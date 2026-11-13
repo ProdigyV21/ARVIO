@@ -3,9 +3,11 @@ const assert = require('node:assert/strict');
 const { load } = require('./load.cjs');
 
 const id = 'a1101111-2222-4333-8444-555566667777';
-function fixture({ privacy = {}, blocked = false, now = Date.now() } = {}) {
+function fixture({ privacy = {}, blocked = false, now = Date.now(),
+  url = `https://web.arvio.tv/?intent=trial&arvio_journey=${id}&utm_source=discord&utm_campaign=launch`,
+  referrer = 'https://arvio.tv/premium/' } = {}) {
   const values = new Map(); const requests = []; const options = []; let clock = now;
-  const location = new URL(`https://web.arvio.tv/?intent=trial&arvio_journey=${id}&utm_source=discord&utm_campaign=launch`);
+  const location = new URL(url);
   const storage = { getItem: key => values.get(key), setItem: (key, value) => values.set(key, value) };
   const window = { location, history: { state: null, replaceState(_state, _title, value) { const target = new URL(value); location.href = target.href; } } };
   Object.defineProperty(window, 'sessionStorage', { get() { if (blocked) throw Error('blocked'); return storage; } });
@@ -14,7 +16,7 @@ function fixture({ privacy = {}, blocked = false, now = Date.now() } = {}) {
   const module = load('lib/premiumAnalytics.ts', {
     './config': { config: { paywallEnabled: true, netlifyBackendUrl: 'https://backend.invalid' } },
     './http': { jsonRequest: async (_url, init) => { requests.push(JSON.parse(init.body)); options.push(init); } }
-  }, { window, document: { referrer: 'https://arvio.tv/premium/' }, navigator: privacy, Date: Clock });
+  }, { window, document: { referrer }, navigator: privacy, Date: Clock });
   const auth = { session: { userId: 'account-a' }, accessToken: async () => 'fixture' };
   return { module, requests, options, auth, values, location, advance: ms => { clock += ms; } };
 }
@@ -85,4 +87,76 @@ test('account switches during token refresh cannot attach the old journey to ano
   f.auth.accessToken = async () => { f.auth.session.userId = 'account-b'; return 'new-token'; };
   assert.equal(await f.module.trackPremiumEvent(f.auth, 'paywall_view'), false);
   assert.equal(f.requests.length, 0);
+});
+
+test('direct web arrivals retain the observed search/referral source without an anonymous journey', async () => {
+  for (const [referrer, source, medium] of [
+    ['https://www.google.nl/search?q=private-title', 'www.google.nl', 'organic'],
+    ['https://www.reddit.com/r/arvio/?private=value', 'www.reddit.com', 'referral'],
+    ['https://www.google.com.evil.invalid/', 'www.google.com.evil.invalid', 'referral'],
+    ['https://arvio.tv/premium/', 'arvio.tv', 'internal'],
+    ['', 'direct', 'direct']
+  ]) {
+    const f = fixture({ url: 'https://web.arvio.tv/', referrer });
+    await f.module.trackPremiumEvent(f.auth, 'checkout_opened', { entry: 'feature_preview' });
+    assert.equal(f.requests[0].journey_id, undefined);
+    assert.equal(f.requests[0].metadata.source, source);
+    assert.equal(f.requests[0].metadata.medium, medium);
+    assert.equal(f.requests[0].metadata.page, 'web');
+    assert.equal(f.requests[0].metadata.landing_page, 'web');
+    assert.equal(JSON.stringify(f.requests).includes('private'), false);
+  }
+});
+
+test('bounded marketing landing survives login and checkout while private paths never enter attribution', async () => {
+  const f = fixture({ url: `https://web.arvio.tv/?arvio_journey=${id}&arvio_landing=jellyfin&utm_source=www.google.com&utm_medium=organic` });
+  f.module.capturePremiumAttribution();
+  assert.equal(f.location.searchParams.has('arvio_landing'), false);
+  await f.module.trackPremiumEvent(f.auth, 'account_connected');
+  await f.module.trackPremiumEvent(f.auth, 'checkout_opened', { entry: 'account_settings' });
+  assert.equal(f.requests[1].metadata.source, 'www.google.com');
+  assert.equal(f.requests[1].metadata.medium, 'organic');
+  assert.equal(f.requests[1].metadata.landing_page, 'jellyfin');
+  const g = fixture({ url: 'https://web.arvio.tv/?arvio_landing=%2Faccount%3Femail%3Dprivate%40example.test&utm_source=private%40example.test', referrer: 'invalid' });
+  await g.module.trackPremiumEvent(g.auth, 'checkout_opened');
+  assert.equal(g.requests[0].metadata.landing_page, 'web');
+  assert.equal(g.requests[0].metadata.source, 'direct');
+  assert.equal(JSON.stringify(g.requests).includes('private'), false);
+});
+
+test('explicit campaign tags win over the observed referring site and a later campaign resets stale fields', async () => {
+  const f = fixture({ url: 'https://web.arvio.tv/?utm_source=newsletter&utm_medium=email&utm_campaign=november', referrer: 'https://www.google.com/' });
+  await f.module.trackPremiumEvent(f.auth, 'paywall_view');
+  assert.equal(f.requests[0].metadata.source, 'newsletter');
+  assert.equal(f.requests[0].metadata.medium, 'email');
+  f.location.href = 'https://web.arvio.tv/?utm_source=reddit';
+  await f.module.trackPremiumEvent(f.auth, 'checkout_opened');
+  assert.equal(f.requests[1].metadata.source, 'reddit');
+  assert.equal(f.requests[1].metadata.medium, 'campaign');
+  assert.equal(f.requests[1].metadata.campaign, 'premium');
+});
+
+test('expired and switched-account attribution cannot reuse an earlier external referrer or landing', async () => {
+  for (const action of ['expire', 'switch']) {
+    const f = fixture({ url: 'https://web.arvio.tv/?arvio_landing=addons', referrer: 'https://www.reddit.com/' });
+    await f.module.trackPremiumEvent(f.auth, 'paywall_view');
+    if (action === 'expire') f.advance(24 * 3600000 + 1);
+    else f.auth.session.userId = 'account-b';
+    await f.module.trackPremiumEvent(f.auth, 'checkout_opened');
+    assert.equal(f.requests[1].metadata.source, 'direct');
+    assert.equal(f.requests[1].metadata.referrer, '');
+    assert.equal(f.requests[1].metadata.landing_page, 'web');
+  }
+});
+
+test('a later campaign from the same source cannot retain the earlier campaign journey or content', async () => {
+  const f = fixture({ url: `https://web.arvio.tv/?arvio_journey=${id}&arvio_landing=addons&utm_source=newsletter&utm_medium=email&utm_campaign=november&utm_content=oldhero` });
+  await f.module.trackPremiumEvent(f.auth, 'paywall_view');
+  f.location.href = 'https://web.arvio.tv/?utm_source=newsletter&utm_campaign=december';
+  await f.module.trackPremiumEvent(f.auth, 'checkout_opened');
+  assert.equal(f.requests[1].journey_id, undefined);
+  assert.equal(f.requests[1].metadata.source, 'newsletter');
+  assert.equal(f.requests[1].metadata.campaign, 'december');
+  assert.equal(f.requests[1].metadata.content, 'unspecified');
+  assert.equal(f.requests[1].metadata.landing_page, 'web');
 });

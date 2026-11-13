@@ -75,7 +75,7 @@ test("trial email jobs encrypt addresses and produce exactly three service messa
   assert.match(trialEmails._test.trialEmailContent("expired", expiresAt).text, /final email/i);
 });
 
-test("premium funnel metadata is bounded and excludes complex values", () => {
+test("premium funnel metadata is bounded and rejects malformed marketing tags and complex values", () => {
   const metadata = funnel._test.sanitizeMetadata({
     source: "website\nspoofed",
     duration_days: 3,
@@ -84,7 +84,6 @@ test("premium funnel metadata is bounded and excludes complex values", () => {
     "bad key": "ignored"
   });
   assert.deepEqual(metadata, {
-    source: "website spoofed",
     duration_days: 3,
     successful: true
   });
