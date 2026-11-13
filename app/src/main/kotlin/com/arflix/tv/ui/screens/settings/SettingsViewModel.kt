@@ -249,6 +249,7 @@ data class SettingsUiState(
     val trailerInCards: Boolean = true,
     val netflixHomeStyle: Boolean = true,
     val watchlistOnHome: Boolean = false,
+    val hiddenNavigationSections: Set<String> = emptySet(),
     val showBudget: Boolean = true,
     val showEpisodeRatings: Boolean = false,
     val animeStructuringStyle: AnimeStructuringStyle = AnimeStructuringStyle.BROADCAST,
@@ -1191,6 +1192,13 @@ class SettingsViewModel @Inject constructor(
 
     private fun observeProfileChanges() {
         viewModelScope.launch {
+            kotlinx.coroutines.flow.combine(profileManager.activeProfileId, context.settingsDataStore.data) { profileId, prefs ->
+                com.arflix.tv.util.readHiddenNavigationSections(prefs[com.arflix.tv.util.hiddenNavigationSectionsKey(profileId)])
+            }.distinctUntilChanged().collect { hidden ->
+                _uiState.update { it.copy(hiddenNavigationSections = hidden) }
+            }
+        }
+        viewModelScope.launch {
             profileRepository.activeProfile.map { it?.isKidsProfile == true }.distinctUntilChanged().collect { isKids ->
                 _uiState.update { it.copy(isKidsProfile = isKids) }
             }
@@ -2098,6 +2106,19 @@ class SettingsViewModel @Inject constructor(
     fun setShowAddonStreamDetails(enabled: Boolean) {
         if (!canManage("playback")) return
         preferenceWriter.save(addonStreamDetailsKey(), enabled, { it.showAddonStreamDetails }, { state, value -> state.copy(showAddonStreamDetails = value) })
+    }
+
+    fun setNavigationSectionVisible(section: String, visible: Boolean) {
+        if (section !in com.arflix.tv.util.OPTIONAL_NAVIGATION_SECTIONS || !canManage("appearance")) return
+        val hidden = _uiState.value.hiddenNavigationSections.toMutableSet().apply {
+            if (visible) remove(section) else add(section)
+        }
+        preferenceWriter.save(
+            com.arflix.tv.util.hiddenNavigationSectionsKey(profileManager.getProfileIdSync()),
+            com.arflix.tv.util.encodeHiddenNavigationSections(hidden),
+            { com.arflix.tv.util.encodeHiddenNavigationSections(it.hiddenNavigationSections) },
+            { state, value -> state.copy(hiddenNavigationSections = com.arflix.tv.util.readHiddenNavigationSections(value)) }
+        )
     }
 
     fun setTrailerInCards(enabled: Boolean) {

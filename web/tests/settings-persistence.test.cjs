@@ -11,6 +11,7 @@ const { sourceOf, storeSource } = require('./sources.cjs');
 function harness(managedResources = null) {
   const management = load('lib/managedConfiguration.ts');
   const disk = storage();
+  const navigation = load('lib/navigationVisibility.ts', { './storage': disk });
   let remote = { accentColor: 'White', profileSettingsById: { p1: { contentLanguage: 'en-US' } } };
   let reject = false;
   let pause;
@@ -44,6 +45,7 @@ function harness(managedResources = null) {
   const code = ts.transpileModule(source.slice(start,end) + '\nresult = updateSettings;', { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
   const context = { result: null, useCallback: fn => fn, settingsRef, personalSettingsRef, activeProfileIdRef: {current:'p1'}, authClient: auth,
     personalManagedPatch: management.personalManagedPatch,
+    saveNavigationVisibility: navigation.saveNavigationVisibility,
     managed: { recordPreferences: patch => management.assertManagedEdit(patch, managedResources?.delivery),
       applySettings: value => management.overlayManagedSettings(value, managedResources) },
     queueSettings: outbox.queueSettings, saveStored: disk.saveStored, settingsKey:'settings',
@@ -66,6 +68,17 @@ test('an edit before initial cloud hydration is durable immediately and survives
   const restored = await h.cloud.pullCloudPayload(h.auth,'p1');
   assert.equal(restored.settings.language,'nl-NL');
   assert.equal(restored.settings.accentColor,'arctic');
+});
+
+test('navigation edits persist in the profile cache and cloud outbox, including unhiding all tabs', async () => {
+  const h = harness();
+  h.edit({ hiddenNavigationSections: ['tv'] });
+  assert.deepEqual(Array.from(h.disk.loadStored('arvio.web.navigation:account:p1', [])), ['tv']);
+  await h.createOutbox().flushSettingsOutbox(h.auth);
+  assert.deepEqual(Array.from((await h.cloud.pullCloudPayload(h.auth, 'p1')).settings.hiddenNavigationSections), ['tv']);
+  h.edit({ hiddenNavigationSections: [] });
+  await h.createOutbox().flushSettingsOutbox(h.auth);
+  assert.deepEqual(Array.from(h.remote().profileSettingsById.p1.hiddenNavigationSections), []);
 });
 
 test('managed preferences and credentials never enter settings storage or the cloud outbox', async () => {

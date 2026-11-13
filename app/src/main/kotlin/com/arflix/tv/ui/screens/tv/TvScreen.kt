@@ -283,7 +283,8 @@ fun TvScreen(
     var focusZone by rememberSaveable { mutableStateOf(if (uiState.isConfigured) TvFocusZone.GROUPS else TvFocusZone.SIDEBAR) }
     val hasProfile = currentProfile != null
     val maxSidebarIndex = topBarMaxIndex(hasProfile)
-    var sidebarFocusIndex by rememberSaveable { mutableIntStateOf(if (hasProfile) 4 else 3) }
+    var sidebarFocusIndex by rememberSaveable { mutableIntStateOf(com.arflix.tv.ui.components.topBarSelectedIndex(SidebarItem.TV, hasProfile).coerceAtLeast(0)) }
+    com.arflix.tv.ui.components.ReconcileTopBarFocus(sidebarFocusIndex, hasProfile) { sidebarFocusIndex = it }
     var groupIndex by rememberSaveable { mutableIntStateOf(0) }
     var channelIndex by rememberSaveable { mutableIntStateOf(0) }
     var selectedChannelId by rememberSaveable { mutableStateOf<String?>(null) }

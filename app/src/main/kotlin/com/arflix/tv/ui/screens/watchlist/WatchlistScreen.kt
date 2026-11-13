@@ -143,7 +143,8 @@ fun WatchlistScreen(
     var search by remember { mutableStateOf(false) }
     var sourcesOpen by remember { mutableStateOf(false) }
     var topFocused by remember { mutableStateOf(false) }
-    var topIndex by remember { mutableIntStateOf(if (currentProfile != null) 3 else 2) }
+    var topIndex by remember { mutableIntStateOf(com.arflix.tv.ui.components.topBarSelectedIndex(SidebarItem.WATCHLIST, currentProfile != null).coerceAtLeast(0)) }
+    com.arflix.tv.ui.components.ReconcileTopBarFocus(topIndex, currentProfile != null) { topIndex = it }
     val firstTab = remember { FocusRequester() }
     var initialFocusPlaced by remember { mutableStateOf(false) }
     val filterButton = remember { FocusRequester() }

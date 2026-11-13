@@ -326,7 +326,8 @@ fun DetailsScreen(
     var isSidebarFocused by remember { mutableStateOf(false) }
     val hasProfile = currentProfile != null
     val maxSidebarIndex = topBarMaxIndex(hasProfile)
-    var sidebarFocusIndex by remember { mutableIntStateOf(if (hasProfile) 2 else 1) }
+    var sidebarFocusIndex by remember { mutableIntStateOf(com.arflix.tv.ui.components.topBarSelectedIndex(SidebarItem.HOME, hasProfile)) }
+    com.arflix.tv.ui.components.ReconcileTopBarFocus(sidebarFocusIndex, hasProfile) { sidebarFocusIndex = it }
 
     // Stream Selector state
     var showStreamSelector by remember { mutableStateOf(false) }

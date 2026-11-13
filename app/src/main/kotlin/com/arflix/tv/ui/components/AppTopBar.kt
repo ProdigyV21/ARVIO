@@ -63,10 +63,8 @@ val AppTopBarHorizontalPadding = 28.dp
 
 // Navigation items that appear CENTERED in the top bar (Search, Home, Watchlist, TV).
 // Settings is NOT in this list — it's rendered as a standalone gear icon on the right.
-private val ALL_NAV_ITEMS = SidebarItem.entries.filter { it != SidebarItem.SETTINGS }
-private val KIDS_NAV_ITEMS = ALL_NAV_ITEMS.filter { it != SidebarItem.TV }
 private val NAV_ITEMS: List<SidebarItem>
-    get() = if (KidsNavigation.hideLiveTv) KIDS_NAV_ITEMS else ALL_NAV_ITEMS
+    get() = visibleNavigationItems().filter { it != SidebarItem.SETTINGS }
 
 fun topBarMaxIndex(hasProfile: Boolean): Int {
     // Profile (0 if shown) + nav items + settings gear (last index)
@@ -85,8 +83,10 @@ fun topBarSelectedIndex(selectedItem: SidebarItem, hasProfile: Boolean): Int {
 }
 
 fun topBarFocusedItem(focusedIndex: Int, hasProfile: Boolean): SidebarItem? {
+    if (focusedIndex < 0) return null
     if (hasProfile && focusedIndex == 0) return null // profile avatar focused
-    val itemIndex = if (hasProfile) focusedIndex - 1 else focusedIndex
+    val safeIndex = focusedIndex.coerceAtMost(topBarMaxIndex(hasProfile))
+    val itemIndex = if (hasProfile) safeIndex - 1 else safeIndex
     // If it's the settings gear (last index after nav items)
     if (itemIndex == NAV_ITEMS.size) return SidebarItem.SETTINGS
     return NAV_ITEMS.getOrNull(itemIndex)
@@ -108,10 +108,12 @@ fun AppTopBar(
     val showProfile = profile != null
     val hasProfile = showProfile
     val currentTime = rememberTopBarTime(clockFormat)
-    val selectedIndex = remember(selectedItem, hasProfile) { topBarSelectedIndex(selectedItem, hasProfile) }
+    val navItems = NAV_ITEMS
+    val selectedIndex = topBarSelectedIndex(selectedItem, hasProfile)
+    val safeFocusedIndex = focusedIndex.coerceAtMost(topBarMaxIndex(hasProfile))
     // Settings gear is always the last focusable index
     val settingsIndex = topBarMaxIndex(hasProfile)
-    val settingsFocused = isFocused && focusedIndex == settingsIndex
+    val settingsFocused = isFocused && safeFocusedIndex == settingsIndex
     val settingsSelected = selectedItem == SidebarItem.SETTINGS
 
     Box(
@@ -140,7 +142,7 @@ fun AppTopBar(
             if (showProfile && profile != null) {
                 TopBarProfileAvatar(
                     profile = profile,
-                    isFocused = isFocused && focusedIndex == 0
+                    isFocused = isFocused && safeFocusedIndex == 0
                 )
                 Spacer(modifier = Modifier.width(16.dp))
             }
@@ -155,11 +157,11 @@ fun AppTopBar(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    NAV_ITEMS.forEachIndexed { index, item ->
+                    navItems.forEachIndexed { index, item ->
                         val itemFocusIndex = if (hasProfile) index + 1 else index
                         TopBarNavChip(
                             item = item,
-                            isFocused = isFocused && focusedIndex == itemFocusIndex,
+                            isFocused = isFocused && safeFocusedIndex == itemFocusIndex,
                             isSelected = selectedIndex == itemFocusIndex,
                         )
                     }

@@ -344,6 +344,7 @@ class CloudSyncRepository @Inject constructor(
         // Null from older clients: keep the local preference.
         val netflixHomeStyle: Boolean? = null,
         val watchlistOnHome: Boolean? = null,
+        val hiddenNavigationSections: List<String>? = null,
         val clockFormat: String = "24h",
         val guideRowCount: Int? = null,
         val showBudget: Boolean = true,
@@ -744,6 +745,7 @@ class CloudSyncRepository @Inject constructor(
                         trailerInCards = prefs[trailerInCardsKeyFor(profile.id)] ?: true,
                         netflixHomeStyle = prefs[netflixHomeStyleKeyFor(profile.id)] ?: true,
                         watchlistOnHome = prefs[watchlistOnHomeKeyFor(profile.id)] ?: false,
+                        hiddenNavigationSections = com.arflix.tv.util.navigationSectionsForCloud(prefs, profile.id),
                         clockFormat = prefs[clockFormatKeyFor(profile.id)] ?: "24h",
                         guideRowCount = prefs[guideRowCountKeyFor(profile.id)]?.toIntOrNull()
                             ?.takeIf { it in 6..10 } ?: 0,
@@ -1739,6 +1741,7 @@ class CloudSyncRepository @Inject constructor(
                         prefs[trailerDelayKeyFor(profileId)] = state.trailerDelaySeconds.toString()
                         prefs[trailerInCardsKeyFor(profileId)] = state.trailerInCards
                         state.watchlistOnHome?.let { prefs[watchlistOnHomeKeyFor(profileId)] = it }
+                        com.arflix.tv.util.restoreNavigationSections(prefs, profileId, state.hiddenNavigationSections)
                         prefs[clockFormatKeyFor(profileId)] = state.clockFormat
                         // Older clients omit this field; keep the local preference in that case.
                         state.guideRowCount?.let { count ->

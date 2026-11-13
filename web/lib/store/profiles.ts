@@ -10,6 +10,7 @@ import { savePlaylists } from "../iptv";
 import { defaultSettings, settingsKey } from "./settings";
 import { verifyProfilePin } from "../profilePin";
 import { hydratedProfileId } from "../profiles";
+import { loadNavigationVisibility, saveNavigationVisibility } from "../navigationVisibility";
 import { partnerLoginRedirect } from "../partnerLinks";
 import { mdblistClient } from "../mdblist";
 import { simklClient } from "../simkl";
@@ -197,6 +198,14 @@ export function useProfileActions(store: StoreCore & Pick<ReturnType<typeof useR
     }
     const updated = profiles.map((p) => (p.id === profile.id ? { ...p, lastUsedAt: Date.now() } : p));
     const switching = profile.id !== activeProfileId;
+    if (switching) {
+      saveNavigationVisibility(authClient.session?.userId, activeProfileId, store.personalSettingsRef.current.hiddenNavigationSections);
+      const next = { ...store.personalSettingsRef.current,
+        hiddenNavigationSections: loadNavigationVisibility(authClient.session?.userId, profile.id) };
+      store.personalSettingsRef.current = next;
+      store.settingsRef.current = store.managed.applySettings(next);
+      store.setSettings(next);
+    }
     persistProfiles(updated, profile.id);
     traktClient.setProfile(profile.id);
     mdblistClient.setProfile(profile.id);

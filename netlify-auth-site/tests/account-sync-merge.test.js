@@ -79,6 +79,24 @@ function androidPayload(overrides = {}) {
 const clone = (value) => structuredClone(value);
 const merge = (stored, incoming, base) => mergeWithStoredSnapshot({ payload: stored }, incoming, base);
 
+test('navigation visibility survives older clients, stale devices and profile-isolated unhide edits', () => {
+  const stored = androidPayload();
+  stored.profileSettingsById.p1.hiddenNavigationSections = ['tv'];
+  stored.profileSettingsById.p2.hiddenNavigationSections = ['search'];
+  stored.fieldUpdatedAt['p:p1:hiddenNavigationSections'] = 1000;
+  stored.fieldUpdatedAt['p:p2:hiddenNavigationSections'] = 1000;
+  const older = androidPayload();
+  assert.deepEqual(merge(stored, older).profileSettingsById.p1.hiddenNavigationSections, ['tv']);
+  const stale = clone(stored);
+  stale.profileSettingsById.p1.hiddenNavigationSections = [];
+  stale.fieldUpdatedAt['p:p1:hiddenNavigationSections'] = 500;
+  assert.deepEqual(merge(stored, stale).profileSettingsById.p1.hiddenNavigationSections, ['tv']);
+  stale.fieldUpdatedAt['p:p1:hiddenNavigationSections'] = 2000;
+  const next = merge(stored, stale);
+  assert.deepEqual(next.profileSettingsById.p1.hiddenNavigationSections, []);
+  assert.deepEqual(next.profileSettingsById.p2.hiddenNavigationSections, ['search']);
+});
+
 test("a web edit and a concurrent Android edit of different fields both survive", () => {
   const read = androidPayload({ fieldUpdatedAt: { "p:p1:autoPlayNext": 100, "p:p1:subtitleSize": 100 } });
   // Android changes autoPlayNext after the web read the document...

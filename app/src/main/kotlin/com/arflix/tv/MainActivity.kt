@@ -776,6 +776,7 @@ fun ArflixApp(
         }
     }.collectAsStateWithLifecycle(initialValue = ActiveProfileLoadState.Loading)
     val activeProfile = (activeProfileState as? ActiveProfileLoadState.Loaded)?.profile
+    com.arflix.tv.ui.components.ObserveNavigationVisibility(activeProfile?.id)
     val startupReady = skipProfileSelection != null &&
         activeProfileState is ActiveProfileLoadState.Loaded &&
         authState !is AuthState.Loading

@@ -2120,4 +2120,8 @@
     <string name="live_ai_subs_auto_desc">Every channel starts with AI subtitles on, without picking them in the subtitle menu</string>
     <string name="show_addon_stream_details">Show add-on stream details</string>
     <string name="show_addon_stream_details_desc">Show add-on descriptions below source badges on TV. Focus a source to expand its details.</string>
+    <string name="navigation_sections">Navigation</string>
+    <string name="navigation_show_search">Show Search</string>
+    <string name="navigation_show_library">Show Library</string>
+    <string name="navigation_show_tv">Show TV Player</string>
 </resources>
