@@ -171,7 +171,7 @@ async function main() {
       assert.match(serial, /^emulator-\d+$/, 'physical devices are not permitted');
       const run = promisify(execFile);
       const avd = await run(adb, ['-s', serial, 'emu', 'avd', 'name']);
-      assert.equal(avd.stdout.trim().split(/\r?\n/)[0], expectedAvd, 'only the chosen isolated emulator is permitted');
+      assert.equal(avd.stdout.trim().split(/\r?\n/)[0].trim(), expectedAvd, 'only the chosen isolated emulator is permitted');
       const url = `http://10.0.2.2:${bridge.address().port}/fixture/payload`;
       const result = await run(adb, ['-s', serial, 'shell', 'timeout', '-k', '5s', '360s', 'am', 'instrument', '-w',
         '-e', 'class', 'com.arflix.tv.ui.screens.settings.NavigationVisibilityDeviceTest', '-e', 'navigationSyncUrl', url,
