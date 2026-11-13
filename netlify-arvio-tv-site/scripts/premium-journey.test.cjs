@@ -195,4 +195,64 @@ test('search referrers are organic but cannot override explicit campaign medium'
   assert.equal(paid.events[0].metadata.medium, 'cpc');
   const fake = run({ url: 'https://arvio.tv/jellyfin-android-tv/', referrer: 'https://www.google.com.evil.invalid/' });
   assert.equal(fake.events[0].metadata.medium, 'referral');
+  const internal = run({ url: 'https://arvio.tv/premium/', referrer: 'https://web.arvio.tv/' });
+  assert.equal(internal.events[0].metadata.medium, 'internal');
+});
+
+test('the first editorial landing survives guide, Premium and web-app navigation', () => {
+  const guide = run({ url: 'https://arvio.tv/nl/jellyfin-android-tv/?utm_source=reddit&utm_medium=social&utm_campaign=discovery#private-fragment',
+    referrer: 'https://www.reddit.com/r/private-thread/?user=private', destinations: ['/nl/premium/'] });
+  assert.equal(guide.events[0].metadata.page, 'jellyfin');
+  assert.equal(guide.events[0].metadata.landing_page, 'jellyfin');
+  assert.equal(guide.events[0].metadata.referrer, 'www.reddit.com');
+  const next = guide.activate(0);
+  assert.equal(new URL(next).searchParams.get('arvio_landing'), 'jellyfin');
+  const premium = run({ url: next, referrer: 'https://arvio.tv/nl/jellyfin-android-tv/', destinations: ['https://web.arvio.tv/'] });
+  assert.equal(premium.events[0].metadata.page, 'premium');
+  assert.equal(premium.events[0].metadata.landing_page, 'jellyfin');
+  assert.equal(premium.events[0].metadata.source, 'reddit');
+  const web = new URL(premium.activate(0));
+  assert.equal(web.searchParams.get('arvio_journey'), id);
+  assert.equal(web.searchParams.get('arvio_landing'), 'jellyfin');
+  assert.equal(web.searchParams.get('utm_source'), 'reddit');
+  assert.equal(web.searchParams.get('utm_medium'), 'social');
+  assert.equal(web.searchParams.get('utm_campaign'), 'discovery');
+  assert.equal(JSON.stringify([...guide.events, ...premium.events]).includes('private'), false);
+});
+
+test('invalid landing labels and unknown routes never disclose arbitrary paths', () => {
+  const invalid = run({ url: 'https://arvio.tv/guides/?arvio_landing=%2Fprivate%2F%3Femail%3Dperson%40example.test', destinations: ['https://web.arvio.tv/'] });
+  assert.equal(invalid.events[0].metadata.landing_page, 'guides');
+  assert.equal(new URL(invalid.activate(0)).searchParams.get('arvio_landing'), 'guides');
+  const unknown = run({ url: 'https://arvio.tv/private-profile/?arvio_landing=secret', destinations: ['https://web.arvio.tv/?arvio_landing=secret'] });
+  const target = new URL(unknown.activate(0));
+  assert.equal(target.searchParams.has('arvio_landing'), false);
+  assert.equal(unknown.events[0].metadata.page, undefined);
+  assert.equal(unknown.events[0].metadata.landing_page, undefined);
+  assert.equal(JSON.stringify(unknown.events).includes('private-profile'), false);
+  assert.equal(JSON.stringify(invalid.events).includes('person'), false);
+  const fakePremium = run({ url: 'https://arvio.tv/private-account/premium/', destinations: [] });
+  assert.equal(fakePremium.events.length, 0);
+});
+
+test('published localized guides all use the same bounded editorial labels', () => {
+  const labels = { guides: 'guides', hub: 'android', jellyfin: 'jellyfin', servers: 'servers', sources: 'debrid', tracking: 'tracking', live: 'live', subtitles: 'subtitles', firetv: 'firetv', web: 'browser' };
+  const localeDir = path.join(__dirname, 'guide-locales');
+  for (const name of fs.readdirSync(localeDir).filter(name => name.endsWith('.json'))) {
+    const data = JSON.parse(fs.readFileSync(path.join(localeDir, name), 'utf8'));
+    for (const [key, route] of Object.entries(data.slugs)) {
+      if (!labels[key]) continue;
+      const result = run({ url: 'https://arvio.tv' + route, destinations: ['https://web.arvio.tv/'] });
+      assert.equal(result.events[0]?.event_name, 'guide_page_view', route);
+      assert.equal(result.events[0]?.metadata.page, labels[key], route);
+      assert.equal(result.events[0]?.metadata.landing_page, labels[key], route);
+      assert.equal(new URL(result.activate(0)).searchParams.get('arvio_landing'), labels[key], route);
+    }
+  }
+});
+
+test('landing attribution and journey IDs never decorate Ko-fi shop or membership links', () => {
+  const destinations = ['https://ko-fi.com/arvio/tiers', 'https://ko-fi.com/s/373de24a07', 'https://ko-fi.com/arvio/link/ARVIOREGION50'];
+  const result = run({ url: 'https://arvio.tv/premium/?arvio_landing=jellyfin&utm_source=google', destinations });
+  for (let index = 0; index < destinations.length; index++) assert.equal(result.activate(index), destinations[index]);
 });
