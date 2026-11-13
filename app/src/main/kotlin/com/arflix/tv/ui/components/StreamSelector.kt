@@ -35,6 +35,7 @@ import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -103,6 +104,8 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.unit.sp
 import androidx.tv.foundation.lazy.list.TvLazyColumn
 import androidx.tv.foundation.lazy.list.TvLazyListState
@@ -1156,7 +1159,8 @@ private fun OledSourceSelectorTv(
                     hasStreamingAddons = hasStreamingAddons,
                     message = stringResource(R.string.stream_no_sources_match)
                 )
-                else -> Box(modifier = Modifier.fillMaxSize()) {
+                else -> BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+                    val rowViewportHeight = (maxHeight - 44.dp).coerceAtLeast(0.dp)
                     TvLazyColumn(
                         state = listState,
                         contentPadding = PaddingValues(bottom = 10.dp),
@@ -1170,6 +1174,7 @@ private fun OledSourceSelectorTv(
                                 OledSourceRow(
                                     presentation = presentation,
                                     showAddonStreamDetails = showAddonStreamDetails,
+                                    rowViewportHeight = rowViewportHeight,
                                     isFocused = streamsFocused && index == focusedIndex,
                                     isSelected = isSelectedSource(presentation.stream, selectedStream),
                                     isRecent = presentation.stream === recentStream,
@@ -2226,11 +2231,17 @@ private fun SourceEmptyState(
 private fun OledSourceRow(
     presentation: SourcePresentation,
     showAddonStreamDetails: Boolean,
+    rowViewportHeight: Dp,
     isFocused: Boolean,
     isSelected: Boolean,
     isRecent: Boolean,
     onClick: () -> Unit
 ) {
+    var headerHeight by remember { mutableIntStateOf(0) }
+    val density = LocalDensity.current
+    val expandedLines = with(density) {
+        addonDescriptionMaxLines(rowViewportHeight.toPx() - headerHeight - 34.dp.toPx(), 16.sp.toPx())
+    }
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -2258,7 +2269,7 @@ private fun OledSourceRow(
             .clickable { onClick() }
             .padding(horizontal = 14.dp, vertical = 12.dp)
     ) {
-            Column {
+            Column(Modifier.onSizeChanged { headerHeight = it.height }) {
                 if (isRecent) {
                     RecentlyPlayedChip(inverted = isFocused)
                     Spacer(modifier = Modifier.height(5.dp))
@@ -2309,22 +2320,25 @@ private fun OledSourceRow(
                 )
                 Spacer(Modifier.height(8.dp))
                 OledBadgeFlow(presentation, Int.MAX_VALUE, inverted = isFocused)
-                val description = remember(presentation.stream.description, showAddonStreamDetails) {
-                    tvAddonStreamDescription(presentation.stream.description, showAddonStreamDetails)
-                }
-                if (description != null) {
-                    Spacer(Modifier.height(8.dp))
-                    Text(
-                        text = description,
-                        style = ArflixTypography.body.copy(fontSize = 12.sp, lineHeight = 16.sp),
-                        color = if (isFocused) Color.Black.copy(alpha = 0.8f) else TextSecondary,
-                        maxLines = if (isFocused) 12 else 3,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
             }
+        val description = remember(presentation.stream.description, showAddonStreamDetails) {
+            tvAddonStreamDescription(presentation.stream.description, showAddonStreamDetails)
+        }
+        if (description != null) {
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text = description,
+                style = ArflixTypography.body.copy(fontSize = 12.sp, lineHeight = 16.sp),
+                color = if (isFocused) Color.Black.copy(alpha = 0.8f) else TextSecondary,
+                maxLines = if (isFocused) expandedLines else minOf(3, expandedLines),
+                overflow = TextOverflow.Ellipsis
+            )
+        }
     }
 }
+
+internal fun addonDescriptionMaxLines(availableHeight: Float, lineHeight: Float): Int =
+    (availableHeight / lineHeight).toInt().coerceIn(1, 12)
 
 internal fun tvAddonStreamDescription(raw: String?, enabled: Boolean): String? =
     if (enabled) raw?.trim()?.takeIf { it.isNotBlank() }?.let(::withEmojiPresentation) else null

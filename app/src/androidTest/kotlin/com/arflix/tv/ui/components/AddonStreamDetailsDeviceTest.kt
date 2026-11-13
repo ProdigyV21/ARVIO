@@ -62,12 +62,12 @@ class AddonStreamDetailsDeviceTest {
         context.settingsDataStore.edit { it[addonStreamDetailsKey(profile)] = enabled }
     }
 
-    private fun show(device: DeviceType = DeviceType.TV, onSelect: (StreamSource) -> Unit = {}) {
+    private fun show(device: DeviceType = DeviceType.TV, sources: List<StreamSource> = streams, onSelect: (StreamSource) -> Unit = {}) {
         compose.setContent {
             CompositionLocalProvider(LocalDeviceType provides device) {
                 ArflixTvTheme {
                     Box(Modifier.fillMaxSize().background(Color.Black)) {
-                        StreamSelector(true, streams, null, onSelect = onSelect)
+                        StreamSelector(true, sources, null, onSelect = onSelect)
                     }
                 }
             }
@@ -87,6 +87,11 @@ class AddonStreamDetailsDeviceTest {
         val results = mutableListOf<TextLayoutResult>()
         compose.onNodeWithText(text, useUnmergedTree = true).performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(results) }
         return results.single()
+    }
+
+    private fun assertDetailsNotClipped(text: String) {
+        assertEquals(layout(text).size.height.toFloat(),
+            compose.onNodeWithText(text, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot.height, 1f)
     }
 
     @Test fun defaultsOffAndUpdatesImmediatelyWhenPreferenceChanges() {
@@ -112,6 +117,7 @@ class AddonStreamDetailsDeviceTest {
             key(KeyEvent.KEYCODE_DPAD_DOWN)
             compose.onNodeWithText(streams[index + 1].source).assertIsDisplayed()
             assertEquals(9, layout(streams[index + 1].description!!).lineCount)
+            assertDetailsNotClipped(streams[index + 1].description!!)
         }
         key(KeyEvent.KEYCODE_DPAD_RIGHT)
         key(KeyEvent.KEYCODE_DPAD_LEFT)
@@ -127,6 +133,17 @@ class AddonStreamDetailsDeviceTest {
         compose.waitUntil(5_000) { compose.onAllNodesWithText(streams[0].description!!, useUnmergedTree = true).fetchSemanticsNodes().isEmpty() }
         runBlocking { context.profilesDataStore.edit { it[activeProfile] = profile } }
         compose.waitUntil(5_000) { compose.onAllNodesWithText(streams[0].description!!, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
+    }
+
+    @Test fun longFilenamesLeaveRoomForDetailsOnSmallTvLayouts() {
+        enable(true)
+        val long = streams[0].copy(
+            source = "Movie.Extended.Directors.Cut.Multi.Audio.TrueHD.7.1.Atmos.REMUX.".repeat(7),
+            description = (1..25).joinToString("\n") { "Formatter line $it: 2160p WEB-DL HDR" }
+        )
+        show(sources = listOf(long))
+        assertTrue(layout(long.description!!).lineCount in 1..12)
+        assertDetailsNotClipped(long.description!!)
     }
 
     @Test fun phoneKeepsItsExistingThreeLineDescription() {

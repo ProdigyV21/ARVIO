@@ -9,6 +9,12 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class AddonStreamDetailsTest {
+    @Test fun expandedLinesRespectTheSpaceLeftByTheFilenameAndBadges() {
+        assertEquals(12, addonDescriptionMaxLines(500f, 16f))
+        assertEquals(6, addonDescriptionMaxLines(100f, 16f))
+        assertEquals(1, addonDescriptionMaxLines(0f, 16f))
+    }
+
     @Test fun detailsAreOffByDefaultAndScopedToTheProfile() {
         val first = addonStreamDetailsKey("first")
         val second = addonStreamDetailsKey("second")
