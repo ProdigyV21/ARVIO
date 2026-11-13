@@ -341,7 +341,8 @@ internal fun tvGeneralRowsForSection(section: String): List<Int> {
             listOf(39, 9, 45)
         "ai_subtitles" -> listOf(28, 29, 30, 31, 32, 33) + LIVE_AI_SUBS_ROWS
         "playback" -> listOf(10, 11, 12, 43, 44, 55, 13, 14, 34, 37, 16, 15, 40, 27, 53, 54)
-        "appearance" -> listOf(17, 49, 50, 18, 20, 21, 24, 23, 22, 41, 46, 36, 47)
+        "appearance" -> listOf(17, 49, 50, 18, 20, 21, 24, 23, 22, 41, 46, 36, 47, 56, 57) +
+            (if (com.arflix.tv.ui.components.KidsNavigation.hideLiveTv) emptyList() else listOf(58))
         "profiles" -> listOf(19)
         "network" -> listOf(25, 26, 35)
         else -> emptyList()
@@ -612,7 +613,8 @@ fun SettingsScreen(
     var isSidebarFocused by remember { mutableStateOf(arrivesAtTopLevel) }
     val hasProfile = currentProfile != null
     val maxSidebarIndex = topBarMaxIndex(hasProfile)
-    var sidebarFocusIndex by remember { mutableIntStateOf(if (hasProfile) 5 else 4) } // SETTINGS
+    var sidebarFocusIndex by remember { mutableIntStateOf(com.arflix.tv.ui.components.topBarSelectedIndex(SidebarItem.SETTINGS, hasProfile)) }
+    com.arflix.tv.ui.components.ReconcileTopBarFocus(sidebarFocusIndex, hasProfile) { sidebarFocusIndex = it }
     var sectionIndex by remember { mutableIntStateOf(initialSectionIdx ?: 0) }
     var mobilePage by remember {
         mutableStateOf(
@@ -1508,6 +1510,11 @@ fun SettingsScreen(
                                                 53 -> viewModel.cyclePlaybackCacheSize()
                                                 54 -> viewModel.clearPlaybackCache()
                                                 55 -> viewModel.setShowAddonStreamDetails(!uiState.showAddonStreamDetails)
+                                                in 56..58 -> {
+                                                    val section = com.arflix.tv.util.OPTIONAL_NAVIGATION_SECTIONS[
+                                                        tvGeneralRowsForSection(currentSection)[contentFocusIndex] - 56]
+                                                    viewModel.setNavigationSectionVisible(section, section in uiState.hiddenNavigationSections)
+                                                }
                                             }
                                         }
                                         "iptv" -> {
@@ -2198,7 +2205,9 @@ fun SettingsScreen(
                             onPlaybackCacheSizeClick = { viewModel.cyclePlaybackCacheSize() },
                             onClearPlaybackCacheClick = { viewModel.clearPlaybackCache() },
                             showAddonStreamDetails = uiState.showAddonStreamDetails,
-                            onShowAddonStreamDetailsToggle = { viewModel.setShowAddonStreamDetails(it) }
+                            onShowAddonStreamDetailsToggle = { viewModel.setShowAddonStreamDetails(it) },
+                            hiddenNavigationSections = uiState.hiddenNavigationSections,
+                            onNavigationSectionVisibleChange = viewModel::setNavigationSectionVisible
                         )
                         if (showAiModelDialog) {
                             AiModelDialog(
@@ -5713,6 +5722,26 @@ private fun MobileSettingsSubPage(
                         onClick = { viewModel.setSmoothScrolling(!uiState.smoothScrolling) }
                     )
                 }
+                MobileSettingsCategory(title = stringResource(R.string.navigation_sections)) {
+                    com.arflix.tv.util.OPTIONAL_NAVIGATION_SECTIONS
+                        .filter { it != "tv" || !uiState.isKidsProfile }
+                        .forEach { section ->
+                            val visible = section !in uiState.hiddenNavigationSections
+                            MobileSettingsRow(
+                                icon = when (section) {
+                                    "search" -> Icons.Default.Search
+                                    "watchlist" -> Icons.Default.Bookmark
+                                    else -> Icons.Default.LiveTv
+                                },
+                                title = navigationVisibilityTitle(section),
+                                subtitle = stringResource(R.string.settings_profile_scoped),
+                                value = stringResource(if (visible) R.string.on else R.string.off),
+                                toggleChecked = visible,
+                                isFocused = false,
+                                onClick = { viewModel.setNavigationSectionVisible(section, !visible) }
+                            )
+                        }
+                }
             }
             "Addons" -> {
                 StremioAddonsSettings(
@@ -6795,6 +6824,13 @@ private fun formatCompactCount(value: Int): String {
 }
 
 @Composable
+private fun navigationVisibilityTitle(section: String): String = stringResource(when (section) {
+    "search" -> R.string.navigation_show_search
+    "watchlist" -> R.string.navigation_show_library
+    else -> R.string.navigation_show_tv
+})
+
+@Composable
 private fun TvGeneralSettingsRows(
     section: String,
     defaultSubtitle: String,
@@ -6906,12 +6942,20 @@ private fun TvGeneralSettingsRows(
     onPlaybackCacheSizeClick: () -> Unit = {},
     onClearPlaybackCacheClick: () -> Unit = {},
     showAddonStreamDetails: Boolean = false,
-    onShowAddonStreamDetailsToggle: (Boolean) -> Unit = {}
+    onShowAddonStreamDetailsToggle: (Boolean) -> Unit = {},
+    hiddenNavigationSections: Set<String> = emptySet(),
+    onNavigationSectionVisibleChange: (String, Boolean) -> Unit = { _, _ -> }
 ) {
     Column {
         tvGeneralRowsForSection(section).forEachIndexed { localIndex, rowId ->
             if (localIndex > 0) Spacer(modifier = Modifier.height(10.dp))
             when (rowId) {
+                in 56..58 -> {
+                    val section = com.arflix.tv.util.OPTIONAL_NAVIGATION_SECTIONS[rowId - 56]
+                    SettingsToggleRow(navigationVisibilityTitle(section), stringResource(R.string.settings_profile_scoped),
+                        section !in hiddenNavigationSections, focusedIndex == localIndex,
+                        { onNavigationSectionVisibleChange(section, it) }, Modifier.settingsFocusSlot(localIndex))
+                }
                 55 -> SettingsToggleRow(stringResource(R.string.show_addon_stream_details),
                     stringResource(R.string.show_addon_stream_details_desc), showAddonStreamDetails,
                     focusedIndex == localIndex, onShowAddonStreamDetailsToggle, Modifier.settingsFocusSlot(localIndex))

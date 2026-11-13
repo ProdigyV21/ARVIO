@@ -2894,6 +2894,7 @@ internal fun HomeInputLayer(
     // profile switcher). Focus navigation includes it as the first focusable item.
     val hasProfile = currentProfile != null
     val maxSidebarIndex = topBarMaxIndex(hasProfile)
+    com.arflix.tv.ui.components.ReconcileTopBarFocus(focusState.sidebarFocusIndex, hasProfile) { focusState.sidebarFocusIndex = it }
 
     LaunchedEffect(Unit) {
         focusRequester.requestFocus()
@@ -2906,7 +2907,7 @@ internal fun HomeInputLayer(
         }
     }
     LaunchedEffect(hasProfile) {
-        if (hasProfile && !focusState.userHasNavigated) focusState.sidebarFocusIndex = 2
+        if (!focusState.userHasNavigated) focusState.sidebarFocusIndex = com.arflix.tv.ui.components.topBarSelectedIndex(SidebarItem.HOME, hasProfile)
     }
 
     // One owner reconciles both row and title identity. Input records anchors

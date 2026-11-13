@@ -204,7 +204,8 @@ fun SearchScreen(
     var focusZone by rememberSaveable { mutableStateOf(FocusZone.SEARCH_INPUT) }
     val hasProfile = currentProfile != null
     val maxSidebarIndex = topBarMaxIndex(hasProfile)
-    var sidebarFocusIndex by remember { mutableIntStateOf(if (hasProfile) 1 else 0) }
+    var sidebarFocusIndex by remember { mutableIntStateOf(com.arflix.tv.ui.components.topBarSelectedIndex(SidebarItem.SEARCH, hasProfile).coerceAtLeast(0)) }
+    com.arflix.tv.ui.components.ReconcileTopBarFocus(sidebarFocusIndex, hasProfile) { sidebarFocusIndex = it }
     var isSearchInputFocused by remember { mutableStateOf(false) }
     var suppressSelectUntilMs by remember { mutableLongStateOf(0L) }
     val fastScrollThresholdMs = 220L

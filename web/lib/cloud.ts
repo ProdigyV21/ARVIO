@@ -1,4 +1,5 @@
 import { repairIptvPlaylistIds } from "./iptvPlaylistIdentity";
+import { loadNavigationVisibility, normalizedHiddenNavigationSections } from "./navigationVisibility";
 import type { AuthClient } from "./auth";
 import { mergeAddonChanges, recordAddonChanges, type AddonChanges } from "./addonChanges";
 import { mergeWatchlistChanges, mergeWatchlistItems, watchlistChangesStorageKey, watchlistKey, type CloudWatchlistItem as AndroidWatchlistItem, type WatchlistChanges } from "./watchlistChanges";
@@ -516,6 +517,7 @@ function androidProfileSettings(settings: AppSettings) {
     // Optional on Android: only sent once chosen here, so the app keeps its own value otherwise.
     ...(settings.netflixHomeStyle !== undefined ? { netflixHomeStyle: settings.netflixHomeStyle } : {}),
     ...(settings.watchlistOnHome !== undefined ? { watchlistOnHome: settings.watchlistOnHome } : {}),
+    ...(Array.isArray(settings.hiddenNavigationSections) ? { hiddenNavigationSections: normalizedHiddenNavigationSections(settings.hiddenNavigationSections) } : {}),
     ...(settings.guideRowCount !== undefined ? { guideRowCount: settings.guideRowCount } : {}),
     ...(settings.autoPlayMaxQuality !== undefined && ANDROID_MAX_QUALITY.has(settings.autoPlayMaxQuality) ? { autoPlayMaxQuality: settings.autoPlayMaxQuality } : {}),
     ...(settings.autoPlayMaxSizeGb !== undefined ? { autoPlayMaxSizeGb: Math.max(0, Math.min(1024, Math.round(Number(settings.autoPlayMaxSizeGb) || 0))) } : {}),
@@ -575,6 +577,7 @@ function settingsFromAndroidProfile(value: unknown): Partial<AppSettings> {
   if ("streamSearchMode" in state) partial.streamSearchMode = String(state.streamSearchMode).toLowerCase() === "sequential" ? "sequential" : "parallel";
   if (typeof state.netflixHomeStyle === "boolean") partial.netflixHomeStyle = state.netflixHomeStyle;
   if (typeof state.watchlistOnHome === "boolean") partial.watchlistOnHome = state.watchlistOnHome;
+  if (Array.isArray(state.hiddenNavigationSections)) partial.hiddenNavigationSections = normalizedHiddenNavigationSections(state.hiddenNavigationSections);
   if (state.guideRowCount !== undefined && state.guideRowCount !== null && Number.isFinite(Number(state.guideRowCount))) partial.guideRowCount = Number(state.guideRowCount);
   if (state.autoPlayMaxQuality !== undefined && state.autoPlayMaxQuality !== null) partial.autoPlayMaxQuality = webMaxQuality(state.autoPlayMaxQuality);
   if (state.autoPlayMaxSizeGb !== undefined && state.autoPlayMaxSizeGb !== null && Number.isFinite(Number(state.autoPlayMaxSizeGb))) partial.autoPlayMaxSizeGb = Number(state.autoPlayMaxSizeGb);
@@ -914,6 +917,7 @@ export async function pullCloudPayload(auth: AuthClient, profileId?: string | nu
   delete legacySettings.streamProviderEnabledMap;
   delete legacySettings.catalogueRowLayoutModes;
   delete legacySettings.androidPluginRepositories;
+  delete legacySettings.hiddenNavigationSections;
   const legacyCatalogs = parseNestedJson(root.catalogs);
   const hasProfileCatalogs = Array.isArray(profileCatalogs);
   const effectiveHiddenCatalogs = hiddenCatalogIds ?? (hasProfileCatalogs ? [] : root.hiddenPreinstalledCatalogs ?? legacySettings.hiddenCatalogIds);
@@ -974,6 +978,7 @@ export async function pullCloudPayload(auth: AuthClient, profileId?: string | nu
       streamProviderEnabledMap: undefined,
       catalogueRowLayoutModes: undefined,
       androidPluginRepositories: undefined,
+      hiddenNavigationSections: loadNavigationVisibility(auth.session?.userId, profileId),
       ...profileSettings,
       ...globalSettings,
       ...iptvSettings,

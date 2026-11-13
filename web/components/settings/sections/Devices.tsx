@@ -5,6 +5,8 @@ import { useTranslation } from "@/lib/i18n";
 import { ACCENTS, ACCENT_NAMES } from "@/lib/accents";
 import { isLinux, isMac, isWindows, setVlcProtocolReady, triggerDownload, vlcProtocolReady, VLC_SETUP_SH_URL, VLC_SETUP_URL } from "@/lib/externalPlayers";
 import { useAppPick } from "@/lib/store";
+import { kidsLevelOf } from "@/lib/kids";
+import { navigationSectionVisible, withNavigationSectionVisible } from "@/lib/navigationVisibility";
 import { DownloadsPanel } from "../DownloadsPanel";
 import { Group, Row, Segmented, Select, SectionHeader, Status, Swatches, TextInput, Toggle } from "../ui";
 
@@ -13,7 +15,7 @@ const settingsKey = "arvio.web.settings";
 /* ---------- Home and appearance ---------- */
 
 export function AppearanceSection() {
-  const { settings, updateSettings: set } = useAppPick("settings", "updateSettings");
+  const { settings, updateSettings: set, activeProfile } = useAppPick("settings", "updateSettings", "activeProfile");
   return (
     <>
       <SectionHeader title="Home and appearance" description="How ARVIO looks, and what shows on Home." />
@@ -39,6 +41,20 @@ export function AppearanceSection() {
         <Row id="watchlist-home" label="Show watchlist on Home" hint="Place your watchlist below Continue Watching." scope="android">
           <Toggle label="Show watchlist on Home" value={settings.watchlistOnHome ?? false} onChange={(v) => set({ watchlistOnHome: v })} />
         </Row>
+      </Group>
+      <Group title="Navigation">
+        <Row id="navigation-search" label="Show Search" scope="all">
+          <Toggle label="Show Search" value={navigationSectionVisible("search", settings.hiddenNavigationSections)}
+            onChange={(visible) => set({ hiddenNavigationSections: withNavigationSectionVisible(settings.hiddenNavigationSections, "search", visible) })} />
+        </Row>
+        <Row id="navigation-library" label="Show Library" scope="all">
+          <Toggle label="Show Library" value={navigationSectionVisible("watchlist", settings.hiddenNavigationSections)}
+            onChange={(visible) => set({ hiddenNavigationSections: withNavigationSectionVisible(settings.hiddenNavigationSections, "watchlist", visible) })} />
+        </Row>
+        {!kidsLevelOf(activeProfile) && <Row id="navigation-tv" label="Show TV Player" scope="all">
+          <Toggle label="Show TV Player" value={navigationSectionVisible("tv", settings.hiddenNavigationSections)}
+            onChange={(visible) => set({ hiddenNavigationSections: withNavigationSectionVisible(settings.hiddenNavigationSections, "tv", visible) })} />
+        </Row>}
       </Group>
       <Group title="Title pages">
         <Row id="spoiler-blur" label="Blur episode spoilers" hint="Blur thumbnails and descriptions of episodes you haven't watched." scope="all">

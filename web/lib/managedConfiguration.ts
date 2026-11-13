@@ -25,7 +25,7 @@ export function managedSettings(config: PartnerConfiguration): Partial<AppSettin
   })) as Partial<AppSettings>;
 }
 
-const appearance = new Set(["netflixHomeStyle", "watchlistOnHome", "cardLayoutMode", "oledBlack", "clockFormat", "showBudget", "showEpisodeRatings", "iptvFavoritesOnHome", "smoothScrolling", "spoilerBlur", "accentColor", "cardDensity", "guideRowCount", "catalogueRowLayoutModes"]);
+const appearance = new Set(["netflixHomeStyle", "watchlistOnHome", "hiddenNavigationSections", "cardLayoutMode", "oledBlack", "clockFormat", "showBudget", "showEpisodeRatings", "iptvFavoritesOnHome", "smoothScrolling", "spoilerBlur", "accentColor", "cardDensity", "guideRowCount", "catalogueRowLayoutModes"]);
 const catalogs = new Set(["catalogs", "hiddenCatalogIds", "hiddenAddonCatalogIds", "hiddenHomeServerCatalogIds"]);
 const connections = new Set(["homeServers", "iptvPlaylists", "iptvStalkerUrl", "iptvStalkerMac", "iptvStalkerPortals", "disabledAddonIds", "torrServerBaseUrl", "streamProvidersCustomOrder", "streamIntegrationsMacroOrder", "streamMacroEnabledMap", "streamProviderEnabledMap"]);
 const metadata = new Set(["customTmdbApiKey", "customTvdbApiKey", "customTvdbUserPin", "metadataMovieProviders", "metadataTvProviders", "metadataAnimeProviders", "animeEpisodeStructuring"]);

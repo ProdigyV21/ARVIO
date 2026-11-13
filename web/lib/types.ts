@@ -575,6 +575,8 @@ export interface AppSettings {
   /** Android/TV home layout. Undefined = keep the app's value. */
   netflixHomeStyle?: boolean;
   watchlistOnHome?: boolean;
+  /** Profile-scoped optional navigation tabs; absent in older cloud snapshots. */
+  hiddenNavigationSections?: string[];
   /** Android/TV guide rows: 0 = automatic, 6–10. Undefined = keep the app's value. */
   guideRowCount?: number;
   showEpisodeRatings: boolean;

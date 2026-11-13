@@ -253,7 +253,9 @@ fun AppBottomBar(
         modifier.background(Color(0xCC000000))
     }
 
-    val items = bottomBarItems.filter { it.route != "tv" || !KidsNavigation.hideLiveTv }
+    val items = bottomBarItems.filter {
+        com.arflix.tv.util.isNavigationSectionVisible(it.route, NavigationVisibility.hiddenSections, KidsNavigation.hideLiveTv)
+    }
     if (isRail) {
         Column(
             modifier = baseModifier

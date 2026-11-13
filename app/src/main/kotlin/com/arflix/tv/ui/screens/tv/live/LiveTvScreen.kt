@@ -1108,6 +1108,7 @@ fun LiveTvScreen(
     var topBarFocusIndex by rememberSaveable {
         mutableIntStateOf(topBarSelectedIndex(SidebarItem.TV, hasProfile).coerceIn(0, maxTopBarIndex))
     }
+    com.arflix.tv.ui.components.ReconcileTopBarFocus(topBarFocusIndex, hasProfile) { topBarFocusIndex = it }
     val topBarFocusRequester = remember { FocusRequester() }
     var lastGuideUserNavigationAt by remember { mutableLongStateOf(0L) }
     fun noteGuideUserNavigation() {
@@ -4658,7 +4659,7 @@ fun LiveTvScreen(
                         }
                     },
                     onMoveUpFromSearch = {
-                        topBarFocusIndex = topBarSelectedIndex(SidebarItem.TV, hasProfile)
+                        topBarFocusIndex = topBarSelectedIndex(SidebarItem.TV, hasProfile).coerceIn(0, maxTopBarIndex)
                             .coerceIn(0, maxTopBarIndex)
                         focusZone = LiveTvFocusZone.TOPBAR
                     },

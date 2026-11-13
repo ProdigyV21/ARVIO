@@ -10,11 +10,13 @@ import { settingsKey } from "./settings";
 import { authClient } from "./clients";
 import type { StoreCore } from "./core";
 import { personalManagedPatch } from "../managedConfiguration";
+import { saveNavigationVisibility } from "../navigationVisibility";
 
 export function useSettingsAutosave(store: StoreCore) {
   const { activeProfileId, activeProfileIdRef, cloudProfilesHydrated, lastSyncedSettingsRef, profiles, setSettingsSyncState, setToast, personalSettings: settings } = store;
   useEffect(() => {
     saveStored(settingsKey, settings);
+    saveNavigationVisibility(authClient.session?.userId, activeProfileId, settings.hiddenNavigationSections);
     savePlaylists(settings.iptvPlaylists);
     if (!authClient.session || !activeProfileId) { setSettingsSyncState("local"); return; }
     if (authClient.session && !cloudProfilesHydrated) return;
@@ -81,6 +83,7 @@ export function useUpdateSettings(store: StoreCore) {
     const previous = personalSettingsRef.current;
     const next = { ...previous, ...personalManagedPatch(patch) };
     const profileId = activeProfileIdRef.current;
+    saveNavigationVisibility(authClient.session?.userId, profileId, next.hiddenNavigationSections);
     // Record the explicit user edit immediately, even before the first cloud
     // pull finishes. The autosave effect cannot queue without a hydrated baseline.
     // Using the pre-edit values here describes only this action, not browser defaults.

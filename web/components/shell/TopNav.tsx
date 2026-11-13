@@ -6,6 +6,7 @@ import { BadgeCheck, Bookmark, Home, Search, Settings, Tv } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useAppPick } from "@/lib/store";
 import { kidsLevelOf } from "@/lib/kids";
+import { navigationSectionVisible } from "@/lib/navigationVisibility";
 import { ProfileAvatarVisual } from "@/components/profile/ProfileAvatar";
 import type { NavSection } from "@/lib/types";
 import { useEntitlement } from "@/lib/entitlementContext";
@@ -39,7 +40,18 @@ export function TopNav() {
   const [scrolled, setScrolled] = useState(false);
   const barRef = useRef<HTMLElement>(null);
   // Live TV carries no age ratings: a kids profile loses the tab (Android KidsNavigation).
-  const visibleNav = kidsLevelOf(activeProfile) ? nav.filter((item) => item.id !== "tv") : nav;
+  const visibleNav = nav.filter((item) => navigationSectionVisible(item.id, settings.hiddenNavigationSections, Boolean(kidsLevelOf(activeProfile))));
+  const navFocus = useRef<{ button: HTMLButtonElement; container: HTMLElement } | null>(null);
+  const visibleNavKey = visibleNav.map((item) => item.id).join("|");
+  const rememberNavFocus = (event: React.FocusEvent<HTMLButtonElement>) => {
+    if (event.currentTarget.parentElement) navFocus.current = { button: event.currentTarget, container: event.currentTarget.parentElement };
+  };
+  useEffect(() => {
+    const previous = navFocus.current;
+    if (previous && !previous.button.isConnected && document.activeElement === document.body) {
+      previous.container.querySelector<HTMLButtonElement>('[data-nav-section="home"]')?.focus();
+    }
+  }, [visibleNavKey]);
   const entitlement = useEntitlement();
   const [now, setNow] = useState(Date.now);
   const trialLabel = trialRemainingLabel(entitlement, now);
@@ -103,6 +115,8 @@ export function TopNav() {
                 type="button"
                 key={item.id}
                 className={`nav-item ${current ? "is-active" : ""}`}
+                data-nav-section={item.id}
+                onFocus={rememberNavFocus}
                 // The labels are hidden at 681-980px: the name must not depend on them.
                 aria-label={translateUi(item.label)}
                 aria-current={current ? "page" : undefined}
@@ -187,6 +201,8 @@ export function TopNav() {
               key={item.id}
               aria-current={!selected && section === item.id ? "page" : undefined}
               className={`mobile-nav-item ${!selected && section === item.id ? "is-active" : ""}`}
+              data-nav-section={item.id}
+              onFocus={rememberNavFocus}
               onClick={() => {
                 closeDetails();
                 setSection(item.id);
