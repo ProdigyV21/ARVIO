@@ -1281,7 +1281,7 @@
     <string name="ai_remove_hi_title">Hörgeschädigten-Text entfernen</string>
     <string name="ai_remove_hi_desc">[Geklammerte] Hörgeschädigten-Kennzeichnungen vor der Übersetzung entfernen</string>
     <string name="ai_api_key_title">API-Schlüssel</string>
-    <string name="ai_api_key_desc">Groq- oder Gemini-API-Schlüssel manuell eingeben</string>
+    <string name="ai_api_key_desc">Groq-, Gemini- oder Claude-API-Schlüssel manuell eingeben</string>
     <string name="ai_scan_qr_title">QR-Code scannen zum Setzen des Schlüssels</string>
     <string name="ai_scan_qr_desc">Browser auf dem Telefon öffnen, um den API-Schlüssel einzugeben</string>
     <string name="ai_groq_disclaimer">Groq Gratis-Tarif: ~30 Anfragen/Min_</string>

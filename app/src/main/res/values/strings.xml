@@ -293,7 +293,7 @@
     <string name="ai_remove_hi_title">Remove Hearing Impaired Text</string>
     <string name="ai_remove_hi_desc">Strip [bracketed] hearing-impaired markers before translation</string>
     <string name="ai_api_key_title">API Key</string>
-    <string name="ai_api_key_desc">Enter your Groq or Gemini API key manually</string>
+    <string name="ai_api_key_desc">Enter your Groq, Gemini or Claude API key manually</string>
     <string name="ai_scan_qr_title">Scan QR Code to Set Key</string>
     <string name="ai_scan_qr_desc">Open a browser on your phone to enter the API key</string>
     <string name="ai_groq_disclaimer">Groq free tier: ~30 requests/min_</string>
@@ -304,6 +304,9 @@
     <string name="ai_gemini_model_note">Better quality · Requires a billing-enabled Google account</string>
     <string name="ai_api_key_dialog_subtitle_groq">Enter your Groq API key</string>
     <string name="ai_api_key_dialog_subtitle_gemini">Enter your Gemini API key</string>
+    <string name="ai_api_key_dialog_subtitle_claude" tools:ignore="MissingTranslation">Enter your Anthropic API key</string>
+    <string name="ai_claude_model_note" tools:ignore="MissingTranslation">Best quality · Paid Anthropic API key</string>
+    <string name="ai_claude_disclaimer" tools:ignore="MissingTranslation">Paid Anthropic API key. Cost: about $0.02–0.05 per episode. Audio features (hearing reference, live TV) still need Gemini</string>
     <string name="ai_key_saved_title">API key saved</string>
     <string name="ai_key_saved_subtitle">AI translation is ready to use</string>
     <string name="ai_qr_scan_hint">Scan with your phone — choose Groq or Gemini</string>

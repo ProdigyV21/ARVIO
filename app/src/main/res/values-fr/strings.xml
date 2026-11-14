@@ -241,7 +241,7 @@
     <string name="ai_remove_hi_title">Retirer le texte pour malentendants</string>
     <string name="ai_remove_hi_desc">Supprimez les marqueurs pour malentendants [entre crochets] avant la traduction</string>
     <string name="ai_api_key_title">Clé API</string>
-    <string name="ai_api_key_desc">Saisissez manuellement votre clé API Groq ou Gemini</string>
+    <string name="ai_api_key_desc">Saisissez manuellement votre clé API Groq, Gemini ou Claude</string>
     <string name="ai_scan_qr_title">Scanner un QR code pour définir la clé</string>
     <string name="ai_scan_qr_desc">Ouvrez un navigateur sur votre téléphone pour saisir la clé API</string>
     <string name="ai_groq_disclaimer">Offre gratuite Groq : ~30 requêtes/min</string>

@@ -2362,6 +2362,10 @@ class SettingsViewModel @Inject constructor(
                 onKeyReceived = { key ->
                     viewModelScope.launch {
                         saveSubtitleAiApiKey(key)
+                        // The phone page picks the provider; follow it on the TV.
+                        com.arflix.tv.ui.screens.player.subtitles.subtitleAiModelForKey(key)
+                            ?.takeIf { it != _uiState.value.subtitleAiModel }
+                            ?.let { setSubtitleAiModel(it) }
                         _uiState.value = _uiState.value.copy(
                             aiKeyServerState = _uiState.value.aiKeyServerState.copy(keyReceived = true)
                         )
