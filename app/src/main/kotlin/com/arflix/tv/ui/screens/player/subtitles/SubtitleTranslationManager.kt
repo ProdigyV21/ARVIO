@@ -168,16 +168,51 @@ class SubtitleTranslationManager(
         val uncached = texts.filter { !cache.containsKey(it) && !inFlight.containsKey(it) }
         if (uncached.isEmpty()) return
         uncached.chunked(40).forEach { chunk ->
-            val result = service.translateBatch(chunk, targetLanguage)
-            if (result.success) {
-                onBatchResult?.invoke(true, null)
-                chunk.forEachIndexed { i, text ->
-                    cache[text] = result.lines.getOrElse(i) { text }
+            // Register the chunk as in flight so a cue reaching the screen meanwhile joins this
+            // request instead of the real-time queue sending the same line again.
+            val owned = chunk.mapNotNull { text ->
+                val deferred = CompletableDeferred<String>()
+                if (inFlight.putIfAbsent(text, deferred) == null) text to deferred else null
+            }.toMap()
+            var first: TranslationResult? = null
+            try {
+                val r = service.translateBatch(chunk, targetLanguage)
+                first = r
+                if (r.success) {
+                    onBatchResult?.invoke(true, null)
+                    chunk.forEachIndexed { i, text ->
+                        cache[text] = r.lines.getOrElse(i) { text }
+                    }
+                } else {
+                    onBatchResult?.invoke(false, r.errorMessage)
                 }
-            } else {
-                onBatchResult?.invoke(false, result.errorMessage)
+            } finally {
+                // Waiters get the first-pass translation, or on failure/cancellation the original
+                // text (not cached, so the next render tries again), exactly like processBatches.
+                owned.forEach { (text, deferred) ->
+                    inFlight.remove(text, deferred)
+                    deferred.complete(cache[text] ?: text)
+                }
+            }
+            val firstPass = first?.takeIf { it.success } ?: run {
                 delay(5_000L)
                 return
+            }
+            // The repair request runs only after every waiter has its line, so it never delays a
+            // cue on screen (after play or seek, the first cue is in this chunk). A cue already
+            // shown keeps the first version; later renders of that line get the repaired one.
+            val repaired = try {
+                service.repairSuspectLines(chunk, firstPass, targetLanguage)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                firstPass
+            }
+            if (repaired !== firstPass) {
+                chunk.forEachIndexed { i, text ->
+                    val line = repaired.lines.getOrNull(i) ?: return@forEachIndexed
+                    if (line != firstPass.lines.getOrNull(i)) cache[text] = line
+                }
             }
         }
     }

@@ -19,7 +19,10 @@ internal val RTL_LANGUAGES = setOf("hebrew", "arabic", "urdu", "persian", "farsi
 data class TranslationResult(
     val lines: List<String>,
     val success: Boolean,
-    val errorMessage: String? = null
+    val errorMessage: String? = null,
+    // Indices the model left out of an otherwise successful reply; those entries of [lines] still
+    // hold the source text. Lets translateBatch ask for just those lines again.
+    val untranslated: Set<Int> = emptySet()
 )
 
 // Marker error for Gemini's non-configurable content-policy rejections (finishReason
@@ -284,6 +287,36 @@ class SubtitleTranslationService(
     suspend fun translateBatch(lines: List<String>, targetLanguage: String): TranslationResult =
         translateBatchInternal(lines, targetLanguage, depth = 0)
 
+    /**
+     * One follow-up request for the few lines of a successful batch that came back unusable: lines
+     * the model dropped (they would be cached and shown in the source language) and lines with
+     * letters from an unrelated script inside them (see SubtitleScriptCheck). The retry carries
+     * only those lines, and a retried line is used only if it is an improvement, so the worst case
+     * is one small extra request and the same result as before.
+     *
+     * Returns [first] itself when there was nothing to repair. Call it only off the waiting path:
+     * the caller should already have shown [first].
+     */
+    suspend fun repairSuspectLines(
+        lines: List<String>,
+        first: TranslationResult,
+        targetLanguage: String
+    ): TranslationResult {
+        if (!first.success || first.lines.size != lines.size) return first
+        val expected = dominantScript(first.lines, lines)
+        val suspects = suspectLineIndices(lines, first.lines, first.untranslated, expected)
+        // More than half the batch suspect means the batch or the script guess is off, not a few
+        // stray lines; a retry would just double the request for no gain.
+        if (suspects.isEmpty() || suspects.size * 2 > lines.size) return first
+
+        Log.w(TAG, "Re-requesting ${suspects.size}/${lines.size} lines (dropped or script-corrupted)")
+        val retry = translateBatchInternal(suspects.map { lines[it] }, targetLanguage, depth = 0)
+        if (!retry.success) return first
+        return first.copy(
+            lines = mergeRepairedLines(lines, first.lines, suspects, retry.lines, retry.untranslated, expected)
+        )
+    }
+
     private suspend fun translateBatchInternal(
         lines: List<String>,
         targetLanguage: String,
@@ -314,7 +347,9 @@ class SubtitleTranslationService(
             val left = translateBatchInternal(lines.subList(0, mid), targetLanguage, depth + 1)
             val right = translateBatchInternal(lines.subList(mid, lines.size), targetLanguage, depth + 1)
             // Best-effort merge: failed halves already carry their original lines.
-            return TranslationResult(left.lines + right.lines, true)
+            val untranslated = (if (left.success) left.untranslated else emptySet()) +
+                (if (right.success) right.untranslated.map { it + mid } else emptyList())
+            return TranslationResult(left.lines + right.lines, true, untranslated = untranslated)
         }
         return result
     }
@@ -579,6 +614,7 @@ class SubtitleTranslationService(
             if (isRtl) "‏$line‏" else line
         }
 
-        return TranslationResult(translated, true)
+        val untranslated = lines.indices.filterNot { byIndex.containsKey(it) }.toSet()
+        return TranslationResult(translated, true, untranslated = untranslated)
     }
 }
