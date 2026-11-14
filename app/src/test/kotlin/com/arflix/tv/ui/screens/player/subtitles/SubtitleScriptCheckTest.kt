@@ -141,4 +141,20 @@ class SubtitleScriptCheckTest {
         val merged = mergeRepairedLines(source, first, listOf(0, 1), listOf("Πάρε τον Σολ Γκούντμαν."), emptySet(), greek)
         assertThat(merged).containsExactly("Πάρε τον Σολ Γκούντμαν.", "Καταστrafηκε.").inOrder()
     }
+
+    @Test
+    fun japaneseIterationMarkIsEastAsian() {
+        val ja = ScriptFamily.EAST_ASIAN
+        assertThat(scriptFamilyOf('々'.code)).isEqualTo(ja)
+        assertThat(hasScriptCorruption("人々が集まった。", "People gathered.", ja)).isFalse()
+        assertThat(hasScriptCorruption("時々そう思う。", "Sometimes I think so.", ja)).isFalse()
+    }
+
+    @Test
+    fun modifierApostropheAndLigaturesAreLatin() {
+        assertThat(scriptFamilyOf(0x02BC)).isEqualTo(ScriptFamily.LATIN)
+        assertThat(scriptFamilyOf(0xFB01)).isEqualTo(ScriptFamily.LATIN)
+        // Ukrainian "мʼясо" (meat) is ordinary Cyrillic text, not a third script.
+        assertThat(hasScriptCorruption("Це мʼясо.", "This is meat.", ScriptFamily.CYRILLIC)).isFalse()
+    }
 }

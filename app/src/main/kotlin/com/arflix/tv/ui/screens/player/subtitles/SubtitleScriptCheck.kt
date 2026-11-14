@@ -34,7 +34,10 @@ private const val MIN_LATIN_LETTERS_IN_MIXED_WORD = 2
 internal fun scriptFamilyOf(codePoint: Int): ScriptFamily? {
     if (!Character.isLetter(codePoint)) return null
     return when (codePoint) {
-        in 0x0041..0x024F, in 0x1E00..0x1EFF, in 0xFF21..0xFF5A -> ScriptFamily.LATIN
+        // Spacing modifier letters (the Ukrainian apostrophe ʼ) and Latin ligatures (ﬁ) are part of
+        // ordinary Latin-script text.
+        in 0x0041..0x024F, in 0x02B0..0x02FF, in 0x1E00..0x1EFF, in 0xFB00..0xFB06,
+        in 0xFF21..0xFF5A -> ScriptFamily.LATIN
         in 0x0370..0x03FF, in 0x1F00..0x1FFF -> ScriptFamily.GREEK
         in 0x0400..0x052F, in 0x2DE0..0x2DFF, in 0xA640..0xA69F -> ScriptFamily.CYRILLIC
         in 0x0530..0x058F -> ScriptFamily.ARMENIAN
@@ -45,7 +48,8 @@ internal fun scriptFamilyOf(codePoint: Int): ScriptFamily? {
         in 0x0E00..0x0EFF -> ScriptFamily.THAI_LAO
         in 0x10A0..0x10FF -> ScriptFamily.GEORGIAN
         // Han, kana and Hangul are one family: Japanese and Korean legitimately mix them.
-        in 0x1100..0x11FF, in 0x3040..0x318F, in 0x31F0..0x31FF, in 0x3400..0x4DBF,
+        // 0x3005..0x3007 are the iteration and ideographic marks (々 in 人々, 時々).
+        in 0x1100..0x11FF, in 0x3005..0x3007, in 0x3040..0x318F, in 0x31F0..0x31FF, in 0x3400..0x4DBF,
         in 0x4E00..0x9FFF, in 0xAC00..0xD7AF, in 0xF900..0xFAFF, in 0xFF66..0xFFDC,
         in 0x20000..0x3FFFF -> ScriptFamily.EAST_ASIAN
         else -> ScriptFamily.OTHER

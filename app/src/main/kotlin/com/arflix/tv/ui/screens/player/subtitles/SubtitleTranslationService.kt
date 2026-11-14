@@ -284,9 +284,18 @@ class SubtitleTranslationService(
         }
     }
 
-    suspend fun translateBatch(lines: List<String>, targetLanguage: String): TranslationResult {
+    /**
+     * [repairSuspects] adds one follow-up request for dropped or script-corrupted lines before
+     * returning. Only pass it where nobody is waiting on the result (the lookahead): on the
+     * real-time path the retry would hold back the whole batch, including the cue on screen.
+     */
+    suspend fun translateBatch(
+        lines: List<String>,
+        targetLanguage: String,
+        repairSuspects: Boolean = false
+    ): TranslationResult {
         val first = translateBatchInternal(lines, targetLanguage, depth = 0)
-        return repairSuspectLines(lines, first, targetLanguage)
+        return if (repairSuspects) repairSuspectLines(lines, first, targetLanguage) else first
     }
 
     /**
