@@ -147,13 +147,12 @@ data class SearchUiState(
     val isAiSearch: Boolean = false
 ) {
     /**
-     * Rows or grid: the media type alone is not a filter (it is always set), and neither is the
-     * sort order — sorting five browse rows that each have their own sort would mean nothing.
-     * Everything else switches the rows over to the filtered grid.
+     * The default view keeps its themed browse rows. A non-default sort opens the grid so the
+     * requested order applies to one list, even without a genre or another narrowing filter.
      */
     val hasDiscoverFilters: Boolean
         get() = selectedGenres.isNotEmpty() || rating.isSet || decade != null || year != null ||
-            certification != null || language != null || hideWatched
+            certification != null || language != null || hideWatched || sortOption != SortOption.POPULAR
 }
 
 @HiltViewModel
@@ -240,7 +239,7 @@ class SearchViewModel @Inject constructor(
                 val oneYearAgo = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(cal.time)
 
                 // Each row brings its own sort and vote floor — that is what makes it a row and
-                // not a slice of the grid, so the sort chip deliberately does not reach here.
+                // not a slice of the grid. A non-default sort opens the grid instead.
                 //
                 // The rows stay on the any-release window on purpose (B34): "New Releases" asks
                 // what turned up in the last 90 days, and a film that just landed on a platform
@@ -395,7 +394,7 @@ class SearchViewModel @Inject constructor(
     ): List<MediaItem> =
         mediaRepository.discoverTv(
             genres = genres,
-            sortBy = request.sort,
+            sortBy = if (request.sort == "primary_release_date.desc") "first_air_date.desc" else request.sort,
             minVoteCount = request.minVotes,
             page = request.page,
             year = request.year,
@@ -734,8 +733,7 @@ class SearchViewModel @Inject constructor(
         val state = _uiState.value
         if (state.sortOption == sort) return
         _uiState.value = state.copy(sortOption = sort)
-        // The sort order only reaches the grid; the browse rows each carry their own.
-        if (state.hasDiscoverFilters) applyDiscoverSelection()
+        applyDiscoverSelection()
     }
 
     fun setRating(rating: RatingFilter) {
@@ -799,6 +797,7 @@ class SearchViewModel @Inject constructor(
         if (!state.hasDiscoverFilters) return
         _uiState.value = state.copy(
             selectedGenres = emptyList(),
+            sortOption = SortOption.POPULAR,
             rating = RatingFilter(),
             decade = null,
             year = null,
