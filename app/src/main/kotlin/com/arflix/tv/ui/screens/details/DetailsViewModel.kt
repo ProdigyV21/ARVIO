@@ -26,6 +26,12 @@ import com.arflix.tv.data.api.TmdbApi
 import com.arflix.tv.data.api.TraktComment
 import com.arflix.tv.data.repository.AddonNotice
 import com.arflix.tv.data.repository.YouTubeCollection
+import com.arflix.tv.data.repository.CatalogException
+import com.arflix.tv.data.repository.CatalogRepository
+import com.arflix.tv.data.repository.YouTubeSource
+import com.arflix.tv.data.api.YouTubeKidsCorpus
+import com.arflix.tv.data.api.YouTubeSearchApi
+import com.arflix.tv.BuildConfig
 import com.arflix.tv.data.repository.CloudSyncRepository
 import com.arflix.tv.data.repository.ContinueWatchingMerge
 import com.arflix.tv.data.repository.HomeServerRepository
@@ -67,6 +73,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -120,9 +127,18 @@ data class DetailsUiState(
     val totalAddons: Int = 0,
     /** The "Search Telegram" source row (Telegram setting "only search when clicking"). */
     val telegramSearchRow: TelegramSearchRow = TelegramSearchRow.HIDDEN,
+    /** The "Search YouTube" source row (Settings > Sources > YouTube). */
+    val youTubeSourceRow: YouTubeSourceRow = YouTubeSourceRow.HIDDEN,
     val hasStreamingAddons: Boolean = true,
     val addonOrderedIds: List<String> = emptyList(),
     val isInWatchlist: Boolean = false,
+    /**
+     * A YouTube video (collection or search result). Its bookmark is the profile's YouTube row
+     * on Home, its "favorites" — never the watchlist, which Trakt and MDBList cannot hold.
+     */
+    val isYouTubeVideo: Boolean = false,
+    /** A kids profile is adding a video to its YouTube row, which needs the parent PIN. */
+    val youTubeParentPinRequested: Boolean = false,
     val showEpisodeRatings: Boolean = false,
     // Profile audio language as a short code ("de"), or null for Auto/None; ranks the source
     // list's language badge.
@@ -241,7 +257,9 @@ enum class ToastType {
 private fun isSupplementalStream(stream: StreamSource): Boolean =
     IptvVodSourceIds.isIptvVodAddonId(stream.addonId) || stream.addonId == HomeServerRepository.ADDON_ID ||
         // Found by the user's own "Search Telegram" — outside the addon lookup, like the above.
-        stream.addonId == TELEGRAM_ADDON_ID
+        stream.addonId == TELEGRAM_ADDON_ID ||
+        // Found by the user's own "Search YouTube", same as Telegram.
+        stream.addonId == YouTubeCollection.ADDON_ID
 
 private const val TELEGRAM_ADDON_ID = "telegram_native"
 
@@ -251,6 +269,12 @@ private const val TELEGRAM_ADDON_ID = "telegram_native"
  * row starts the search, and what it finds is listed under it as it arrives.
  */
 enum class TelegramSearchRow { HIDDEN, IDLE, SEARCHING, NONE }
+
+/**
+ * The "Search YouTube" source row: YouTube is searched for the title (or episode) only when the
+ * viewer presses it, and only its videos of 5 minutes or more are listed (see YouTubeSource).
+ */
+enum class YouTubeSourceRow { HIDDEN, IDLE, SEARCHING, NONE, FAILED }
 
 private fun Addon.isVodStreamingAddon(): Boolean =
     isEnabled &&
@@ -279,8 +303,45 @@ class DetailsViewModel @Inject constructor(
     private val recentPlayedSourceRepository: RecentPlayedSourceRepository,
     personalListsRepository: PersonalListsRepository,
     private val kidsContentFilter: KidsContentFilter,
-    private val idleReturnCoordinator: com.arflix.tv.data.repository.IdleReturnCoordinator
+    private val idleReturnCoordinator: com.arflix.tv.data.repository.IdleReturnCoordinator,
+    private val catalogRepository: dagger.Lazy<CatalogRepository>? = null,
+    private val youTubeSearchApi: YouTubeSearchApi = YouTubeSearchApi()
 ) : ViewModel() {
+
+    /** The YouTube video id of a native YouTube card, or null for anything else. */
+    private fun youTubeVideoIdOf(mediaType: MediaType, mediaId: Int): String? {
+        if (mediaId >= 0) return null
+        val card = mediaRepository.addonNativeCard(mediaType, mediaId) ?: return null
+        if (card.addonNativeAddonId != YouTubeCollection.ADDON_ID) return null
+        return YouTubeCollection.videoIdFromMetaId(card.addonNativeId)
+    }
+
+    /**
+     * A YouTube-favorite message in the app's language. [context] is the application context,
+     * which keeps the system language (English on most TVs) rather than the profile's.
+     */
+    private fun youTubeText(resId: Int, vararg args: Any): String = runCatching {
+        val config = android.content.res.Configuration(context.resources.configuration).apply {
+            setLocale(com.arflix.tv.util.appLocale(mediaRepository.contentLanguage))
+        }
+        context.createConfigurationContext(config).getString(resId, *args)
+    }.getOrNull() ?: context.getString(resId, *args)
+
+    /** The parent PIN typed for the pending YouTube-row addition on a kids profile. */
+    private var youTubeParentPin: String? = null
+    /** Why the last YouTube-row write failed, shown instead of the generic watchlist error. */
+    private var youTubeFavoriteError: String? = null
+
+    fun submitYouTubeParentPin(pin: String) {
+        youTubeParentPin = pin
+        _uiState.value = _uiState.value.copy(youTubeParentPinRequested = false)
+        toggleWatchlist()
+    }
+
+    fun dismissYouTubeParentPin() {
+        youTubeParentPin = null
+        _uiState.value = _uiState.value.copy(youTubeParentPinRequested = false)
+    }
 
     /** "Add to list" from the action row; the result shows as a Details toast. */
     private val personalListPicker = PersonalListPicker(viewModelScope, personalListsRepository, context) { message, ok ->
@@ -665,7 +726,12 @@ class DetailsViewModel @Inject constructor(
                 }
                 val watchlistDeferred = async {
                     loadDetailsPart("watchlist") {
-                        watchlistRepository.isInWatchlist(mediaType, mediaId)
+                        val youTubeVideoId = youTubeVideoIdOf(mediaType, mediaId)
+                        if (youTubeVideoId != null) {
+                            catalogRepository?.get()?.isYouTubeVideoSaved(youTubeVideoId) == true
+                        } else {
+                            watchlistRepository.isInWatchlist(mediaType, mediaId)
+                        }
                     } ?: false
                 }
                 // Fetch real IMDB ID and TVDB ID from TMDB external_ids endpoint
@@ -1157,7 +1223,8 @@ class DetailsViewModel @Inject constructor(
                         watchlistPendingAtLoad) return@launch
                     watchlistSaveState.saved = isInWatchlist
                     watchlistSaveState.wanted = isInWatchlist
-                    updateState { state -> state.copy(isInWatchlist = isInWatchlist) }
+                    val isYouTubeVideo = youTubeVideoIdOf(mediaType, mediaId) != null
+                    updateState { state -> state.copy(isInWatchlist = isInWatchlist, isYouTubeVideo = isYouTubeVideo) }
                 }
 
                 launch {
@@ -1616,6 +1683,13 @@ class DetailsViewModel @Inject constructor(
         val saveState = watchlistSaveStates.getOrPut(mediaType to mediaId) { WatchlistSaveState() }
         val previousInWatchlist = _uiState.value.isInWatchlist
         val newInWatchlist = !previousInWatchlist
+        val isYouTubeVideo = youTubeVideoIdOf(mediaType, mediaId) != null
+        // On a kids profile every video of the YouTube row is parent-picked: ask for the PIN
+        // before adding (removing needs none).
+        if (isYouTubeVideo && newInWatchlist && youTubeParentPin == null && kidsContentFilter.state.value.isActive) {
+            _uiState.value = _uiState.value.copy(youTubeParentPinRequested = true)
+            return
+        }
         saveState.wanted = newInWatchlist
         val toggleVersion = ++saveState.version
         saveState.pendingWrites++
@@ -1624,7 +1698,12 @@ class DetailsViewModel @Inject constructor(
         // take several seconds, and the bookmark used to wait for both.
         _uiState.value = _uiState.value.copy(
             isInWatchlist = newInWatchlist,
-            toastMessage = if (newInWatchlist) context.getString(R.string.added_to_watchlist) else context.getString(R.string.watchlist_toast_removed),
+            toastMessage = when {
+                isYouTubeVideo && newInWatchlist -> youTubeText(R.string.youtube_favorite_added)
+                isYouTubeVideo -> youTubeText(R.string.youtube_favorite_removed)
+                newInWatchlist -> context.getString(R.string.added_to_watchlist)
+                else -> context.getString(R.string.watchlist_toast_removed)
+            },
             toastType = ToastType.SUCCESS
         )
 
@@ -1658,7 +1737,8 @@ class DetailsViewModel @Inject constructor(
                         if (isCurrentTitle) {
                             _uiState.value = _uiState.value.copy(
                                 isInWatchlist = saveState.wanted == true,
-                                toastMessage = context.getString(R.string.details_failed_update_watchlist),
+                                toastMessage = youTubeFavoriteError
+                                    ?: context.getString(R.string.details_failed_update_watchlist),
                                 toastType = ToastType.ERROR
                             )
                         }
@@ -1670,6 +1750,10 @@ class DetailsViewModel @Inject constructor(
     }
 
     private suspend fun writeWatchlist(item: MediaItem, mediaType: MediaType, mediaId: Int, inWatchlist: Boolean) {
+        youTubeVideoIdOf(mediaType, mediaId)?.let { videoId ->
+            writeYouTubeFavorite(videoId, item.title, inWatchlist)
+            return
+        }
         val isAnime = item.mediaType == MediaType.TV &&
             item.originalLanguage.equals("ja", ignoreCase = true) &&
             item.genreIds.contains(16)
@@ -1685,6 +1769,35 @@ class DetailsViewModel @Inject constructor(
                 throw IllegalStateException(context.getString(R.string.details_failed_trakt_watchlist_remove))
             }
             watchlistRepository.removeFromWatchlist(mediaType, mediaId)
+        }
+    }
+
+    /** Adds the video to, or takes it out of, the profile's YouTube row (created on first use). */
+    private suspend fun writeYouTubeFavorite(videoId: String, title: String, saved: Boolean) {
+        youTubeFavoriteError = null
+        val catalogs = catalogRepository?.get() ?: throw IllegalStateException("YouTube row unavailable")
+        val result = if (saved) {
+            val pin = youTubeParentPin
+            youTubeParentPin = null
+            catalogs.addYouTubeVideo(
+                YouTubeCollection.watchUrl(videoId),
+                parentPin = pin,
+                targetProfileId = profileManager.getProfileIdSync(),
+                knownTitle = title
+            )
+                .map { }
+                .recoverCatching { error ->
+                    // Saved already (on another device, say): that is the state the viewer wants.
+                    if ((error as? CatalogException)?.messageRes != R.string.catalog_already_added) throw error
+                }
+        } else {
+            catalogs.removeSavedYouTubeVideo(videoId)
+        }
+        result.onFailure { error ->
+            youTubeFavoriteError = (error as? CatalogException)?.let {
+                youTubeText(it.messageRes, *it.formatArgs.toTypedArray())
+            }
+            throw error
         }
     }
 
@@ -2193,6 +2306,71 @@ class DetailsViewModel @Inject constructor(
         }
     }
 
+    private data class YouTubeSourceRequest(
+        val requestId: Long,
+        val query: String,
+        val names: List<String?>,
+        val mediaType: MediaType,
+        val tmdbId: Int
+    )
+
+    /**
+     * The English name of a TMDB title, for the YouTube name filter: a show made in the app's
+     * language (a Hebrew show on a Hebrew app) has that one name as both title and original
+     * title, while many of its uploads are titled in English. Asked only when the viewer
+     * presses "Search YouTube", in parallel with the search. Null when unknown.
+     */
+    private suspend fun englishTitleOf(mediaType: MediaType, tmdbId: Int): String? {
+        if (tmdbId <= 0) return null
+        return runCatching {
+            if (mediaType == MediaType.MOVIE) {
+                tmdbApi.getMovieDetails(tmdbId, Constants.TMDB_API_KEY, language = "en").title
+            } else {
+                tmdbApi.getTvDetails(tmdbId, Constants.TMDB_API_KEY, language = "en").name
+            }
+        }.getOrNull()?.takeIf { it.isNotBlank() }
+    }
+
+    /** What the "Search YouTube" row searches for — the current source list's title/episode. */
+    private var youTubeSourceRequest: YouTubeSourceRequest? = null
+
+    /** The user selected the "Search YouTube" row: one YouTube search, its long videos listed. */
+    fun searchYouTubeSourceNow() {
+        val request = youTubeSourceRequest ?: return
+        if (_uiState.value.youTubeSourceRow == YouTubeSourceRow.SEARCHING) return
+        _uiState.value = _uiState.value.copy(youTubeSourceRow = YouTubeSourceRow.SEARCHING)
+        viewModelScope.launch {
+            val corpus = kidsContentFilter.state.value.level?.let(YouTubeKidsCorpus::forLevel)
+            val found = try {
+                coroutineScope {
+                    val english = async { englishTitleOf(request.mediaType, request.tmdbId) }
+                    val videos = YouTubeSource.search(request.query, corpus, youTubeSearchApi::search)
+                    YouTubeSource.streams(videos, request.names + english.await())
+                }
+            } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
+                Log.w(TAG, "[YouTube] source search failed: ${e.message}")
+                null
+            }
+            if (request.requestId != loadStreamsRequestId) return@launch
+            if (!found.isNullOrEmpty()) {
+                // The addon lookup may still be running: its spinner is its own to end.
+                _uiState.value = _uiState.value.copy(
+                    streams = sortPlayableStreamsFirst(
+                        (_uiState.value.streams + found).distinctBy(::providerScopedStreamIdentity)
+                    )
+                )
+            }
+            _uiState.value = _uiState.value.copy(
+                youTubeSourceRow = when {
+                    found == null -> YouTubeSourceRow.FAILED
+                    found.isEmpty() -> YouTubeSourceRow.NONE
+                    else -> YouTubeSourceRow.HIDDEN
+                }
+            )
+        }
+    }
+
     fun loadStreams(imdbId: String?, identity: EpisodeIdentity? = null) {
         if (!canStartPlayback()) return
         val requestId = ++loadStreamsRequestId
@@ -2216,9 +2394,11 @@ class DetailsViewModel @Inject constructor(
             subtitles = emptyList(),
             streamSearchStartTime = System.currentTimeMillis(),
             pluginScrapersLoading = false,
-            telegramSearchRow = TelegramSearchRow.HIDDEN
+            telegramSearchRow = TelegramSearchRow.HIDDEN,
+            youTubeSourceRow = YouTubeSourceRow.HIDDEN
         )
         telegramSearchRequest = null
+        youTubeSourceRequest = null
         val requestMediaType = currentMediaType
         val requestMediaId = currentMediaId
 
@@ -2309,6 +2489,27 @@ class DetailsViewModel @Inject constructor(
                     )
                     if (isCurrentRequest()) {
                         _uiState.value = _uiState.value.copy(telegramSearchRow = TelegramSearchRow.IDLE)
+                    }
+                }
+                if (!isYouTubeVideo && BuildConfig.YOUTUBE_SEARCH_AVAILABLE &&
+                    streamIntegrationRepository.isIntegrationEnabled(StreamIntegrationType.YOUTUBE)
+                ) {
+                    val query = YouTubeSource.query(
+                        mediaType = requestMediaType,
+                        title = item?.title.orEmpty(),
+                        year = item?.year?.toIntOrNull(),
+                        season = canonicalSeason,
+                        episode = canonicalEpisode
+                    )
+                    if (query != null && isCurrentRequest()) {
+                        youTubeSourceRequest = YouTubeSourceRequest(
+                            requestId = requestId,
+                            query = query,
+                            names = listOf(item?.title, item?.originalTitle),
+                            mediaType = requestMediaType,
+                            tmdbId = requestMediaId
+                        )
+                        _uiState.value = _uiState.value.copy(youTubeSourceRow = YouTubeSourceRow.IDLE)
                     }
                 }
                 val animeQueryOverride = identity?.kitsuQuery

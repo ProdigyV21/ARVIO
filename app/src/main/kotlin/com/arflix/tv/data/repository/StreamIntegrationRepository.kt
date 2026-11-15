@@ -2,6 +2,7 @@ package com.arflix.tv.data.repository
 
 import android.content.Context
 import androidx.datastore.preferences.core.edit
+import com.arflix.tv.BuildConfig
 import com.arflix.tv.core.plugin.PluginManager
 import com.arflix.tv.data.model.AddonType
 import com.arflix.tv.data.model.IptvVodSourceIds
@@ -306,6 +307,23 @@ class StreamIntegrationRepository @Inject constructor(
                             type = StreamIntegrationType.IPTV_VOD,
                             isEnabled = portal.enabled,
                             targetConfigId = "iptv_stalker:${portal.id}"
+                        )
+                    )
+                }
+
+                // 6. YouTube (sideload builds only): on like the others, but
+                // then searched only when the source list's "Search YouTube" row is pressed.
+                if (BuildConfig.YOUTUBE_SEARCH_AVAILABLE) {
+                    add(
+                        StreamProviderItem(
+                            id = YouTubeSource.PROVIDER_ID,
+                            rawProviderKeys = listOf(YouTubeCollection.ADDON_ID),
+                            displayName = YouTubeCollection.ADDON_NAME,
+                            // Null: the Sources screen shows the type's description in the app language.
+                            subtitle = null,
+                            type = StreamIntegrationType.YOUTUBE,
+                            isEnabled = true,
+                            targetConfigId = YouTubeSource.PROVIDER_ID
                         )
                     )
                 }

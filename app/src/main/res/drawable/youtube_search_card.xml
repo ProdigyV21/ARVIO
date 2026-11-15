@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Artwork of the "Search YouTube" card on the Search screen: a magnifier around a play mark. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="320dp"
+    android:height="180dp"
+    android:viewportWidth="320"
+    android:viewportHeight="180">
+    <path
+        android:fillColor="#FF1C1C1E"
+        android:pathData="M0,0h320v180h-320z" />
+    <path
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="10"
+        android:fillColor="#00000000"
+        android:pathData="M108,82a42,42 0,1 0,84 0a42,42 0,1 0,-84 0" />
+    <path
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="14"
+        android:strokeLineCap="round"
+        android:pathData="M182,114L212,144" />
+    <path
+        android:fillColor="#FFFF3B30"
+        android:pathData="M138,62L174,82L138,102Z" />
+</vector>

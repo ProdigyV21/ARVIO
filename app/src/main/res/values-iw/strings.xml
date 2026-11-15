@@ -2020,6 +2020,8 @@
     <string name="stream_integration_telegram_desc">סטרימינג ישיר מצ׳אטים וערוצי Telegram המחוברים שלך.</string>
     <string name="stream_integration_iptv_vod">IPTV VOD</string>
     <string name="stream_integration_iptv_vod_desc">סרטים וסדרות לפי דרישה מרשימות ה-IPTV שלך.</string>
+    <string name="stream_integration_youtube">YouTube</string>
+    <string name="stream_integration_youtube_desc">סרטונים של 5 דקות ומעלה, בחיפוש רק כשלוחצים על חיפוש ביוטיוב</string>
     <string name="stream_integration_move_up">הזזה למעלה</string>
     <string name="stream_integration_move_down">הזזה למטה</string>
     <string name="stream_integration_toggle_enabled">משיכת זרמים</string>
@@ -2110,4 +2112,22 @@
     <string name="live_ai_subs_needs_key">יש להוסיף תחילה מפתח API של Google Gemini</string>
     <string name="live_ai_subs_auto_title">תרגום אוטומטי בתחילת ערוץ</string>
     <string name="live_ai_subs_auto_desc">כל ערוץ מתחיל עם כתוביות AI מופעלות, ללא צורך לבחור בהן בתפריט הכתוביות</string>
+    <!-- YouTube search on the Search screen -->
+    <string name="youtube_search_row_title">YouTube</string>
+    <string name="youtube_search_button">חיפוש ביוטיוב</string>
+    <string name="youtube_kids_search_button">חיפוש ב-YouTube Kids</string>
+    <string name="youtube_search_for">עבור "%1$s"</string>
+    <string name="youtube_search_loading">מחפש ביוטיוב…</string>
+    <string name="youtube_search_no_results">לא נמצאו סרטונים ביוטיוב</string>
+    <string name="youtube_search_failed">יוטיוב לא הגיב</string>
+    <string name="youtube_search_retry">לחצו כדי לנסות שוב</string>
+    <string name="youtube_favorite_added">נשמר בשורת היוטיוב שלך בדף הבית</string>
+    <string name="youtube_favorite_removed">הוסר משורת היוטיוב שלך</string>
+    <string name="youtube_favorite">מועדף ביוטיוב</string>
+    <string name="youtube_favorite_add">שמירה בשורת היוטיוב שלך</string>
+    <string name="youtube_parent_pin_title">קוד הורה לשמירת הסרטון</string>
+    <string name="youtube_source_row_idle">יש להקיש כדי לחפש ביוטיוב</string>
+    <string name="youtube_source_row_searching">מחפש ביוטיוב…</string>
+    <string name="youtube_source_row_none">לא נמצאו ביוטיוב סרטונים של 5 דקות ומעלה — יש לבחור כדי לחפש שוב</string>
+    <string name="youtube_source_row_failed">יוטיוב לא ענה — יש לבחור כדי לנסות שוב</string>
 </resources>

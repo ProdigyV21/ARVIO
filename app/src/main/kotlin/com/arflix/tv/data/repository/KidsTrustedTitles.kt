@@ -46,6 +46,42 @@ internal object KidsTrustedTitles {
     }
 }
 
+/**
+ * Addon catalogs a parent approved for a kids profile (with the parent PIN), such as a
+ * broadcaster's kids' catalogue. Their titles often have no TMDB entry at all — an addon's own
+ * items — so no rating can ever be looked up; the approval is what lets them through.
+ *
+ * A title is trusted once an approved catalog listed it on that profile: every page of an
+ * approved catalog that loads records its titles ([members]). A TMDB title with a known
+ * certification still follows the age limit; approval only stands in for a missing rating.
+ * Local to the device, like the list approvals.
+ */
+internal object KidsTrustedCatalogs {
+    fun approvalsKey(profileId: String) = stringSetPreferencesKey("profile_${profileId}_kids_catalog_approvals_v1")
+    fun membersKey(profileId: String) = stringSetPreferencesKey("profile_${profileId}_kids_catalog_members_v1")
+
+    /** Titles kept per profile; the oldest are dropped past this, so the set stays small. */
+    const val MAX_MEMBERS = 20_000
+
+    /** One addon catalog: the addon that serves it, its type and its id. */
+    fun catalogKey(addonId: String, catalogType: String, catalogId: String): String =
+        listOf(addonId.trim(), catalogType.trim().lowercase(), catalogId.trim())
+            .joinToString("") { "${it.length}:$it" }
+
+    fun member(catalogKey: String, type: MediaType, id: Int): String = "$catalogKey|${KidsTrustedTitles.key(type, id)}"
+
+    fun titleKeys(members: Set<String>): Set<String> = members.mapTo(hashSetOf()) { it.substringAfterLast('|') }
+
+    fun withoutCatalogs(members: Set<String>, catalogKeys: Collection<String>): Set<String> =
+        members.filterTo(linkedSetOf()) { it.substringBeforeLast('|') !in catalogKeys }
+
+    /** An addon catalog row, or a collection tile drawing from addon catalogs. */
+    fun isApprovable(catalog: CatalogConfig): Boolean =
+        (catalog.kind == CatalogKind.STANDARD && catalog.sourceType == CatalogSourceType.ADDON) ||
+            (catalog.kind == CatalogKind.COLLECTION &&
+                catalog.collectionSources.any { it.kind == com.arflix.tv.data.model.CollectionSourceKind.ADDON_CATALOG })
+}
+
 internal data class KidsListApprovalSession(val profileId: String, val catalog: CatalogConfig, val parentPinHash: String)
 
 internal data class KidsListRefresh(val profileId: String, val previouslyApproved: Set<String>)

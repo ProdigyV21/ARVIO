@@ -998,6 +998,8 @@ fun SettingsScreen(
     fun openCatalogEditor(catalog: CatalogConfig) {
         if (uiState.isKidsProfile && com.arflix.tv.data.repository.KidsTrustedTitles.isTrustedSource(catalog)) {
             kidsCatalogOptions = catalog
+        } else if (uiState.isKidsProfile && com.arflix.tv.data.repository.KidsTrustedCatalogs.isApprovable(catalog)) {
+            viewModel.openKidsCatalogApproval(catalog)
         } else {
             renameCatalogId = catalog.id
             renameCatalogTitle = catalog.title
@@ -1017,6 +1019,7 @@ fun SettingsScreen(
         showCatalogRename ||
         kidsCatalogOptions != null ||
         uiState.kidsListApproval != null ||
+        uiState.kidsCatalogApproval != null ||
         youTubeManagerCatalogId != null ||
         showYouTubeAddInput ||
         uiState.pendingYouTubeUrl != null ||
@@ -2968,6 +2971,32 @@ fun SettingsScreen(
                 },
                 onDismiss = { kidsCatalogOptions = null }
             )
+        }
+
+        uiState.kidsCatalogApproval?.let { approval ->
+            if (approval.needsPin) {
+                androidx.compose.runtime.key(approval.pinAttempts) {
+                    com.arflix.tv.ui.screens.profile.PinEntryDialog(
+                        title = stringResource(R.string.profile_parent_pin_enter),
+                        onPinConfirmed = viewModel::confirmKidsCatalogPin,
+                        onDismiss = viewModel::dismissKidsCatalogApproval,
+                        pinError = approval.error?.localizedText().orEmpty()
+                    )
+                }
+            } else {
+                KidsCatalogOptionsDialog(
+                    title = approval.catalog.title,
+                    approved = approval.approved,
+                    onRename = {
+                        viewModel.dismissKidsCatalogApproval()
+                        renameCatalogId = approval.catalog.id
+                        renameCatalogTitle = approval.catalog.title
+                        showCatalogRename = true
+                    },
+                    onToggleApproval = viewModel::requestKidsCatalogPin,
+                    onDismiss = viewModel::dismissKidsCatalogApproval
+                )
+            }
         }
 
         uiState.kidsListApproval?.let { approval ->

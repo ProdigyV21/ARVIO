@@ -82,4 +82,13 @@ class YouTubeCollectionTest {
         assertEquals("abcDEF12_-x", YouTubeCollection.videoIdFromStreamMarker(stream.url!!))
         assertFalse(YouTubeCollection.isStreamMarker("https://www.youtube.com/watch?v=abcDEF12_-x"))
     }
+
+    @Test
+    fun `an addon stream offering a YouTube video is recognised by ytId or link`() {
+        assertEquals("abcDEF12_-x", YouTubeCollection.videoIdOfAddonStream("abcDEF12_-x", null))
+        assertEquals("abcDEF12_-x", YouTubeCollection.videoIdOfAddonStream(null, "https://www.youtube.com/watch?v=abcDEF12_-x"))
+        assertEquals("abcDEF12_-x", YouTubeCollection.videoIdOfAddonStream(null, "https://youtu.be/abcDEF12_-x"))
+        assertNull(YouTubeCollection.videoIdOfAddonStream("not-an-id", "https://example.com/video.m3u8"))
+        assertNull(YouTubeCollection.videoIdOfAddonStream(null, null))
+    }
 }

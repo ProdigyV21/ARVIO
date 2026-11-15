@@ -25,6 +25,7 @@ import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.DragHandle
 import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.LiveTv
+import androidx.compose.material.icons.filled.PlayCircle
 import androidx.compose.material.icons.filled.Widgets
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
@@ -319,7 +320,7 @@ private fun ProviderRowMobile(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
-            val subtitleText = item.subtitle ?: stringResource(item.type.titleRes)
+            val subtitleText = item.subtitle ?: stringResource(providerFallbackSubtitle(item.type))
             Text(
                 text = subtitleText,
                 style = ArflixTypography.caption.copy(fontSize = 13.sp),
@@ -641,7 +642,7 @@ private fun ProviderRowTV(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
-                val subtitleText = item.subtitle ?: stringResource(item.type.titleRes)
+                val subtitleText = item.subtitle ?: stringResource(providerFallbackSubtitle(item.type))
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
                     text = subtitleText,
@@ -829,6 +830,12 @@ private fun IntegrationIcon(type: StreamIntegrationType, tint: Color, size: andr
             tint = tint,
             modifier = Modifier.size(size)
         )
+        StreamIntegrationType.YOUTUBE -> Icon(
+            imageVector = Icons.Default.PlayCircle,
+            contentDescription = null,
+            tint = tint,
+            modifier = Modifier.size(size)
+        )
     }
 }
 
@@ -873,5 +880,10 @@ private fun getStatusSummary(
                 stringResource(R.string.settings_disabled)
             }
         }
+        StreamIntegrationType.YOUTUBE -> stringResource(R.string.stream_integration_youtube_desc)
     }
 }
+
+/** A row without its own subtitle: YouTube says what it does, the others name their type. */
+private fun providerFallbackSubtitle(type: StreamIntegrationType): Int =
+    if (type == StreamIntegrationType.YOUTUBE) type.descRes else type.titleRes

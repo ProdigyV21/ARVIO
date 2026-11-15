@@ -82,6 +82,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.BookmarkBorder
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FavoriteBorder
+import com.arflix.tv.ui.screens.profile.PinEntryDialog
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Movie
@@ -1034,6 +1037,7 @@ fun DetailsScreen(
                         reviewIndex = reviewIndex,
                         similarIndex = similarIndex,
                         isInWatchlist = uiState.isInWatchlist,
+                        isYouTubeVideo = uiState.isYouTubeVideo,
                         genres = uiState.genres,
                         budget = uiState.budget,
                         externalRatings = uiState.externalRatings,
@@ -1084,6 +1088,14 @@ fun DetailsScreen(
             }
         )
 
+        if (uiState.youTubeParentPinRequested) {
+            PinEntryDialog(
+                title = stringResource(R.string.youtube_parent_pin_title),
+                onPinConfirmed = viewModel::submitYouTubeParentPin,
+                onDismiss = viewModel::dismissYouTubeParentPin
+            )
+        }
+
         if (showTrailerPlayer && uiState.trailerKey != null) {
             YouTubeTrailerModal(
                 youtubeKey = uiState.trailerKey!!,
@@ -1104,11 +1116,21 @@ fun DetailsScreen(
             TelegramSearchRow.SEARCHING -> stringResource(R.string.telegram_search_row_searching)
             TelegramSearchRow.NONE -> stringResource(R.string.telegram_search_row_none)
         }
+        // Likewise the "Search YouTube" row (Settings > Sources > YouTube): searched on press only.
+        val youTubeRowLabel = when (uiState.youTubeSourceRow) {
+            YouTubeSourceRow.HIDDEN -> null
+            YouTubeSourceRow.IDLE -> stringResource(R.string.youtube_source_row_idle)
+            YouTubeSourceRow.SEARCHING -> stringResource(R.string.youtube_source_row_searching)
+            YouTubeSourceRow.NONE -> stringResource(R.string.youtube_source_row_none)
+            YouTubeSourceRow.FAILED -> stringResource(R.string.youtube_source_row_failed)
+        }
         // Addon messages (AIOStreams "[❌] Comet …") are display-only rows like the Telegram row.
-        val selectorStreams = remember(uiState.streams, uiState.addonNotices, telegramRowLabel) {
+        val selectorStreams = remember(uiState.streams, uiState.addonNotices, telegramRowLabel, youTubeRowLabel) {
             val withNotices = uiState.streams + uiState.addonNotices.mapIndexed(::addonNoticeRow)
-            if (telegramRowLabel == null) withNotices
+            val withTelegram = if (telegramRowLabel == null) withNotices
             else withNotices + TELEGRAM_SEARCH_ROW.copy(source = telegramRowLabel)
+            if (youTubeRowLabel == null) withTelegram
+            else withTelegram + YOUTUBE_SEARCH_ROW.copy(source = youTubeRowLabel)
         }
         StreamSelector(
             isVisible = showStreamSelector,
@@ -1126,7 +1148,7 @@ fun DetailsScreen(
             preferredAudioLanguage = uiState.preferredAudioLanguage,
             mediaTitle = uiState.item?.title.orEmpty(),
             onFocusedStream = { stream ->
-                if (!isTelegramSearchRow(stream) && !isAddonNoticeRow(stream)) {
+                if (!isTelegramSearchRow(stream) && !isYouTubeSearchRow(stream) && !isAddonNoticeRow(stream)) {
                     viewModel.prewarmStreamsAround(stream, uiState.streams)
                 }
             },
@@ -1135,6 +1157,10 @@ fun DetailsScreen(
                     currentSelectionRevision.value != uiState.idleSyncRevision) return@StreamSelector
                 if (isTelegramSearchRow(stream)) {
                     viewModel.searchTelegramNow()
+                    return@StreamSelector
+                }
+                if (isYouTubeSearchRow(stream)) {
+                    viewModel.searchYouTubeSourceNow()
                     return@StreamSelector
                 }
                 if (isAddonNoticeRow(stream)) {
@@ -1294,6 +1320,8 @@ private fun DetailsContent(
     reviewIndex: Int,
     similarIndex: Int,
     isInWatchlist: Boolean,
+    // A YouTube video's bookmark saves it to the profile's YouTube row: drawn as a heart.
+    isYouTubeVideo: Boolean = false,
     genres: List<String> = emptyList(),
     budget: String? = null,
     externalRatings: List<MdbExternalRating> = emptyList(),
@@ -1701,8 +1729,13 @@ private fun DetailsContent(
                             onClick = { onButtonClick(3) }
                         )
                         MobileIconActionButton(
-                            icon = if (isInWatchlist) Icons.Default.Bookmark else Icons.Default.BookmarkBorder,
-                            contentDescription = if (isInWatchlist) stringResource(R.string.details_in_watchlist) else stringResource(R.string.add_to_watchlist),
+                            icon = bookmarkIcon(isInWatchlist, isYouTubeVideo),
+                            contentDescription = when {
+                                isYouTubeVideo && isInWatchlist -> stringResource(R.string.youtube_favorite)
+                                isYouTubeVideo -> stringResource(R.string.youtube_favorite_add)
+                                isInWatchlist -> stringResource(R.string.details_in_watchlist)
+                                else -> stringResource(R.string.add_to_watchlist)
+                            },
                             isActive = isInWatchlist,
                             modifier = Modifier
                                 .weight(1f)
@@ -2486,8 +2519,8 @@ private fun DetailsContent(
                     }
                     Box(modifier = Modifier.clickable { onButtonClick(4) }) {
                         PremiumActionButton(
-                            icon = if (isInWatchlist) Icons.Default.Bookmark else Icons.Default.BookmarkBorder,
-                            text = stringResource(R.string.watchlist),
+                            icon = bookmarkIcon(isInWatchlist, isYouTubeVideo),
+                            text = stringResource(if (isYouTubeVideo) R.string.youtube_favorite else R.string.watchlist),
                             isFocused = focusSectionForUi == FocusSection.BUTTONS && buttonIndex == 4,
                             isIconOnly = true,
                             isActive = isInWatchlist
@@ -5043,3 +5076,23 @@ private val TELEGRAM_SEARCH_ROW = StreamSource(
 )
 
 private fun isTelegramSearchRow(stream: StreamSource): Boolean = stream.url == TELEGRAM_SEARCH_ROW.url
+
+/** The "Search YouTube" row's stand-in source: listed under YouTube, never played. */
+private val YOUTUBE_SEARCH_ROW = StreamSource(
+    source = "",
+    addonName = YouTubeCollection.ADDON_NAME,
+    addonId = YouTubeCollection.ADDON_ID,
+    quality = "",
+    size = "",
+    url = "arvio-youtube-search://row"
+)
+
+private fun isYouTubeSearchRow(stream: StreamSource): Boolean = stream.url == YOUTUBE_SEARCH_ROW.url
+
+/** The Details bookmark: the watchlist's bookmark, or a heart for a YouTube video's favorite. */
+private fun bookmarkIcon(saved: Boolean, isYouTubeVideo: Boolean) = when {
+    isYouTubeVideo && saved -> Icons.Default.Favorite
+    isYouTubeVideo -> Icons.Default.FavoriteBorder
+    saved -> Icons.Default.Bookmark
+    else -> Icons.Default.BookmarkBorder
+}

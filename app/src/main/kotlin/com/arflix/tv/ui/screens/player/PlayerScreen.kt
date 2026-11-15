@@ -7152,13 +7152,16 @@ private fun youTubeCollectionMediaSource(
     mediaItem: MediaItem,
     audioUrl: String?
 ): MediaSource {
+    val web = if (!audioUrl.isNullOrBlank()) {
+        com.arflix.tv.data.api.YoutubeChunkedDataSourceFactory()
+    } else {
+        androidx.media3.datasource.DefaultHttpDataSource.Factory()
+            .setUserAgent(com.arflix.tv.data.api.YOUTUBE_TRAILER_USER_AGENT)
+    }
+    // The same source also loads side-loaded subtitles, which are local files (Preload Subtitles):
+    // DefaultDataSource reads file:// and content:// itself and hands only web URLs to [web].
     val factory = DefaultMediaSourceFactory(context, extractorsFactory)
-        .setDataSourceFactory(if (!audioUrl.isNullOrBlank()) {
-            com.arflix.tv.data.api.YoutubeChunkedDataSourceFactory()
-        } else {
-            androidx.media3.datasource.DefaultHttpDataSource.Factory()
-                .setUserAgent(com.arflix.tv.data.api.YOUTUBE_TRAILER_USER_AGENT)
-        })
+        .setDataSourceFactory(androidx.media3.datasource.DefaultDataSource.Factory(context, web))
     val videoSource = factory.createMediaSource(mediaItem)
     if (audioUrl.isNullOrBlank()) return videoSource
     return androidx.media3.exoplayer.source.MergingMediaSource(

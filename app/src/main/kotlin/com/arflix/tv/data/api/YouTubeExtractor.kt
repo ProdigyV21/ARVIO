@@ -66,9 +66,46 @@ internal data class StreamCandidate(
     val mimeType: String = ""
 )
 
+/**
+ * The Android decoder MIME type a YouTube format needs ("video/mp4; codecs=\"av01.0.08M.08\""
+ * needs video/av01), or null when the codecs are not stated or not known.
+ */
+internal fun youTubeVideoDecoderMime(mimeType: String): String? {
+    val codecs = mimeType.substringAfter("codecs=", "").trim().trim('"').lowercase()
+    return when {
+        codecs.startsWith("avc1") || codecs.startsWith("avc3") -> "video/avc"
+        codecs.startsWith("av01") -> "video/av01"
+        codecs.startsWith("vp09") || codecs.startsWith("vp9") -> "video/x-vnd.on2.vp9"
+        codecs.startsWith("hev1") || codecs.startsWith("hvc1") -> "video/hevc"
+        else -> null
+    }
+}
+
+/**
+ * Whether this device has a decoder for [decoderMime]. A separate YouTube video track the device
+ * cannot decode plays as sound over a black picture (AV1 on a Mi Box 4), so such formats are
+ * never chosen. Answers are kept: the codec list does not change while the app runs.
+ */
+internal object DeviceVideoDecoders {
+    private val answers = java.util.concurrent.ConcurrentHashMap<String, Boolean>()
+
+    fun canDecode(decoderMime: String): Boolean = answers.getOrPut(decoderMime) {
+        runCatching {
+            android.media.MediaCodecList(android.media.MediaCodecList.REGULAR_CODECS).codecInfos.any { info ->
+                !info.isEncoder && info.supportedTypes.any { it.equals(decoderMime, ignoreCase = true) }
+            }
+        }.getOrDefault(true)
+    }
+}
+
 /** Try Full HD across clients before settling for HD, without repeating the same URL. */
-internal fun trailerVideoProbeOrder(candidates: List<StreamCandidate>, minimumHeight: Int): List<StreamCandidate> {
+internal fun trailerVideoProbeOrder(
+    candidates: List<StreamCandidate>,
+    minimumHeight: Int,
+    canDecode: (String) -> Boolean = { true }
+): List<StreamCandidate> {
     val sorted = candidates.filter { it.height in maxOf(720, minimumHeight)..1080 && it.ext == "mp4" }
+        .filter { candidate -> youTubeVideoDecoderMime(candidate.mimeType)?.let(canDecode) ?: true }
         .distinctBy { it.url }
         .sortedWith(compareByDescending<StreamCandidate> { it.height }
             .thenBy { it.hasN }
@@ -382,9 +419,14 @@ class InAppYouTubeExtractor @Inject constructor() {
 
         // Combined streams are often only 360p. Use separate HD only after both URLs
         // actually return media bytes; rejected URLs must not replace a working preview.
-        val hdVideos = trailerVideoProbeOrder(adaptiveVideo, (fallback?.maxVideoHeight ?: 0) + 1)
+        val decodable = { candidate: StreamCandidate ->
+            youTubeVideoDecoderMime(candidate.mimeType)?.let(DeviceVideoDecoders::canDecode) ?: true
+        }
+        val hdVideos = trailerVideoProbeOrder(
+            adaptiveVideo, (fallback?.maxVideoHeight ?: 0) + 1, DeviceVideoDecoders::canDecode
+        )
         val videosToProbe = if (fallback == null) {
-            hdVideos + sortCandidates(adaptiveVideo.filter { it.height in 1..719 && it.ext == "mp4" })
+            hdVideos + sortCandidates(adaptiveVideo.filter { it.height in 1..719 && it.ext == "mp4" && decodable(it) })
                 .distinctBy { it.client }.take(2)
         } else hdVideos
         val probeDeadline = android.os.SystemClock.elapsedRealtime() + 3500L
@@ -398,6 +440,8 @@ class InAppYouTubeExtractor @Inject constructor() {
             val audio = sortCandidates(adaptiveAudio.filter { it.client == video.client && it.ext == "m4a" }).firstOrNull()
                 ?: continue
             if (playable(video.url) && playable(audio.url)) {
+                Log.i(TAG, "[$videoId] separate tracks: video itag=${video.itag} ${video.height}p " +
+                    "${video.mimeType.substringAfter("codecs=", "?")} via ${video.client}")
                 return TrailerPlaybackSource(video.url, audio.url, fallback?.videoUrl, video.height)
             }
         }

@@ -2,6 +2,9 @@ package com.arflix.tv.ui.screens.search
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.arflix.tv.BuildConfig
+import com.arflix.tv.data.api.YouTubeKidsCorpus
+import com.arflix.tv.data.api.YouTubeSearchApi
 import com.arflix.tv.data.model.MediaItem
 import com.arflix.tv.data.model.MediaType
 import com.arflix.tv.data.model.Category
@@ -144,7 +147,9 @@ data class SearchUiState(
     // AI
     val aiInterpretation: String? = null,
     val aiResults: List<MediaItem> = EMPTY_MEDIA_ITEMS,
-    val isAiSearch: Boolean = false
+    val isAiSearch: Boolean = false,
+    /** The YouTube row of the current query; it only searches when its button is pressed. */
+    val youTube: YouTubeSearch = YouTubeSearch()
 ) {
     /**
      * The default view keeps its themed browse rows. A non-default sort opens the grid so the
@@ -155,13 +160,65 @@ data class SearchUiState(
             certification != null || language != null || hideWatched || sortOption != SortOption.POPULAR
 }
 
+enum class YouTubeSearchStatus { IDLE, LOADING, LOADED, FAILED }
+
+/** The on-demand YouTube results of [query] (see [YouTubeSearchApi]). */
+data class YouTubeSearch(
+    val query: String = "",
+    val status: YouTubeSearchStatus = YouTubeSearchStatus.IDLE,
+    val videos: List<MediaItem> = EMPTY_MEDIA_ITEMS
+)
+
 @HiltViewModel
 class SearchViewModel @Inject constructor(
     private val mediaRepository: MediaRepository,
     private val traktRepository: TraktRepository,
     private val recentSearchRepository: RecentSearchRepository,
-    private val kidsContentFilter: KidsContentFilter
+    private val kidsContentFilter: KidsContentFilter,
+    private val youTubeSearchApi: YouTubeSearchApi = YouTubeSearchApi()
 ) : ViewModel() {
+
+    /** False in Play builds: the YouTube button never shows there. */
+    val youTubeSearchAvailable: Boolean = BuildConfig.YOUTUBE_SEARCH_AVAILABLE
+    private var youTubeJob: Job? = null
+
+    /**
+     * Searches YouTube for the current query: the one place this screen ever asks YouTube
+     * anything, and only because the viewer pressed the button. A kids profile searches
+     * YouTube Kids at the tier of its age level instead.
+     */
+    fun searchYouTube() {
+        if (!youTubeSearchAvailable) return
+        val query = _uiState.value.query.trim()
+        if (query.isEmpty()) return
+        val current = _uiState.value.youTube
+        if (current.query == query && current.status == YouTubeSearchStatus.LOADING) return
+        val corpus = kidsContentFilter.state.value.level?.let(YouTubeKidsCorpus::forLevel)
+        youTubeJob?.cancel()
+        _uiState.update { it.copy(youTube = YouTubeSearch(query, YouTubeSearchStatus.LOADING)) }
+        youTubeJob = viewModelScope.launch {
+            val result = try {
+                // Kids profiles: YouTube Kids plus regular YouTube kept to YouTube Kids' channels.
+                val videos = com.arflix.tv.data.repository.YouTubeSource.search(
+                    query, corpus, youTubeSearchApi::search
+                )
+                YouTubeSearch(query, YouTubeSearchStatus.LOADED, mediaRepository.youTubeSearchItems(videos))
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                android.util.Log.w("SearchViewModel", "YouTube search failed: ${e.message}")
+                YouTubeSearch(query, YouTubeSearchStatus.FAILED)
+            }
+            // A query typed meanwhile has its own (still unpressed) button.
+            _uiState.update { if (it.query.trim() == query) it.copy(youTube = result) else it }
+        }
+    }
+
+    private fun resetYouTubeFor(query: String) {
+        if (_uiState.value.youTube.query == query.trim()) return
+        youTubeJob?.cancel()
+        _uiState.update { it.copy(youTube = YouTubeSearch()) }
+    }
 
     val kidsFilterState: StateFlow<KidsContentFilter.State> = kidsContentFilter.state
 
@@ -817,6 +874,7 @@ class SearchViewModel @Inject constructor(
         if (newQuery == _uiState.value.query) return
         searchJob?.cancel()
         activeSearchQuery = null
+        resetYouTubeFor(newQuery)
         _uiState.update { it.copy(query = newQuery, isAiSearch = false, aiInterpretation = null, aiResults = EMPTY_MEDIA_ITEMS) }
         if (newQuery.trim().isEmpty()) {
             clearSearch()

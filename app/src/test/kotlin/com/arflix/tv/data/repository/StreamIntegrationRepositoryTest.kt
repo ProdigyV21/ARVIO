@@ -1,5 +1,6 @@
 package com.arflix.tv.data.repository
 
+import com.arflix.tv.BuildConfig
 import android.app.Application
 import android.content.Context
 import androidx.datastore.preferences.core.booleanPreferencesKey
@@ -184,15 +185,16 @@ class StreamIntegrationRepositoryTest {
         val repo = createRepository()
         val configs = repo.getConfigs()
 
-        assertEquals(5, configs.size)
+        assertEquals(6, configs.size)
         assertEquals(StreamIntegrationType.HOME_SERVER, configs[0].type)
         assertEquals(StreamIntegrationType.STREMIO_ADDONS, configs[1].type)
         assertEquals(StreamIntegrationType.PLUGINS, configs[2].type)
         assertEquals(StreamIntegrationType.TELEGRAM, configs[3].type)
         assertEquals(StreamIntegrationType.IPTV_VOD, configs[4].type)
+        assertEquals(StreamIntegrationType.YOUTUBE, configs[5].type)
 
         assertTrue(configs.all { it.isEnabled })
-        assertEquals(listOf(0, 1, 2, 3, 4), configs.map { it.priority })
+        assertEquals(listOf(0, 1, 2, 3, 4, 5), configs.map { it.priority })
     }
 
     @Test
@@ -241,7 +243,7 @@ class StreamIntegrationRepositoryTest {
         val repo = createRepository()
         val items = repo.getProviderItems()
 
-        assertEquals(5, items.size)
+        assertEquals(if (BuildConfig.YOUTUBE_SEARCH_AVAILABLE) 6 else 5, items.size)
         assertEquals("homeserver:conn_emby_1", items[0].id)
         assertEquals("Emby Server", items[0].displayName)
         assertEquals(StreamIntegrationType.HOME_SERVER, items[0].type)
@@ -261,6 +263,27 @@ class StreamIntegrationRepositoryTest {
         assertEquals("iptv_playlist:playlist_1", items[4].id)
         assertEquals("Premium IPTV", items[4].displayName)
         assertEquals(StreamIntegrationType.IPTV_VOD, items[4].type)
+
+        if (BuildConfig.YOUTUBE_SEARCH_AVAILABLE) {
+            assertEquals("youtube", items[5].id)
+            assertEquals(StreamIntegrationType.YOUTUBE, items[5].type)
+            assertTrue(items[5].isEnabled)
+        }
+    }
+
+    @Test
+    fun youTubeSourceIsOnByDefaultAndCanBeSwitchedOff() = runBlocking {
+        org.junit.Assume.assumeTrue(BuildConfig.YOUTUBE_SEARCH_AVAILABLE)
+        val repo = createRepository()
+        assertTrue(repo.isIntegrationEnabled(StreamIntegrationType.YOUTUBE))
+        assertEquals("arvio_youtube", repo.getUnifiedSourceOrderedIds().first().last())
+
+        assertFalse(repo.toggleProviderItem("youtube"))
+
+        assertFalse(repo.isIntegrationEnabled(StreamIntegrationType.YOUTUBE))
+        assertFalse(repo.getUnifiedSourceOrderedIds().first().contains("arvio_youtube"))
+        // The other sources are untouched.
+        assertTrue(repo.isIntegrationEnabled(StreamIntegrationType.TELEGRAM))
     }
 
     @Test
@@ -393,9 +416,10 @@ class StreamIntegrationRepositoryTest {
             invalidationBus = invalidationBus
         )
 
-        val items = emptyRepo.getProviderItems()
+        // Only YouTube (sideload builds), which needs no account, is listed.
+        val items = emptyRepo.getProviderItems().filterNot { it.type == StreamIntegrationType.YOUTUBE }
         assertTrue("Provider items should be completely empty with no dummy placeholder roots", items.isEmpty())
-        val orderedIds = emptyRepo.getUnifiedSourceOrderedIdsSync()
+        val orderedIds = emptyRepo.getUnifiedSourceOrderedIdsSync().filterNot { it == "arvio_youtube" }
         assertTrue("Unified ordered IDs should be empty", orderedIds.isEmpty())
     }
 

@@ -148,12 +148,15 @@ android {
             buildConfigField("Boolean", "FEATURE_PLUGINS_ENABLED", "false")
             // The initial Sync by Hearing rollout is limited to sideload builds.
             buildConfigField("Boolean", "AUDIO_SYNC_AVAILABLE", "false")
+            // Searching YouTube from Search is a sideload-only feature (YouTube API policies).
+            buildConfigField("Boolean", "YOUTUBE_SEARCH_AVAILABLE", "false")
         }
         create("sideload") {
             dimension = "distribution"
             buildConfigField("Boolean", "SELF_UPDATE_ENABLED", "true")
             buildConfigField("Boolean", "FEATURE_PLUGINS_ENABLED", "true")
             buildConfigField("Boolean", "AUDIO_SYNC_AVAILABLE", "true")
+            buildConfigField("Boolean", "YOUTUBE_SEARCH_AVAILABLE", "true")
         }
     }
 

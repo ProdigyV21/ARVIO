@@ -113,6 +113,7 @@ import androidx.tv.foundation.lazy.list.rememberTvLazyListState
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Text
 import com.arflix.tv.data.model.IptvVodSourceIds
+import com.arflix.tv.data.repository.YouTubeCollection
 import com.arflix.tv.data.repository.isAddonNoticeRow
 import com.arflix.tv.data.model.RecentPlayedSource
 import com.arflix.tv.data.model.findRecentSourceMatch
@@ -1338,7 +1339,10 @@ private object StreamRegexes {
  *  keep their arrival order instead of re-sorting. Mirror of PlayerViewModel.keepsOwnStreamOrder. */
 private fun keepsOwnStreamOrder(stream: StreamSource): Boolean =
     stream.addonName.contains("aiostream", ignoreCase = true) ||
-        stream.addonId.contains("aiostream", ignoreCase = true)
+        stream.addonId.contains("aiostream", ignoreCase = true) ||
+        // YouTube videos come in YouTube's relevance order and have no resolution or size, so
+        // re-sorting them would sort by title alone (A-Z) and bury the best match.
+        stream.addonId == YouTubeCollection.ADDON_ID
 
 internal fun sourceTabId(stream: StreamSource): String {
     val baseName = stream.addonName.split(" - ").firstOrNull()?.trim() ?: stream.addonName

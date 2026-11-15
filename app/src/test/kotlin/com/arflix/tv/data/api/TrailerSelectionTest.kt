@@ -61,6 +61,25 @@ class TrailerSelectionTest {
         assertEquals(listOf("avc"), order.map { it.url })
     }
 
+    @Test fun neverPicksAVideoCodecTheDeviceCannotDecode() {
+        // An unthrottled AV1 track outranks a throttled H.264 one; on a device without an AV1
+        // decoder it would play as sound over a black picture, so it is never offered.
+        val options = listOf(
+            candidate("android", "av1", 1080).copy(mimeType = "video/mp4; codecs=\"av01.0.08M.08\""),
+            candidate("android", "avc-throttled", 1080).copy(hasN = true, mimeType = "video/mp4; codecs=\"avc1.640028\"")
+        )
+        val noAv1 = { mime: String -> mime != "video/av01" }
+        assertEquals(listOf("avc-throttled"), trailerVideoProbeOrder(options, 720, noAv1).map { it.url })
+        assertEquals(listOf("av1"), trailerVideoProbeOrder(options, 720).map { it.url })
+    }
+
+    @Test fun readsTheDecoderAYouTubeFormatNeeds() {
+        assertEquals("video/av01", youTubeVideoDecoderMime("video/mp4; codecs=\"av01.0.08M.08\""))
+        assertEquals("video/avc", youTubeVideoDecoderMime("video/mp4; codecs=\"avc1.640028\""))
+        assertEquals("video/x-vnd.on2.vp9", youTubeVideoDecoderMime("video/webm; codecs=\"vp9\""))
+        assertNull(youTubeVideoDecoderMime("video/mp4"))
+    }
+
     @Test fun doesNotProbeDuplicateUrlsSdOrFourKForAFullHdPreview() {
         val hd = candidate("vr", "same", 1080)
         assertEquals(listOf(hd), trailerVideoProbeOrder(listOf(hd, hd.copy(client = "ios"),

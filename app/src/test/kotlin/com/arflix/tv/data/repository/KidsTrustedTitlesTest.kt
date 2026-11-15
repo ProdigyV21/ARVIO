@@ -78,4 +78,58 @@ class KidsTrustedTitlesTest {
         assertFalse(withTrust.copy(ages = emptyMap()).allows(unrated))
         assertTrue(withTrust.copy(ages = emptyMap()).isUnknown(unrated))
     }
+
+    @Test
+    fun `an addon's own item passes only once an approved catalog listed it`() {
+        val native = MediaItem(id = -321, title = "Example kids show", mediaType = MediaType.TV,
+            addonNativeId = "example:show", addonNativeAddonId = "example.addon")
+        val catalog = KidsTrustedCatalogs.catalogKey("example.addon", "Series", "kids")
+        val members = setOf(KidsTrustedCatalogs.member(catalog, MediaType.TV, -321))
+
+        assertFalse(KidsContentFilter.State(KidsAgeLevel.DEFAULT, "US", emptyMap()).allows(native))
+        val trusted = KidsTrustedCatalogs.titleKeys(members)
+        assertTrue(KidsContentFilter.State(KidsAgeLevel.DEFAULT, "US", emptyMap(), trusted).allows(native))
+        // Adult profiles are not filtered at all.
+        assertTrue(KidsContentFilter.State(null, "US", emptyMap()).allows(native))
+    }
+
+    @Test
+    fun `removing a catalog's approval drops only its titles`() {
+        val kids = KidsTrustedCatalogs.catalogKey("example.addon", "series", "kids")
+        val other = KidsTrustedCatalogs.catalogKey("example.addon", "series", "other")
+        val members = setOf(
+            KidsTrustedCatalogs.member(kids, MediaType.TV, -1),
+            KidsTrustedCatalogs.member(other, MediaType.TV, -2)
+        )
+        assertEquals(setOf("TV/-2"), KidsTrustedCatalogs.titleKeys(KidsTrustedCatalogs.withoutCatalogs(members, listOf(kids))))
+        // The type is compared case-insensitively, the way loading and approving may spell it.
+        assertEquals(kids, KidsTrustedCatalogs.catalogKey(" example.addon ", "SERIES", "kids"))
+    }
+
+    @Test
+    fun `addon rows and collection tiles with addon sources can be approved`() {
+        assertTrue(KidsTrustedCatalogs.isApprovable(row(CatalogSourceType.ADDON)))
+        assertFalse(KidsTrustedCatalogs.isApprovable(row(CatalogSourceType.MDBLIST)))
+        assertFalse(KidsTrustedCatalogs.isApprovable(row(CatalogSourceType.TMDB)))
+        val tile = row(CatalogSourceType.ADDON, kind = CatalogKind.COLLECTION).copy(
+            collectionSources = listOf(com.arflix.tv.data.model.CollectionSourceConfig(
+                kind = com.arflix.tv.data.model.CollectionSourceKind.ADDON_CATALOG,
+                addonCatalogType = "series", addonCatalogId = "kids"
+            ))
+        )
+        assertTrue(KidsTrustedCatalogs.isApprovable(tile))
+        assertFalse(KidsTrustedCatalogs.isApprovable(tile.copy(collectionSources = emptyList())))
+    }
+
+    @Test
+    fun `kids catalog approvals ride the profile's cloud settings, and older clients don't clear them`() {
+        val gson = com.google.gson.Gson()
+        val key = KidsTrustedCatalogs.catalogKey("example.addon", "series", "kids")
+        val sent = CloudSyncRepository.CloudProfileSettings(kidsCatalogApprovals = listOf(key))
+        val received = gson.fromJson(gson.toJson(sent), CloudSyncRepository.CloudProfileSettings::class.java)
+        assertEquals(listOf(key), received.kidsCatalogApprovals)
+        // A payload from a client that doesn't know the field leaves it null: nothing is cleared.
+        val older = gson.fromJson("{\"defaultSubtitle\":\"Off\"}", CloudSyncRepository.CloudProfileSettings::class.java)
+        assertEquals(null, older.kidsCatalogApprovals)
+    }
 }

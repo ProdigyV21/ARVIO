@@ -1511,6 +1511,8 @@ class PlayerViewModel @Inject constructor(
                                     )
                                 }
                             }
+                            // Searched only when the viewer presses "Search YouTube", never here.
+                            StreamIntegrationType.YOUTUBE -> emptyList()
                         }
 
                         val validCandidates = rawCandidates.filter { stream ->
@@ -2989,7 +2991,9 @@ class PlayerViewModel @Inject constructor(
      *  their streams keep the order the addon returned them in instead of being re-sorted. */
     private fun keepsOwnStreamOrder(stream: StreamSource): Boolean =
         stream.addonName.contains("aiostream", ignoreCase = true) ||
-            stream.addonId.contains("aiostream", ignoreCase = true)
+            stream.addonId.contains("aiostream", ignoreCase = true) ||
+            // YouTube's relevance order (see StreamSelector.keepsOwnStreamOrder).
+            stream.addonId == YouTubeCollection.ADDON_ID
 
     private fun sortStreamsByQualityAndSize(
         streams: List<StreamSource>,
