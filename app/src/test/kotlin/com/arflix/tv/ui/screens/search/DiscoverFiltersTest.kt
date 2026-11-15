@@ -272,13 +272,13 @@ class DiscoverFiltersTest {
         assertTrue(showsClearChip(SearchUiState(certification = "16")))
         assertTrue(showsClearChip(SearchUiState(language = "ja")))
         assertTrue(showsClearChip(SearchUiState(hideWatched = true)))
+        assertTrue(showsClearChip(SearchUiState(sortOption = SortOption.TOP_RATED)))
+        assertTrue(showsClearChip(SearchUiState(sortOption = SortOption.NEWEST)))
     }
 
-    @Test fun theTwoThingsThatAreAlwaysSetDoNotBringTheResetChip() {
-        // The media type and the sort order are never off, so a reset chip next to them would
-        // never leave the row again — and pressing it would change nothing.
+    @Test fun theMediaTypeAndDefaultSortDoNotBringTheResetChip() {
         assertFalse(showsClearChip(SearchUiState(selectedType = DiscoverType.TV_SHOWS)))
-        assertFalse(showsClearChip(SearchUiState(sortOption = SortOption.TOP_RATED)))
+        assertFalse(showsClearChip(SearchUiState(sortOption = SortOption.POPULAR)))
     }
 
     @Test fun pressingTheResetChipMovesTheFrameOntoTheLastRemainingChip() {

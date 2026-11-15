@@ -241,6 +241,90 @@ class DiscoverGridTest {
         assertEquals(SortOption.TOP_RATED, state.sortOption)
     }
 
+    private fun stubSortResults() {
+        coEvery {
+            repository.discoverMovies(genres = any(), sortBy = any(), minVoteCount = any(), page = any(), language = any(), year = any(), keywords = any(), releaseDateLte = any(), releaseDateGte = any(), primaryReleaseDateLte = any(), primaryReleaseDateGte = any(), minVoteAverage = any(), maxVoteAverage = any(), certificationCountry = any(), certificationLte = any())
+        } coAnswers {
+            if (arg<String?>(9) == null) listOf(movie(900))
+            else listOf(movie(SortOption.entries.first { it.apiValue == arg<String>(1) }.ordinal * 100 + arg<Int>(3)))
+        }
+    }
+
+    @Test fun changingSortAloneReloadsTheGridWithoutAnotherFilter() = runBlocking {
+        stubSortResults()
+        for (sort in listOf(SortOption.TOP_RATED, SortOption.NEWEST)) {
+            model.selectSort(sort)
+            val state = withTimeout(STATE_TIMEOUT_MS) { model.uiState.first {
+                !it.isGridLoading && it.discoverGridItems.map { item -> item.id } == listOf(sort.ordinal * 100 + 1)
+            } }
+            assertTrue(state.hasDiscoverFilters)
+            assertTrue(state.selectedGenres.isEmpty())
+            assertTrue(state.query.isEmpty())
+            assertTrue(state.discoverCategories.isEmpty())
+        }
+    }
+
+    @Test fun aSortOnlyGridCanLoadItsNextPage() = runBlocking {
+        stubSortResults()
+        model.selectSort(SortOption.TOP_RATED)
+        withTimeout(STATE_TIMEOUT_MS) { model.uiState.first { !it.isGridLoading && it.discoverGridItems.isNotEmpty() } }
+        model.loadMoreDiscoverGrid()
+        val state = withTimeout(STATE_TIMEOUT_MS) { model.uiState.first { it.discoverGridItems.size == 2 } }
+        assertEquals(listOf(101, 102), state.discoverGridItems.map { it.id })
+    }
+
+    @Test fun newestSortAloneUsesTheSeriesDateForShowsAndAnime() = runBlocking {
+        coEvery {
+            repository.discoverTv(genres = any(), sortBy = "first_air_date.desc", minVoteCount = any(), page = any(), language = any(), year = any(), keywords = any(), airDateLte = any(), airDateGte = any(), firstAirDateLte = any(), firstAirDateGte = any(), minVoteAverage = any(), maxVoteAverage = any())
+        } coAnswers { listOf(show(if (arg<String?>(6) == "210024") 72 else 71)) }
+        for ((type, id) in listOf(DiscoverType.TV_SHOWS to 71, DiscoverType.ANIME to 72)) {
+            model.selectType(type)
+            model.selectSort(SortOption.NEWEST)
+            val state = withTimeout(STATE_TIMEOUT_MS) { model.uiState.first {
+                !it.isGridLoading && it.discoverGridItems.map { item -> item.id } == listOf(id)
+            } }
+            assertTrue(state.selectedGenres.isEmpty())
+            assertTrue(state.hasDiscoverFilters)
+            assertEquals(type, state.selectedType)
+        }
+    }
+
+    @Test fun returningToPopularAfterSortOnlyRestoresBrowseRows() = runBlocking {
+        stubSortResults()
+        model.selectSort(SortOption.TOP_RATED)
+        withTimeout(STATE_TIMEOUT_MS) { model.uiState.first { it.discoverGridItems.isNotEmpty() } }
+        model.selectSort(SortOption.POPULAR)
+        val state = withTimeout(STATE_TIMEOUT_MS) { model.uiState.first { !it.isDiscoverLoading && it.discoverCategories.isNotEmpty() } }
+        assertFalse(state.hasDiscoverFilters)
+        assertTrue(state.discoverGridItems.isEmpty())
+        assertEquals(SortOption.POPULAR, state.sortOption)
+    }
+
+    @Test fun resettingSortOnlyRestoresPopularAndBrowseRows() = runBlocking {
+        stubSortResults()
+        model.selectSort(SortOption.NEWEST)
+        withTimeout(STATE_TIMEOUT_MS) { model.uiState.first { it.discoverGridItems.isNotEmpty() } }
+        model.clearDiscoverFilters()
+        val state = withTimeout(STATE_TIMEOUT_MS) { model.uiState.first { !it.isDiscoverLoading && it.discoverCategories.isNotEmpty() } }
+        assertEquals(SortOption.POPULAR, state.sortOption)
+        assertFalse(showsClearChip(state))
+        assertTrue(state.discoverGridItems.isEmpty())
+    }
+
+    @Test fun changingBackToPopularWithAGenreKeepsTheFilteredGrid() = runBlocking {
+        stubSortResults()
+        model.toggleGenre(action)
+        for (sort in listOf(SortOption.TOP_RATED, SortOption.NEWEST, SortOption.POPULAR)) {
+            model.selectSort(sort)
+            val state = withTimeout(STATE_TIMEOUT_MS) { model.uiState.first {
+                !it.isGridLoading && it.discoverGridItems.map { item -> item.id } == listOf(sort.ordinal * 100 + 1)
+            } }
+            assertEquals(listOf(action), state.selectedGenres)
+            assertTrue(state.hasDiscoverFilters)
+            assertTrue(state.discoverCategories.isEmpty())
+        }
+    }
+
     @Test fun theRatingRangeAndVoteFloorBothReachTheRequest() = runBlocking {
         coEvery {
             repository.discoverMovies(minVoteAverage = 7.0, maxVoteAverage = 9.0, minVoteCount = 500, genres = any(), sortBy = any(), page = any(), language = any(), year = any(), keywords = any(), releaseDateLte = any(), releaseDateGte = any(), certificationCountry = any(), certificationLte = any(), primaryReleaseDateLte = any(), primaryReleaseDateGte = any())
@@ -392,6 +476,7 @@ class DiscoverGridTest {
 
     @Test fun clearingEveryFilterBringsTheRowsBackInOneStep() = runBlocking {
         model.toggleGenre(action)
+        model.selectSort(SortOption.TOP_RATED)
         // The decade belongs in here, and so does the language: a filter the reset forgets
         // leaves the screen on the grid with nothing on it explaining why.
         model.selectDecade(Decade(2000, 2009))
@@ -410,6 +495,7 @@ class DiscoverGridTest {
         assertFalse(state.rating.isSet)
         assertNull(state.language)
         assertFalse(state.hideWatched)
+        assertEquals(SortOption.POPULAR, state.sortOption)
         assertTrue(state.discoverGridItems.isEmpty())
     }
 
