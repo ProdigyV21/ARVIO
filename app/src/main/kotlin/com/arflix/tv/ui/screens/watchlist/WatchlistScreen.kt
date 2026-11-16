@@ -299,7 +299,9 @@ fun WatchlistScreen(
                     AppTopBar(SidebarItem.WATCHLIST, topFocused, topIndex, profile = currentProfile)
                 }
             }
-        Column(Modifier.fillMaxSize().padding(top = if (touch) 0.dp else LibraryTabsTopInset)
+        Column(Modifier.fillMaxSize()
+            .then(if (compact && search) Modifier.imePadding() else Modifier)
+            .padding(top = if (touch) 0.dp else LibraryTabsTopInset)
             .padding(horizontal = if (compact) 16.dp else 26.dp)) {
             if (touch) Text(stringResource(R.string.nav_library), color = Color.White, fontSize = 24.sp,
                 fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(vertical = 12.dp))
