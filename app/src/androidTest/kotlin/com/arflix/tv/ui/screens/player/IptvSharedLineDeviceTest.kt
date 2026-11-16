@@ -17,6 +17,7 @@ import com.arflix.tv.network.IptvProviderAccount
 import com.arflix.tv.network.IptvStreamSessionTable
 import com.arflix.tv.ui.screens.home.HomeIptvPreviewSessions
 import com.arflix.tv.ui.screens.home.homeHeroIptvClient
+import com.arflix.tv.ui.screens.home.homeIptvPreviewHeaders
 import com.arflix.tv.ui.screens.home.homeIptvPreviewSource
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -111,7 +112,8 @@ class IptvSharedLineDeviceTest {
                     val session = checkNotNull(available.admit(player) { policy }?.session)
                     assertNotNull(session)
                     player.setMediaSource(homeIptvPreviewSource(
-                        context, homeHeroIptvClient(panel.client), "ARVIO test", session, panel.item, false
+                        context, homeHeroIptvClient(panel.client),
+                        homeIptvPreviewHeaders("ARVIO test", emptyMap()), session, panel.item, false
                     ))
                     player.prepare()
                     awaitReady(player)
