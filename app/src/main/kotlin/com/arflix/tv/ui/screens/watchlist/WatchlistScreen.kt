@@ -94,6 +94,7 @@ internal fun libraryColumns(width: Int, poster: Boolean, collections: Boolean = 
     if (collections) (width / 270).coerceIn(1, 3) else if (poster) (width / 115).coerceIn(2, 8) else (width / 180).coerceIn(2, 4)
 internal fun WatchlistSourceItem.isPersonalCollection(): Boolean = this is WatchlistSourceItem.Catalog ||
     (this is WatchlistSourceItem.TrackerList && (provider == TrackerLibraryProvider.MDBLIST ||
+        (provider == TrackerLibraryProvider.WETRAKR && listKey.startsWith(com.arflix.tv.data.repository.wetrakr.WeTrakrLists.LIST_KEY_PREFIX)) ||
         (provider == TrackerLibraryProvider.TRAKT && listKey !in setOf("__watchlist__", "watchlist", "collection", "watched"))))
 internal fun librarySources(sources: List<WatchlistSourceItem>, section: LibrarySection): List<WatchlistSourceItem> =
     sources.filter { when (section) {
