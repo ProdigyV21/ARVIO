@@ -7691,6 +7691,7 @@ class IptvRepository @Inject constructor(
                     addonName = "IPTV Series VOD",
                     addonId = IptvVodSourceIds.XTREAM,
                     quality = inferQualityFrom(seriesName, sourceName),
+                    rawLabel = seriesName,
                     size = "",
                     url = streamUrl
                 )
