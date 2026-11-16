@@ -32,6 +32,7 @@ import androidx.compose.foundation.MutatePriority
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.collectIsDraggedAsState
 import androidx.compose.ui.res.painterResource
 import com.arflix.tv.R
 import androidx.compose.foundation.rememberScrollState
@@ -211,6 +212,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import dagger.hilt.android.EntryPointAccessors
 import com.arflix.tv.ui.components.TrailerPlayerEntryPoint
@@ -2564,28 +2566,8 @@ internal fun MobileHeroCarousel(
     onPreloadHeroImdbRatings: (List<MediaItem>) -> Unit = {},
 ) {
     val context = LocalContext.current
-    val heroItems = remember(categories) {
-        val eligibleRows = categories.filter {
-            it.id != "continue_watching" &&
-                !it.id.startsWith("collection_row_") &&
-                it.id != SportsAddonCapabilities.SPORTS_CATEGORY_ROW_ID &&
-                it.id != SportsAddonCapabilities.POPULAR_LIVE_TV_ROW_ID
-        }
-        val firstCat = eligibleRows.getOrNull(0)
-            ?.items?.filter { !it.isPlaceholder && it.id > 0 && !SportsAddonCapabilities.isSportsHomeStatus(it.status) && !SportsAddonCapabilities.isSportsLockedStatus(it.status) }?.take(5)
-            .orEmpty()
-        val secondCat = eligibleRows.getOrNull(1)
-            ?.items?.filter { !it.isPlaceholder && it.id > 0 && !SportsAddonCapabilities.isSportsHomeStatus(it.status) && !SportsAddonCapabilities.isSportsLockedStatus(it.status) }?.take(5)
-            .orEmpty()
-        // Interleave: first[0], second[0], first[1], second[1], …
-        buildList {
-            val maxLen = maxOf(firstCat.size, secondCat.size)
-            for (i in 0 until maxLen) {
-                if (i < firstCat.size) add(firstCat[i])
-                if (i < secondCat.size) add(secondCat[i])
-            }
-        }.distinctBy { "${it.mediaType}_${it.id}" }
-    }
+    val incomingItems = remember(categories) { mobileHeroItems(categories) }
+    var heroItems by remember { mutableStateOf(incomingItems) }
 
     LaunchedEffect(heroItems) {
         if (heroItems.isNotEmpty()) {
@@ -2594,6 +2576,7 @@ internal fun MobileHeroCarousel(
     }
 
     if (heroItems.isEmpty()) {
+        LaunchedEffect(incomingItems) { heroItems = incomingItems }
         Column(modifier = Modifier.fillMaxWidth()) {
             if (posterStyle) MobileHomeHeader(currentProfile, onSwitchProfile, onNavigateToSearch)
 
@@ -2618,21 +2601,34 @@ internal fun MobileHeroCarousel(
         return
     }
 
-    // Circular paging: use a large virtual page count that's a multiple of heroItems.size
-    // so page % heroItems.size always maps correctly and starts at item[0].
-    val virtualPageCount = heroItems.size * 1000
-    val initialPage = heroItems.size * 500
     val pagerState = rememberPagerState(
-        initialPage = initialPage,
-        pageCount = { virtualPageCount }
+        initialPage = mobileHeroPageForIndex(MobileHeroPageCount / 2, heroItems.size, 0),
+        pageCount = { MobileHeroPageCount },
     )
+    LaunchedEffect(incomingItems) {
+        if (incomingItems == heroItems) return@LaunchedEffect
+        if (incomingItems.isEmpty()) {
+            heroItems = emptyList()
+            return@LaunchedEffect
+        }
+        snapshotFlow { pagerState.isScrollInProgress }.first { !it }
+        val selected = heroItems[pagerState.currentPage.mod(heroItems.size)]
+        val nextIndex = incomingItems.indexOfFirst { it.id == selected.id && it.mediaType == selected.mediaType }
+            .coerceAtLeast(0)
+        pagerState.scrollToPage(mobileHeroPageForIndex(pagerState.currentPage, incomingItems.size, nextIndex))
+        heroItems = incomingItems
+    }
 
-    // Restart the 10s countdown whenever the pager settles on a new page,
-    // whether from a user swipe or the previous auto-advance. This gives
-    // the user a full 10s after any manual interaction before the next advance.
-    LaunchedEffect(pagerState.settledPage, heroItems.size) {
-        if (heroItems.size <= 1) return@LaunchedEffect
+    val isDragged by pagerState.interactionSource.collectIsDraggedAsState()
+    val lifecycleState by LocalLifecycleOwner.current.lifecycle.currentStateAsState()
+    LaunchedEffect(pagerState.settledPage, heroItems, isDragged, lifecycleState) {
+        if (heroItems.size <= 1 || isDragged || !lifecycleState.isAtLeast(Lifecycle.State.RESUMED)) return@LaunchedEffect
         delay(10000L)
+        if (pagerState.isScrollInProgress) return@LaunchedEffect
+        if (pagerState.currentPage == MobileHeroPageCount - 1) {
+            pagerState.scrollToPage(mobileHeroPageForIndex(MobileHeroPageCount / 2, heroItems.size,
+                pagerState.currentPage.mod(heroItems.size)))
+        }
         pagerState.animateScrollToPage(
             pagerState.currentPage + 1,
             animationSpec = tween(durationMillis = 900, easing = FastOutSlowInEasing)

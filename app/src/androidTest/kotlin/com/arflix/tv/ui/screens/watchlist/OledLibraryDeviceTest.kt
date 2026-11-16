@@ -120,6 +120,35 @@ class OledLibraryDeviceTest {
         field.performTextInput("fixture")
         field.assertTextContains("fixture")
     }
+
+    @Test fun phoneSearchControlsHaveFullTouchTargetsAndDoneClosesSearch() {
+        show(false, deviceOverride = DeviceType.PHONE)
+        val search = compose.onNodeWithContentDescription("Search library")
+        search.performTouchInput { click() }
+        val field = compose.onNodeWithTag("library-search-field")
+        field.performTextInput("fixture")
+        val density = compose.activity.resources.displayMetrics.density
+        for (tag in listOf("library-search-clear", "library-search-done")) {
+            val bounds = compose.onNodeWithTag(tag).fetchSemanticsNode().boundsInRoot
+            assertTrue("$tag needs a 48dp touch target", bounds.width >= 48f * density - 1f && bounds.height >= 48f * density - 1f)
+        }
+        compose.onNodeWithTag("library-search-clear").performTouchInput { click() }
+        field.assert(SemanticsMatcher.expectValue(androidx.compose.ui.semantics.SemanticsProperties.EditableText,
+            androidx.compose.ui.text.AnnotatedString("")))
+        val longQuery = "A deliberately long search title that must never hide the library controls"
+        field.performTextInput(longQuery)
+        compose.onNodeWithTag("library-search-done").performTouchInput { click() }
+        compose.onNodeWithTag("library-search-field").assertDoesNotExist()
+        compose.waitUntil(5_000) {
+            compose.runOnUiThread {
+                ViewCompat.getRootWindowInsets(compose.activity.window.decorView)
+                    ?.isVisible(WindowInsetsCompat.Type.ime()) != true
+            }
+        }
+        compose.onNodeWithText("\"$longQuery\"").assertIsDisplayed()
+        compose.onNodeWithText("Filters").assertIsDisplayed()
+        compose.onNodeWithTag("library-source-picker").assertIsDisplayed()
+    }
     @Test fun posterAndLongGridScroll() {
         show(true)
         compose.onNodeWithTag("library-grid").performScrollToIndex(55)

@@ -1391,6 +1391,7 @@ internal fun DetailsContent(
             availableHeightDp = (maxHeight - navigationBottomPadding).coerceAtLeast(1.dp).value,
         ).dp
         val artwork = mobileDetailsArtworkSource(item.image, item.backdrop, maxWidth <= maxHeight)
+        var mobileLogoFailed by remember(item.id, logoUrl) { mutableStateOf(false) }
         val mobileScrollState = rememberScrollState()
         val density = LocalDensity.current
         var stickyThreshold by remember { mutableStateOf(-1f) }
@@ -1455,7 +1456,8 @@ internal fun DetailsContent(
                                     colorStops = arrayOf(
                                         0.0f to Color.Transparent,
                                         0.55f to Color.Transparent,
-                                        0.8f to Color.Black.copy(alpha = 0.84f),
+                                        0.76f to Color.Black.copy(alpha = if (artwork?.isPoster == true) 1f else 0.70f),
+                                        0.8f to Color.Black.copy(alpha = if (artwork?.isPoster == true) 1f else 0.84f),
                                         1.0f to Color.Black
                                     )
                                 )
@@ -1503,7 +1505,7 @@ internal fun DetailsContent(
                             contentAlignment = Alignment.Center
                         ) {
                             Crossfade(
-                                targetState = logoUrl,
+                                targetState = logoUrl.takeUnless { mobileLogoFailed },
                                 animationSpec = tween(300, easing = FastOutSlowInEasing),
                                 label = "mobile_logo_crossfade"
                             ) { currentLogoUrl ->
@@ -1512,6 +1514,7 @@ internal fun DetailsContent(
                                         model = currentLogoUrl,
                                         contentDescription = item.title,
                                         contentScale = ContentScale.Fit,
+                                        onError = { mobileLogoFailed = true },
                                         alignment = Alignment.Center,
                                         modifier = Modifier
                                             .fillMaxWidth(0.78f)
