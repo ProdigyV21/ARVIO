@@ -1661,6 +1661,13 @@
     <string name="kids_list_approval_unavailable">The list or rating could not be verified. No approval was saved.</string>
     <string name="kids_list_approval_rated">This title has a certification. The age filter still applies.</string>
     <string name="kids_list_approval_empty">No titles available in this list.</string>
+    <string name="kids_catalog_explain">Approve this add-on catalog for this kids profile: its titles will show here even without an age rating. Titles with a rating still follow the age limit.</string>
+    <string name="kids_catalog_approved_state">This add-on catalog is approved for this kids profile.</string>
+    <string name="kids_catalog_approve">Approve for this kids profile</string>
+    <string name="kids_catalog_unapprove">Remove the approval</string>
+    <string name="kids_catalog_approved_toast">%1$s is approved for this kids profile</string>
+    <string name="kids_catalog_unapproved_toast">%1$s is no longer approved for this kids profile</string>
+    <string name="kids_catalog_unavailable">This catalog\'s add-on isn\'t installed on this profile.</string>
     <string name="kids_list_more_titles">More titles</string>
     <string name="kids_list_title_approved">Approved %1$s</string>
     <string name="settings_catalog_unpacked">Catalog row extracted from pack</string>
@@ -2028,6 +2035,8 @@
     <string name="stream_integration_telegram_desc">Direct streaming from your connected Telegram chats and channels.</string>
     <string name="stream_integration_iptv_vod">IPTV VOD</string>
     <string name="stream_integration_iptv_vod_desc">Video-on-demand movies and series from your IPTV playlists.</string>
+    <string name="stream_integration_youtube">YouTube</string>
+    <string name="stream_integration_youtube_desc">Videos of 5+ minutes, searched when you press Search YouTube</string>
     <string name="stream_integration_move_up">Move up</string>
     <string name="stream_integration_move_down">Move down</string>
     <string name="stream_integration_toggle_enabled">Pull streams</string>
@@ -2124,4 +2133,22 @@
     <string name="navigation_show_search">Show Search</string>
     <string name="navigation_show_library">Show Library</string>
     <string name="navigation_show_tv">Show TV Player</string>
+    <!-- YouTube search on the Search screen -->
+    <string name="youtube_search_row_title">YouTube</string>
+    <string name="youtube_search_button">Search YouTube</string>
+    <string name="youtube_kids_search_button">Search YouTube Kids</string>
+    <string name="youtube_search_for">for "%1$s"</string>
+    <string name="youtube_search_loading">Searching YouTube…</string>
+    <string name="youtube_search_no_results">No YouTube videos</string>
+    <string name="youtube_search_failed">YouTube didn\'t answer</string>
+    <string name="youtube_search_retry">Press to try again</string>
+    <string name="youtube_favorite_added">Saved to your YouTube row on Home</string>
+    <string name="youtube_favorite_removed">Removed from your YouTube row</string>
+    <string name="youtube_favorite">YouTube favorite</string>
+    <string name="youtube_favorite_add">Save to your YouTube row</string>
+    <string name="youtube_parent_pin_title">Parent PIN to save this video</string>
+    <string name="youtube_source_row_idle">Click to search YouTube</string>
+    <string name="youtube_source_row_searching">Searching YouTube…</string>
+    <string name="youtube_source_row_none">No YouTube videos of 5+ minutes — select to search again</string>
+    <string name="youtube_source_row_failed">YouTube didn\'t answer — select to try again</string>
 </resources>

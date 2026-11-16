@@ -82,6 +82,7 @@ import com.arflix.tv.data.repository.CatalogException
 import com.arflix.tv.data.repository.KidsContentFilter
 import com.arflix.tv.data.repository.KidsListApprovalSession
 import com.arflix.tv.data.repository.KidsTrustedTitles
+import com.arflix.tv.data.repository.KidsTrustedCatalogs
 import com.arflix.tv.data.model.MediaItem
 import com.arflix.tv.data.repository.SyncProgress
 import com.arflix.tv.data.repository.SyncStatus
@@ -383,6 +384,8 @@ data class SettingsUiState(
     val catalogs: List<CatalogConfig> = emptyList(),
     val isKidsProfile: Boolean = false,
     val kidsListApproval: KidsListApprovalUi? = null,
+    /** A parent approving (or un-approving) a whole addon catalog for this kids profile. */
+    val kidsCatalogApproval: KidsCatalogApprovalUi? = null,
     val pendingYouTubeUrl: String? = null,
     val youTubeApprovalProfileId: String? = null,
     val youTubeApprovalError: SettingsMessage? = null,
@@ -455,6 +458,18 @@ data class SettingsUiState(
     val telegramUserName: String? = null
 )
 
+/** See [com.arflix.tv.data.repository.KidsTrustedCatalogs]. */
+data class KidsCatalogApprovalUi(
+    val profileId: String,
+    val catalog: CatalogConfig,
+    val catalogKeys: List<String>,
+    val approved: Boolean,
+    val needsPin: Boolean = false,
+    val pinAttempts: Int = 0,
+    val saving: Boolean = false,
+    val error: SettingsMessage? = null
+)
+
 data class KidsListApprovalUi(
     val profileId: String,
     val catalog: CatalogConfig,
@@ -514,6 +529,14 @@ class SettingsViewModel @Inject constructor(
 
     private val _uiState = MutableStateFlow(SettingsUiState())
     val uiState: StateFlow<SettingsUiState> = _uiState.asStateFlow()
+
+    /**
+     * Whether the active profile is a kids profile, kept apart from [_uiState]: many updates
+     * build a copy of the state around a suspending call and write it back, and such a stale
+     * copy put back `isKidsProfile = false` on a kids profile — hiding its kids-only options
+     * (list and catalog approvals) for good. See [observeProfileChanges], which repairs it.
+     */
+    private val activeProfileIsKids = MutableStateFlow(false)
     private var kidsListApprovalJob: Job? = null
     private var kidsListApprovalSession: KidsListApprovalSession? = null
     private fun managedPermissions() = if (com.arflix.tv.BuildConfig.PARTNER_MANAGEMENT_ENABLED)
@@ -1200,7 +1223,15 @@ class SettingsViewModel @Inject constructor(
         }
         viewModelScope.launch {
             profileRepository.activeProfile.map { it?.isKidsProfile == true }.distinctUntilChanged().collect { isKids ->
+                activeProfileIsKids.value = isKids
                 _uiState.update { it.copy(isKidsProfile = isKids) }
+            }
+        }
+        viewModelScope.launch {
+            // A stale state copy written back must not take the kids flag with it.
+            _uiState.collect { state ->
+                val isKids = activeProfileIsKids.value
+                if (state.isKidsProfile != isKids) _uiState.update { it.copy(isKidsProfile = isKids) }
             }
         }
         viewModelScope.launch {
@@ -3235,7 +3266,7 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun requestKidsListApproval(catalog: CatalogConfig) {
-        if (!_uiState.value.isKidsProfile || !KidsTrustedTitles.isTrustedSource(catalog) || !canManage("catalogs")) return
+        if (!activeProfileIsKids.value || !KidsTrustedTitles.isTrustedSource(catalog) || !canManage("catalogs")) return
         dismissKidsListApproval()
         _uiState.update { it.copy(kidsListApproval = KidsListApprovalUi(profileManager.getProfileIdSync(), catalog)) }
     }
@@ -3301,6 +3332,59 @@ class SettingsViewModel @Inject constructor(
             } catch (e: Exception) {
                 if (request.needsPin) kidsListApprovalSession = null
                 _uiState.update { it.copy(kidsListApproval = request.copy(
+                    pinAttempts = request.pinAttempts + 1,
+                    error = e.orCatalogMessage(SettingsMessage.Res(R.string.kids_list_approval_unavailable))
+                )) }
+            }
+        }
+    }
+
+    /** Opens the kids approval of an addon catalog row or collection tile (kids profiles only). */
+    fun openKidsCatalogApproval(catalog: CatalogConfig) {
+        if (!activeProfileIsKids.value || !KidsTrustedCatalogs.isApprovable(catalog) || !canManage("catalogs")) return
+        val profileId = profileManager.getProfileIdSync()
+        viewModelScope.launch {
+            val keys = runCatching { mediaRepository.kidsCatalogKeys(catalog) }.getOrDefault(emptyList())
+            if (keys.isEmpty()) {
+                _uiState.update { it.copy(
+                    toastMessage = SettingsMessage.Res(R.string.kids_catalog_unavailable),
+                    toastType = ToastType.ERROR
+                ) }
+                return@launch
+            }
+            val approved = catalogRepository.kidsCatalogApprovals(profileId).containsAll(keys)
+            _uiState.update { it.copy(kidsCatalogApproval = KidsCatalogApprovalUi(profileId, catalog, keys, approved)) }
+        }
+    }
+
+    /** "Approve" / "Remove approval" pressed: the parent PIN comes next. */
+    fun requestKidsCatalogPin() {
+        _uiState.update { state -> state.copy(kidsCatalogApproval = state.kidsCatalogApproval?.copy(needsPin = true, error = null)) }
+    }
+
+    fun dismissKidsCatalogApproval() {
+        _uiState.update { it.copy(kidsCatalogApproval = null) }
+    }
+
+    fun confirmKidsCatalogPin(pin: String) {
+        val request = _uiState.value.kidsCatalogApproval?.takeIf { it.needsPin && !it.saving } ?: return
+        _uiState.update { it.copy(kidsCatalogApproval = request.copy(saving = true, error = null)) }
+        viewModelScope.launch {
+            try {
+                catalogRepository.setKidsCatalogApproval(request.profileId, request.catalogKeys, !request.approved, pin)
+                _uiState.update { it.copy(
+                    kidsCatalogApproval = null,
+                    toastMessage = SettingsMessage.Res(
+                        if (request.approved) R.string.kids_catalog_unapproved_toast else R.string.kids_catalog_approved_toast,
+                        listOf(request.catalog.title)
+                    ),
+                    toastType = ToastType.SUCCESS
+                ) }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _uiState.update { it.copy(kidsCatalogApproval = request.copy(
+                    saving = false,
                     pinAttempts = request.pinAttempts + 1,
                     error = e.orCatalogMessage(SettingsMessage.Res(R.string.kids_list_approval_unavailable))
                 )) }

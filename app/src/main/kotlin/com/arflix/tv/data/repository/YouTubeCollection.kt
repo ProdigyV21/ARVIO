@@ -80,6 +80,13 @@ internal object YouTubeCollection {
 
     fun metaId(videoId: String): String = META_ID_PREFIX + videoId
 
+    /**
+     * The YouTube video an addon stream offers: Stremio's `ytId`, or a youtube.com / youtu.be
+     * link as its url. Null for anything else.
+     */
+    fun videoIdOfAddonStream(ytId: String?, url: String?): String? =
+        ytId?.trim()?.takeIf { VIDEO_ID.matches(it) } ?: url?.let(::videoIdFromUrl)
+
     fun videoIdFromMetaId(metaId: String?): String? =
         metaId?.takeIf { it.startsWith(META_ID_PREFIX) }?.removePrefix(META_ID_PREFIX)?.takeIf { VIDEO_ID.matches(it) }
 

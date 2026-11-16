@@ -2,6 +2,7 @@ package com.arflix.tv.data.repository
 
 import android.content.Context
 import com.arflix.tv.R
+import com.arflix.tv.data.api.YouTubeSearchVideo
 import com.arflix.tv.data.api.TmdbApi
 import com.arflix.tv.data.api.TmdbCastMember
 import com.arflix.tv.data.api.TmdbCrewMember
@@ -317,7 +318,16 @@ class MediaRepository @Inject constructor(
         fun countOf(refs: List<Pair<MediaType, Int>>): Int =
             if (mediaType == null) refs.size else refs.count { it.first == mediaType }
 
-        val cacheKey = "${collectionRefsCacheKey(catalog)}|${catalog.collectionGroup}|${catalog.collectionRailKey}|${mediaType?.name ?: "ALL"}"
+        // An approved addon catalog's titles are trusted only once a load records them, so refs
+        // cached before an approval (made here, revoked or restored from the cloud) must not stand
+        // in for that load: the kids profile's approvals are part of what was cached.
+        val kidsApprovals = if (catalog.collectionSources.any { it.kind == CollectionSourceKind.ADDON_CATALOG }) {
+            activeKidsCatalogApprovals()
+        } else {
+            emptySet()
+        }
+        val cacheKey = "${collectionRefsCacheKey(catalog)}|${catalog.collectionGroup}|${catalog.collectionRailKey}|${mediaType?.name ?: "ALL"}" +
+            "|kids:${kidsApprovals.sorted().joinToString(",")}"
         val cached = getCollectionRefsCache(cacheKey)
         if (cached != null && (cached.complete || countOf(cached.refs) >= requiredCount.coerceAtLeast(1))) {
             return cached
@@ -1176,6 +1186,32 @@ class MediaRepository @Inject constructor(
                 mediaType = MediaType.MOVIE,
                 addonType = "movie"
             )
+        }
+        addonNative.flush()
+        if (items.isNotEmpty()) cacheItems(items)
+        return items
+    }
+
+    /**
+     * YouTube search answers as cards of the same native addon as the YouTube row, so Details,
+     * playback, resume and the hover preview treat a found video exactly like a collection one.
+     * [MediaItem.subtitle] carries the channel and length for the card.
+     */
+    suspend fun youTubeSearchItems(videos: List<YouTubeSearchVideo>): List<MediaItem> {
+        val items = videos.mapNotNull { video ->
+            val facts = listOfNotNull(video.channel, video.duration, video.views)
+            addonNative.register(
+                addonId = YouTubeCollection.ADDON_ID,
+                preview = StremioMetaPreview(
+                    id = YouTubeCollection.metaId(video.id),
+                    name = video.title,
+                    poster = YouTubeCollection.posterUrl(video.id),
+                    background = video.thumbnailUrl,
+                    description = facts.joinToString(" · ").takeIf { it.isNotBlank() }
+                ),
+                mediaType = MediaType.MOVIE,
+                addonType = "movie"
+            )?.copy(subtitle = listOfNotNull(video.channel, video.duration).joinToString(" · "))
         }
         addonNative.flush()
         if (items.isNotEmpty()) cacheItems(items)
@@ -2343,7 +2379,60 @@ class MediaRepository @Inject constructor(
             }
         }.mapNotNull { it.await() }
 
+        // A kids profile whose parent approved this catalog trusts what it lists — only titles
+        // it names exactly, never a TMDB match guessed from a title (see KidsTrustedCatalogs).
+        catalogRepository?.let { catalogs ->
+            val exact = (nativeRefs + directRefs + resolvedFromMeta + resolvedImdbRefs).distinct()
+            try {
+                catalogs.recordKidsCatalogMembers(kidsCatalogKey(descriptor), exact)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                // Trust is only ever added here; a failed write leaves the titles hidden.
+            }
+        }
+
         (nativeRefs + directRefs + resolvedFromMeta + resolvedImdbRefs + resolvedTitleRefs).distinct()
+    }
+
+    private suspend fun activeKidsCatalogApprovals(): Set<String> = try {
+        catalogRepository?.activeKidsCatalogApprovals().orEmpty()
+    } catch (e: CancellationException) {
+        throw e
+    } catch (_: Exception) {
+        emptySet()
+    }
+
+    /** The key a parent's kids approval of [descriptor] is stored under (see KidsTrustedCatalogs). */
+    private fun kidsCatalogKey(descriptor: AddonCatalogDescriptor): String =
+        KidsTrustedCatalogs.catalogKey(
+            descriptor.addonId,
+            normalizeAddonCatalogType(descriptor.catalogType) ?: descriptor.catalogType,
+            descriptor.catalogId
+        )
+
+    /**
+     * The addon catalogs [catalog] draws from, as kids-approval keys: an addon row's own catalog,
+     * or each addon source of a collection tile, resolved to its installed addon the way loading
+     * does. Empty when none of them is installed on this profile.
+     */
+    suspend fun kidsCatalogKeys(catalog: CatalogConfig): List<String> {
+        val descriptors = if (catalog.kind == CatalogKind.COLLECTION) {
+            catalog.collectionSources.filter { it.kind == CollectionSourceKind.ADDON_CATALOG }.mapNotNull { source ->
+                val catalogType = source.addonCatalogType?.trim().orEmpty()
+                val catalogId = source.addonCatalogId?.trim().orEmpty()
+                if (catalogType.isBlank() || catalogId.isBlank()) return@mapNotNull null
+                val addonId = streamRepository.findInstalledAddonIdForCatalog(
+                    catalogType = catalogType,
+                    catalogId = catalogId,
+                    preferredAddonId = source.addonId
+                ) ?: return@mapNotNull null
+                AddonCatalogDescriptor(addonId, catalogType, catalogId)
+            }
+        } else {
+            listOfNotNull(resolveAddonCatalogDescriptor(catalog))
+        }
+        return descriptors.map(::kidsCatalogKey).distinct()
     }
 
     private suspend fun installedAddonsSnapshot(): List<Addon> = try {

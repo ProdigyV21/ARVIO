@@ -65,6 +65,64 @@ internal fun KidsListOptionsDialog(title: String, onRename: () -> Unit, onApprov
     )
 }
 
+/**
+ * A kids profile's addon catalog row or collection tile: rename it, or approve the whole catalog
+ * for this profile (its titles then show even without a rating) / take that approval back.
+ */
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+internal fun KidsCatalogOptionsDialog(
+    title: String,
+    approved: Boolean,
+    onRename: () -> Unit,
+    onToggleApproval: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    val first = remember { FocusRequester() }
+    // TV buttons answer only the remote; on a phone the same choices are ordinary touch buttons.
+    val isTouch = com.arflix.tv.util.LocalDeviceType.current.isTouchDevice()
+    val approveLabel = stringResource(if (approved) R.string.kids_catalog_unapprove else R.string.kids_catalog_approve)
+    val renameLabel = stringResource(R.string.rename_catalog)
+    val cancelLabel = stringResource(R.string.cancel)
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = BackgroundElevated,
+        shape = RoundedCornerShape(12.dp),
+        title = { Text(title, color = TextPrimary, maxLines = 2, overflow = TextOverflow.Ellipsis) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    stringResource(if (approved) R.string.kids_catalog_approved_state else R.string.kids_catalog_explain),
+                    color = TextSecondary
+                )
+                if (isTouch) {
+                    androidx.compose.material3.Button(onClick = onToggleApproval, modifier = Modifier.fillMaxWidth()) {
+                        androidx.compose.material3.Text(approveLabel)
+                    }
+                    androidx.compose.material3.OutlinedButton(onClick = onRename, modifier = Modifier.fillMaxWidth()) {
+                        androidx.compose.material3.Text(renameLabel)
+                    }
+                } else {
+                    Button(onClick = onToggleApproval, modifier = Modifier.fillMaxWidth().focusRequester(first)) {
+                        Text(approveLabel)
+                    }
+                    Button(onClick = onRename, modifier = Modifier.fillMaxWidth()) {
+                        Text(renameLabel)
+                    }
+                    FocusDialogItem(first)
+                }
+            }
+        },
+        confirmButton = {
+            if (isTouch) {
+                androidx.compose.material3.TextButton(onClick = onDismiss) { androidx.compose.material3.Text(cancelLabel) }
+            } else {
+                Button(onClick = onDismiss) { Text(cancelLabel) }
+            }
+        }
+    )
+}
+
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 internal fun KidsListTitleDialog(

@@ -3303,6 +3303,7 @@ class StreamRepository @Inject constructor(
 
         return filtered
             .map { stream ->
+                addonYouTubeStream(stream, addon)?.let { return@map it }
                 val rawStreamUrl = stream.getStreamUrl()
                 val streamUrl = when {
                     !rawStreamUrl.isNullOrBlank() -> rawStreamUrl
@@ -3386,7 +3387,30 @@ class StreamRepository @Inject constructor(
             }
     }
 
+    /**
+     * A stream an addon offers as a YouTube video — Stremio's `ytId`, or a youtube.com / youtu.be
+     * link — played through ARVIO's own YouTube player, like a video of the YouTube row (an
+     * addon with a broadcaster's episodes that are only on YouTube, say). Without this the
+     * watch page itself was handed to the player, which can't play a web page. Sideload builds
+     * only, like the rest of YouTube playback from search and sources.
+     */
+    private fun addonYouTubeStream(stream: StremioStream, addon: Addon): StreamSource? {
+        if (!BuildConfig.YOUTUBE_SEARCH_AVAILABLE) return null
+        val videoId = YouTubeCollection.videoIdOfAddonStream(stream.ytId, stream.getStreamUrl()) ?: return null
+        val label = listOfNotNull(stream.name, stream.title)
+            .map { it.trim() }.firstOrNull { it.isNotBlank() }
+        return YouTubeCollection.stream(videoId).copy(
+            source = label ?: YouTubeCollection.ADDON_NAME,
+            addonName = "${addon.name} - ${YouTubeCollection.ADDON_NAME}",
+            description = stream.description?.trim()?.takeIf { it.isNotBlank() }
+        )
+    }
+
     private fun isSupportedPlaybackCandidate(stream: StremioStream): Boolean {
+        // A YouTube video is played through the YouTube player (see addonYouTubeStream).
+        if (BuildConfig.YOUTUBE_SEARCH_AVAILABLE && stream.getStreamUrl()?.let(YouTubeCollection::videoIdFromUrl) != null) {
+            return true
+        }
         val url = stream.getStreamUrl()?.trim().orEmpty()
         if (url.isBlank()) return true
 

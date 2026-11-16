@@ -370,7 +370,13 @@ class CloudSyncRepository @Inject constructor(
         val streamProvidersCustomOrder: String = "",
         val streamIntegrationsMacroOrder: String = "",
         val streamMacroEnabledMap: Map<String, Boolean> = emptyMap(),
-        val streamProviderEnabledMap: Map<String, Boolean> = emptyMap()
+        val streamProviderEnabledMap: Map<String, Boolean> = emptyMap(),
+        /**
+         * Addon catalogs a parent approved for this kids profile (KidsTrustedCatalogs). Only the
+         * approvals sync; each device records the titles they list as its catalogs load. Null
+         * from older clients, which must not clear approvals.
+         */
+        val kidsCatalogApprovals: List<String>? = null
     )
 
     // ── DataStore key helpers ──
@@ -790,7 +796,8 @@ class CloudSyncRepository @Inject constructor(
                         streamProvidersCustomOrder = streamCloudState.customProviderOrder,
                         streamIntegrationsMacroOrder = streamCloudState.macroCategoryOrder,
                         streamMacroEnabledMap = streamCloudState.macroEnabledMap,
-                        streamProviderEnabledMap = streamCloudState.providerEnabledMap
+                        streamProviderEnabledMap = streamCloudState.providerEnabledMap,
+                        kidsCatalogApprovals = prefs[KidsTrustedCatalogs.approvalsKey(profile.id)]?.sorted()
                     )
                 )
             }
@@ -1801,6 +1808,17 @@ class CloudSyncRepository @Inject constructor(
                                 providerEnabledMap = state.streamProviderEnabledMap
                             )
                         )
+                        state.kidsCatalogApprovals?.let { approvals ->
+                            val approved = approvals.toSet()
+                            val members = KidsTrustedCatalogs.membersKey(profileId)
+                            val current = prefs[KidsTrustedCatalogs.approvalsKey(profileId)].orEmpty()
+                            prefs[KidsTrustedCatalogs.approvalsKey(profileId)] = approved
+                            // An approval removed on another device takes its titles with it here.
+                            val revoked = current - approved
+                            if (revoked.isNotEmpty()) {
+                                prefs[members] = KidsTrustedCatalogs.withoutCatalogs(prefs[members].orEmpty(), revoked)
+                            }
+                        }
                     }
                 }
             }

@@ -181,11 +181,19 @@ fun SearchScreen(
     val hasSearchResults = uiState.movieResults.isNotEmpty() || uiState.tvResults.isNotEmpty() || uiState.personResults.isNotEmpty()
     val hasAiResults = uiState.isAiSearch && uiState.aiResults.isNotEmpty()
     val searchTopResults = uiState.results
+    // The on-demand YouTube row goes first; it also shows when nothing else was found.
+    val youTubeRow = youTubeSearchCategory(
+        state = uiState,
+        available = viewModel.youTubeSearchAvailable,
+        isKidsProfile = kidsFilterState.isActive,
+        hasSearchResults = hasSearchResults
+    )
 
     // Determine which categories to show in rows (filter out empty ones)
     val activeCategories: List<Category> = when {
-        hasSearchResults -> {
+        hasSearchResults || youTubeRow != null -> {
             val list = mutableListOf<Category>()
+            youTubeRow?.let(list::add)
             if (searchTopResults.isNotEmpty()) list.add(Category("s_all", "${stringResource(R.string.search)} (${searchTopResults.size})", searchTopResults))
             if (uiState.movieResults.isNotEmpty()) list.add(Category("s_m", "${stringResource(R.string.movies)} (${uiState.movieResults.size})", uiState.movieResults))
             if (uiState.tvResults.isNotEmpty()) list.add(Category("s_t", "${stringResource(R.string.tv_shows)} (${uiState.tvResults.size})", uiState.tvResults))
@@ -416,7 +424,8 @@ fun SearchScreen(
     // Opening a title from the results keeps the query among the recent searches.
     val openSearchResult: (MediaItem) -> Unit = { item ->
         viewModel.rememberSearch()
-        onNavigateToDetails(item.mediaType, item.id)
+        if (item.isYouTubeSearchAction()) viewModel.searchYouTube()
+        else onNavigateToDetails(item.mediaType, item.id)
     }
     fun focusRecent() {
         focusZone = FocusZone.RECENT
@@ -1007,7 +1016,7 @@ fun SearchScreen(
                     ContentGrid(items = uiState.aiResults, usePosterCards = aiUsePosterCards, isLoading = false, isTouchDevice = isTouchDevice, onItemClick = openSearchResult, onLoadMore = {})
                 }
 
-                uiState.query.isNotEmpty() && !uiState.isAiSearch && !hasSearchResults -> {
+                uiState.query.isNotEmpty() && !uiState.isAiSearch && !hasSearchResults && youTubeRow == null -> {
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Text(if (uiState.error != null) stringResource(R.string.error_loading)
                             else "${stringResource(R.string.no_results_for)} \"${uiState.query}\"",
@@ -1367,7 +1376,8 @@ private fun RowsLayer(
                 val isCurrentRow = !isTouchDevice && isFocused && index == currentRowIndex
                 val rowKey = remember(category.id) { "search:${category.id}" }
                 val rowUsePosterCards = rememberCatalogueRowLayoutMode(rowKey) == CardLayoutMode.POSTER
-                val isPortrait = category.isPortrait(rowUsePosterCards)
+                // YouTube artwork is 16:9; a poster crop would cut most of it away.
+                val isPortrait = category.id != YOUTUBE_SEARCH_ROW_ID && category.isPortrait(rowUsePosterCards)
                 val itemWidth = if (isTouchDevice) {
                     if (isPortrait) 120.dp else 200.dp
                 } else {
@@ -1471,10 +1481,12 @@ private fun RowsLayer(
                                     isLandscape = !isPortrait,
                                     logoImageUrl = cardLogoUrls["${item.mediaType}_${item.id}"],
                                     showProgress = false,
-                                    titleMaxLines = 2,
+                                    // One line for YouTube, so the channel and length below it stay in view.
+                                    titleMaxLines = if (category.id == YOUTUBE_SEARCH_ROW_ID) 1 else 2,
                                     subtitleMaxLines = 1,
                                     isFocusedOverride = itemIsFocused,
                                     enableSystemFocus = false,
+                                    artworkPainter = youTubeSearchCardPainter(item),
                                     onFocused = {},
                                     onClick = { onItemClick(item) },
                                     modifier = Modifier.testTag("search-card-${category.id}-${item.mediaType}-${item.id}")
@@ -1643,6 +1655,8 @@ private fun buildCardTitle(item: MediaItem): String {
 
 @Composable
 private fun buildCardSubtitle(item: MediaItem): String {
+    // YouTube cards show their channel and length; "Movie" would only be the storage type.
+    if (item.isYouTubeVideo() || item.isYouTubeSearchAction()) return item.subtitle
     val mediaLabel = when (item.mediaType) {
         MediaType.TV -> stringResource(R.string.series)
         MediaType.MOVIE -> stringResource(R.string.movie)

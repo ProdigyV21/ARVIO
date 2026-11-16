@@ -78,7 +78,10 @@ class KidsContentFilter @Inject constructor(
             if (item.isPlaceholder || isCollectionTile(item)) return true
             // A parent picked every video of the profile's own YouTube row; there is no rating to look up.
             if (item.addonNativeAddonId == YouTubeCollection.ADDON_ID) return true
-            if (item.id <= 0) return false
+            // An addon's own item has no TMDB id to rate: it passes only when a catalog the
+            // parent approved for this profile listed it (KidsTrustedCatalogs).
+            if (item.id < 0) return KidsTrustedTitles.key(item.mediaType, item.id) in trusted
+            if (item.id == 0) return false
             val age = ages[key(region, item.mediaType, item.id)] ?: return false
             return allowsAge(age, cap, KidsTrustedTitles.key(item.mediaType, item.id) in trusted)
         }
@@ -109,7 +112,10 @@ class KidsContentFilter @Inject constructor(
     private val policy = profileRepository.activeProfile.flatMapLatest { profile ->
         val level = profile?.kidsLevel
         if (profile == null || level == null) flowOf(null to emptySet<String>())
-        else catalogRepository.observeKidsListApprovals(profile.id).map { level to it }
+        else combine(
+            catalogRepository.observeKidsListApprovals(profile.id),
+            catalogRepository.observeKidsCatalogMembers(profile.id)
+        ) { titles, catalogMembers -> level to (titles + catalogMembers) }
             .onStart { emit(level to emptySet()) }
     }
 
@@ -138,11 +144,15 @@ class KidsContentFilter @Inject constructor(
         if (tmdbId < 0 && mediaRepository.get().addonNativeCard(mediaType, tmdbId)?.addonNativeAddonId == YouTubeCollection.ADDON_ID) {
             return true
         }
-        if (tmdbId <= 0) return false
+        if (tmdbId < 0) {
+            // An addon's own item: only through a catalog the parent approved (KidsTrustedCatalogs).
+            return KidsTrustedTitles.key(mediaType, tmdbId) in catalogRepository.observeKidsCatalogMembers(profile.id).first()
+        }
+        if (tmdbId == 0) return false
         val region = region()
         val key = key(region, mediaType, tmdbId)
         val titleKey = KidsTrustedTitles.key(mediaType, tmdbId)
-        val approved = titleKey in catalogRepository.observeKidsListApprovals(profile.id).first()
+        val approved = trustedTitle(profile.id, titleKey)
         val cached = ages.value[key]
         // Recheck an exception when opening a title. A stale "unrated" result must
         // not override a certification added since the parent approved it.
@@ -151,9 +161,13 @@ class KidsContentFilter @Inject constructor(
             ?: return false
         val current = profileRepository.getActiveProfile()
         if (current?.id != profile.id || current.kidsLevel != cap) return false
-        return allowsAge(age, cap, approved && age == NO_CERTIFICATION &&
-            titleKey in catalogRepository.observeKidsListApprovals(profile.id).first())
+        return allowsAge(age, cap, approved && age == NO_CERTIFICATION && trustedTitle(profile.id, titleKey))
     }
+
+    /** Approved one by one in a list row, or listed by a catalog the parent approved. */
+    private suspend fun trustedTitle(profileId: String, titleKey: String): Boolean =
+        titleKey in catalogRepository.observeKidsListApprovals(profileId).first() ||
+            titleKey in catalogRepository.observeKidsCatalogMembers(profileId).first()
 
     internal suspend fun approveListTitle(session: KidsListApprovalSession, item: MediaItem) {
         catalogRepository.checkKidsListApproval(session)
