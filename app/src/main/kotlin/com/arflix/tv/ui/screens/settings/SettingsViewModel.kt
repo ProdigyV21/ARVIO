@@ -2372,8 +2372,27 @@ class SettingsViewModel @Inject constructor(
 
     fun saveSubtitleAiApiKey(key: String) {
         viewModelScope.launch {
-            context.settingsDataStore.edit { it[subtitleAiApiKeyKey] = key.trim() }
-            _uiState.value = _uiState.value.copy(subtitleAiApiKey = key.trim())
+            // A key's fixed prefix names its provider: follow it, whether the key was typed on the
+            // TV or sent from the phone, so it never sits under the wrong model.
+            val keyModel = com.arflix.tv.ui.screens.player.subtitles.subtitleAiModelForKey(key)
+                ?.takeIf { it != _uiState.value.subtitleAiModel }
+            val leavingGemini = keyModel != null &&
+                _uiState.value.subtitleAiModel == com.arflix.tv.ui.screens.player.subtitles.SubtitleAiModel.GEMINI_FLASH_25
+            context.settingsDataStore.edit {
+                it[subtitleAiApiKeyKey] = key.trim()
+                if (keyModel != null) it[subtitleAiModelKey] = keyModel.name
+            }
+            _uiState.value = _uiState.value.copy(
+                subtitleAiApiKey = key.trim(),
+                subtitleAiModel = keyModel ?: _uiState.value.subtitleAiModel
+            )
+            if (leavingGemini) {
+                // One key slot: live TV AI subtitles and the hearing reference need a Gemini key.
+                _uiState.value = _uiState.value.copy(
+                    toastMessage = SettingsMessage.Res(R.string.ai_model_switched_from_gemini),
+                    toastType = ToastType.INFO
+                )
+            }
             syncLocalStateToCloud(silent = true)
         }
     }
@@ -2392,6 +2411,7 @@ class SettingsViewModel @Inject constructor(
             val server = AiKeyConfigServer.startOnAvailablePort(
                 onKeyReceived = { key ->
                     viewModelScope.launch {
+                        // Also switches the model to the key's provider (see saveSubtitleAiApiKey).
                         saveSubtitleAiApiKey(key)
                         _uiState.value = _uiState.value.copy(
                             aiKeyServerState = _uiState.value.aiKeyServerState.copy(keyReceived = true)

@@ -39,6 +39,7 @@ class AiKeyConfigServer(
             method == Method.GET  && uri == "/"          -> serveHtml(AiKeyWebPage.getLandingHtml())
             method == Method.GET  && uri == "/groq"      -> serveHtml(AiKeyWebPage.getGroqHtml())
             method == Method.GET  && uri == "/gemini"    -> serveHtml(AiKeyWebPage.getGeminiHtml())
+            method == Method.GET  && uri == "/claude"    -> serveHtml(AiKeyWebPage.getClaudeHtml())
             method == Method.GET  && uri == "/logo.png"  -> serveLogo()
             // Require the client to supply the pairing token when submitting the key.
             method == Method.POST && uri == "/api/key"   -> handleKeySubmit(session, onKeyReceived)
