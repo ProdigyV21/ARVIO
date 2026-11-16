@@ -343,6 +343,12 @@ class CatalogRepository @Inject constructor(
     internal suspend fun kidsCatalogApprovals(profileId: String): Set<String> =
         context.settingsDataStore.data.first()[KidsTrustedCatalogs.approvalsKey(profileId)].orEmpty()
 
+    /** The active profile's catalog approvals when it is a kids profile; empty for any other. */
+    internal suspend fun activeKidsCatalogApprovals(): Set<String> {
+        val profile = profileManager.getActiveProfile()?.takeIf { it.isKidsProfile } ?: return emptySet()
+        return kidsCatalogApprovals(profile.id)
+    }
+
     /**
      * Records the titles a page of an addon catalog listed, when the active profile is a kids
      * profile that approved that catalog (see [KidsTrustedCatalogs]). Anything else is ignored.

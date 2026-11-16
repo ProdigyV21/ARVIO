@@ -81,31 +81,6 @@ class YouTubeSearchApiTest {
     }
 
     @Test
-    fun `the uploading channel's id is read from the byline link`() {
-        val json = """
-            {"contents":[
-              {"compactVideoRenderer":{
-                "videoId":"DDDDDDDDDD1",
-                "title":{"simpleText":"Example episode"},
-                "longBylineText":{"runs":[{"text":"Example Kids Channel",
-                  "navigationEndpoint":{"browseEndpoint":{"browseId":"UCexampleKidsChannel0001"}}}]},
-                "lengthText":{"simpleText":"14:37"}
-              }},
-              {"compactVideoRenderer":{
-                "videoId":"DDDDDDDDDD2",
-                "title":{"simpleText":"No link"},
-                "longBylineText":{"runs":[{"text":"Somebody"}]},
-                "lengthText":{"simpleText":"14:37"}
-              }}
-            ]}
-        """
-        val videos = YouTubeSearchApi.parseSearchResponse(json)
-        assertEquals("UCexampleKidsChannel0001", videos[0].channelId)
-        assertEquals("Example Kids Channel", videos[0].channel)
-        assertNull(videos[1].channelId)
-    }
-
-    @Test
     fun `garbage answers are empty, not a crash`() {
         assertTrue(YouTubeSearchApi.parseSearchResponse("").isEmpty())
         assertTrue(YouTubeSearchApi.parseSearchResponse("<html>bot check</html>").isEmpty())

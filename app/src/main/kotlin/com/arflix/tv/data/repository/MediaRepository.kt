@@ -318,7 +318,16 @@ class MediaRepository @Inject constructor(
         fun countOf(refs: List<Pair<MediaType, Int>>): Int =
             if (mediaType == null) refs.size else refs.count { it.first == mediaType }
 
-        val cacheKey = "${collectionRefsCacheKey(catalog)}|${catalog.collectionGroup}|${catalog.collectionRailKey}|${mediaType?.name ?: "ALL"}"
+        // An approved addon catalog's titles are trusted only once a load records them, so refs
+        // cached before an approval (made here, revoked or restored from the cloud) must not stand
+        // in for that load: the kids profile's approvals are part of what was cached.
+        val kidsApprovals = if (catalog.collectionSources.any { it.kind == CollectionSourceKind.ADDON_CATALOG }) {
+            activeKidsCatalogApprovals()
+        } else {
+            emptySet()
+        }
+        val cacheKey = "${collectionRefsCacheKey(catalog)}|${catalog.collectionGroup}|${catalog.collectionRailKey}|${mediaType?.name ?: "ALL"}" +
+            "|kids:${kidsApprovals.sorted().joinToString(",")}"
         val cached = getCollectionRefsCache(cacheKey)
         if (cached != null && (cached.complete || countOf(cached.refs) >= requiredCount.coerceAtLeast(1))) {
             return cached
@@ -2384,6 +2393,14 @@ class MediaRepository @Inject constructor(
         }
 
         (nativeRefs + directRefs + resolvedFromMeta + resolvedImdbRefs + resolvedTitleRefs).distinct()
+    }
+
+    private suspend fun activeKidsCatalogApprovals(): Set<String> = try {
+        catalogRepository?.activeKidsCatalogApprovals().orEmpty()
+    } catch (e: CancellationException) {
+        throw e
+    } catch (_: Exception) {
+        emptySet()
     }
 
     /** The key a parent's kids approval of [descriptor] is stored under (see KidsTrustedCatalogs). */

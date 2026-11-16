@@ -12,14 +12,13 @@ import kotlinx.coroutines.test.runTest
 import java.io.IOException
 
 class YouTubeSourceTest {
-    private fun video(id: String, duration: String?, title: String = "Video $id", channelId: String? = null) = YouTubeSearchVideo(
+    private fun video(id: String, duration: String?, title: String = "Video $id") = YouTubeSearchVideo(
         id = id,
         title = title,
         channel = "Example channel",
         duration = duration,
         views = "1K views",
-        thumbnailUrl = "https://i.ytimg.com/vi/$id/mqdefault.jpg",
-        channelId = channelId
+        thumbnailUrl = "https://i.ytimg.com/vi/$id/mqdefault.jpg"
     )
 
     @Test
@@ -90,34 +89,20 @@ class YouTubeSourceTest {
     }
 
     @Test
-    fun `a kids profile keeps regular YouTube videos only from channels YouTube Kids carries`() {
-        // The show is missing from YouTube Kids, but its channel is there with other shows.
-        val kids = listOf(
-            video("EEEEEEEEEE1", "12:00", "Another show | episode 3", channelId = "UCkidsChannel"),
-            video("EEEEEEEEEE2", "11:00", "Other kids show", channelId = "UCotherKids")
-        )
-        val web = listOf(
-            video("FFFFFFFFFF1", "14:37", "Example Show | episode 1", channelId = "UCkidsChannel"),
-            video("FFFFFFFFFF2", "14:40", "Example Show parody", channelId = "UCunknown"),
-            video("FFFFFFFFFF3", "14:41", "Example Show reupload", channelId = null),
-            video("FFFFFFFFFF4", "15:00", "Example Show | episode 2", channelId = "UCkidsChannel")
-        )
-        val kept = YouTubeSource.kidsChannelVideos(web, kids)
-        assertEquals(
-            listOf("FFFFFFFFFF1", "FFFFFFFFFF4", "EEEEEEEEEE1", "EEEEEEEEEE2"),
-            kept.map { it.id }
-        )
-        // With the name filter, only the show's own episodes remain.
-        assertEquals(
-            listOf("arvio-youtube://FFFFFFFFFF1", "arvio-youtube://FFFFFFFFFF4"),
-            YouTubeSource.streams(kept, listOf("Example Show")).map { it.url }
-        )
+    fun `precomposed accents match their plain letters, both ways`() {
+        fun kept(title: String, name: String) =
+            YouTubeSource.streams(listOf(video("DDDDDDDDDD1", "22:00", title)), listOf(name)).isNotEmpty()
+        assertTrue(kept("Pok\u00e9mon the movie", "Pokemon"))
+        assertTrue(kept("Pokemon the movie", "Pok\u00e9mon"))
+        // The same word written with a combining accent (NFD) matches too.
+        assertTrue(kept("Poke\u0301mon the movie", "Pok\u00e9mon"))
+        assertTrue(kept("Am\u00e9lie 2001", "Amelie"))
     }
 
-    private val kidsAnswer = listOf(video("GGGGGGGGGG1", "12:00", "Other kids show", channelId = "UCkidsChannel"))
+    private val kidsAnswer = listOf(video("GGGGGGGGGG1", "12:00", "Example Show | episode 3"))
     private val webAnswer = listOf(
-        video("HHHHHHHHHH1", "14:37", "Example Show | episode 1", channelId = "UCkidsChannel"),
-        video("HHHHHHHHHH2", "14:40", "Example Show parody", channelId = "UCunknown")
+        video("HHHHHHHHHH1", "14:37", "Example Show | episode 1"),
+        video("HHHHHHHHHH2", "14:40", "Example Show parody")
     )
 
     @Test
@@ -129,14 +114,16 @@ class YouTubeSourceTest {
     }
 
     @Test
-    fun `a kids profile asks both and keeps regular videos only from YouTube Kids channels`() = runTest {
+    fun `a kids profile gets only YouTube Kids' own videos at its tier`() = runTest {
+        // Regular YouTube would offer the same channel's other uploads; none of them was vetted
+        // for the tier, so regular YouTube is never asked on a kids profile.
         val asked = mutableListOf<YouTubeKidsCorpus?>()
         val videos = YouTubeSource.search("example show", YouTubeKidsCorpus.YOUNGER) { _, corpus ->
-            synchronized(asked) { asked += corpus }
+            asked += corpus
             if (corpus == null) webAnswer else kidsAnswer
         }
-        assertEquals(setOf(null, YouTubeKidsCorpus.YOUNGER), asked.toSet())
-        assertEquals(listOf("HHHHHHHHHH1", "GGGGGGGGGG1"), videos.map { it.id })
+        assertEquals(listOf<YouTubeKidsCorpus?>(YouTubeKidsCorpus.YOUNGER), asked)
+        assertEquals(listOf("GGGGGGGGGG1"), videos.map { it.id })
     }
 
     @Test
@@ -147,13 +134,5 @@ class YouTubeSourceTest {
             }
         }
         assertTrue(failure.exceptionOrNull() is IOException)
-    }
-
-    @Test
-    fun `a failed regular answer leaves YouTube Kids' own videos`() = runTest {
-        val videos = YouTubeSource.search("example show", YouTubeKidsCorpus.PRESCHOOL) { _, corpus ->
-            if (corpus == null) throw IOException("regular YouTube answered HTTP 500") else kidsAnswer
-        }
-        assertEquals(listOf("GGGGGGGGGG1"), videos.map { it.id })
     }
 }

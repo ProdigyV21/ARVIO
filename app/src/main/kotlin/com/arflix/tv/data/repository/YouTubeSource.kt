@@ -4,9 +4,7 @@ import com.arflix.tv.data.api.YouTubeKidsCorpus
 import com.arflix.tv.data.api.YouTubeSearchVideo
 import com.arflix.tv.data.model.MediaType
 import com.arflix.tv.data.model.StreamSource
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.async
-import kotlinx.coroutines.coroutineScope
+import java.text.Normalizer
 import java.util.Locale
 
 /**
@@ -53,60 +51,27 @@ internal object YouTubeSource {
     }
 
     /**
-     * What a kids profile may pick from, for a title its age filter already let through.
-     *
-     * YouTube Kids carries only part of each kids' channel: a show can be missing from it while
-     * the same channel's other shows are there (seen with a public broadcaster's kids' show). So
-     * a kids profile searches regular YouTube too, but keeps only videos from channels that
-     * YouTube Kids itself answered with for the same search — never a re-upload or a parody from
-     * a channel YouTube Kids doesn't carry. [kids] (YouTube Kids' own answer) is kept as well.
-     */
-    /**
      * Searches YouTube for [query] as the profile may see it — the one place both the Search
      * screen and the source list ask YouTube. Without a [kidsCorpus], one regular search. On a
-     * kids profile: YouTube Kids at that tier and regular YouTube at once, kept to YouTube Kids'
-     * channels ([kidsChannelVideos]). A failed YouTube Kids answer fails the whole search: never
-     * fall back to regular YouTube, which nothing would then vouch for. A failed regular answer
-     * leaves YouTube Kids' own videos.
+     * kids profile, YouTube Kids at that tier only: every video it returns is one YouTube Kids
+     * itself offers that tier. Regular YouTube is never asked, not even when YouTube Kids fails,
+     * since nothing would vouch for its videos.
      */
     suspend fun search(
         query: String,
         kidsCorpus: YouTubeKidsCorpus?,
         searcher: suspend (String, YouTubeKidsCorpus?) -> List<YouTubeSearchVideo>
-    ): List<YouTubeSearchVideo> {
-        if (kidsCorpus == null) return searcher(query, null)
-        return coroutineScope {
-            val web = async {
-                try {
-                    searcher(query, null)
-                } catch (e: Exception) {
-                    if (e is CancellationException) throw e
-                    emptyList()
-                }
-            }
-            val kids = try {
-                searcher(query, kidsCorpus)
-            } catch (e: Exception) {
-                web.cancel()
-                throw e
-            }
-            kidsChannelVideos(web.await(), kids)
-        }
-    }
-
-    fun kidsChannelVideos(web: List<YouTubeSearchVideo>, kids: List<YouTubeSearchVideo>): List<YouTubeSearchVideo> {
-        val kidsChannels = kids.mapNotNull { it.channelId }.toSet()
-        val webFromKidsChannels = web.filter { it.channelId != null && it.channelId in kidsChannels }
-        return (webFromKidsChannels + kids).distinctBy { it.id }
-    }
+    ): List<YouTubeSearchVideo> = searcher(query, kidsCorpus)
 
     /**
-     * Lowercase words only, so "Spider-Man: No Way Home" matches "spider man no way home" and
-     * "Schindler's List" matches "Schindlers List". Apostrophes and Hebrew geresh/gershayim are
-     * dropped (צה"ל = צהל); every other non-letter, non-digit splits words.
+     * Lowercase words only, so "Spider-Man: No Way Home" matches "spider man no way home",
+     * "Schindler's List" matches "Schindlers List" and "Pokémon" matches "Pokemon". Apostrophes
+     * and Hebrew geresh/gershayim are dropped (צה"ל = צהל); every other non-letter, non-digit
+     * splits words.
      */
     internal fun normalize(text: String): String =
-        text.lowercase(Locale.ROOT)
+        // Decompose first: a precomposed "é" is one letter until NFD splits off its accent.
+        Normalizer.normalize(text, Normalizer.Form.NFD).lowercase(Locale.ROOT)
             .replace(MARKS, "")
             .replace(APOSTROPHES, "")
             .replace(NON_WORD, " ")
