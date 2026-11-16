@@ -349,9 +349,10 @@ class SubtitleTranslationService(
         // A content-policy block poisons the whole window because of (usually) one line.
         // Bisect so the innocuous majority still gets translated; a line that stays blocked all
         // the way down is shown in its original language. Depth cap keeps worst-case extra API
-        // calls bounded (window → halves → quarters).
+        // calls bounded (window → halves → quarters). A Claude reply cut off at max_tokens is
+        // bisected the same way: half the lines fit where the whole batch did not.
         if (!result.success &&
-            result.errorMessage == TRANSLATION_ERROR_CONTENT_BLOCKED &&
+            (result.errorMessage == TRANSLATION_ERROR_CONTENT_BLOCKED || result.errorMessage == CLAUDE_ERROR_MAX_TOKENS) &&
             lines.size >= 2 && depth < 2
         ) {
             Log.w(TAG, "Content-blocked batch of ${lines.size} — bisecting (depth=$depth)")

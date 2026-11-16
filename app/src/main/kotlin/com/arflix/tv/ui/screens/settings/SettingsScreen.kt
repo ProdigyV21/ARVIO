@@ -7672,11 +7672,12 @@ private fun GeneralSettings(
 private fun maskAiApiKey(key: String, notSetLabel: String = "Not set"): String {
     val trimmed = key.trim()
     if (trimmed.isBlank()) return notSetLabel
-    val provider = when {
-        trimmed.startsWith("gsk_") -> "Groq · "
-        trimmed.startsWith("AIzaSy") -> "Gemini · "
-        trimmed.startsWith(com.arflix.tv.ui.screens.player.subtitles.CLAUDE_KEY_PREFIX) -> "Claude · "
-        else -> ""
+    // Same prefix rules as the model switch, so the label and the model can't disagree.
+    val provider = when (com.arflix.tv.ui.screens.player.subtitles.subtitleAiModelForKey(trimmed)) {
+        com.arflix.tv.ui.screens.player.subtitles.SubtitleAiModel.GROQ_LLAMA_70B -> "Groq · "
+        com.arflix.tv.ui.screens.player.subtitles.SubtitleAiModel.GEMINI_FLASH_25 -> "Gemini · "
+        com.arflix.tv.ui.screens.player.subtitles.SubtitleAiModel.CLAUDE_HAIKU -> "Claude · "
+        null -> ""
     }
     val masked = if (trimmed.length <= 4) "••••" else "••••${trimmed.takeLast(4)}"
     return "$provider$masked"

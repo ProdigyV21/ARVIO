@@ -306,7 +306,7 @@
     <string name="ai_api_key_dialog_subtitle_gemini">הזנת מפתח API של Gemini</string>
     <string name="ai_key_saved_title">מפתח ה-API נשמר</string>
     <string name="ai_key_saved_subtitle">תרגום AI מוכן לשימוש</string>
-    <string name="ai_qr_scan_hint">יש לסרוק בטלפון — לבחור Groq או Gemini</string>
+    <string name="ai_qr_scan_hint">יש לסרוק בטלפון — לבחור Groq, Gemini או Claude</string>
     <string name="smooth_scrolling">גלילה חלקה יותר</string>
     <string name="smooth_scrolling_desc">שימוש במעברים חלקים ברמה גבוהה בעת ניווט בין שורות פוסטרים</string>
 

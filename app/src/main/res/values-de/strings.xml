@@ -1294,7 +1294,7 @@
     <string name="ai_api_key_dialog_subtitle_gemini">Gemini-API-Schlüssel eingeben</string>
     <string name="ai_key_saved_title">API-Schlüssel gespeichert</string>
     <string name="ai_key_saved_subtitle">KI-Übersetzung ist einsatzbereit</string>
-    <string name="ai_qr_scan_hint">Mit dem Telefon scannen — Groq oder Gemini wählen</string>
+    <string name="ai_qr_scan_hint">Mit dem Telefon scannen — Groq, Gemini oder Claude wählen</string>
     <string name="smooth_scrolling">Sanfteres Scrollen</string>
     <string name="smooth_scrolling_desc">Premium sanfte Übergänge beim Navigieren in Poster-Reihen nutzen</string>
     <string name="plugin_providers_count">%1$d Anbieter</string>

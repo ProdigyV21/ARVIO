@@ -30,6 +30,24 @@ private const val CLAUDE_MAX_TRANSIENT_RETRIES = 2   // 3 attempts total, like G
 private const val CLAUDE_RETRY_BASE_DELAY_MS = 400L
 // 529 is Anthropic's "overloaded".
 private val CLAUDE_RETRYABLE_HTTP = setOf(500, 502, 503, 529)
+// The call is not streamed, so nothing arrives until the whole batch is translated: the shared
+// client's 30 s read timeout is too short for a slow reply and would retry (and bill) it again.
+private const val CLAUDE_READ_TIMEOUT_SECONDS = 90L
+
+/** The reply's text was cut off at max_tokens; the batch is bisected like a content block. */
+internal const val CLAUDE_ERROR_MAX_TOKENS = "MAX_TOKENS"
+
+@Volatile private var claudeClient: Pair<OkHttpClient, OkHttpClient>? = null
+
+/** [base] with Claude's longer read timeout, built once per base client. */
+private fun claudeClientFor(base: OkHttpClient): OkHttpClient {
+    claudeClient?.takeIf { it.first === base }?.let { return it.second }
+    val builder = base.newBuilder().readTimeout(CLAUDE_READ_TIMEOUT_SECONDS, java.util.concurrent.TimeUnit.SECONDS)
+    if (base.callTimeoutMillis in 1 until (CLAUDE_READ_TIMEOUT_SECONDS + 30) * 1000) {
+        builder.callTimeout(CLAUDE_READ_TIMEOUT_SECONDS + 30, java.util.concurrent.TimeUnit.SECONDS)
+    }
+    return builder.build().also { claudeClient = base to it }
+}
 
 /** Anthropic keys start with this; used for the key label in Settings. */
 internal const val CLAUDE_KEY_PREFIX = "sk-ant-"
@@ -43,8 +61,9 @@ internal sealed class ClaudeReply {
 }
 
 /**
- * One Messages call. No temperature (current Claude models reject a non-default value) and low
- * effort: subtitle batches need speed, not reasoning. Transient failures (5xx/529, network) are
+ * One Messages call. No temperature (current Claude models reject a non-default value), thinking
+ * off and low effort: subtitle batches need speed, not reasoning (Gemini's path likewise sets
+ * thinkingLevel "minimal"). Thinking tokens would also count toward max_tokens. Transient failures (5xx/529, network) are
  * retried with jittered backoff; 429 maps to "RATE_LIMITED" like the other providers.
  */
 internal suspend fun claudeMessagesCall(
@@ -63,6 +82,7 @@ internal suspend fun claudeMessagesCall(
             put("content", userText)
         }))
         put("output_config", JSONObject().put("effort", "low"))
+        put("thinking", JSONObject().put("type", "disabled"))
     }
     val request = Request.Builder()
         .url(CLAUDE_URL)
@@ -74,7 +94,7 @@ internal suspend fun claudeMessagesCall(
 
     val reply: ClaudeReply? = withContext(Dispatchers.IO) {
         try {
-            client.newCall(request).execute().use { response ->
+            claudeClientFor(client).newCall(request).execute().use { response ->
                 val text = response.body?.string().orEmpty()
                 when {
                     response.isSuccessful -> parseClaudeReply(text)
@@ -109,6 +129,10 @@ internal fun parseClaudeReply(body: String): ClaudeReply {
             if (block.optString("type") == "text") append(block.optString("text"))
         }
     }.trim()
-    if (json.optString("stop_reason") == "max_tokens") Log.w(TAG, "Claude reply hit max_tokens")
+    if (json.optString("stop_reason") == "max_tokens") {
+        // A cut-off batch won't parse, and sending it again unchanged hits the same limit.
+        Log.w(TAG, "Claude reply hit max_tokens")
+        return ClaudeReply.Failed(CLAUDE_ERROR_MAX_TOKENS)
+    }
     return if (text.isBlank()) ClaudeReply.Failed("Empty Claude response") else ClaudeReply.Text(text)
 }

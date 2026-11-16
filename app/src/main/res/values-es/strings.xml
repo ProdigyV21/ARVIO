@@ -277,7 +277,7 @@
     <string name="ai_api_key_dialog_subtitle_gemini">Introduce tu clave API de Gemini</string>
     <string name="ai_key_saved_title">Clave API guardada</string>
     <string name="ai_key_saved_subtitle">La traducción por IA está lista para usarse</string>
-    <string name="ai_qr_scan_hint">Escanea con tu teléfono — elige Groq o Gemini</string>
+    <string name="ai_qr_scan_hint">Escanea con tu teléfono — elige Groq, Gemini o Claude</string>
     <string name="smooth_scrolling">Desplazamiento más fluido</string>
     <string name="smooth_scrolling_desc">Usar transiciones fluidas prémium al navegar por filas de pósteres</string>
 

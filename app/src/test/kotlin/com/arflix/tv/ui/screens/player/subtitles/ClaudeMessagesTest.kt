@@ -33,6 +33,13 @@ class ClaudeMessagesTest {
         assertEquals(ClaudeReply.Refused, parseClaudeReply("""{"content":[],"stop_reason":"refusal"}"""))
     }
 
+    @Test fun aReplyCutOffAtMaxTokensIsReportedForBisection() {
+        assertEquals(
+            ClaudeReply.Failed(CLAUDE_ERROR_MAX_TOKENS),
+            parseClaudeReply("""{"content":[{"type":"text","text":"[\"0: Γεια\","}],"stop_reason":"max_tokens"}""")
+        )
+    }
+
     @Test fun emptyOrUnreadableRepliesFail() {
         assertTrue(parseClaudeReply("""{"content":[],"stop_reason":"end_turn"}""") is ClaudeReply.Failed)
         assertTrue(parseClaudeReply("not json") is ClaudeReply.Failed)

@@ -254,7 +254,7 @@
     <string name="ai_api_key_dialog_subtitle_gemini">Saisissez votre clé API Gemini</string>
     <string name="ai_key_saved_title">Clé API enregistrée</string>
     <string name="ai_key_saved_subtitle">La traduction IA est prête à l’emploi</string>
-    <string name="ai_qr_scan_hint">Scannez avec votre téléphone — choisissez Groq ou Gemini</string>
+    <string name="ai_qr_scan_hint">Scannez avec votre téléphone — choisissez Groq, Gemini ou Claude</string>
     <string name="smooth_scrolling">Défilement plus fluide</string>
     <string name="smooth_scrolling_desc">Utilisez des transitions fluides premium dans les rangées d’affiches</string>
 

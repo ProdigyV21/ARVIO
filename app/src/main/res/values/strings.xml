@@ -305,11 +305,12 @@
     <string name="ai_api_key_dialog_subtitle_groq">Enter your Groq API key</string>
     <string name="ai_api_key_dialog_subtitle_gemini">Enter your Gemini API key</string>
     <string name="ai_api_key_dialog_subtitle_claude" tools:ignore="MissingTranslation">Enter your Anthropic API key</string>
-    <string name="ai_claude_model_note" tools:ignore="MissingTranslation">Best quality · Paid Anthropic API key</string>
+    <string name="ai_claude_model_note" tools:ignore="MissingTranslation">Paid Anthropic API key</string>
+    <string name="ai_model_switched_from_gemini" tools:ignore="MissingTranslation">Model switched to match the key. Live TV AI subtitles and the hearing reference need a Gemini key</string>
     <string name="ai_claude_disclaimer" tools:ignore="MissingTranslation">Paid Anthropic API key. Cost: about $0.02–0.05 per episode. Audio features (hearing reference, live TV) still need Gemini</string>
     <string name="ai_key_saved_title">API key saved</string>
     <string name="ai_key_saved_subtitle">AI translation is ready to use</string>
-    <string name="ai_qr_scan_hint">Scan with your phone — choose Groq or Gemini</string>
+    <string name="ai_qr_scan_hint">Scan with your phone — choose Groq, Gemini or Claude</string>
     <string name="smooth_scrolling">Smoother Scrolling</string>
     <string name="smooth_scrolling_desc">Use premium smooth transitions when navigating poster rows</string>
 

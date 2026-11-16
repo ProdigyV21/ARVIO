@@ -80,7 +80,7 @@ $sharedCss
   </a>
 
   <a id="claudeLink" href="/claude" class="provider-btn">
-    <span class="badge badge-claude">BEST QUALITY</span>
+    <span class="badge badge-claude">PAID</span>
     <span class="name">Anthropic Claude</span>
     <span class="model">Claude Haiku 5.5 · Paid API key</span>
   </a>
