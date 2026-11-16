@@ -1374,8 +1374,9 @@ fun HomeScreen(
                             .setMinPlaybackSpeed(1.0f).setMaxPlaybackSpeed(1.0f)
                             .setTargetOffsetMs(4_000).build()
                     ).build()
-                if (iptvSession != null) {
-                    player?.setMediaSource(homeIptvPreviewSource(context, handles.iptvClient, handles.userAgent, iptvSession, mi, useHls))
+                if (heroIptvItem != null) {
+                    val headers = homeIptvPreviewHeaders(handles.userAgent, viewModel.getIptvRequestHeaders(heroIptvItem.id))
+                    player?.setMediaSource(homeIptvPreviewSource(context, handles.iptvClient, headers, iptvSession, mi, useHls))
                 } else if (useHls) {
                     player?.setMediaSource(handles.hlsFactory.createMediaSource(mi))
                 } else {
