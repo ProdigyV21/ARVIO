@@ -24,9 +24,7 @@ data class YouTubeSearchVideo(
     val channel: String?,
     val duration: String?,
     val views: String?,
-    val thumbnailUrl: String,
-    /** The uploading channel's id ("UC…"), when the answer names it. */
-    val channelId: String? = null
+    val thumbnailUrl: String
 ) {
     /** The length in seconds, from YouTube's "1:02:03" / "12:34" text; null when unreadable. */
     val durationSeconds: Int? get() = parseDurationSeconds(duration)
@@ -181,7 +179,6 @@ class YouTubeSearchApi @Inject constructor() {
             val duration = text(renderer.obj("lengthText"))?.takeIf { it.isNotBlank() } ?: return null
             val bylines = listOf("ownerText", "longBylineText", "shortBylineText").mapNotNull { renderer.obj(it) }
             val channel = bylines.firstNotNullOfOrNull(::text)?.takeIf { it.isNotBlank() }
-            val channelId = bylines.firstNotNullOfOrNull(::browseId)
             val views = (text(renderer.obj("shortViewCountText")) ?: text(renderer.obj("viewCountText")))
                 ?.takeIf { it.isNotBlank() }
             return YouTubeSearchVideo(
@@ -190,8 +187,7 @@ class YouTubeSearchApi @Inject constructor() {
                 channel = channel,
                 duration = duration,
                 views = views,
-                thumbnailUrl = largestThumbnail(renderer) ?: "https://i.ytimg.com/vi/$id/mqdefault.jpg",
-                channelId = channelId
+                thumbnailUrl = largestThumbnail(renderer) ?: "https://i.ytimg.com/vi/$id/mqdefault.jpg"
             )
         }
 
@@ -202,14 +198,6 @@ class YouTubeSearchApi @Inject constructor() {
                 ?.string("url")
                 ?.let { if (it.startsWith("//")) "https:$it" else it }
                 ?.takeIf { it.startsWith("https://") }
-
-        /** The channel a byline links to: its first run's browse endpoint. */
-        private fun browseId(byline: JsonObject): String? =
-            byline.array("runs")?.firstNotNullOfOrNull { run ->
-                run.takeIf(JsonElement::isJsonObject)?.asJsonObject
-                    ?.obj("navigationEndpoint")?.obj("browseEndpoint")?.string("browseId")
-                    ?.takeIf { it.startsWith("UC") }
-            }
 
         /** YouTube text: either `simpleText` or a list of `runs`. */
         private fun text(node: JsonObject?): String? {

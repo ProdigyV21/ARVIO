@@ -139,6 +139,7 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.Dp
@@ -1600,7 +1601,8 @@ internal fun DetailsContent(
                                         style = ArflixTypography.caption.copy(
                                             fontSize = 13.sp,
                                             fontWeight = FontWeight.SemiBold,
-                                            shadow = textShadow
+                                            shadow = textShadow,
+                                            textDirection = LatinMetadataDirection
                                         ),
                                         color = Color.White.copy(alpha = 0.78f),
                                         maxLines = 1,
@@ -2272,7 +2274,8 @@ internal fun DetailsContent(
                                 style = ArflixTypography.caption.copy(
                                     fontSize = 13.sp,
                                     fontWeight = FontWeight.Bold,
-                                    shadow = textShadow
+                                    shadow = textShadow,
+                                    textDirection = LatinMetadataDirection
                                 ),
                                 color = Color.White,
                                 maxLines = 1
@@ -2286,7 +2289,8 @@ internal fun DetailsContent(
                                 style = ArflixTypography.caption.copy(
                                     fontSize = 13.sp,
                                     fontWeight = FontWeight.Bold,
-                                    shadow = textShadow
+                                    shadow = textShadow,
+                                    textDirection = LatinMetadataDirection
                                 ),
                                 color = Color.White,
                                 maxLines = 1
@@ -4210,7 +4214,11 @@ internal fun EpisodeCard(
                 if (metadata.isNotEmpty()) {
                     Text(
                         text = metadata,
-                        style = ArvioSkin.typography.caption.copy(fontSize = 10.sp, lineHeight = 14.sp),
+                        style = ArvioSkin.typography.caption.copy(
+                            fontSize = 10.sp,
+                            lineHeight = 14.sp,
+                            textDirection = LatinMetadataDirection
+                        ),
                         color = if (isEpisodeUnaired) Color(0xFFBDEBFF) else Color.White.copy(alpha = 0.7f),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
@@ -4256,6 +4264,14 @@ internal fun EpisodeCard(
 }
 
 private val episodeAirDateFormatter = DateTimeFormatter.ofPattern("d MMM yyyy", Locale.US)
+
+/**
+ * Dates ("15 Feb 2015") and runtimes ("1h 42m", "42m") are written in English. In a right-to-left
+ * layout their paragraph would be RTL, and the bidi algorithm splits off a leading number: the
+ * line read "Feb 2015 15". Their own first letter decides the direction instead, so they keep
+ * their English order wherever they sit.
+ */
+internal val LatinMetadataDirection = TextDirection.Content
 
 internal fun formatEpisodeAirDateLabel(rawDate: String): String? {
     val value = rawDate.trim()

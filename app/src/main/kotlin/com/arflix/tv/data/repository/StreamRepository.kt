@@ -3262,7 +3262,7 @@ class StreamRepository @Inject constructor(
         originalTitle: String? = null,
         providerId: String? = null
     ): List<StreamSource> = withContext(Dispatchers.IO) {
-        withTimeoutOrNull(timeoutMs.coerceIn(500L, 90_000L)) {
+        val sources = withTimeoutOrNull(timeoutMs.coerceIn(500L, 90_000L)) {
             runCatching {
                 iptvRepository.findMovieVodSources(
                     title = title,
@@ -3284,6 +3284,7 @@ class StreamRepository @Inject constructor(
                 )
             }.getOrDefault(emptyList())
         }.orEmpty()
+        applyQualityRegexFilters(sources)
     }
 
     /** Hands messages an addon sent instead of sources to the running search's [AddonNoticeSink]. */
@@ -3891,7 +3892,7 @@ class StreamRepository @Inject constructor(
         originalTitle: String? = null,
         providerId: String? = null
     ): List<StreamSource> = withContext(Dispatchers.IO) {
-        withPartialVodResults(timeoutMs.coerceIn(500L, 90_000L)) { onSources ->
+        val sources = withPartialVodResults(timeoutMs.coerceIn(500L, 90_000L)) { onSources ->
             runCatching {
                 iptvRepository.findEpisodeVodSources(
                     title = title,
@@ -3918,6 +3919,8 @@ class StreamRepository @Inject constructor(
                 )
             }.getOrThrow()
         }
+        // Filter after the timeout helper so retained partial results follow the same rules.
+        applyQualityRegexFilters(sources)
     }
 
     suspend fun prefetchEpisodeVod(
@@ -5349,13 +5352,7 @@ class StreamRepository @Inject constructor(
 
         // Use precompiled regexes from cache (no DataStore reads, no recompilation)
         return streams.filter { stream ->
-            val qualityText = buildString {
-                append(stream.quality)
-                if (stream.source.isNotBlank()) {
-                    append(' ')
-                    append(stream.source)
-                }
-            }
+            val qualityText = qualityFilterText(stream)
             cachedQualityFilters.regexes.none { regex -> regex.containsMatchIn(qualityText) }
         }
     }
@@ -5386,19 +5383,22 @@ class StreamRepository @Inject constructor(
         if (compiledRegexes.isEmpty()) return streams
 
         return streams.filter { stream ->
-            val qualityText = buildString {
-                append(stream.quality)
-                if (stream.source.isNotBlank()) {
-                    append(' ')
-                    append(stream.source)
-                }
-            }
+            val qualityText = qualityFilterText(stream)
             // Check if this stream matches any exclusion filter regex
             compiledRegexes.none { regex ->
                 regex.containsMatchIn(qualityText)
             }
         }
     }
+
+private fun qualityFilterText(stream: StreamSource): String = buildString {
+    append(stream.quality)
+    if (stream.source.isNotBlank()) append(' ').append(stream.source)
+    // Xtream can label the series variant while its episode title names no quality at all.
+    if (IptvVodSourceIds.isIptvVodAddonId(stream.addonId) && !stream.rawLabel.isNullOrBlank()) {
+        append(' ').append(stream.rawLabel)
+    }
+}
 
 private object StreamRegexes {
     val MANIFEST_TYPO_REGEX = Regex("""(?i)/manifest\.json[a-z0-9_-]+(?=($|[?]))""")

@@ -198,7 +198,7 @@ class SearchViewModel @Inject constructor(
         _uiState.update { it.copy(youTube = YouTubeSearch(query, YouTubeSearchStatus.LOADING)) }
         youTubeJob = viewModelScope.launch {
             val result = try {
-                // Kids profiles: YouTube Kids plus regular YouTube kept to YouTube Kids' channels.
+                // Kids profiles: YouTube Kids at the profile's tier, never regular YouTube.
                 val videos = com.arflix.tv.data.repository.YouTubeSource.search(
                     query, corpus, youTubeSearchApi::search
                 )
