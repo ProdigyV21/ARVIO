@@ -32,10 +32,14 @@ internal data class IptvStreamPolicy(
     val panelCheckAllowed: Boolean,
 )
 
-/** A known channel owner, including an explicit No limit policy. */
+/**
+ * A known channel owner, including an explicit No limit policy. A source with no panel to ask
+ * (a plain M3U, or a login whose allowance was never read) may still preview: the preview then
+ * counts as this device's one session on it, so it never opens beside other playback.
+ */
 internal data class ResolvedIptvChannelPolicy(val limit: IptvStreamPolicy?) {
     val allowsHomePreview: Boolean
-        get() = limit?.let { it.homePreviewAllowed && it.panelCheckAllowed } ?: true
+        get() = limit?.homePreviewAllowed ?: true
 }
 
 /**
@@ -61,7 +65,7 @@ internal fun iptvStreamPolicy(
     return IptvStreamPolicy(
         account,
         effectiveLimit = limit,
-        // Under Auto a preview still needs a confirmed spare slot.
+        // Under Auto a preview still needs a spare slot: the panel confirms it when there is one to ask.
         homePreviewAllowed = explicit == null || limit >= 2,
         matroskaIndexAllowed = limit >= 2,
         panelCheckAllowed = reliableAllowance != null

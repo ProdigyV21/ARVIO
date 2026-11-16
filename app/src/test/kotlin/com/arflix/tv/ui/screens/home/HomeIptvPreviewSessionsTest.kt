@@ -18,6 +18,7 @@ import kotlinx.coroutines.test.currentTime
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -73,7 +74,7 @@ class HomeIptvPreviewSessionsTest {
         assertEquals(0, table.openCount())
     }
 
-    @Test fun unknownOrUnresponsiveAccountsDoNotPreview() = runTest {
+    @Test fun unknownOwnersAndUnresponsivePanelsDoNotPreview() = runTest {
         val table = table()
         var checks = 0
         val preview = HomeIptvPreviewSessions(table) {
@@ -82,10 +83,39 @@ class HomeIptvPreviewSessionsTest {
             IptvAccountUsage(0, 1)
         }
         assertNull(preview.admit(player) { null })
-        assertNull(preview.admit(player) { autoUnknown })
-        assertEquals(0, checks)
         assertNull(preview.admit(player) { autoReliable })
         assertEquals(1, checks)
+        assertEquals(0, table.openCount())
+    }
+
+    @Test fun anAccountWithNoPanelToAskPreviewsAsThisDevicesOnlySession() = runTest {
+        val table = table()
+        val preview = HomeIptvPreviewSessions(table, checkAccount = noPanel)
+        val session = preview.admit(player) { autoUnknown }!!.session!!
+        assertEquals("counted like any playback", 1, table.openCount(alice))
+        assertTrue("stops rather than pauses", preview.leave(player, stopOnLeave = true))
+        assertTrue(session.isClosed)
+        session.close().join()
+
+        val m3u = IptvProviderAccount.m3u("http://lists.test/playlist.m3u")!!
+        val m3uAuto = ResolvedIptvChannelPolicy(iptvStreamPolicy(m3u, IptvConnectionLimit.AUTO, null))
+        assertNotNull("a plain M3U has no panel at all", HomeIptvPreviewSessions(table, checkAccount = noPanel).admit(player) { m3uAuto }!!.session)
+        assertEquals(1, table.openCount(m3u))
+    }
+
+    @Test fun anAccountWithNoPanelDoesNotPreviewBesideOtherPlayback() = runTest {
+        val table = table()
+        val playback = table.open(alice, 1)
+        val preview = HomeIptvPreviewSessions(table, checkAccount = noPanel)
+        assertNull(preview.admit(player) { autoUnknown })
+        assertFalse(playback.isClosed)
+        assertEquals(1, table.openCount(alice))
+    }
+
+    @Test fun anExplicitLimitOfOneNeverPreviews() = runTest {
+        val table = table()
+        val one = ResolvedIptvChannelPolicy(iptvStreamPolicy(alice, IptvConnectionLimit.ONE, null))
+        assertNull(HomeIptvPreviewSessions(table, checkAccount = noPanel).admit(player) { one })
         assertEquals(0, table.openCount())
     }
 
