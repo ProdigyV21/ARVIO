@@ -5595,6 +5595,7 @@ private fun MobileSettingsSubPage(
                         value = when (uiState.subtitleAiModel) {
                             com.arflix.tv.ui.screens.player.subtitles.SubtitleAiModel.GROQ_LLAMA_70B -> "Groq - GPT-OSS 120B"
                             com.arflix.tv.ui.screens.player.subtitles.SubtitleAiModel.GEMINI_FLASH_25 -> "Google - Gemini 3.5 Flash Lite"
+                            com.arflix.tv.ui.screens.player.subtitles.SubtitleAiModel.CLAUDE_HAIKU -> "Anthropic - Claude Haiku 5.5"
                         },
                         isFocused = false,
                         onClick = onSubtitleAiModelClick
@@ -5642,6 +5643,8 @@ private fun MobileSettingsSubPage(
                                     stringResource(R.string.ai_groq_disclaimer)
                                 com.arflix.tv.ui.screens.player.subtitles.SubtitleAiModel.GEMINI_FLASH_25 ->
                                     stringResource(R.string.ai_gemini_disclaimer)
+                                com.arflix.tv.ui.screens.player.subtitles.SubtitleAiModel.CLAUDE_HAIKU ->
+                                    stringResource(R.string.ai_claude_disclaimer)
                             },
                             style = ArflixTypography.caption.copy(fontSize = 11.sp),
                             color = TextSecondary.copy(alpha = 0.5f),
@@ -7107,6 +7110,7 @@ private fun TvGeneralSettingsRows(
                     value = when (subtitleAiModel) {
                         com.arflix.tv.ui.screens.player.subtitles.SubtitleAiModel.GROQ_LLAMA_70B -> "Groq - GPT-OSS 120B"
                         com.arflix.tv.ui.screens.player.subtitles.SubtitleAiModel.GEMINI_FLASH_25 -> "Google - Gemini 3.5 Flash Lite"
+                        com.arflix.tv.ui.screens.player.subtitles.SubtitleAiModel.CLAUDE_HAIKU -> "Anthropic - Claude Haiku 5.5"
                     },
                     isFocused = focusedIndex == localIndex,
                     onClick = onSubtitleAiModelClick,
@@ -7631,6 +7635,7 @@ private fun GeneralSettings(
             value = when (subtitleAiModel) {
                 com.arflix.tv.ui.screens.player.subtitles.SubtitleAiModel.GROQ_LLAMA_70B -> "Groq – GPT-OSS 120B"
                 com.arflix.tv.ui.screens.player.subtitles.SubtitleAiModel.GEMINI_FLASH_25 -> "Google – Gemini 3.5 Flash Lite"
+                com.arflix.tv.ui.screens.player.subtitles.SubtitleAiModel.CLAUDE_HAIKU -> "Anthropic – Claude Haiku 5.5"
             },
             isFocused = focusedIndex == 29,
             onClick = onSubtitleAiModelClick,
@@ -7682,6 +7687,8 @@ private fun GeneralSettings(
                         stringResource(R.string.ai_groq_disclaimer)
                     com.arflix.tv.ui.screens.player.subtitles.SubtitleAiModel.GEMINI_FLASH_25 ->
                         stringResource(R.string.ai_gemini_disclaimer)
+                    com.arflix.tv.ui.screens.player.subtitles.SubtitleAiModel.CLAUDE_HAIKU ->
+                        stringResource(R.string.ai_claude_disclaimer)
                 },
                 style = ArflixTypography.caption.copy(fontSize = 11.sp),
                 color = TextSecondary.copy(alpha = 0.4f),
@@ -7694,10 +7701,12 @@ private fun GeneralSettings(
 private fun maskAiApiKey(key: String, notSetLabel: String = "Not set"): String {
     val trimmed = key.trim()
     if (trimmed.isBlank()) return notSetLabel
-    val provider = when {
-        trimmed.startsWith("gsk_") -> "Groq · "
-        trimmed.startsWith("AIzaSy") -> "Gemini · "
-        else -> ""
+    // Same prefix rules as the model switch, so the label and the model can't disagree.
+    val provider = when (com.arflix.tv.ui.screens.player.subtitles.subtitleAiModelForKey(trimmed)) {
+        com.arflix.tv.ui.screens.player.subtitles.SubtitleAiModel.GROQ_LLAMA_70B -> "Groq · "
+        com.arflix.tv.ui.screens.player.subtitles.SubtitleAiModel.GEMINI_FLASH_25 -> "Gemini · "
+        com.arflix.tv.ui.screens.player.subtitles.SubtitleAiModel.CLAUDE_HAIKU -> "Claude · "
+        null -> ""
     }
     val masked = if (trimmed.length <= 4) "••••" else "••••${trimmed.takeLast(4)}"
     return "$provider$masked"
@@ -7712,7 +7721,8 @@ private fun AiModelDialog(
     val isMobile = LocalDeviceType.current.isTouchDevice()
     val options = listOf(
         Triple(com.arflix.tv.ui.screens.player.subtitles.SubtitleAiModel.GROQ_LLAMA_70B, "Groq – GPT-OSS 120B", stringResource(R.string.ai_groq_model_note)),
-        Triple(com.arflix.tv.ui.screens.player.subtitles.SubtitleAiModel.GEMINI_FLASH_25, "Google – Gemini 3.5 Flash Lite", stringResource(R.string.ai_gemini_model_note))
+        Triple(com.arflix.tv.ui.screens.player.subtitles.SubtitleAiModel.GEMINI_FLASH_25, "Google – Gemini 3.5 Flash Lite", stringResource(R.string.ai_gemini_model_note)),
+        Triple(com.arflix.tv.ui.screens.player.subtitles.SubtitleAiModel.CLAUDE_HAIKU, "Anthropic – Claude Haiku 5.5", stringResource(R.string.ai_claude_model_note))
     )
     BackHandler { onDismiss() }
     androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
@@ -7792,6 +7802,7 @@ private fun AiApiKeyDialog(
     val placeholder = when (model) {
         com.arflix.tv.ui.screens.player.subtitles.SubtitleAiModel.GROQ_LLAMA_70B -> "gsk_..."
         com.arflix.tv.ui.screens.player.subtitles.SubtitleAiModel.GEMINI_FLASH_25 -> "AIzaSy..."
+        com.arflix.tv.ui.screens.player.subtitles.SubtitleAiModel.CLAUDE_HAIKU -> "sk-ant-..."
     }
     BackHandler { onDismiss() }
     LaunchedEffect(Unit) {
@@ -7812,7 +7823,13 @@ private fun AiApiKeyDialog(
                 Text(text = stringResource(R.string.ai_api_key_title), style = ArflixTypography.sectionTitle, color = TextPrimary)
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = stringResource(if (model == com.arflix.tv.ui.screens.player.subtitles.SubtitleAiModel.GROQ_LLAMA_70B) R.string.ai_api_key_dialog_subtitle_groq else R.string.ai_api_key_dialog_subtitle_gemini),
+                    text = stringResource(
+                        when (model) {
+                            com.arflix.tv.ui.screens.player.subtitles.SubtitleAiModel.GROQ_LLAMA_70B -> R.string.ai_api_key_dialog_subtitle_groq
+                            com.arflix.tv.ui.screens.player.subtitles.SubtitleAiModel.GEMINI_FLASH_25 -> R.string.ai_api_key_dialog_subtitle_gemini
+                            com.arflix.tv.ui.screens.player.subtitles.SubtitleAiModel.CLAUDE_HAIKU -> R.string.ai_api_key_dialog_subtitle_claude
+                        }
+                    ),
                     style = ArflixTypography.caption,
                     color = TextSecondary
                 )

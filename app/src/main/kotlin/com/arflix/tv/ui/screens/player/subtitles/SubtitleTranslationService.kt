@@ -180,6 +180,7 @@ class SubtitleTranslationService(
         val raw = when (modelProvider()) {
             SubtitleAiModel.GROQ_LLAMA_70B -> matchGroq(prompt, payload, apiKey)
             SubtitleAiModel.GEMINI_FLASH_25 -> matchGemini(prompt, payload, apiKey)
+            SubtitleAiModel.CLAUDE_HAIKU -> matchClaude(prompt, payload, apiKey)
         } ?: return null
         val array = extractJsonArray(raw) ?: return null
         val matches = ArrayList<LineMatch>(array.length())
@@ -284,6 +285,16 @@ class SubtitleTranslationService(
         }
     }
 
+    private suspend fun matchClaude(systemPrompt: String, payload: String, apiKey: String): String? =
+        when (val reply = claudeMessagesCall(client, apiKey, systemPrompt, payload)) {
+            is ClaudeReply.Text -> reply.text
+            is ClaudeReply.Refused -> null
+            is ClaudeReply.Failed -> {
+                Log.w(TAG, "matchSubtitleLines claude failed: ${reply.message}")
+                null
+            }
+        }
+
     suspend fun translateBatch(lines: List<String>, targetLanguage: String): TranslationResult =
         translateBatchInternal(lines, targetLanguage, depth = 0)
 
@@ -332,14 +343,16 @@ class SubtitleTranslationService(
         val result = when (modelProvider()) {
             SubtitleAiModel.GROQ_LLAMA_70B -> translateGroq(lines, targetLanguage, apiKey)
             SubtitleAiModel.GEMINI_FLASH_25 -> translateGemini(lines, targetLanguage, apiKey)
+            SubtitleAiModel.CLAUDE_HAIKU -> translateClaude(lines, targetLanguage, apiKey)
         }
 
         // A content-policy block poisons the whole window because of (usually) one line.
         // Bisect so the innocuous majority still gets translated; a line that stays blocked all
         // the way down is shown in its original language. Depth cap keeps worst-case extra API
-        // calls bounded (window → halves → quarters).
+        // calls bounded (window → halves → quarters). A Claude reply cut off at max_tokens is
+        // bisected the same way: half the lines fit where the whole batch did not.
         if (!result.success &&
-            result.errorMessage == TRANSLATION_ERROR_CONTENT_BLOCKED &&
+            (result.errorMessage == TRANSLATION_ERROR_CONTENT_BLOCKED || result.errorMessage == CLAUDE_ERROR_MAX_TOKENS) &&
             lines.size >= 2 && depth < 2
         ) {
             Log.w(TAG, "Content-blocked batch of ${lines.size} — bisecting (depth=$depth)")
@@ -560,6 +573,31 @@ class SubtitleTranslationService(
                 }
                 Log.e(TAG, "translateGemini exception: ${e.message}", e)
                 TranslationResult(lines, false, e.message)
+            }
+        }
+    }
+
+    /** Same prompt, indexed batch and parser as Gemini; a reply that doesn't parse is asked for once more. */
+    private suspend fun translateClaude(
+        lines: List<String>,
+        targetLanguage: String,
+        apiKey: String,
+        attempt: Int = 0
+    ): TranslationResult {
+        val NL = "⏎"
+        val userText = "Translate to $targetLanguage:\n${encodeIndexed(lines, NL)}"
+        val systemPrompt = buildSystemPrompt(targetLanguage, NL)
+        return when (val reply = claudeMessagesCall(client, apiKey, systemPrompt, userText)) {
+            is ClaudeReply.Refused -> TranslationResult(lines, false, TRANSLATION_ERROR_CONTENT_BLOCKED)
+            is ClaudeReply.Failed -> TranslationResult(lines, false, reply.message)
+            is ClaudeReply.Text -> {
+                val parsed = parseTranslationResult(lines, targetLanguage, reply.text, NL)
+                if (!parsed.success && attempt == 0) {
+                    Log.w(TAG, "Claude parse failed (${parsed.errorMessage}) — retrying batch once")
+                    translateClaude(lines, targetLanguage, apiKey, attempt = 1)
+                } else {
+                    parsed
+                }
             }
         }
     }

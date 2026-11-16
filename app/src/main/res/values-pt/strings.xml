@@ -251,7 +251,7 @@
     <string name="ai_remove_hi_title">Remover descrições para deficientes auditivos</string>
     <string name="ai_remove_hi_desc">Remover marcadores entre colchetes [som] antes da tradução</string>
     <string name="ai_api_key_title">Chave de API</string>
-    <string name="ai_api_key_desc">Digite sua chave de API da Groq ou Gemini manualmente</string>
+    <string name="ai_api_key_desc">Digite sua chave de API da Groq, Gemini ou Claude manualmente</string>
     <string name="ai_scan_qr_title">Escanear código QR para definir chave</string>
     <string name="ai_scan_qr_desc">Abra um navegador no celular para inserir a chave de API</string>
     <string name="ai_groq_disclaimer">Plano gratuito Groq: ~30 requisições/min</string>
@@ -264,7 +264,7 @@
     <string name="ai_api_key_dialog_subtitle_gemini">Insira sua chave de API do Gemini</string>
     <string name="ai_key_saved_title">Chave de API salva</string>
     <string name="ai_key_saved_subtitle">A tradução por IA está pronta para uso</string>
-    <string name="ai_qr_scan_hint">Escaneie com seu celular — escolha Groq ou Gemini</string>
+    <string name="ai_qr_scan_hint">Escaneie com seu celular — escolha Groq, Gemini ou Claude</string>
     <string name="smooth_scrolling">Rolagem mais suave</string>
     <string name="smooth_scrolling_desc">Usar transições suaves premium ao navegar pelas fileiras de pôsteres</string>
 
