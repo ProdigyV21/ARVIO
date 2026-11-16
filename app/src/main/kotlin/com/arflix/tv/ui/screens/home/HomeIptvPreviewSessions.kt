@@ -39,7 +39,7 @@ internal class HomeIptvPreviewSessions(
 
     /**
      * Runs before the hero probes or prepares. Null means show no preview.
-     * Only an explicit No limit can proceed without a session or panel check.
+     * Only an explicit No limit can proceed without a session; only a known allowance is checked with the panel.
      */
     suspend fun admit(player: Player?, readPolicy: suspend () -> ResolvedIptvChannelPolicy?): HomeIptvPreviewAdmission? {
         val previous = session
@@ -67,7 +67,9 @@ internal class HomeIptvPreviewSessions(
         previous?.close()?.let { closing ->
             withTimeoutOrNull(MAX_IPTV_CLOSE_JOIN_MS) { closing.join() }
         }
-        if (sessions.openCount(limit.account) >= limit.effectiveLimit || !panelAllows(limit.account)) return null
+        if (sessions.openCount(limit.account) >= limit.effectiveLimit) return null
+        // Only an account with a known allowance has a panel to ask; without one, this device's own sessions are the check.
+        if (limit.panelCheckAllowed && !panelAllows(limit.account)) return null
         val spare = sessions.tryOpenSpare(limit.account, limit.effectiveLimit) ?: return null
         session = spare
         return HomeIptvPreviewAdmission(spare)
