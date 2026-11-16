@@ -161,6 +161,7 @@ import com.arflix.tv.ui.components.SkeletonMediaCard
 import androidx.compose.material3.TextButton
 import com.arflix.tv.ui.components.MobileHeroBanner
 import com.arflix.tv.ui.components.MobileHeroLayoutSpec
+import com.arflix.tv.ui.components.mobileDetailsArtworkSource
 import com.arflix.tv.ui.components.resolveMobileHeroLayout
 import com.arflix.tv.ui.components.ProfileAvatarVisual
 import com.arflix.tv.util.LocalDeviceType
@@ -2559,10 +2560,9 @@ internal fun MobileHeroCarousel(
     onNavigateToSearch: () -> Unit = {},
     onSwitchProfile: () -> Unit = {},
     onNavigateToDetails: (MediaType, Int, Int?, Int?) -> Unit,
-    onPreloadHeroImdbRatings: (List<MediaItem>) -> Unit = {}
+    onPreloadHeroImdbRatings: (List<MediaItem>) -> Unit = {},
 ) {
     val context = LocalContext.current
-    val density = LocalDensity.current
     val heroItems = remember(categories) {
         val eligibleRows = categories.filter {
             it.id != "continue_watching" &&
@@ -2677,14 +2677,8 @@ internal fun MobileHeroCarousel(
                 }
             }
             val logoUrl = cardLogoUrls["${item.mediaType}_${item.id}"]
-            val heroImageUrl = remember(item.backdrop, item.image, heroLayout, density, posterStyle) {
-                TmdbImageSizing.forSlot(
-                    (if (posterStyle) item.image.takeIf(String::isNotBlank) ?: item.backdrop?.takeIf(String::isNotBlank)
-                        else item.backdrop?.takeIf(String::isNotBlank) ?: item.image.takeIf(String::isNotBlank)) ?: "",
-                    with(density) { heroLayout.cardWidthDp.dp.roundToPx() },
-                    with(density) { heroLayout.cardHeightDp.dp.roundToPx() },
-                    if (posterStyle) TmdbImageSizing.Kind.POSTER else TmdbImageSizing.Kind.BACKDROP
-                )
+            val heroArtwork = remember(item.backdrop, item.image, heroLayout.compactContent) {
+                mobileDetailsArtworkSource(item.image, item.backdrop, portrait = !heroLayout.compactContent)
             }
 
             // Scale down cards that aren't in the center; animate smoothly as they scroll in/out
@@ -2699,12 +2693,13 @@ internal fun MobileHeroCarousel(
 
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 MobileHeroBanner(
-                    imageUrl = heroImageUrl,
+                    imageUrl = heroArtwork?.url.orEmpty(),
+                    isPosterArtwork = heroArtwork?.isPoster == true,
                     title = item.title,
                     genres = genres,
                     year = year,
                     rating = rating,
-                    logoUrl = if (posterStyle) null else logoUrl,
+                    logoUrl = logoUrl,
                     onClick = { onNavigateToDetails(item.mediaType, item.id, null, null) },
                     compactContent = heroLayout.compactContent,
                     immersive = !posterStyle,
