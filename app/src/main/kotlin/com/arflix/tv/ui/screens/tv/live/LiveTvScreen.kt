@@ -4444,6 +4444,7 @@ fun LiveTvScreen(
                         .padding(top = contentTopPadding),
                 )
             } else {
+                var mobileChannelGuide by rememberSaveable(selectedCategoryId) { mutableStateOf(false) }
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
@@ -4510,6 +4511,7 @@ fun LiveTvScreen(
                                 .border(BorderStroke(1.dp, LiveColors.Divider), RoundedCornerShape(LiveDims.CardRadius)),
                         ) {
                             MiniPlayerRow(
+                                videoOnly = !mobileChannelGuide,
                                 focusedProgrammeProvider = { focusedProgramme.takeIf { focusZone == LiveTvFocusZone.EPG } },
                                 focusedChannelProvider = ::focusedChannelPreview,
                                 exoPlayer = exoPlayer,
@@ -4528,7 +4530,20 @@ fun LiveTvScreen(
                             )
                         }
                     }
-                    if (sportsSelected) SportsGuidePane(
+                    if (!sportsSelected) Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                        Text(stringResource(R.string.live_channels_count, selectedCategoryTotalCount), color = TextSecondary, fontSize = 13.sp)
+                        androidx.compose.material3.TextButton(onClick = { mobileChannelGuide = !mobileChannelGuide }) {
+                            androidx.compose.material3.Text(stringResource(if (mobileChannelGuide) R.string.live_quick_all_channels else R.string.channel_guide), color = Color.White)
+                        }
+                    }
+                    if (!sportsSelected && !mobileChannelGuide) MobileChannelList(
+                        channels = filteredChannels, guide = effectiveGuideNowNext, playingId = playingDisplayChannelId ?: playingChannelId,
+                        favorites = favSet, onSelect = { selectChannel(it) },
+                        onToggleFavorite = { viewModel.toggleFavoriteChannel(it) },
+                        onLongPress = { openChannelMenu(it, false) }, onVisibleRange = ::onGuideVisibleRange,
+                        modifier = Modifier.weight(1f))
+                    else if (sportsSelected) SportsGuidePane(
                         events = sportsDisplayEvents, now = guideClockMillis, loading = sportsDisplayLoading, clockFormat = sportsClockFormat,
                         failed = sportsDisplayFailed, onRetry = { sportsRefresh++ }, providerNames = sportsProviderNames,
                         focusSignal = sportsFocusSignal,

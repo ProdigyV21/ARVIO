@@ -7,6 +7,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -22,6 +24,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.platform.LocalConfiguration
@@ -50,6 +53,7 @@ private fun isRepeatedModalSelect(event: KeyEvent): Boolean =
 @Composable
 internal fun CloudModalScrim(
     onDismiss: () -> Unit,
+    modifier: Modifier = Modifier,
     content: @Composable BoxScope.() -> Unit
 ) {
     val scrimInteraction = remember { MutableInteractionSource() }
@@ -59,6 +63,7 @@ internal fun CloudModalScrim(
         modifier = Modifier
             .fillMaxSize()
             .background(Color.Black.copy(alpha = 0.72f))
+            .then(modifier)
             .onPreviewKeyEvent(::isRepeatedModalSelect)
             .clickable(
                 interactionSource = scrimInteraction,
@@ -94,6 +99,7 @@ fun CloudEmailPasswordModal(
     onCreateAccount: () -> Unit,
     onOpenPrivacy: () -> Unit = {}
 ) {
+    val touchDevice = LocalDeviceType.current.isTouchDevice()
     val context = LocalContext.current
     val effectiveOpenPrivacy: () -> Unit = remember(onOpenPrivacy, context) {
         {
@@ -114,9 +120,9 @@ fun CloudEmailPasswordModal(
     val emailRequester = remember { FocusRequester() }
     val passwordRequester = remember { FocusRequester() }
 
-    LaunchedEffect(Unit) { emailRequester.requestFocus() }
+    LaunchedEffect(Unit) { if (!touchDevice) emailRequester.requestFocus() }
     LaunchedEffect(focusedIndex) {
-        when (focusedIndex) {
+        if (!touchDevice) when (focusedIndex) {
             0 -> emailRequester.requestFocus()
             1 -> passwordRequester.requestFocus()
         }
@@ -127,17 +133,23 @@ fun CloudEmailPasswordModal(
         properties = DialogProperties(
             dismissOnBackPress = true,
             dismissOnClickOutside = true,
-            usePlatformDefaultWidth = false
+            usePlatformDefaultWidth = false,
+            decorFitsSystemWindows = !touchDevice
         )
     ) {
-        CloudModalScrim(onDismiss = onDismiss) {
+        CloudModalScrim(onDismiss = onDismiss,
+            modifier = if (touchDevice) Modifier.systemBarsPadding().imePadding() else Modifier) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth(if (LocalDeviceType.current.isTouchDevice()) 0.92f else 1f)
                     .widthIn(max = 600.dp)
+                    .then(if (LocalDeviceType.current.isTouchDevice()) Modifier
+                        .heightIn(max = LocalConfiguration.current.screenHeightDp.dp * 0.88f)
+                        .verticalScroll(rememberScrollState()) else Modifier)
                     .background(BackgroundElevated, RoundedCornerShape(16.dp))
                     .padding(if (LocalDeviceType.current.isTouchDevice()) 20.dp else 32.dp)
                     .onPreviewKeyEvent { event ->
+                        if (touchDevice) return@onPreviewKeyEvent false
                         if (event.type == KeyEventType.KeyDown) {
                             when (event.key) {
                                 Key.Back, Key.Escape -> {
@@ -224,6 +236,7 @@ fun CloudEmailPasswordModal(
                         modifier = Modifier
                             .fillMaxWidth()
                             .focusRequester(emailRequester)
+                            .onFocusChanged { if (touchDevice && it.isFocused) focusedIndex = 0 }
                             .border(
                                 width = if (focusedIndex == 0) 2.dp else 1.dp,
                                 color = if (focusedIndex == 0) Pink else Color.White.copy(alpha = 0.2f),
@@ -259,6 +272,7 @@ fun CloudEmailPasswordModal(
                         modifier = Modifier
                             .fillMaxWidth()
                             .focusRequester(passwordRequester)
+                            .onFocusChanged { if (touchDevice && it.isFocused) focusedIndex = 1 }
                             .border(
                                 width = if (focusedIndex == 1) 2.dp else 1.dp,
                                 color = if (focusedIndex == 1) Pink else Color.White.copy(alpha = 0.2f),

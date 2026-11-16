@@ -12,8 +12,26 @@ internal fun resolveDetailsBackdropHeightDp(
         val overlayFloor = minOf(190f, height * 0.68f)
         (height * 0.55f).coerceIn(overlayFloor, 360f)
     } else {
-        val portraitFloor = minOf(400f, height * 0.65f)
-        (height * 0.53f).coerceAtLeast(portraitFloor)
+        // Keep the complete 2:3 poster visible, leaving room for the first action.
+        minOf(width * 1.5f, height * 0.84f)
+    }
+}
+
+internal data class MobileDetailsArtworkSource(val url: String, val isPoster: Boolean)
+
+internal fun mobileDetailsArtworkSource(
+    poster: String?,
+    backdrop: String?,
+    portrait: Boolean,
+): MobileDetailsArtworkSource? {
+    val posterUrl = poster?.takeIf(String::isNotBlank)
+    val backdropUrl = backdrop?.takeIf(String::isNotBlank)
+    return when {
+        portrait && posterUrl != null && posterUrl.substringAfterLast('/') != backdropUrl?.substringAfterLast('/') ->
+            MobileDetailsArtworkSource(posterUrl, true)
+        backdropUrl != null -> MobileDetailsArtworkSource(backdropUrl, false)
+        posterUrl != null -> MobileDetailsArtworkSource(posterUrl, true)
+        else -> null
     }
 }
 

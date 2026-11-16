@@ -55,6 +55,7 @@ import com.arflix.tv.ui.skin.rememberArvioCardShape
 import com.arflix.tv.util.LocalDeviceType
 import com.arflix.tv.util.TmdbImageSizing
 import com.arflix.tv.util.Constants
+import com.arflix.tv.ui.screens.details.formatEpisodeAirDateLabel
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.zIndex
@@ -289,7 +290,8 @@ fun MediaCard(
                                 it.result.drawable.opacity == android.graphics.PixelFormat.OPAQUE
                         },
                         modifier = Modifier.fillMaxSize().then(
-                            if (isProviderLogo) Modifier.padding(horizontal = width * 0.22f, vertical = 24.dp)
+                            if (isProviderLogo) Modifier.padding(horizontal = width * 0.22f,
+                                vertical = if (isMobile) (width / aspectRatio) * 0.18f else 24.dp)
                             else if (isChannelLogo) Modifier.padding(
                                 horizontal = width * 0.1f,
                                 vertical = (width / aspectRatio) * 0.12f
@@ -305,7 +307,15 @@ fun MediaCard(
                     )
                 }
 
-                if (showCollectionTitleOverlay) {
+                if (showCollectionTitleOverlay && isMobile && !isProviderLogo) {
+                    Box(Modifier.align(Alignment.BottomStart).fillMaxWidth()
+                        .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.88f))))
+                        .padding(horizontal = 10.dp, vertical = 12.dp)) {
+                        Text(item.title, color = Color.White, fontSize = 14.sp, maxLines = 2,
+                            overflow = TextOverflow.Ellipsis)
+                    }
+                }
+                if (showCollectionTitleOverlay && !isMobile) {
                     Box(
                         modifier = Modifier
                             .align(if (isGenreCollectionTile) Alignment.BottomStart else Alignment.TopStart)
@@ -535,7 +545,7 @@ fun MediaCard(
                 val tvSeriesLabel = stringResource(R.string.component_label_tv_series)
                 val movieLabel = stringResource(R.string.movie)
                 val mediaLabel = stringResource(R.string.component_label_media)
-                val subtitle = remember(item.subtitle, item.releaseDate, item.year, item.mediaType, tvSeriesLabel, movieLabel, mediaLabel) {
+                val subtitle = remember(item.subtitle, item.releaseDate, item.year, item.mediaType, isMobile, tvSeriesLabel, movieLabel, mediaLabel) {
                     val typeLabel = when (item.mediaType) {
                         MediaType.TV -> tvSeriesLabel
                         MediaType.MOVIE -> movieLabel
@@ -543,7 +553,8 @@ fun MediaCard(
                     }
                     val year = item.releaseDate?.takeIf { it.isNotBlank() }
                         ?: item.year.takeIf { it.isNotBlank() }
-                    if (year != null) "$typeLabel · $year"
+                    val dateLabel = if (isMobile && year != null) formatEpisodeAirDateLabel(year) ?: year else year
+                    if (dateLabel != null) "$typeLabel · $dateLabel"
                     else item.subtitle.ifBlank { typeLabel }
                 }
                 Text(

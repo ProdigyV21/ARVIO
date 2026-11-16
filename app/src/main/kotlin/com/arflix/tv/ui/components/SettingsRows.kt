@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -260,15 +261,13 @@ fun MobileSettingsCategory(
     ) {
         Text(
             text = title,
-            style = ArflixTypography.caption.copy(fontSize = 12.sp, letterSpacing = 1.sp),
+            style = ArflixTypography.caption.copy(fontSize = 13.sp, letterSpacing = 0.sp),
             color = TextSecondary,
-            modifier = Modifier.padding(start = 16.dp, bottom = 8.dp)
+            modifier = Modifier.padding(bottom = 8.dp)
         )
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(12.dp))
-                .background(BackgroundElevated)
         ) {
             content()
         }
@@ -304,17 +303,19 @@ fun MobileSettingsRow(
         stringResource(if (checked) R.string.on else R.string.off)
     } else ""
     val alpha = if (enabled) 1f else 0.4f
-    Column(modifier = Modifier.alpha(alpha)) {
+    val safeValue = value.orEmpty()
+    val stackedValue = checked == null && !isExternalLink && actionIcon == null &&
+        (safeValue.length > 16 || androidx.compose.ui.platform.LocalDensity.current.fontScale > 1.2f)
+    Column(modifier = Modifier.alpha(alpha).then(
+        if (checked != null) Modifier.toggleable(checked, enabled = enabled, role = Role.Switch) { onClick() }
+            .semantics { stateDescription = toggleDescription }
+        else Modifier.clickable(enabled = enabled, onClick = onClick)
+    )) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .then(
-                    if (checked != null) Modifier
-                        .toggleable(checked, enabled = enabled, role = Role.Switch) { onClick() }
-                        .semantics { stateDescription = toggleDescription }
-                    else Modifier.clickable(enabled = enabled) { onClick() }
-                )
-                .padding(horizontal = 16.dp, vertical = 14.dp),
+                .padding(horizontal = 4.dp, vertical = 8.dp)
+                .heightIn(min = 40.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
@@ -344,7 +345,7 @@ fun MobileSettingsRow(
                         text = title,
                         style = ArflixTypography.cardTitle.copy(fontSize = 16.sp),
                         color = TextPrimary,
-                        maxLines = 1,
+                        maxLines = 3,
                         overflow = TextOverflow.Ellipsis
                     )
                     if (subtitle.isNotEmpty()) {
@@ -352,14 +353,12 @@ fun MobileSettingsRow(
                             text = subtitle,
                             style = ArflixTypography.caption.copy(fontSize = 13.sp, lineHeight = 17.sp),
                             color = TextSecondary,
-                            maxLines = 4,
-                            overflow = TextOverflow.Ellipsis
+                            overflow = TextOverflow.Clip
                         )
                     }
                 }
             }
-            val safeValue = value.orEmpty()
-            if (checked != null || safeValue.isNotEmpty() || isExternalLink || actionIcon != null) {
+            if (checked != null || (!stackedValue && safeValue.isNotEmpty()) || isExternalLink || actionIcon != null) {
                 Spacer(modifier = Modifier.width(16.dp))
                 if (checked != null) {
                     Box(
@@ -397,14 +396,24 @@ fun MobileSettingsRow(
                             fontWeight = androidx.compose.ui.text.font.FontWeight.Medium
                         ),
                         color = TextSecondary,
-                        modifier = Modifier.widthIn(max = 120.dp),
-                        maxLines = 1,
+                        modifier = Modifier.widthIn(max = 108.dp),
+                        maxLines = 2,
                         overflow = TextOverflow.Ellipsis
                     )
                     Spacer(Modifier.width(4.dp))
                     Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = TextSecondary, modifier = Modifier.size(18.dp))
                 }
             }
+        }
+        if (stackedValue && safeValue.isNotEmpty()) Row(
+            Modifier.fillMaxWidth()
+                .padding(start = 44.dp, end = 4.dp, bottom = 12.dp),
+            horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(localizeSettingValue(safeValue), color = TextSecondary, fontSize = 14.sp,
+                modifier = Modifier.weight(1f), textAlign = androidx.compose.ui.text.style.TextAlign.End)
+            Spacer(Modifier.width(8.dp))
+            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = TextSecondary, modifier = Modifier.size(20.dp))
         }
         if (showDivider) {
             Box(modifier = Modifier.fillMaxWidth().height(1.dp).padding(horizontal = 16.dp).background(Color.White.copy(alpha = 0.05f)))

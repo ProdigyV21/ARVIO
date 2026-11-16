@@ -1379,7 +1379,7 @@ private fun RowsLayer(
                 // YouTube artwork is 16:9; a poster crop would cut most of it away.
                 val isPortrait = category.id != YOUTUBE_SEARCH_ROW_ID && category.isPortrait(rowUsePosterCards)
                 val itemWidth = if (isTouchDevice) {
-                    if (isPortrait) 120.dp else 200.dp
+                    if (isPortrait) 112.dp else 168.dp
                 } else {
                     if (isPortrait) 105.dp else 210.dp
                 }

@@ -233,6 +233,7 @@ internal fun SportsGuidePane(
     val isRtl = LocalLayoutDirection.current == LayoutDirection.Rtl
     val context = LocalContext.current
     val configuration = LocalConfiguration.current
+    val touch = com.arflix.tv.util.LocalDeviceType.current.isTouchDevice()
     val narrow = configuration.screenWidthDp < 600
     val timeFormat = remember(context, clockFormat) {
         if (clockFormat == null) android.text.format.DateFormat.getTimeFormat(context)
@@ -258,7 +259,7 @@ internal fun SportsGuidePane(
         return "$day ${timeFormat.format(Date(event.programme.startUtcMillis))}"
     }
     LaunchedEffect(focusSignal, rows.isEmpty(), sidebarOpen) {
-        if (focusSignal > handledFocusSignal && rows.isNotEmpty() && !sidebarOpen) {
+        if (!touch && focusSignal > handledFocusSignal && rows.isNotEmpty() && !sidebarOpen) {
             // Lazy cards are attached after the drawer starts its layout transition.
             withFrameNanos { }
             withFrameNanos { }
@@ -266,7 +267,7 @@ internal fun SportsGuidePane(
         }
     }
     LaunchedEffect(selected) {
-        if (selected == null) returnFocus?.let { runCatching { it.requestFocus() } }
+        if (!touch && selected == null) returnFocus?.let { runCatching { it.requestFocus() } }
     }
     CompositionLocalProvider(LocalTextStyle provides LocalTextStyle.current.copy(fontFamily = LiveFontFamily)) {
     BoxWithConstraints(modifier.fillMaxSize().background(LiveColors.Bg)) {
@@ -450,18 +451,20 @@ internal fun SportsGuidePane(
                                     }
                                     Box(Modifier.matchParentSize().liveFocusOutline(focused, 4.dp))
                                 }
-                                Text(event.title, color = LiveColors.Fg, fontSize = 11.sp, lineHeight = 14.sp, fontWeight = FontWeight.Medium,
+                                Text(event.title, color = LiveColors.Fg, fontSize = if (touch) 14.sp else 11.sp, lineHeight = if (touch) 18.sp else 14.sp, fontWeight = FontWeight.Medium,
                                     minLines = 2, maxLines = 2, overflow = TextOverflow.Ellipsis,
                                     modifier = Modifier.padding(top = 4.dp))
-                                Row(Modifier.fillMaxWidth().height(14.dp), verticalAlignment = Alignment.CenterVertically) {
-                                    Text(listOfNotNull(event.sport.title, event.competition).joinToString(" · "), color = LiveColors.FgDim, fontSize = 10.sp, lineHeight = 13.sp,
+                                if (touch) Text(listOfNotNull(event.sport.title, event.competition).joinToString(" · "),
+                                    color = LiveColors.FgDim, fontSize = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                                Row(Modifier.fillMaxWidth().height(if (touch) 24.dp else 14.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    if (!touch) Text(listOfNotNull(event.sport.title, event.competition).joinToString(" · "), color = LiveColors.FgDim, fontSize = 10.sp, lineHeight = 13.sp,
                                         maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
                                     val count = remember(event, now) {
                                         ((if (event.isOnAir(now)) event.availableChannels(now) else event.channels) + event.possibleChannels).distinctBy { it.id }.size + event.addonSources.size
                                     }
                                     if (count > 0) {
                                         Icon(Icons.Default.Tv, null, tint = LiveColors.FgDim, modifier = Modifier.size(13.dp))
-                                        Text(if (event.addonSources.isEmpty()) channelCount(count) else stringResource(R.string.live_sports_source_count, count), color = LiveColors.FgDim, fontSize = 9.sp, lineHeight = 12.sp,
+                                        Text(if (event.addonSources.isEmpty()) channelCount(count) else stringResource(R.string.live_sports_source_count, count), color = LiveColors.FgDim, fontSize = if (touch) 12.sp else 9.sp, lineHeight = if (touch) 16.sp else 12.sp,
                                             modifier = Modifier.padding(start = 6.dp))
                                     }
                                 }
@@ -490,6 +493,7 @@ internal fun SportsGuidePane(
         val sourceChannels = (confirmedChannels + event?.possibleChannels.orEmpty()).distinctBy { it.id }
         val initialFocus = remember(event?.id) { FocusRequester() }
         LaunchedEffect(event?.id, sourceChannels.isEmpty()) {
+            if (touch) return@LaunchedEffect
             // The native dialog window must own focus before Compose assigns its row.
             withFrameNanos { }
             withFrameNanos { }

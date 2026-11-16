@@ -16,6 +16,11 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -1044,6 +1049,24 @@ private fun CollectionGenreRow(
             val res = if (isSeries) tvGenreNameRes(id) else movieGenreNameRes(id)
             res?.let { id to stringResource(it) }
         }
+    if (LocalDeviceType.current.isTouchDevice()) {
+        var expanded by remember { mutableStateOf(false) }
+        Box {
+            androidx.compose.material3.TextButton(onClick = { expanded = true }) {
+                androidx.compose.material3.Text(chips.firstOrNull { it.first == selectedGenreId }?.second.orEmpty(), color = Color.White)
+                androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Default.ArrowDropDown, null, tint = Color.White)
+            }
+            androidx.compose.material3.DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false },
+                modifier = Modifier.heightIn(max = 420.dp), containerColor = Color(0xFF171717)) {
+                chips.forEach { (id, label) -> androidx.compose.material3.DropdownMenuItem(
+                    text = { androidx.compose.material3.Text(label, color = Color.White) },
+                    trailingIcon = { if (id == selectedGenreId) androidx.compose.material3.Icon(
+                        Icons.Default.Check, null, tint = Color.White) },
+                    onClick = { expanded = false; onGenreSelected(id) }) }
+            }
+        }
+        return
+    }
     // Wrapped instead of scrolled: every genre stays in view, and a scrolling row inside the
     // TV grid is pivot-scrolled off its start in right-to-left layouts.
     FlowRow(
@@ -1167,7 +1190,7 @@ internal fun CollectionItemsGrid(
     val gridColumns = layout.columns
     val cardWidth = layout.cardWidthDp.dp
     val compact = LocalConfiguration.current.screenHeightDp < 480
-    val headerItems = if (showTabs) 1 else 0
+    val headerItems = (if (showTabs) 1 else 0) + (if (isMobile) 1 else 0)
     val itemKeys = remember(catalog?.id, items) { stableHomeRowItemKeys(catalog?.id.orEmpty(), items) }
     var focusedKey by rememberSaveable(catalog?.id, selectedTab) { mutableStateOf<String?>(null) }
     var previewKey by remember(catalog?.id, selectedTab) { mutableStateOf<String?>(null) }
@@ -1239,7 +1262,14 @@ internal fun CollectionItemsGrid(
         CollectionBackdrop(catalog, previewItem, isMobile,
             collectionSpotlightHeight(isMobile, compact) + 150.dp)
         Column(Modifier.fillMaxSize().padding(top = topContentPadding)) {
-        CollectionSpotlight(
+        if (isMobile) Row(Modifier.fillMaxWidth().height(52.dp).padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            androidx.compose.material3.IconButton(onClick = onBack) {
+                androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.back), tint = Color.White)
+            }
+            androidx.compose.material3.Text(catalog?.title.orEmpty(), color = Color.White, fontSize = 18.sp,
+                maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+        }
+        if (!isMobile) CollectionSpotlight(
             catalog, previewItem, isMobile, compact, onBack,
             providerLogoUrl = providerLogos["${previewItem?.mediaType}_${previewItem?.id}"]
                 ?: previewItem?.primaryNetworkLogo,
@@ -1263,6 +1293,12 @@ internal fun CollectionItemsGrid(
         verticalArrangement = Arrangement.spacedBy(if (usePosterCards) 18.dp else 14.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
+        if (isMobile) item(span = { androidx.tv.foundation.lazy.grid.TvGridItemSpan(maxLineSpan) }, contentType = "spotlight") {
+            CollectionSpotlight(catalog, previewItem, true, compact, onBack,
+                providerLogoUrl = providerLogos["${previewItem?.mediaType}_${previewItem?.id}"] ?: previewItem?.primaryNetworkLogo,
+                clearLogoUrl = cardLogoUrls["${previewItem?.mediaType}_${previewItem?.id}"],
+                showBackButton = false, horizontalInset = 0.dp)
+        }
         if (showTabs) item(
             span = { androidx.tv.foundation.lazy.grid.TvGridItemSpan(maxLineSpan) },
             contentType = "header"

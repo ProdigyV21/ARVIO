@@ -34,6 +34,7 @@ import androidx.compose.material.icons.filled.ChildCare
 import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Movie
@@ -46,6 +47,7 @@ import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -120,6 +122,7 @@ fun LiveTvGroupHome(
     onOpenVariants: (() -> Unit)? = null,
     miniPlayerContent: (@Composable () -> Unit)? = null,
 ) {
+    var previewExpanded by remember { mutableStateOf(false) }
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -128,23 +131,23 @@ fun LiveTvGroupHome(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 24.dp, vertical = 16.dp),
+                .padding(horizontal = 16.dp, vertical = 8.dp)
+                .heightIn(min = 48.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
                 text = stringResource(R.string.topbar_tv),
-                style = ArflixTypography.heroTitle.copy(fontSize = 28.sp),
+                style = ArflixTypography.heroTitle.copy(fontSize = 24.sp),
                 color = TextPrimary,
                 modifier = Modifier.weight(1f),
             )
-            Icon(
+            IconButton(onClick = onOpenSearch, modifier = Modifier.size(48.dp)) { Icon(
                 imageVector = Icons.Default.Search,
                 contentDescription = stringResource(R.string.search),
                 tint = TextPrimary,
                 modifier = Modifier
-                    .size(28.dp)
-                    .clickable(onClick = onOpenSearch),
-            )
+                    .size(24.dp),
+            ) }
         }
         LazyColumn(
             state = listState,
@@ -155,6 +158,18 @@ fun LiveTvGroupHome(
         ) {
         // 1. Current live / Continue Watching mini-player card
         item(key = "home_mini_player") {
+            Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable { previewExpanded = !previewExpanded }.padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(currentChannel?.name ?: stringResource(R.string.live_quick_all_channels), color = Color.White,
+                        fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    nowNext?.now?.title?.let { Text(it, color = LiveColors.FgDim, fontSize = 13.sp,
+                        maxLines = 1, overflow = TextOverflow.Ellipsis) }
+                }
+                Icon(if (previewExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                    stringResource(if (previewExpanded) R.string.mobile_collapse_preview else R.string.mobile_expand_preview), tint = Color.White)
+            }
+            if (previewExpanded) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -182,6 +197,7 @@ fun LiveTvGroupHome(
                         modifier = Modifier.fillMaxWidth(),
                     )
                 }
+            }
             }
         }
 
@@ -222,7 +238,7 @@ fun LiveTvGroupHome(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    text = stringResource(R.string.live_groups_title),
+                    text = stringResource(R.string.settings_source_menu_categories),
                     style = LiveType.CatLabel.copy(
                         fontSize = 17.sp,
                         fontWeight = FontWeight.Bold,
@@ -242,7 +258,7 @@ fun LiveTvGroupHome(
                 onClick = { onSelectGroup(group) },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 4.dp),
+                    .padding(horizontal = 12.dp),
             )
         }
     }
@@ -327,39 +343,30 @@ private fun QuickAccessTile(
     val tileDescription = if (enabled) "$title, $subtitle" else "$title, $subtitle (disabled)"
     Row(
         modifier = modifier
-            .height(72.dp)
-            .clip(RoundedCornerShape(12.dp))
-            .background(if (enabled) LiveColors.Panel else LiveColors.Panel.copy(alpha = 0.35f))
-            .border(
-                BorderStroke(
-                    1.dp,
-                    if (enabled) LiveColors.Divider else LiveColors.Divider.copy(alpha = 0.2f),
-                ),
-                RoundedCornerShape(12.dp),
-            )
+            .heightIn(min = 64.dp)
+            .clip(RoundedCornerShape(6.dp))
             .clickable(enabled = enabled, onClick = onClick)
             .semantics {
                 role = Role.Button
                 contentDescription = tileDescription
             }
-            .padding(horizontal = 14.dp, vertical = 12.dp),
+            .padding(horizontal = 8.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Box(
             modifier = Modifier
-                .size(40.dp)
+                .size(28.dp)
                 .clip(CircleShape)
                 .background(
-                    if (enabled) iconTint.copy(alpha = 0.16f)
-                    else LiveColors.FgDim.copy(alpha = 0.08f),
+                    Color.Transparent,
                 ),
             contentAlignment = Alignment.Center,
         ) {
             Icon(
                 imageVector = icon,
                 contentDescription = null,
-                tint = if (enabled) iconTint else LiveColors.FgMute.copy(alpha = 0.35f),
+                tint = if (enabled) Color.White else LiveColors.FgMute.copy(alpha = 0.35f),
                 modifier = Modifier.size(22.dp),
             )
         }
@@ -374,7 +381,7 @@ private fun QuickAccessTile(
                     fontWeight = FontWeight.SemiBold,
                     color = if (enabled) LiveColors.Fg else LiveColors.FgMute.copy(alpha = 0.5f),
                 ),
-                maxLines = 1,
+                maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
             Text(
@@ -620,25 +627,21 @@ private fun GroupPlankTile(
 
     Row(
         modifier = modifier
-            .height(58.dp)
-            .clip(RoundedCornerShape(12.dp))
-            .background(LiveColors.Panel)
-            .border(BorderStroke(0.5.dp, LiveColors.Divider), RoundedCornerShape(12.dp))
+            .heightIn(min = 56.dp)
+            .clip(RoundedCornerShape(6.dp))
             .clickable(onClick = onClick)
             .semantics {
                 role = Role.Button
                 contentDescription = plankDescription
             }
-            .padding(horizontal = 14.dp, vertical = 8.dp),
+            .padding(horizontal = 8.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         // Icon or Flag
         Box(
             modifier = Modifier
-                .size(36.dp)
-                .clip(RoundedCornerShape(8.dp))
-                .background(LiveColors.PanelRaised),
+                .size(28.dp),
             contentAlignment = Alignment.Center,
         ) {
             if (!category.flagEmoji.isNullOrBlank()) {
@@ -668,7 +671,7 @@ private fun GroupPlankTile(
                     fontWeight = FontWeight.SemiBold,
                     color = LiveColors.Fg,
                 ),
-                maxLines = 1,
+                maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
             Text(

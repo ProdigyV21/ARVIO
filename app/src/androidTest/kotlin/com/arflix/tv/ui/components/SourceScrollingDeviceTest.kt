@@ -46,6 +46,22 @@ class SourceScrollingDeviceTest {
         } else compose.waitForIdle()
     }
 
+    @Test fun touchSourcePickerRespectsSystemBarsAndTabletReadingWidth() {
+        instrumentation.runOnMainSync {
+            androidx.core.view.WindowCompat.setDecorFitsSystemWindows(compose.activity.window, false)
+        }
+        val deviceType = com.arflix.tv.util.detectDeviceType(compose.activity)
+        show(deviceType) { StreamSelector(true, listOf(source(0)), null) }
+        val title = compose.onNodeWithText(compose.activity.getString(com.arflix.tv.R.string.stream_title_select_source))
+            .assertIsDisplayed().fetchSemanticsNode().boundsInRoot
+        val bars = androidx.core.view.ViewCompat.getRootWindowInsets(compose.activity.window.decorView)
+            ?.getInsets(androidx.core.view.WindowInsetsCompat.Type.systemBars())
+        assertTrue("Source title overlaps status bar", title.top >= (bars?.top ?: 0))
+        val row = compose.onNodeWithText(source(0).source).assertIsDisplayed().getUnclippedBoundsInRoot()
+        assertTrue("Source text is stretched across the tablet", row.right.value - row.left.value < 840f)
+        compose.onNodeWithContentDescription(compose.activity.getString(com.arflix.tv.R.string.close)).assertIsDisplayed()
+    }
+
     @Test fun focusingLongReleaseNamesDoesNotResizeRows() {
         val streams = (0..24).map { source(it, ".Extended.Directors.Cut.Multi.Audio.TrueHD.7.1.Atmos.REMUX".repeat(it % 3 + 1)) }
         show { StreamSelector(true, streams, null) }
@@ -174,6 +190,7 @@ class SourceScrollingDeviceTest {
         val streams = mutableStateOf(original)
         var selected: StreamSource? = null
         show(DeviceType.PHONE) { StreamSelector(true, streams.value, null, onSelect = { selected = it }) }
+        captureMobileSources("sources-initial.png")
         compose.onNode(hasScrollToIndexAction()).performScrollToIndex(30)
         val row = compose.onNodeWithText(original[30].source)
         row.assertIsDisplayed()
@@ -183,6 +200,16 @@ class SourceScrollingDeviceTest {
         assertEquals("Incoming results moved the visible source", before, row.fetchSemanticsNode().boundsInRoot.top, 1f)
         row.performClick()
         compose.runOnIdle { assertEquals(original[30], selected) }
+        captureMobileSources("sources-scrolled.png")
+    }
+
+    private fun captureMobileSources(name: String) {
+        val directory = File(instrumentation.targetContext.filesDir, "mobile-ui-review").apply { mkdirs() }
+        val screenshot = checkNotNull(instrumentation.uiAutomation.takeScreenshot())
+        File(directory, name).outputStream().use {
+            screenshot.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it)
+        }
+        screenshot.recycle()
     }
 
     private fun key(code: Int) {

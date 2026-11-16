@@ -17,6 +17,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.res.stringResource
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.mapSaver
 import androidx.compose.material.icons.Icons
@@ -195,7 +196,7 @@ fun WatchlistScreen(
         }
     }
     var focusedPreviewKey by rememberSaveable(currentProfile?.id, sourceKey) { mutableStateOf<String?>(null) }
-    val touchPreviewIndex by remember(grid) { derivedStateOf { grid.firstVisibleItemIndex } }
+    val touchPreviewIndex by remember(grid) { derivedStateOf { (grid.firstVisibleItemIndex - 1).coerceAtLeast(0) } }
     val previewCandidate = if (touch) items.getOrNull(touchPreviewIndex.coerceAtMost(items.lastIndex.coerceAtLeast(0)))
         else items.firstOrNull { libraryPreviewKey(it) == focusedPreviewKey } ?: items.firstOrNull()
     var readyPreview by remember(currentProfile?.id, sourceKey) { mutableStateOf<LibraryPreview?>(null) }
@@ -298,7 +299,8 @@ fun WatchlistScreen(
             }
         Column(Modifier.fillMaxSize().padding(top = if (touch) 0.dp else LibraryTabsTopInset)
             .padding(horizontal = if (compact) 16.dp else 26.dp)) {
-            if (touch) Spacer(Modifier.height(12.dp))
+            if (touch) Text(stringResource(R.string.nav_library), color = Color.White, fontSize = 24.sp,
+                fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(vertical = 12.dp))
             Row(Modifier.fillMaxWidth().testTag("library-section-tabs").then(if (compact) Modifier.horizontalScroll(rememberScrollState()) else Modifier)
                 .heightIn(min = 48.dp)
                 .padding(bottom = if(compact) 10.dp else 6.dp), verticalAlignment = Alignment.CenterVertically,
@@ -473,7 +475,7 @@ fun WatchlistScreen(
                         collectionSpotlightHeight(touch, compactSpotlight) + 150.dp,
                         background = Color.Black)
                     Column(Modifier.fillMaxSize()) {
-                    if (showSpotlight) {
+                    if (showSpotlight && !touch) {
                         Box(
                             Modifier
                                 .fillMaxWidth()
@@ -577,7 +579,10 @@ fun WatchlistScreen(
                         CircularProgressIndicator(Modifier.align(Alignment.Center), color = resolveAccentColor(Color.White))
                     } else if (items.isEmpty()) {
                         Column(Modifier.align(Alignment.Center), horizontalAlignment = Alignment.CenterHorizontally) {
-                            OledMessage(if(error != null) tr("Library unavailable") else tr("No titles found"), error ?: tr("Choose a source or add titles to your watchlist."))
+                            val disconnected = touch && serverMode && scopeSources.isEmpty() && error == null
+                            OledMessage(if (disconnected) stringResource(R.string.mobile_server_disconnected) else if(error != null) tr("Library unavailable") else tr("No titles found"),
+                                if (disconnected) stringResource(R.string.mobile_server_disconnected_hint) else error ?: tr("Choose a source or add titles to your watchlist."))
+                            if (disconnected) OledControl(stringResource(R.string.mobile_connect_server), onClick = { onNavigateToSettings("home_server") })
                             if(error != null) OledControl(tr("Retry"), onClick = { if(serverMode) viewModel.refreshLibrary() else viewModel.refresh() })
                         }
                     } else LazyVerticalGrid(GridCells.Fixed(columns), state = grid,
@@ -585,6 +590,12 @@ fun WatchlistScreen(
                             .clipToBounds().testTag("library-grid"),
                         horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(18.dp),
                         contentPadding = PaddingValues(top = 8.dp, bottom = bottomPadding)) {
+                        if (touch && showSpotlight) item("mobile-spotlight", span = { GridItemSpan(maxLineSpan) }) {
+                            CollectionSpotlight(previewCatalog, spotlightItem, true, compactSpotlight, {},
+                                providerLogoUrl = activePreview?.providerLogoUrl ?: spotlightItem?.primaryNetworkLogo,
+                                clearLogoUrl = previewItem?.let { logos[watchlistLogoKey(it)] },
+                                horizontalInset = 6.dp, showBackButton = false, topInset = 8.dp)
+                        }
                         itemsIndexed(items, key = { index, item -> watchlistItemKey(item, index) }) { index, item ->
                             LaunchedEffect(watchlistLogoKey(item), poster) { if(!poster) viewModel.ensureLogo(item) }
                             Box(Modifier.padding(6.dp).testTag("library-card-frame-$index")) {

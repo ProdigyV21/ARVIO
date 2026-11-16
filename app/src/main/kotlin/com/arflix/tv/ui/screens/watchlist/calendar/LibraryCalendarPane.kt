@@ -170,14 +170,14 @@ fun LibraryCalendarPane(
                         textAlign = androidx.compose.ui.text.style.TextAlign.Center, maxLines = 1)
                 }
             }
-            val gridHeight = if (isMobileLandscape) (dates.size / 7 * 48).dp else if (compact) (dates.size / 7 * 64).dp else (dates.size / 7 * 52).dp
+            val gridHeight = if (touch) (dates.size / 7 * 48).dp else if (compact) (dates.size / 7 * 64).dp else (dates.size / 7 * 52).dp
             Column(Modifier.fillMaxWidth().then(if (scrollable) Modifier.height(gridHeight) else Modifier.weight(1f))
                 .testTag("calendar-month-grid"), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 dates.chunked(7).forEach { week ->
                     Row(Modifier.fillMaxWidth().weight(1f), horizontalArrangement = Arrangement.spacedBy(if (compact) 3.dp else 4.dp)) {
                         week.forEach { date ->
                             CalendarDay(date, state.month, releasesByDate[date].orEmpty(), selectedDate,
-                                state.timezone, locale, compact, date == today,
+                                state.timezone, locale, compact && !touch, date == today,
                                 modifier = remember(date, requesters, isRtl) { Modifier.weight(1f).fillMaxHeight().focusRequester(requesters.getValue(date))
                                     .focusProperties { canFocus = YearMonth.from(date) == currentMonth.value }
                                     .onPreviewKeyEvent { event ->
@@ -464,6 +464,19 @@ private fun CalendarDay(date: LocalDate, month: YearMonth, releases: List<Calend
     val accessibility = date.format(DateTimeFormatter.ofPattern("EEEE d MMMM yyyy", locale)) +
         (if (today) ", " + tr("Today") else "") +
         (if (releases.isEmpty()) "" else ", " + releases.joinToString { it.media.title })
+    if (LocalDeviceType.current.isTouchDevice()) {
+        Box(modifier.testTag("calendar-day-$date").semantics { contentDescription = accessibility; this.selected = selected }
+            .clip(RoundedCornerShape(6.dp)).background(background).clickable(onClick = onClick), contentAlignment = Alignment.Center) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(date.dayOfMonth.toString(), color = if (YearMonth.from(date) == month || selected) titleColor else CalendarSecondary,
+                    fontSize = 14.sp, fontWeight = if (selected || today) FontWeight.SemiBold else FontWeight.Normal)
+                if (today) Box(Modifier.width(12.dp).height(1.dp).background(titleColor).testTag("calendar-today-marker-$date"))
+                if (releases.isNotEmpty()) Text(releases.size.toString(), fontSize = 9.sp, color = titleColor,
+                    modifier = Modifier.testTag("calendar-day-count-$date"))
+            }
+        }
+        return
+    }
     BoxWithConstraints(modifier.testTag("calendar-day-$date").semantics { contentDescription = accessibility; this.selected = selected }
         .onFocusChanged { if (it.isFocused) onFocused() }.clip(RoundedCornerShape(5.dp)).background(background).clickable(onClick = onClick)) {
         if (!selected && first != null && (compact || releases.size == 1)) {

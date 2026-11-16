@@ -44,6 +44,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -810,7 +812,10 @@ fun StreamSelector(
 
                 Column(
                     modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .widthIn(max = 840.dp)
                         .fillMaxSize()
+                        .safeDrawingPadding()
                         .padding(horizontal = 16.dp)
                 ) {
                     // Header row: title, count, close button
@@ -2577,7 +2582,7 @@ private fun MobileStreamCard(
             ) {
                 Text(
                     text = withEmojiPresentation(presentation.rawTitle),
-                    style = ArflixTypography.body.copy(fontSize = 14.sp, fontWeight = FontWeight.Bold),
+                    style = ArflixTypography.body.copy(fontSize = 15.sp, lineHeight = 20.sp, fontWeight = FontWeight.SemiBold),
                     color = TextPrimary,
                     modifier = Modifier.weight(1f)
                 )
@@ -2586,7 +2591,7 @@ private fun MobileStreamCard(
             Spacer(modifier = Modifier.height(5.dp))
             Text(
                 text = rowSubtitle(presentation),
-                style = ArflixTypography.caption.copy(fontSize = 10.sp),
+                style = ArflixTypography.caption.copy(fontSize = 12.sp, lineHeight = 16.sp),
                 color = OledMutedText,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis

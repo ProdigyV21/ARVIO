@@ -79,6 +79,7 @@ import com.arflix.tv.data.repository.effectiveSettingsDataStore as settingsDataS
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.BookmarkBorder
@@ -186,6 +187,8 @@ import com.arflix.tv.ui.components.MediaCard
 import com.arflix.tv.ui.components.PersonModal
 import com.arflix.tv.ui.components.PosterCard
 import com.arflix.tv.ui.components.resolveDetailsBackdropHeightDp
+import com.arflix.tv.ui.components.MobileDetailsArtwork
+import com.arflix.tv.ui.components.mobileDetailsArtworkSource
 import com.arflix.tv.ui.components.rememberCatalogueRowLayoutMode
 import com.arflix.tv.ui.components.SidebarItem
 import com.arflix.tv.ui.components.SkeletonDetailsPage
@@ -645,6 +648,12 @@ fun DetailsScreen(
         }
     }
 
+    val onEpisodeItemLongClickRemembered: (Episode) -> Unit = remember {
+        { episode ->
+            contextMenuEpisode = episode
+            showEpisodeContextMenu = true
+        }
+    }
     val onEpisodeItemClickRemembered: (Episode) -> Unit = remember(isMobile, mediaType, mediaId) {
         { ep: Episode ->
             val state = currentUiState.value
@@ -1059,6 +1068,7 @@ fun DetailsScreen(
                         onSeasonLongClick = onSeasonLongClickRemembered,
                         onEpisodeClick = onEpisodeClickRemembered,
                         onEpisodeItemClick = onEpisodeItemClickRemembered,
+                        onEpisodeItemLongClick = onEpisodeItemLongClickRemembered,
                         onCastClick = onCastClickRemembered,
                         onSimilarClick = onSimilarClickRemembered,
                         onCollectionClick = onCollectionClickRemembered
@@ -1210,7 +1220,8 @@ fun DetailsScreen(
         )
 
         // Episode Context Menu
-        contextMenuEpisode?.let { episode ->
+        contextMenuEpisode?.let { heldEpisode ->
+            val episode = uiState.episodes.firstOrNull { it.identity == heldEpisode.identity } ?: heldEpisode
             EpisodeContextMenu(
                 isVisible = showEpisodeContextMenu,
                 episodeName = episode.name,
@@ -1226,8 +1237,16 @@ fun DetailsScreen(
                 },
                 onSelectSource = {
                     showEpisodeContextMenu = false
-                    showStreamSelector = true
-                    viewModel.loadStreams(uiState.imdbId, episode.identity)
+                    val state = currentUiState.value
+                    if (viewModel.canStartPlayback(state.idleSyncRevision)) {
+                        selectedEpisodeRevision = state.idleSyncRevision
+                        tappedEpisode = episode
+                        selectedEpisodeIdentity = episode.identity
+                        val index = state.episodes.indexOfFirst { it.identity == episode.identity }
+                        if (index >= 0) episodeIndex = index
+                        showStreamSelector = true
+                        viewModel.loadStreams(state.imdbId, episode.identity)
+                    }
                 },
                 onToggleWatched = {
                     viewModel.markEpisodeWatched(
@@ -1296,7 +1315,7 @@ fun DetailsScreen(
 
 
 @Composable
-private fun DetailsContent(
+internal fun DetailsContent(
     item: MediaItem,
     logoUrl: String?,
     episodes: List<Episode>,
@@ -1344,6 +1363,7 @@ private fun DetailsContent(
     onSeasonLongClick: ((Int) -> Unit)? = null,
     onEpisodeClick: (Int) -> Unit = {},
     onEpisodeItemClick: ((Episode) -> Unit)? = null,
+    onEpisodeItemLongClick: ((Episode) -> Unit)? = null,
     onCastClick: (Int) -> Unit = {},
     spoilerBlurEnabled: Boolean = false,
     onSimilarClick: (Int) -> Unit = {},
@@ -1369,7 +1389,7 @@ private fun DetailsContent(
             availableWidthDp = maxWidth.value,
             availableHeightDp = (maxHeight - navigationBottomPadding).coerceAtLeast(1.dp).value,
         ).dp
-        val backdropWidth = maxWidth
+        val artwork = mobileDetailsArtworkSource(item.image, item.backdrop, maxWidth <= maxHeight)
         val mobileScrollState = rememberScrollState()
         val density = LocalDensity.current
         var stickyThreshold by remember { mutableStateOf(-1f) }
@@ -1424,31 +1444,7 @@ private fun DetailsContent(
                         .height(backdropHeight)
                         .zIndex(10f)
                 ) {
-                    val backdropRequest = remember(item.backdrop, item.image, context, backdropWidth, backdropHeight, density) {
-                        val url = item.backdrop ?: item.image
-                        if (url.isNullOrBlank()) null else {
-                            ImageRequest.Builder(context)
-                                .data(
-                                    TmdbImageSizing.forSlot(
-                                        url,
-                                        with(density) { backdropWidth.roundToPx() },
-                                        with(density) { backdropHeight.roundToPx() },
-                                        TmdbImageSizing.Kind.BACKDROP
-                                    )
-                                )
-                                .crossfade(250)
-                                .allowHardware(true)
-                                .build()
-                        }
-                    }
-                    if (backdropRequest != null) {
-                        AsyncImage(
-                            model = backdropRequest,
-                            contentDescription = null,
-                            contentScale = ContentScale.Crop,
-                            modifier = Modifier.fillMaxSize()
-                        )
-                    }
+                    MobileDetailsArtwork(artwork, Modifier.fillMaxSize().testTag("details_mobile_artwork"))
                     // Strong bottom gradient
                     Box(
                         modifier = Modifier
@@ -1464,21 +1460,6 @@ private fun DetailsContent(
                                 )
                             )
                     )
-
-                    if (topBarAlpha > 0f) {
-                        Box(
-                            modifier = Modifier
-                                .align(Alignment.TopCenter)
-                                .fillMaxWidth()
-                                .graphicsLayer {
-                                    alpha = topBarAlpha
-                                    translationY = mobileScrollState.value.toFloat()
-                                }
-                                .background(Color.Black.copy(alpha = 0.85f))
-                        ) {
-                            Spacer(modifier = Modifier.statusBarsPadding().height(64.dp))
-                        }
-                    }
 
                     // Title and metadata over backdrop bottom
                     Column(
@@ -1496,7 +1477,7 @@ private fun DetailsContent(
                                 .height(86.dp)
                                 .onGloballyPositioned { coords ->
                                     val currentInitialY = coords.positionInWindow().y + mobileScrollState.value
-                                    val pinnedY = statusBarsTop - with(density) { 12.dp.toPx() }
+                                    val pinnedY = statusBarsTop + with(density) { 56.dp.toPx() }
                                     val calculatedThreshold = currentInitialY - pinnedY
 
                                     // Update if uninitialized, or if the layout shifts significantly (e.g. metadata loaded)
@@ -1508,7 +1489,7 @@ private fun DetailsContent(
                                 .graphicsLayer {
                                     if (stickyThreshold >= 0f && mobileScrollState.value > stickyThreshold) {
                                         val overscroll = mobileScrollState.value - stickyThreshold
-                                        translationY = overscroll
+                                        alpha = 0f
 
                                         // Smooth scale down to feel like a header
                                         val maxOverscroll = 200f
@@ -1685,74 +1666,25 @@ private fun DetailsContent(
 
                     // Primary mobile actions
                     val playButtonLabel = if (!playLabel.isNullOrBlank()) playLabel else stringResource(R.string.play)
-                    MobileActionButton(
-                        icon = Icons.Default.PlayArrow,
-                        text = playButtonLabel,
-                        isPrimary = true,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(58.dp),
-                        onClick = { onButtonClick(0) }
+                    MobileDetailsActions(
+                        playLabel = playButtonLabel,
+                        hasTrailer = hasTrailer,
+                        isWatched = buttonWatched,
+                        isInWatchlist = isInWatchlist,
+                        watchlistIcon = bookmarkIcon(isInWatchlist, isYouTubeVideo),
+                        watchlistLabel = when {
+                            isYouTubeVideo && isInWatchlist -> stringResource(R.string.youtube_favorite)
+                            isYouTubeVideo -> stringResource(R.string.youtube_favorite_add)
+                            isInWatchlist -> stringResource(R.string.details_in_watchlist)
+                            else -> stringResource(R.string.add_to_watchlist)
+                        },
+                        onPlay = { onButtonClick(0) },
+                        onSources = { onButtonClick(1) },
+                        onTrailer = { onButtonClick(2) },
+                        onToggleWatched = { onButtonClick(3) },
+                        onToggleWatchlist = { onButtonClick(4) },
+                        onAddToList = if (listButtonIndex >= 0) ({ onButtonClick(listButtonIndex) }) else null,
                     )
-
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        MobileIconActionButton(
-                            icon = Icons.Default.List,
-                            contentDescription = stringResource(R.string.sources),
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(54.dp),
-                            onClick = { onButtonClick(1) }
-                        )
-                        MobileIconActionButton(
-                            icon = Icons.Default.Movie,
-                            contentDescription = stringResource(R.string.trailer),
-                            enabled = hasTrailer,
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(54.dp),
-                            onClick = { onButtonClick(2) }
-                        )
-                        MobileIconActionButton(
-                            icon = if (buttonWatched) Icons.Default.Check else Icons.Default.Visibility,
-                            contentDescription = if (buttonWatched) stringResource(R.string.watched) else stringResource(R.string.details_btn_mark_watched),
-                            isActive = buttonWatched,
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(54.dp),
-                            onClick = { onButtonClick(3) }
-                        )
-                        MobileIconActionButton(
-                            icon = bookmarkIcon(isInWatchlist, isYouTubeVideo),
-                            contentDescription = when {
-                                isYouTubeVideo && isInWatchlist -> stringResource(R.string.youtube_favorite)
-                                isYouTubeVideo -> stringResource(R.string.youtube_favorite_add)
-                                isInWatchlist -> stringResource(R.string.details_in_watchlist)
-                                else -> stringResource(R.string.add_to_watchlist)
-                            },
-                            isActive = isInWatchlist,
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(54.dp),
-                            onClick = { onButtonClick(4) }
-                        )
-                        if (listButtonIndex >= 0) {
-                            MobileIconActionButton(
-                                icon = Icons.AutoMirrored.Filled.PlaylistAdd,
-                                contentDescription = stringResource(R.string.list_add_to),
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .height(54.dp),
-                                onClick = { onButtonClick(listButtonIndex) }
-                            )
-                        }
-                    }
 
                     Spacer(modifier = Modifier.height(18.dp))
 
@@ -1760,8 +1692,8 @@ private fun DetailsContent(
                     Text(
                         text = item.overview,
                         style = ArflixTypography.body.copy(
-                            fontSize = 12.sp,
-                            lineHeight = 18.sp,
+                            fontSize = 14.sp,
+                            lineHeight = 20.sp,
                             fontWeight = FontWeight.Normal
                         ),
                         color = Color.White.copy(alpha = 0.88f),
@@ -1889,7 +1821,8 @@ private fun DetailsContent(
                                                 spoilerBlurEnabled = spoilerBlurEnabled,
                                                 onClick = {
                                                     onEpisodeItemClick?.invoke(episode) ?: onEpisodeClick(index)
-                                                }
+                                                },
+                                                onLongClick = onEpisodeItemLongClick?.let { callback -> { callback(episode) } },
                                             )
                                         }
                                     }
@@ -2061,13 +1994,23 @@ private fun DetailsContent(
                 Spacer(modifier = Modifier.height(32.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + LocalBottomBarInset.current))
             }
 
-            // Persistent back button for phone users (hidden on tablet/TV).
+            Box(Modifier.align(Alignment.TopCenter).fillMaxWidth()
+                .height(WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 72.dp)
+                .background(Brush.verticalGradient(listOf(Color.Black.copy(alpha = 0.55f), Color.Transparent))))
+            if (topBarAlpha > 0f) Box(Modifier.align(Alignment.TopCenter).fillMaxWidth()
+                .graphicsLayer { alpha = topBarAlpha }
+                .background(Color.Black)
+                .statusBarsPadding()
+                .height(56.dp).padding(start = 64.dp, end = 16.dp), contentAlignment = Alignment.CenterStart) {
+                Text(item.title, color = Color.White, fontSize = 17.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
             // Sits on top of the scrolling Column so it's always reachable even
             // when the system nav bar auto-hides. Issue #43.
-            com.arflix.tv.ui.components.MobileBackButton(
-                onBack = onBack,
-                modifier = Modifier.align(Alignment.TopStart).statusBarsPadding()
-            )
+            androidx.compose.material3.IconButton(onClick = onBack,
+                modifier = Modifier.align(Alignment.TopStart).statusBarsPadding().padding(start = 8.dp, top = 4.dp)
+                    .size(48.dp).background(Color.Black.copy(alpha = 0.45f), CircleShape)) {
+                androidx.compose.material3.Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.back), tint = Color.White)
+            }
         }
         }
         return
@@ -3929,123 +3872,6 @@ private fun MobileMetadataSeparator() {
 }
 
 /**
- * Mobile action button — labeled, tappable, Netflix-style
- */
-@OptIn(ExperimentalTvMaterial3Api::class)
-@Composable
-private fun MobileActionButton(
-    icon: ImageVector,
-    text: String,
-    isPrimary: Boolean = false,
-    isActive: Boolean = false,
-    isOutlined: Boolean = false,
-    modifier: Modifier = Modifier,
-    onClick: () -> Unit
-) {
-    val shape = RoundedCornerShape(percent = 50)
-    val targetBgColor = when {
-        isPrimary -> Color.White
-        isOutlined -> Color.Transparent
-        isActive -> Color.White.copy(alpha = 0.15f)
-        else -> Color.White.copy(alpha = 0.08f)
-    }
-    val targetContentColor = if (isPrimary) Color.Black else Color.White.copy(alpha = 0.92f)
-    val targetBorderColor = if (isOutlined) Color.White.copy(alpha = if (isActive) 0.55f else 0.22f) else Color.Transparent
-
-    val bgColor by animateColorAsState(targetValue = targetBgColor, animationSpec = tween(200), label = "btn_bg")
-    val contentColor by animateColorAsState(targetValue = targetContentColor, animationSpec = tween(200), label = "btn_content")
-    val borderColor by animateColorAsState(targetValue = targetBorderColor, animationSpec = tween(200), label = "btn_border")
-
-    Row(
-        modifier = modifier
-            .clip(shape)
-            .background(bgColor, shape)
-            .border(1.dp, borderColor, shape)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 18.dp, vertical = 10.dp)
-            .animateContentSize(animationSpec = tween(200)),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.Center
-    ) {
-        Crossfade(targetState = icon, animationSpec = tween(200), label = "btn_icon") { currentIcon ->
-            Icon(
-                imageVector = currentIcon,
-                contentDescription = null,
-                tint = contentColor,
-                modifier = Modifier.size(if (isPrimary) 24.dp else 22.dp)
-            )
-        }
-        Spacer(modifier = Modifier.width(8.dp))
-        AnimatedContent(
-            targetState = text,
-            transitionSpec = { fadeIn(tween(200)) togetherWith fadeOut(tween(150)) },
-            label = "btn_text"
-        ) { currentText ->
-            Text(
-                text = currentText,
-                style = ArvioSkin.typography.button.copy(
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold
-                ),
-                color = contentColor,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                textAlign = TextAlign.Center
-            )
-        }
-    }
-}
-
-@Composable
-private fun MobileIconActionButton(
-    icon: ImageVector,
-    contentDescription: String,
-    isActive: Boolean = false,
-    enabled: Boolean = true,
-    modifier: Modifier = Modifier,
-    onClick: () -> Unit
-) {
-    val shape = RoundedCornerShape(16.dp)
-    val targetBackgroundColor = when {
-        !enabled -> Color.White.copy(alpha = 0.04f)
-        isActive -> Color.White.copy(alpha = 0.18f)
-        else -> Color.White.copy(alpha = 0.08f)
-    }
-    val targetContentColor = if (enabled) {
-        Color.White.copy(alpha = if (isActive) 0.96f else 0.88f)
-    } else {
-        Color.White.copy(alpha = 0.3f)
-    }
-    val targetBorderColor = if (isActive) {
-        Color.White.copy(alpha = 0.28f)
-    } else {
-        Color.White.copy(alpha = 0.12f)
-    }
-
-    val backgroundColor by animateColorAsState(targetValue = targetBackgroundColor, animationSpec = tween(200), label = "icon_btn_bg")
-    val contentColor by animateColorAsState(targetValue = targetContentColor, animationSpec = tween(200), label = "icon_btn_content")
-    val borderColor by animateColorAsState(targetValue = targetBorderColor, animationSpec = tween(200), label = "icon_btn_border")
-
-    Box(
-        modifier = modifier
-            .clip(shape)
-            .background(backgroundColor, shape)
-            .border(1.dp, borderColor, shape)
-            .clickable(enabled = enabled, onClick = onClick),
-        contentAlignment = Alignment.Center
-    ) {
-        Crossfade(targetState = icon, animationSpec = tween(200), label = "icon_btn_crossfade") { currentIcon ->
-            Icon(
-                imageVector = currentIcon,
-                contentDescription = contentDescription,
-                tint = contentColor,
-                modifier = Modifier.size(24.dp)
-            )
-        }
-    }
-}
-
-/**
  * Premium ActionButton with smooth animations and glass morphism effect
  */
 @OptIn(ExperimentalTvMaterial3Api::class)
@@ -4207,7 +4033,8 @@ internal fun EpisodeCard(
     cardWidth: androidx.compose.ui.unit.Dp = 300.dp,
     isFocused: Boolean,
     spoilerBlurEnabled: Boolean = false,
-    onClick: () -> Unit = {}
+    onClick: () -> Unit = {},
+    onLongClick: (() -> Unit)? = null,
 ) {
     val aspectRatio = 16f / 9f
     val context = LocalContext.current
@@ -4261,6 +4088,7 @@ internal fun EpisodeCard(
         enableSystemFocus = false,
         isFocusedOverride = isFocused,
         onClick = onClick,
+        onLongClick = onLongClick,
     ) { _ ->
         Box(modifier = Modifier.fillMaxSize()) {
             AsyncImage(

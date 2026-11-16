@@ -7,6 +7,16 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
 
 class AppBottomBarResponsiveLayoutTest {
+    @Test fun immersiveHomeOwnsItsTopSafeAreaWithoutChangingOtherScreens() {
+        val bars = WindowInsets(12, 24, 10, 24)
+        val density = Density(1f)
+        val immersive = mobileContentInsets(bars, showBottomBar = true, edgeToEdgeTop = true)
+        assertThat(immersive.getTop(density)).isEqualTo(0)
+        assertThat(immersive.getLeft(density, LayoutDirection.Ltr)).isEqualTo(12)
+        assertThat(immersive.getRight(density, LayoutDirection.Ltr)).isEqualTo(10)
+        assertThat(mobileContentInsets(bars).getTop(density)).isEqualTo(24)
+    }
+
     @Test fun contentCanDrawUnderCutoutWhileRailKeepsIndependentClearance() {
         val insets = mobileContentInsets(
             systemBars = WindowInsets(0, 24, 0, 24),
@@ -76,14 +86,14 @@ class AppBottomBarResponsiveLayoutTest {
 
     @Test
     fun standardBarDoesNotDoubleCountMeasuredSystemNavigation() {
-        val clearance = appBottomBarClearance(AppBottomBarMode.STANDARD, true, 892, 76f, 24f)
-        assertThat(clearance).isEqualTo(AppBottomBarClearance(24f, 76f))
+        val clearance = appBottomBarClearance(AppBottomBarMode.STANDARD, true, 892, 88f, 24f)
+        assertThat(clearance).isEqualTo(AppBottomBarClearance(88f, 88f))
     }
 
     @Test
     fun standardBarKeepsItsExistingFallbackAndScrollInset() {
         val clearance = appBottomBarClearance(AppBottomBarMode.STANDARD, true, 892, 0f, 48f)
-        assertThat(clearance).isEqualTo(AppBottomBarClearance(48f, 100f))
+        assertThat(clearance).isEqualTo(AppBottomBarClearance(112f, 112f))
     }
 
     @Test

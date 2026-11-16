@@ -9,9 +9,11 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.material.icons.Icons
@@ -86,8 +88,8 @@ internal fun collectionCompactBudget(item: MediaItem?, locale: Locale = Locale.g
 }
 
 internal fun collectionSpotlightHeight(isMobile: Boolean, compact: Boolean): Dp = when {
+    isMobile -> if (compact) 144.dp else 194.dp
     compact -> 174.dp
-    isMobile -> 258.dp
     else -> 198.dp
 }
 
@@ -143,12 +145,14 @@ internal fun CollectionSpotlight(
     val context = LocalContext.current
     val inset = horizontalInset
     val height = collectionSpotlightHeight(isMobile, compact)
-    Box(Modifier.fillMaxWidth().height(height).testTag("collection_spotlight")) {
+    Box(Modifier.fillMaxWidth().then(if (isMobile) Modifier.heightIn(min = height) else Modifier.height(height))
+        .testTag("collection_spotlight")) {
         Column(
-            Modifier.fillMaxSize().padding(start = inset, end = inset, top = topInset, bottom = 8.dp),
+            (if (isMobile) Modifier.fillMaxWidth() else Modifier.fillMaxSize())
+                .padding(start = inset, end = inset, top = topInset, bottom = 8.dp),
             verticalArrangement = Arrangement.spacedBy(if (compact) 5.dp else 7.dp)
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            if (!isMobile || showBackButton) Row(verticalAlignment = Alignment.CenterVertically) {
                 if (showBackButton) {
                     IconButton(onClick = onBack, modifier = Modifier.size(40.dp)) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.back), tint = Color.White)
@@ -207,7 +211,9 @@ internal fun CollectionSpotlight(
                 }
             }
             Text(item?.overview?.takeIf(String::isNotBlank) ?: catalog?.collectionDescription.orEmpty(),
-                modifier = Modifier.fillMaxWidth(textWidth).testTag("collection_spotlight_overview"),
+                modifier = Modifier
+                    .then(if (isMobile) Modifier.widthIn(max = 560.dp) else Modifier)
+                    .fillMaxWidth(textWidth).testTag("collection_spotlight_overview"),
                 color = TextSecondary, fontSize = 13.sp, lineHeight = 18.sp, letterSpacing = 0.sp,
                 maxLines = if (isMobile && !compact) 3 else 2, overflow = TextOverflow.Ellipsis)
         }

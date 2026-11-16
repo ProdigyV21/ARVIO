@@ -616,11 +616,13 @@ fun SettingsScreen(
     var sidebarFocusIndex by remember { mutableIntStateOf(com.arflix.tv.ui.components.topBarSelectedIndex(SidebarItem.SETTINGS, hasProfile)) }
     com.arflix.tv.ui.components.ReconcileTopBarFocus(sidebarFocusIndex, hasProfile) { sidebarFocusIndex = it }
     var sectionIndex by remember { mutableIntStateOf(initialSectionIdx ?: 0) }
-    var mobilePage by remember {
+    var mobilePage by remember(initialSection) {
         mutableStateOf(
             when (initialSection) {
                 "iptv" -> "TV"
                 "stremio" -> "Addons"
+                "home_server" -> "Home Server"
+                "catalogs" -> "Catalogs"
                 else -> "MAIN"
             }
         )
@@ -4833,12 +4835,13 @@ private fun MobileSettingsLayout(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 24.dp, vertical = 16.dp),
+                    .padding(horizontal = 16.dp, vertical = 8.dp)
+                    .heightIn(min = 48.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
                     text = stringResource(R.string.settings),
-                    style = ArflixTypography.heroTitle.copy(fontSize = 28.sp),
+                    style = ArflixTypography.heroTitle.copy(fontSize = 24.sp),
                     color = TextPrimary,
                     modifier = Modifier.weight(1f)
                 )
@@ -4919,18 +4922,15 @@ private fun MobileSettingsLayout(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(56.dp)
-                        .padding(horizontal = 24.dp),
+                        .padding(start = 8.dp, end = 16.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(
+                    androidx.compose.material3.IconButton(onClick = { onNavigate(backTarget) }, modifier = Modifier.size(48.dp)) { Icon(
                         imageVector = Icons.Default.ArrowBack,
                         contentDescription = stringResource(R.string.back),
                         tint = TextPrimary,
-                        modifier = Modifier
-                            .clickable { onNavigate(backTarget) }
-                            .padding(end = 16.dp)
-                            .size(24.dp)
-                    )
+                        modifier = Modifier.size(24.dp)
+                    ) }
                     Text(
                         text = mobileCategoryTitle(displayedSubPage),
                         style = ArflixTypography.heroTitle.copy(fontSize = 20.sp),
@@ -5023,12 +5023,12 @@ private fun MobileSettingsMainPage(
     androidx.compose.foundation.lazy.LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(
-            start = 24.dp,
-            end = 24.dp,
+            start = 16.dp,
+            end = 16.dp,
             top = 8.dp,
             bottom = 16.dp + LocalBottomBarInset.current
         ),
-        verticalArrangement = Arrangement.spacedBy(32.dp)
+        verticalArrangement = Arrangement.spacedBy(20.dp)
     ) {
         item {
             MobileSettingsCategory(title = stringResource(R.string.settings_section_languages)) {
@@ -5089,7 +5089,8 @@ private fun MobileSettingsMainPage(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clickable { onNavigate(name) }
-                                .padding(horizontal = 16.dp, vertical = 14.dp),
+                                .heightIn(min = 52.dp)
+                                .padding(horizontal = 4.dp, vertical = 10.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Icon(imageVector = icon, contentDescription = null, tint = TextSecondary, modifier = Modifier.size(24.dp))
@@ -5312,8 +5313,8 @@ private fun MobileSettingsSubPage(
             .fillMaxSize()
             .verticalScroll(scrollState)
             .padding(
-                start = 24.dp,
-                end = 24.dp,
+                start = 16.dp,
+                end = 16.dp,
                 top = 8.dp,
                 bottom = 16.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
             ),
@@ -5652,6 +5653,7 @@ private fun MobileSettingsSubPage(
             }
             "Appearance" -> {
                 MobileSettingsCategory(title = stringResource(R.string.settings_section_appearance)) {
+                    com.arflix.tv.ui.components.MobileHomeHeroStyleSetting()
                     MobileSettingsRow(
                         icon = Icons.Default.Bookmark,
                         title = stringResource(R.string.watchlist_on_home),
@@ -10070,6 +10072,7 @@ private fun StremioAddonsSettings(
                         val canDelete = addon.isRemovable
                         val settingsUrl = addon.settingsPageUrl
                         val needsSetup = addon.needsConfiguration && !addon.isEnabled
+                        Column {
                         Row(
                             modifier = Modifier.fillMaxWidth().clickable { onToggleAddon(addon.id) }.padding(horizontal = 16.dp, vertical = 14.dp),
                             verticalAlignment = Alignment.CenterVertically
@@ -10077,12 +10080,12 @@ private fun StremioAddonsSettings(
                             AddonLogo(addon = addon, size = 32.dp, fallbackTint = TextSecondary)
                             Spacer(modifier = Modifier.width(12.dp))
                             Column(modifier = Modifier.weight(1f)) {
-                                Text(addon.name, style = ArflixTypography.cardTitle.copy(fontSize = 16.sp), color = TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Text(addon.name, style = ArflixTypography.cardTitle.copy(fontSize = 16.sp), color = TextPrimary, maxLines = 2, overflow = TextOverflow.Ellipsis)
                                 if (needsSetup) {
                                     Spacer(modifier = Modifier.height(4.dp))
                                     AddonSetupRequiredChip()
                                 } else {
-                                    Text(addon.description, style = ArflixTypography.caption.copy(fontSize = 13.sp), color = TextSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    Text(addon.description, style = ArflixTypography.caption.copy(fontSize = 13.sp), color = TextSecondary, maxLines = 2, overflow = TextOverflow.Ellipsis)
                                 }
                             }
                             Spacer(modifier = Modifier.width(12.dp))
@@ -10098,18 +10101,21 @@ private fun StremioAddonsSettings(
                                     Box(modifier = Modifier.size(18.dp).background(color = Color.White, shape = RoundedCornerShape(12.dp)))
                                 }
                             }
+                        }
+                        Row(Modifier.fillMaxWidth().padding(start = 56.dp, end = 8.dp), horizontalArrangement = Arrangement.End) {
                             if (settingsUrl != null && !needsSetup) {
                                 Spacer(modifier = Modifier.width(12.dp))
-                                Box(modifier = Modifier.size(32.dp).clickable { openExternalUrl(context, settingsUrl) }.background(Color.White.copy(alpha = 0.1f), RoundedCornerShape(8.dp)), contentAlignment = Alignment.Center) {
+                                Box(modifier = Modifier.size(48.dp).clickable { openExternalUrl(context, settingsUrl) }, contentAlignment = Alignment.Center) {
                                     Icon(Icons.Default.Settings, contentDescription = stringResource(R.string.settings_addon_configure), tint = TextSecondary, modifier = Modifier.size(18.dp))
                                 }
                             }
                             if (canDelete) {
                                 Spacer(modifier = Modifier.width(12.dp))
-                                Box(modifier = Modifier.size(32.dp).clickable { onDeleteAddon(addon.id) }.background(Color.White.copy(alpha = 0.1f), RoundedCornerShape(8.dp)), contentAlignment = Alignment.Center) {
+                                Box(modifier = Modifier.size(48.dp).clickable { onDeleteAddon(addon.id) }, contentAlignment = Alignment.Center) {
                                     Icon(Icons.Default.Delete, contentDescription = stringResource(R.string.settings_cd_delete_addon), tint = TextSecondary, modifier = Modifier.size(18.dp))
                                 }
                             }
+                        }
                         }
                         if (index < addons.size - 1) {
                             Box(modifier = Modifier.fillMaxWidth().height(1.dp).padding(horizontal = 16.dp).background(Color.White.copy(alpha = 0.05f)))
@@ -11917,6 +11923,10 @@ private fun InputModal(
     onConfirm: () -> Unit,
     onDismiss: () -> Unit
 ) {
+    if (LocalDeviceType.current.isTouchDevice()) {
+        MobileConnectionForm(title, supportingText, fields, toggleFields, onConfirm, onDismiss)
+        return
+    }
     var focusedIndex by remember(title, fields.size) { mutableIntStateOf(0) }
     var lastFocusedFieldIndex by remember(title, fields.size) { mutableStateOf<Int?>(null) }
     val totalItems = fields.size + toggleFields.size + 3 // inputs + toggles + paste + cancel + confirm

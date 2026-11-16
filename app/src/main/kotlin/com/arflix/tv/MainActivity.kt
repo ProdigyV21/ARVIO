@@ -906,34 +906,6 @@ fun ArflixApp(
     val barSpec = currentBottomBarSpec()
     val navigationInset = with(density) { WindowInsets.navigationBars.getBottom(this).toDp() }
     var measuredBarHeight by remember(barSpec, density.fontScale) { mutableStateOf(0.dp) }
-    var measuredBarHeightPx by remember { mutableFloatStateOf(0f) }
-    var bottomBarOffsetPx by remember { mutableFloatStateOf(0f) }
-    var settleJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
-    val hazeState = remember { HazeState() }
-
-    val isScrollAwayRoute = isMobile && showBottomBar && !isLandscapeRail
-
-    val mainScreenBottomBarOffsets = remember { mutableMapOf<String, Float>() }
-    val currentMainRoute = remember(currentRoute) {
-        when (currentRoute?.substringBefore('?')) {
-            Screen.Home.route, Screen.Search.route, Screen.Watchlist.route, "tv", "settings" ->
-                currentRoute.substringBefore('?')
-            else -> null
-        }
-    }
-
-
-    // Restore the bottom bar's state when returning to a main screen from a subpage or subscreen
-    LaunchedEffect(currentRoute, isSettingsSubPage, isTvSubScreen, showBottomBar) {
-        settleJob?.cancel()
-        settleJob = null
-        if (showBottomBar && currentMainRoute != null) {
-            val saved = mainScreenBottomBarOffsets[currentMainRoute] ?: 0f
-            bottomBarOffsetPx = if (measuredBarHeightPx > 0f) {
-                if (saved > measuredBarHeightPx * 0.5f) measuredBarHeightPx else 0f
-            } else saved
-        }
-    }
 
     val barClearance = appBottomBarClearance(
         mode = barMode,
@@ -945,90 +917,6 @@ fun ArflixApp(
     val barInset = barClearance.scrollInsetDp.dp
     val fullBarHeight = barClearance.fullHeightDp.dp
 
-    val nestedScrollConnection = remember(measuredBarHeightPx, currentMainRoute, showBottomBar) {
-        object : NestedScrollConnection {
-            private fun animateToOffset(target: Float, durationMs: Int = 220) {
-                settleJob?.cancel()
-                settleJob = appCoroutineScope.launch {
-                    androidx.compose.animation.core.animate(
-                        initialValue = bottomBarOffsetPx,
-                        targetValue = target,
-                        animationSpec = androidx.compose.animation.core.tween(
-                            durationMillis = durationMs,
-                            easing = androidx.compose.animation.core.FastOutSlowInEasing
-                        )
-                    ) { value, _ ->
-                        bottomBarOffsetPx = value
-                        if (showBottomBar && currentMainRoute != null) {
-                            mainScreenBottomBarOffsets[currentMainRoute] = value
-                        }
-                    }
-                }
-            }
-
-            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
-                val maxOffset = measuredBarHeightPx
-                if (maxOffset <= 0f) return Offset.Zero
-
-                // When dragging downward (swiping down, available.y > 0) to scroll back up,
-                // bring the bottom bar back immediately if it is partially or fully hidden.
-                if (source == NestedScrollSource.Drag && available.y > 0f && bottomBarOffsetPx > 0f) {
-                    settleJob?.cancel()
-                    settleJob = null
-                    val newOffset = (bottomBarOffsetPx - available.y).coerceIn(0f, maxOffset)
-                    bottomBarOffsetPx = newOffset
-                    if (showBottomBar && currentMainRoute != null) {
-                        mainScreenBottomBarOffsets[currentMainRoute] = newOffset
-                    }
-                }
-
-                return Offset.Zero
-            }
-
-            override fun onPostScroll(
-                consumed: Offset,
-                available: Offset,
-                source: NestedScrollSource
-            ): Offset {
-                val maxOffset = measuredBarHeightPx
-                if (maxOffset <= 0f) return Offset.Zero
-
-                // When dragging upward (swiping up, consumed.y < 0) and the child ACTUALLY scrolled,
-                // hide the bottom bar. If child content has nowhere to scroll (e.g. short content),
-                // consumed.y is 0, so the bar stays docked at 0f!
-                if (source == NestedScrollSource.Drag && consumed.y < 0f) {
-                    settleJob?.cancel()
-                    settleJob = null
-                    val newOffset = (bottomBarOffsetPx - consumed.y).coerceIn(0f, maxOffset)
-                    bottomBarOffsetPx = newOffset
-                    if (showBottomBar && currentMainRoute != null) {
-                        mainScreenBottomBarOffsets[currentMainRoute] = newOffset
-                    }
-                }
-
-                return Offset.Zero
-            }
-
-            override suspend fun onPreFling(available: Velocity): Velocity {
-                val maxOffset = measuredBarHeightPx
-                if (maxOffset <= 0f) return Velocity.Zero
-
-                // If the bottom bar never moved (e.g. short/static content), do NOT fling to hide it!
-                if (bottomBarOffsetPx <= 0f) return Velocity.Zero
-
-                val halfThreshold = maxOffset * 0.5f
-                val targetOffset = when {
-                    available.y < -150f -> maxOffset
-                    available.y > 150f -> 0f
-                    bottomBarOffsetPx > halfThreshold -> maxOffset
-                    else -> 0f
-                }
-
-                animateToOffset(targetOffset, 200)
-                return Velocity.Zero
-            }
-        }
-    }
 
     Box(
         modifier = Modifier
@@ -1052,7 +940,10 @@ fun ArflixApp(
             // transient system bars appear or disappear.
             .then(when {
                 isMobile && !isFullscreenRoute -> Modifier.windowInsetsPadding(
-                    mobileContentInsets(WindowInsets.systemBars, showBottomBar)
+                    mobileContentInsets(WindowInsets.systemBars, showBottomBar,
+                        edgeToEdgeTop = currentRoute?.substringBefore('?') == Screen.Details.route.substringBefore('?') ||
+                            (currentRoute?.substringBefore('?') == Screen.Home.route &&
+                                LocalConfiguration.current.orientation != android.content.res.Configuration.ORIENTATION_LANDSCAPE))
                 )
                 applySystemBarsPadding -> Modifier.systemBarsPadding()
                 else -> Modifier
@@ -1065,8 +956,6 @@ fun ArflixApp(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .then(if (isMobile) Modifier.haze(hazeState) else Modifier)
-                    .then(if (isScrollAwayRoute) Modifier.nestedScroll(nestedScrollConnection) else Modifier)
             ) {
                 AppNavigation(
                     navController = navController,
@@ -1117,8 +1006,6 @@ fun ArflixApp(
                     if (route == currentRoute) {
                         return@AppBottomBar
                     }
-                    mainScreenBottomBarOffsets[route] = 0f
-                    bottomBarOffsetPx = 0f
                     navController.navigate(route) {
                         popUpTo("home") {
                             saveState = true
@@ -1127,7 +1014,6 @@ fun ArflixApp(
                         restoreState = true
                     }
                 },
-                hazeState = hazeState,
                 currentProfile = activeProfile,
                 onSwitchProfile = {
                     switchProfile()
@@ -1137,10 +1023,6 @@ fun ArflixApp(
                     .then(if (!isLandscapeRail) Modifier.fillMaxWidth() else Modifier)
                     .onSizeChanged {
                         measuredBarHeight = with(density) { it.height.toDp() }
-                        measuredBarHeightPx = it.height.toFloat()
-                    }
-                    .graphicsLayer {
-                        if (!isLandscapeRail) translationY = bottomBarOffsetPx
                     }
             )
         }
