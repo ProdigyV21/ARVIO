@@ -43,14 +43,14 @@
     "Tu contenido."
   ],
   [
-    "Beautifully",
-    "Tudo bem",
-    "Todo bien"
+    "Free and",
+    "Grátis e de",
+    "Gratis y de"
   ],
   [
-    "connected.",
-    "conectado.",
-    "conectado."
+    "open source.",
+    "código aberto.",
+    "código abierto."
   ],
   [
     "Your libraries, live TV and discoveries.",
@@ -758,11 +758,6 @@
     "ARVIO Web para iPhone, iPad, Mac y PC"
   ],
   [
-    "ARVIO Web is hosted for you. Look around first. You only pay when you press Play.",
-    "O ARVIO Web é hospedado para você. Explore primeiro. Você só paga quando aperta Play.",
-    "ARVIO Web está alojado para ti. Échale un vistazo primero. Solo pagas cuando pulsas Play."
-  ],
-  [
     "$2.99/month, or $20 for 12 months.",
     "US$ 2,99/mês ou US$ 20 por 12 meses.",
     "2,99 $/mes o 20 $ por 12 meses."
@@ -803,9 +798,9 @@
     "Descargas en el ordenador"
   ],
   [
-    "Look around first. You only pay when you press Play.",
-    "Explore primeiro. Você só paga quando aperta Play.",
-    "Échale un vistazo primero. Solo pagas cuando pulsas Play."
+    "Preview ARVIO Web for free. Premium is required for playback.",
+    "Explore o ARVIO Web de graça. O Premium é necessário para reproduzir.",
+    "Explora ARVIO Web gratis. Necesitas Premium para reproducir."
   ],
   [
     "ARVIO Premium plans",
@@ -926,5 +921,70 @@
   ["PARTNER WITH ARVIO", "SEJA PARCEIRO DO ARVIO", "COLABORA CON ARVIO"],
   ["We're looking for sponsors.", "Estamos buscando patrocinadores.", "Buscamos patrocinadores."],
   ["Help support independent development and introduce your brand to our media and home-server community.", "Apoie o desenvolvimento independente e apresente sua marca à nossa comunidade de mídia e servidores domésticos.", "Apoya el desarrollo independiente y presenta tu marca a nuestra comunidad de multimedia y servidores domésticos."],
-  ["Explore sponsorship", "Conheça as oportunidades (em inglês)", "Ver oportunidades (en inglés)"]
+  ["Explore sponsorship", "Conheça as oportunidades (em inglês)", "Ver oportunidades (en inglés)"],
+  [
+    "Choose monthly",
+    "Escolher plano mensal",
+    "Elegir plan mensual"
+  ],
+  [
+    "Get 12 months",
+    "Obter 12 meses",
+    "Obtener 12 meses"
+  ],
+  [
+    "Preview ARVIO Web",
+    "Explorar o ARVIO Web",
+    "Explorar ARVIO Web"
+  ],
+  [
+    "Both plans include hosted ARVIO Web. Connect your own sources; no media is included.",
+    "Os dois planos incluem o ARVIO Web hospedado para você. Conecte suas próprias fontes; nenhum conteúdo de mídia está incluído.",
+    "Ambos planes incluyen ARVIO Web alojado para ti. Conecta tus propias fuentes; no se incluye contenido multimedia."
+  ],
+  [
+    "Next: sign in to ARVIO, then pay on Ko-fi using the same email.",
+    "Próximo passo: entre no ARVIO e pague no Ko-fi usando o mesmo e-mail.",
+    "Siguiente paso: inicia sesión en ARVIO y paga en Ko-fi con el mismo correo electrónico."
+  ],
+  [
+    "Save 44% compared with 12 monthly payments ($35.88).",
+    "Economize 44% em relação a 12 pagamentos mensais (US$ 35,88).",
+    "Ahorra un 44 % frente a 12 pagos mensuales (35,88 $)."
+  ],
+  [
+    "Regional price · save 72%",
+    "Preço regional · economize 72%",
+    "Precio regional · ahorra un 72 %"
+  ],
+  [
+    "50% off the regular $20 pass. Save 72% compared with 12 monthly payments ($35.88).",
+    "50% de desconto sobre o passe normal de US$ 20. Economize 72% em relação a 12 pagamentos mensais (US$ 35,88).",
+    "50 % de descuento sobre el pase habitual de 20 $. Ahorra un 72 % frente a 12 pagos mensuales (35,88 $)."
+  ],
+  [
+    "$2.99/month, or $10 for 12 months in your region.",
+    "US$ 2,99/mês ou US$ 10 por 12 meses na sua região.",
+    "2,99 $/mes o 10 $ por 12 meses en tu región."
+  ],
+  [
+    "See Premium plans",
+    "Ver planos Premium",
+    "Ver planes Premium"
+  ],
+  [
+    "Explore ARVIO Web",
+    "Explorar o ARVIO Web",
+    "Explorar ARVIO Web"
+  ],
+  [
+    "Monthly membership. Cancel anytime through Ko-fi.",
+    "Assinatura mensal. Cancele a qualquer momento pelo Ko-fi.",
+    "Suscripción mensual. Cancela cuando quieras a través de Ko-fi."
+  ],
+  [
+    "View ARVIO source on GitHub",
+    "Ver o código do ARVIO no GitHub",
+    "Ver el código de ARVIO en GitHub"
+  ]
 ]

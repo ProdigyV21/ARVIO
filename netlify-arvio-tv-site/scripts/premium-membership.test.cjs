@@ -26,9 +26,10 @@ test('Premium leads with hosted ARVIO Web and sends every plan to the web app', 
   const anchors = links(premium);
   const open = anchors.find(link => link.placement === 'hero-membership');
   assert.equal(open.href, web);
-  assert.ok(open.classes.includes('button') && open.classes.includes('membership-button'));
+  assert.ok(open.classes.includes('button') && open.classes.includes('preview-button'));
   for (const placement of ['plan-monthly', 'plan-yearly', 'support-membership']) {
-    assert.equal(anchors.find(link => link.placement === placement)?.href, web, placement);
+    const expected = placement === 'support-membership' ? web : web + '?premium_plan=' + (placement === 'plan-monthly' ? 'monthly' : 'yearly');
+    assert.equal(anchors.find(link => link.placement === placement)?.href, expected, placement);
   }
   // Ko-fi is only a secondary management link, never a button.
   for (const link of anchors.filter(link => link.href?.startsWith('https://ko-fi.com'))) {
@@ -36,7 +37,7 @@ test('Premium leads with hosted ARVIO Web and sends every plan to the web app', 
     assert.ok(!link.classes.includes('button'));
   }
   assert.match(premium, /<strong>\$2\.99<\/strong>/u);
-  assert.match(premium, /<strong>\$20<\/strong>/u);
+  assert.match(premium, /<strong data-yearly-price>\$20<\/strong>/u);
   assert.match(premium, /Best value · save 44%/u);
   assert.match(premium, /One payment, no automatic renewal/u);
   assert.match(premium, /Message us within 7 days for a full refund\./u);
@@ -54,7 +55,8 @@ test('The 12-month pass saving matches the monthly price', () => {
 });
 
 test('Premium remains usable in English without JavaScript or translated-copy requests', () => {
-  assert.equal(links(premium).filter(link => link.href === web && link.classes.includes('membership-button')).length, 3);
+  assert.equal(links(premium).filter(link => link.href === '#plans' && link.classes.includes('membership-button')).length, 2);
+  assert.equal(links(premium).filter(link => link.href?.startsWith(web + '?premium_plan=')).length, 2);
   for (const key of new Set([...premium.matchAll(/data-copy="([A-Za-z]+)"/gu)].map(match => match[1]))) {
     for (const [locale, copy] of Object.entries(copies)) assert.ok(copy[key]?.trim(), `${locale}: ${key}`);
   }
@@ -111,7 +113,9 @@ test('English, Spanish and Portuguese homepages send Premium CTAs to ARVIO Web a
     const anchors = links(html);
     for (const placement of ['header-membership', 'hero-membership', 'premium-section', 'premium-yearly']) {
       const link = anchors.find(anchor => anchor.placement === placement);
-      assert.equal(link?.href, web, `${file}: ${placement}`);
+      const expected = placement === 'hero-membership' ? (file === 'index.html' ? '/premium/' : `/${file.split('/')[0]}/premium/`) :
+        placement === 'premium-section' ? web + '?premium_plan=monthly' : placement === 'premium-yearly' ? web + '?premium_plan=yearly' : web;
+      assert.equal(link?.href, expected, `${file}: ${placement}`);
       assert.ok(link.classes.includes('button'), file);
       assert.ok(link.text, file);
     }
@@ -219,7 +223,7 @@ test('Premium renders the new terms correctly for all languages, including RTL',
     const result = await renderLocale(locale);
     assert.equal(result.document.documentElement.lang, locale);
     assert.equal(result.document.documentElement.dir, /^(ar|he|fa|ur)-/u.test(locale) ? 'rtl' : 'ltr');
-    assert.equal(result.elements.find(element => element.dataset.copy === 'open').textContent, copies[locale].open);
+    assert.equal(result.elements.find(element => element.dataset.copy === 'preview').textContent, copies[locale].preview);
     assert.equal(result.elements.find(element => element.dataset.copy === 'membershipTerms').textContent, copies[locale].membershipTerms);
   }
   const fallback = await renderLocale('nl-NL', false);

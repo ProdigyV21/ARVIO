@@ -51,6 +51,7 @@ import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.unit.LayoutDirection
 import com.arflix.tv.ui.focus.mirrorHorizontalForRtl
@@ -95,6 +96,7 @@ internal fun libraryColumns(width: Int, poster: Boolean, collections: Boolean = 
     if (collections) (width / 270).coerceIn(1, 3) else if (poster) (width / 115).coerceIn(2, 8) else (width / 180).coerceIn(2, 4)
 internal fun WatchlistSourceItem.isPersonalCollection(): Boolean = this is WatchlistSourceItem.Catalog ||
     (this is WatchlistSourceItem.TrackerList && (provider == TrackerLibraryProvider.MDBLIST ||
+        (provider == TrackerLibraryProvider.WETRAKR && listKey.startsWith(com.arflix.tv.data.repository.wetrakr.WeTrakrLists.LIST_KEY_PREFIX)) ||
         (provider == TrackerLibraryProvider.TRAKT && listKey !in setOf("__watchlist__", "watchlist", "collection", "watched"))))
 internal fun librarySources(sources: List<WatchlistSourceItem>, section: LibrarySection): List<WatchlistSourceItem> =
     sources.filter { when (section) {
@@ -272,6 +274,7 @@ fun WatchlistScreen(
     }
     BoxWithConstraints(Modifier.fillMaxSize().background(Color.Black).testTag("oled-library")) {
         val compact = touch && (maxWidth < 700.dp || maxHeight < 500.dp)
+        val queryChipMaxWidth = (maxWidth * 0.32f).coerceAtMost(160.dp)
         val sideWidth = if (touch) 160.dp else 126.dp
             if (!touch) {
                 Box(Modifier.fillMaxWidth().height(AppTopBarContentTopInset).focusRequester(topFocus).onFocusChanged { topFocused = it.isFocused }
@@ -297,7 +300,9 @@ fun WatchlistScreen(
                     AppTopBar(SidebarItem.WATCHLIST, topFocused, topIndex, profile = currentProfile)
                 }
             }
-        Column(Modifier.fillMaxSize().padding(top = if (touch) 0.dp else LibraryTabsTopInset)
+        Column(Modifier.fillMaxSize()
+            .then(if (compact && search) Modifier.imePadding() else Modifier)
+            .padding(top = if (touch) 0.dp else LibraryTabsTopInset)
             .padding(horizontal = if (compact) 16.dp else 26.dp)) {
             if (touch) Text(stringResource(R.string.nav_library), color = Color.White, fontSize = 24.sp,
                 fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(vertical = 12.dp))
@@ -335,6 +340,12 @@ fun WatchlistScreen(
                 if (search) {
                     val searchFocus = remember { FocusRequester() }
                     val keyboard = LocalSoftwareKeyboardController.current
+                    val focusManager = LocalFocusManager.current
+                    fun finishSearch() {
+                        keyboard?.hide()
+                        focusManager.clearFocus()
+                        search = false
+                    }
                     LaunchedEffect(searchFocus) {
                         searchFocus.requestFocus()
                         // Let Android attach the new field's input connection before showing the IME.
@@ -345,7 +356,7 @@ fun WatchlistScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(bottom = 10.dp)
-                            .height(42.dp)
+                            .heightIn(min = 48.dp)
                             .clip(CircleShape)
                             .background(BackgroundElevated)
                             .padding(horizontal = 12.dp),
@@ -366,7 +377,7 @@ fun WatchlistScreen(
                             textStyle = androidx.compose.ui.text.TextStyle(color = Color.White, fontSize = 14.sp),
                             cursorBrush = SolidColor(resolveAccentColor(Color.White)),
                             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                            keyboardActions = KeyboardActions(onSearch = { search = false }),
+                            keyboardActions = KeyboardActions(onSearch = { finishSearch() }),
                             decorationBox = { innerTextField ->
                                 if (query.isEmpty()) {
                                     Text(tr("Search library…"), color = Color.Gray, fontSize = 14.sp)
@@ -375,27 +386,19 @@ fun WatchlistScreen(
                             }
                         )
                         if (query.isNotEmpty()) {
-                            Box(
-                                modifier = Modifier
-                                    .size(24.dp)
-                                    .clip(CircleShape)
-                                    .background(Color.White.copy(alpha = 0.15f))
-                                    .clickable { query = "" },
-                                contentAlignment = Alignment.Center
-                            ) {
+                            IconButton(onClick = { query = "" },
+                                modifier = Modifier.size(48.dp).testTag("library-search-clear")) {
                                 Icon(
                                     Icons.Default.Close,
                                     contentDescription = tr("Clear search"),
                                     tint = Color.White,
-                                    modifier = Modifier.size(14.dp)
+                                    modifier = Modifier.size(20.dp)
                                 )
                             }
                         }
-                        Box(
-                            modifier = Modifier
-                                .clip(CircleShape)
-                                .clickable { search = false }
-                                .padding(horizontal = 6.dp, vertical = 4.dp)
+                        TextButton(
+                            onClick = { finishSearch() },
+                            modifier = Modifier.heightIn(min = 48.dp).testTag("library-search-done")
                         ) {
                             Text(
                                 tr("Done"),
@@ -428,9 +431,11 @@ fun WatchlistScreen(
                         if (query.isNotEmpty()) {
                             OledControl(
                                 label = "\"$query\"",
+                                modifier = Modifier.widthIn(max = queryChipMaxWidth),
                                 compact = true,
                                 selected = true,
                                 trailingIcon = Icons.Default.Close,
+                                trailingIconDescription = tr("Clear search"),
                                 onClick = { query = "" }
                             )
                         } else {
@@ -702,11 +707,13 @@ internal fun OledControl(
     compact: Boolean = false,
     icon: ImageVector? = null,
     trailingIcon: ImageVector? = null,
+    trailingIconDescription: String? = null,
     hasActiveBadge: Boolean = false,
     maxLines: Int = 1,
     onClick: () -> Unit
 ) {
     var focused by remember { mutableStateOf(false) }
+    val touch = LocalDeviceType.current.isTouchDevice()
     val accent = resolveAccentColor(Color.White)
     // Phone/tablet (compact): selected tab is a white pill with black text.
     // TV keeps the elevated dark treatment; focus uses the accent color.
@@ -716,6 +723,7 @@ internal fun OledControl(
     val background by animateColorAsState(if(focused) accent else if(isPhoneSelected) Color.White else if(selected) BackgroundElevated else Color.Transparent, tween(120), label = "library-control")
     Box(
         modifier
+            .then(if (touch) Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp) else Modifier)
             .onFocusChanged { focused = it.isFocused }
             .clip(if(compact) CircleShape else RoundedCornerShape(8.dp))
             .background(background)
@@ -737,6 +745,7 @@ internal fun OledControl(
                 }
                 Text(
                     label,
+                    modifier = if (touch && (trailingIcon != null || hasActiveBadge)) Modifier.weight(1f, fill = false) else Modifier,
                     color = foreground,
                     fontSize = if(compact) 13.sp else 14.sp,
                     fontWeight = if(selected || focused) FontWeight.SemiBold else FontWeight.Normal,
@@ -751,7 +760,7 @@ internal fun OledControl(
                     )
                 }
                 if (trailingIcon != null) {
-                    Icon(trailingIcon, contentDescription = null, tint = foreground, modifier = Modifier.size(16.dp))
+                    Icon(trailingIcon, contentDescription = trailingIconDescription, tint = foreground, modifier = Modifier.size(16.dp))
                 }
             }
         }

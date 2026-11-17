@@ -26,8 +26,9 @@
   <meta property="og:description" content="Hostad ARVIO Web. Logga in med ditt ARVIO-konto och fortsätt där du slutade. 2,99 $/månad, eller 20 $ för 12 månader.">
   <meta property="og:image" content="https://arvio.tv/premium/images/home.png">
   <meta name="twitter:card" content="summary_large_image">
-  <link rel="stylesheet" href="/premium/premium.css?v=8">
-  <script defer src="/premium/premium.js?v=5"></script>
+  <link rel="stylesheet" href="/premium/premium.css?v=9">
+  <script defer src="/assets/premium-pricing.js?v=1"></script>
+  <script defer src="/premium/premium.js?v=6"></script>
 <script defer src="/assets/premium-journey.js?v=2"></script>
 <script defer src="/assets/promo-video.js?v=2"></script>
 </head>
@@ -41,13 +42,13 @@
           <li data-copy="benefitSync">Profiler, bevakningslista och framsteg synkas via ARVIO Cloud</li>
           <li data-copy="benefitLive">Live-TV med programguide</li>
           <li data-copy="benefitDownloads">Nedladdningar på datorn</li>
-          <li data-copy="benefitExplore">Titta runt först. Du betalar först när du trycker på Spela.</li>
+          <li data-copy="benefitExplore">Utforska ARVIO Web gratis. Premium krävs för uppspelning.</li>
         </ul>
         <div class="membership-actions">
-          <a class="button membership-button" href="https://web.arvio.tv/" data-premium-placement="hero-membership"><span data-copy="open">Öppna ARVIO Web</span><span aria-hidden="true">↗</span></a>
-          <a class="button preview-button" href="#plans" data-copy="comparePlans">Jämför abonnemang</a>
+          <a class="button membership-button" href="#plans" data-copy="viewPlans">Se Premium-alternativ</a>
+          <a class="button preview-button" href="https://web.arvio.tv/" data-premium-placement="hero-membership" data-copy="preview">Utforska ARVIO Web</a>
         </div>
-        <p class="membership-note" data-copy="fromPrice">2,99 $/månad, eller 20 $ för 12 månader.</p>
+        <p class="membership-note" data-copy="fromPrice" data-plan-price-summary>2,99 $/månad, eller 20 $ för 12 månader.</p>
       </div>
       <figure class="hero-video">
         <video id="promo-video" class="promo-video" width="1280" height="720" controls muted playsinline preload="none" poster="/assets/promo/arvio-premium-poster.webp" src="/assets/promo/arvio-tour-web.mp4" data-src="/assets/promo/arvio-tour-web.mp4" aria-label="ARVIO app tour"></video>
@@ -56,21 +57,24 @@
     </section>
     <section class="plans-section" id="plans" aria-labelledby="plans-title">
       <h2 id="plans-title" data-copy="plansTitle">Två alternativ. Samma ARVIO Web.</h2>
+      <p class="plan-intro" data-copy="planIntro">Båda alternativen inkluderar ARVIO Web med hosting. Anslut dina egna källor; inget medieinnehåll ingår.</p>
       <div class="plans">
         <article class="plan">
           <h3 data-copy="monthly">Månadsvis</h3>
           <p class="plan-price"><strong>$2.99</strong> <span data-copy="period">/ månad</span></p>
           <p class="plan-note" data-copy="membershipTerms">Månadsmedlemskap. Avsluta när som helst via Ko-fi.</p>
-          <a class="button plan-button" href="https://web.arvio.tv/" data-premium-placement="plan-monthly" data-copy="open">Öppna ARVIO Web</a>
+          <a class="button plan-button" href="https://web.arvio.tv/?premium_plan=monthly" data-premium-placement="plan-monthly" data-copy="chooseMonthly">Välj månadsvis</a>
         </article>
         <article class="plan plan-best">
-          <p class="plan-badge" data-copy="yearlyBadge">Bäst värde · spara 44 %</p>
+          <p class="plan-badge" data-copy="yearlyBadge" data-yearly-badge>Bäst värde · spara 44 %</p>
           <h3 data-copy="yearly">12-månaderspass</h3>
-          <p class="plan-price"><strong>$20</strong> <span data-copy="once">en gång</span></p>
+          <p class="plan-price"><s data-yearly-was hidden>$20</s> <strong data-yearly-price>$20</strong> <span data-copy="once">en gång</span></p>
           <p class="plan-note" data-copy="yearlyNote">En betalning, ingen automatisk förnyelse</p>
-          <a class="button membership-button plan-button" href="https://web.arvio.tv/" data-premium-placement="plan-yearly" data-copy="open">Öppna ARVIO Web</a>
+          <a class="button membership-button plan-button" href="https://web.arvio.tv/?premium_plan=yearly" data-premium-placement="plan-yearly" data-copy="chooseYearly">Skaffa 12 månader</a>
         </article>
       </div>
+      <p class="plan-saving" data-copy="yearlySaving" data-yearly-saving>Spara 44% jämfört med 12 månadsbetalningar (35,88 $).</p>
+      <p class="checkout-next" data-copy="nextStep">Nästa steg: logga in på ARVIO och betala sedan på Ko-fi med samma e-postadress.</p>
       <p class="checkout-note" data-copy="checkoutNote">Du betalar via Ko-fi i amerikanska dollar; din bank räknar om beloppet automatiskt. Använd samma e-postadress som för ditt ARVIO-konto.</p>
       <p class="refund"><span data-copy="refund">Fungerar det inte på din enhet? Skriv till oss inom 7 dagar så får du tillbaka hela beloppet.</span> <a href="https://discord.gg/UavuEYMfQ4" data-copy="refundLink">Skriv till oss på Discord</a></p>
       <p class="manage"><a href="https://ko-fi.com/arvio/tiers" data-premium-placement="manage-membership" data-copy="manage">Hantera medlemskap på Ko-fi</a></p>
@@ -88,7 +92,7 @@
       <figure><a href="/premium/images/homeserver.png"><img loading="lazy" src="/premium/images/homeserver.png" width="1920" height="1080" alt="ARVIO Web — Homeserver"></a><figcaption><h2 data-copy="server">Hemmaserver</h2><p data-copy="serverBody">Ta in ditt Jellyfin-, Plex-, Emby- eller Silo-bibliotek i samma välbekanta gränssnitt.</p></figcaption></figure>
       <figure><a href="/premium/images/sports.png"><img loading="lazy" src="/premium/images/sports.png" width="1920" height="1080" alt="ARVIO Web — Sports"></a><figcaption><h2 data-copy="sports">Sport</h2><p data-copy="sportsBody">Utforska sportevenemang och hitta källor från dina anslutna tjänster.</p></figcaption></figure>
     </section>
-    <section class="support-panel"><div><p class="eyebrow">ARVIO PREMIUM</p><h2 data-copy="benefitExplore">Titta runt först. Du betalar först när du trycker på Spela.</h2><p data-copy="fromPrice">2,99 $/månad, eller 20 $ för 12 månader.</p><p class="supports" data-copy="supports">Ditt medlemskap stöder utvecklingen.</p></div><div class="support-action"><a class="button membership-button" href="https://web.arvio.tv/" data-copy="open" data-premium-placement="support-membership">Öppna ARVIO Web</a><a class="secondary" href="#plans" data-copy="comparePlans">Jämför abonnemang</a></div></section>
+    <section class="support-panel"><div><p class="eyebrow">ARVIO PREMIUM</p><h2 data-copy="benefitExplore">Utforska ARVIO Web gratis. Premium krävs för uppspelning.</h2><p data-copy="fromPrice" data-plan-price-summary>2,99 $/månad, eller 20 $ för 12 månader.</p><p class="supports" data-copy="supports">Ditt medlemskap stöder utvecklingen.</p></div><div class="support-action"><a class="button membership-button" href="#plans" data-copy="viewPlans">Se Premium-alternativ</a><a class="secondary" href="https://web.arvio.tv/" data-copy="preview" data-premium-placement="support-membership">Utforska ARVIO Web</a></div></section>
     <footer><p data-copy="notice">ARVIO är en mediehubb för källor som du själv konfigurerar. Katalogposter ger ingen rätt att titta på innehållet. Anslut bara tjänster och media som du har behörighet att använda.</p><nav><a href="/arvio-iphone-ipad/">iPhone &amp; iPad guide</a><a href="https://github.com/ProdigyV21/ARVIO/blob/main/web/README.md">GitHub · Self-hosting</a><a href="https://discord.gg/UavuEYMfQ4">Discord</a><a href="https://web.arvio.tv">ARVIO Web</a></nav></footer>
   </main>
 </body>

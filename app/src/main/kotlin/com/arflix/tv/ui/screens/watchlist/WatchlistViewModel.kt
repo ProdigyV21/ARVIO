@@ -266,8 +266,12 @@ class WatchlistViewModel @Inject constructor(
                 val provider = when (list.provider) {
                     PersonalListsRepository.Provider.TRAKT -> TrackerLibraryProvider.TRAKT
                     PersonalListsRepository.Provider.MDBLIST -> TrackerLibraryProvider.MDBLIST
+                    PersonalListsRepository.Provider.WETRAKR -> TrackerLibraryProvider.WETRAKR
                 }
-                val sourceId = WatchlistSourceItem.TrackerList(provider, list.id, list.title).id
+                val listKey = if (list.provider == PersonalListsRepository.Provider.WETRAKR) {
+                    com.arflix.tv.data.repository.wetrakr.WeTrakrLists.LIST_KEY_PREFIX + list.id
+                } else list.id
+                val sourceId = WatchlistSourceItem.TrackerList(provider, listKey, list.title).id
                 sourceItemsCache.remove(sourceId)
                 sourcePageStates.remove(sourceId)
                 if (_uiState.value.selectedSourceId == sourceId) loadActiveSourceItems(forceRefresh = true)
@@ -412,6 +416,14 @@ class WatchlistViewModel @Inject constructor(
             if (weTrakrConnected) {
                 listOf("planning" to "Watchlist", "watching" to "Watching", "watched" to "Watched", "hold" to "On hold", "dropped" to "Dropped").forEach { (key, title) ->
                     add(WatchlistSourceItem.TrackerList(provider = TrackerLibraryProvider.WETRAKR, listKey = key, title = title))
+                }
+                // The user's own WeTrakr lists, after the status lists.
+                runCatching { personalListsRepository.weTrakrLibraryLists() }.getOrDefault(emptyList()).forEach { list ->
+                    add(WatchlistSourceItem.TrackerList(
+                        provider = TrackerLibraryProvider.WETRAKR,
+                        listKey = com.arflix.tv.data.repository.wetrakr.WeTrakrLists.LIST_KEY_PREFIX + list.id,
+                        title = list.name
+                    ))
                 }
             }
             // A lost session keeps its Watchlist entry, which then explains that Trakt needs
@@ -902,7 +914,15 @@ class WatchlistViewModel @Inject constructor(
                                     ?.let { personalListsRepository.mdbListItems(it) }
                                     .orEmpty()
                             }
-                            TrackerLibraryProvider.WETRAKR -> weTrakr.getLibraryItems(activeSource.listKey, forceRefresh)
+                            TrackerLibraryProvider.WETRAKR -> {
+                                val prefix = com.arflix.tv.data.repository.wetrakr.WeTrakrLists.LIST_KEY_PREFIX
+                                if (activeSource.listKey.startsWith(prefix)) {
+                                    activeSource.listKey.removePrefix(prefix).toLongOrNull()
+                                        ?.let { personalListsRepository.weTrakrListItems(it) }.orEmpty()
+                                } else {
+                                    weTrakr.getLibraryItems(activeSource.listKey, forceRefresh)
+                                }
+                            }
                             TrackerLibraryProvider.SIMKL -> simklSyncService.getLibraryItems(
                                 status = activeSource.listKey,
                                 forceRefresh = forceRefresh

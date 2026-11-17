@@ -2130,6 +2130,17 @@
     <string name="youtube_source_row_searching">מחפש ביוטיוב…</string>
     <string name="youtube_source_row_none">לא נמצאו ביוטיוב סרטונים של 5 דקות ומעלה — יש לבחור כדי לחפש שוב</string>
     <string name="youtube_source_row_failed">יוטיוב לא ענה — יש לבחור כדי לנסות שוב</string>
+
+    <!-- Type on the phone (QR in TV text dialogs) -->
+    <string name="phone_input_button">שימוש בטלפון</string>
+    <string name="phone_input_button_hide">הסתרת קוד הטלפון</string>
+    <string name="phone_input_qr_title">📱 מהטלפון</string>
+    <string name="phone_input_qr_hint">סרקו כדי להקליד או להדביק בטלפון.</string>
+    <string name="phone_input_page_hint">מה שתשלחו יופיע בטלוויזיה. לחצו שם OK כדי לשמור.</string>
+    <string name="phone_input_page_send">שליחה לטלוויזיה</string>
+    <string name="phone_input_page_sent">נשלח ✓ — לחצו OK בטלוויזיה.</string>
+    <string name="phone_input_page_not_sent">לא נשלח</string>
+    <string name="phone_input_page_expired">הקוד פג — סרקו שוב את קוד ה-QR בטלוויזיה.</string>
     <string name="service_home_top10_series">10 הסדרות המובילות ב-%1$s</string>
     <string name="service_home_top10_movies">10 הסרטים המובילים ב-%1$s</string>
     <string name="service_home_new">חדש ב-%1$s</string>

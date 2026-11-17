@@ -13,7 +13,8 @@ for (const [key, dir] of Object.entries(homes)) {
     const locale = JSON.parse(fs.readFileSync(path.join(root, 'scripts/guide-locales', `${key}.json`), 'utf8')).locale;
     assert.match(html, /<div class="actions" id="hero-actions"><a class="button hero-apk" href="https:\/\/play\.google\.com\//);
     assert.match(html, new RegExp(`<a class="button secondary hero-web" href="/${dir}/premium/" data-premium-placement="hero-membership">`));
-    assert.ok(html.includes(`<p class="hero-price-note" hidden>${locale.priceNote}</p>`), 'price note in the page language');
+    assert.ok(html.includes(`<p class="hero-price-note" data-premium-pricing-home data-device-price-summary hidden>${locale.priceNote}</p>`), 'regional price summary retains the page language and starts hidden');
+    assert.match(html, /<script defer src="\/assets\/premium-pricing\.js\?v=1"><\/script>/, 'shared country-based pricing is loaded');
     assert.match(html, /if\(\/Android\/i\.test\(u\+' '\+p\)\)return;/, 'Android keeps the app first');
     assert.match(html, /a\.insertBefore\(web,apk\)/);
   });

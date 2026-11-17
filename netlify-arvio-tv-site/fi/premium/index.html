@@ -26,8 +26,9 @@
   <meta property="og:description" content="Ylläpidetty ARVIO Web. Kirjaudu ARVIO-tililläsi ja jatka siitä, mihin jäit. 2,99 $/kk tai 20 $ 12 kuukaudelta.">
   <meta property="og:image" content="https://arvio.tv/premium/images/home.png">
   <meta name="twitter:card" content="summary_large_image">
-  <link rel="stylesheet" href="/premium/premium.css?v=8">
-  <script defer src="/premium/premium.js?v=5"></script>
+  <link rel="stylesheet" href="/premium/premium.css?v=9">
+  <script defer src="/assets/premium-pricing.js?v=1"></script>
+  <script defer src="/premium/premium.js?v=6"></script>
 <script defer src="/assets/premium-journey.js?v=2"></script>
 <script defer src="/assets/promo-video.js?v=2"></script>
 </head>
@@ -41,13 +42,13 @@
           <li data-copy="benefitSync">Profiilit, katselulista ja edistyminen synkronoidaan ARVIO Cloudin kautta</li>
           <li data-copy="benefitLive">Live-TV ja ohjelmaopas</li>
           <li data-copy="benefitDownloads">Lataukset tietokoneella</li>
-          <li data-copy="benefitExplore">Katsele ensin rauhassa. Maksat vasta, kun painat Toista.</li>
+          <li data-copy="benefitExplore">Tutustu ARVIO Webiin ilmaiseksi. Toisto edellyttää Premiumia.</li>
         </ul>
         <div class="membership-actions">
-          <a class="button membership-button" href="https://web.arvio.tv/" data-premium-placement="hero-membership"><span data-copy="open">Avaa ARVIO Web</span><span aria-hidden="true">↗</span></a>
-          <a class="button preview-button" href="#plans" data-copy="comparePlans">Vertaa tilauksia</a>
+          <a class="button membership-button" href="#plans" data-copy="viewPlans">Katso Premium-vaihtoehdot</a>
+          <a class="button preview-button" href="https://web.arvio.tv/" data-premium-placement="hero-membership" data-copy="preview">Tutustu ARVIO Webiin</a>
         </div>
-        <p class="membership-note" data-copy="fromPrice">2,99 $/kk tai 20 $ 12 kuukaudelta.</p>
+        <p class="membership-note" data-copy="fromPrice" data-plan-price-summary>2,99 $/kk tai 20 $ 12 kuukaudelta.</p>
       </div>
       <figure class="hero-video">
         <video id="promo-video" class="promo-video" width="1280" height="720" controls muted playsinline preload="none" poster="/assets/promo/arvio-premium-poster.webp" src="/assets/promo/arvio-tour-web.mp4" data-src="/assets/promo/arvio-tour-web.mp4" aria-label="ARVIO app tour"></video>
@@ -56,21 +57,24 @@
     </section>
     <section class="plans-section" id="plans" aria-labelledby="plans-title">
       <h2 id="plans-title" data-copy="plansTitle">Kaksi vaihtoehtoa. Sama ARVIO Web.</h2>
+      <p class="plan-intro" data-copy="planIntro">Molemmat vaihtoehdot sisältävät ylläpidetyn ARVIO Webin. Yhdistä omat lähteesi; mediasisältöä ei ole mukana.</p>
       <div class="plans">
         <article class="plan">
           <h3 data-copy="monthly">Kuukausittain</h3>
           <p class="plan-price"><strong>$2.99</strong> <span data-copy="period">/ kk</span></p>
           <p class="plan-note" data-copy="membershipTerms">Kuukausijäsenyys. Peru milloin tahansa Ko-fin kautta.</p>
-          <a class="button plan-button" href="https://web.arvio.tv/" data-premium-placement="plan-monthly" data-copy="open">Avaa ARVIO Web</a>
+          <a class="button plan-button" href="https://web.arvio.tv/?premium_plan=monthly" data-premium-placement="plan-monthly" data-copy="chooseMonthly">Valitse kuukausimaksu</a>
         </article>
         <article class="plan plan-best">
-          <p class="plan-badge" data-copy="yearlyBadge">Edullisin · säästä 44 %</p>
+          <p class="plan-badge" data-copy="yearlyBadge" data-yearly-badge>Edullisin · säästä 44 %</p>
           <h3 data-copy="yearly">12 kuukauden passi</h3>
-          <p class="plan-price"><strong>$20</strong> <span data-copy="once">kertamaksu</span></p>
+          <p class="plan-price"><s data-yearly-was hidden>$20</s> <strong data-yearly-price>$20</strong> <span data-copy="once">kertamaksu</span></p>
           <p class="plan-note" data-copy="yearlyNote">Yksi maksu, ei automaattista uusimista</p>
-          <a class="button membership-button plan-button" href="https://web.arvio.tv/" data-premium-placement="plan-yearly" data-copy="open">Avaa ARVIO Web</a>
+          <a class="button membership-button plan-button" href="https://web.arvio.tv/?premium_plan=yearly" data-premium-placement="plan-yearly" data-copy="chooseYearly">Hanki 12 kuukautta</a>
         </article>
       </div>
+      <p class="plan-saving" data-copy="yearlySaving" data-yearly-saving>Säästä 44% verrattuna 12 kuukausimaksuun (35,88 $).</p>
+      <p class="checkout-next" data-copy="nextStep">Seuraavaksi: kirjaudu ARVIOon ja maksa sitten Ko-fissa samalla sähköpostiosoitteella.</p>
       <p class="checkout-note" data-copy="checkoutNote">Maksu tehdään Ko-fissa Yhdysvaltain dollareina; pankkisi muuntaa summan automaattisesti. Käytä samaa sähköpostiosoitetta kuin ARVIO-tililläsi.</p>
       <p class="refund"><span data-copy="refund">Eikö se toimi laitteellasi? Ota yhteyttä 7 päivän kuluessa, niin palautamme koko summan.</span> <a href="https://discord.gg/UavuEYMfQ4" data-copy="refundLink">Ota yhteyttä Discordissa</a></p>
       <p class="manage"><a href="https://ko-fi.com/arvio/tiers" data-premium-placement="manage-membership" data-copy="manage">Hallinnoi jäsenyyttä Ko-fissa</a></p>
@@ -88,7 +92,7 @@
       <figure><a href="/premium/images/homeserver.png"><img loading="lazy" src="/premium/images/homeserver.png" width="1920" height="1080" alt="ARVIO Web — Homeserver"></a><figcaption><h2 data-copy="server">Kotipalvelin</h2><p data-copy="serverBody">Tuo Jellyfin-, Plex-, Emby- tai Silo-kirjastosi samaan tuttuun käyttöliittymään.</p></figcaption></figure>
       <figure><a href="/premium/images/sports.png"><img loading="lazy" src="/premium/images/sports.png" width="1920" height="1080" alt="ARVIO Web — Sports"></a><figcaption><h2 data-copy="sports">Urheilu</h2><p data-copy="sportsBody">Selaa urheilutapahtumia ja löydä lähteitä yhdistämistäsi palveluista.</p></figcaption></figure>
     </section>
-    <section class="support-panel"><div><p class="eyebrow">ARVIO PREMIUM</p><h2 data-copy="benefitExplore">Katsele ensin rauhassa. Maksat vasta, kun painat Toista.</h2><p data-copy="fromPrice">2,99 $/kk tai 20 $ 12 kuukaudelta.</p><p class="supports" data-copy="supports">Jäsenyytesi tukee kehitystä.</p></div><div class="support-action"><a class="button membership-button" href="https://web.arvio.tv/" data-copy="open" data-premium-placement="support-membership">Avaa ARVIO Web</a><a class="secondary" href="#plans" data-copy="comparePlans">Vertaa tilauksia</a></div></section>
+    <section class="support-panel"><div><p class="eyebrow">ARVIO PREMIUM</p><h2 data-copy="benefitExplore">Tutustu ARVIO Webiin ilmaiseksi. Toisto edellyttää Premiumia.</h2><p data-copy="fromPrice" data-plan-price-summary>2,99 $/kk tai 20 $ 12 kuukaudelta.</p><p class="supports" data-copy="supports">Jäsenyytesi tukee kehitystä.</p></div><div class="support-action"><a class="button membership-button" href="#plans" data-copy="viewPlans">Katso Premium-vaihtoehdot</a><a class="secondary" href="https://web.arvio.tv/" data-copy="preview" data-premium-placement="support-membership">Tutustu ARVIO Webiin</a></div></section>
     <footer><p data-copy="notice">ARVIO on mediakeskus itse määrittämillesi lähteille. Luettelon kohteet eivät anna oikeutta katsoa sisältöä. Yhdistä vain palveluita ja mediaa, joiden käyttöön sinulla on lupa.</p><nav><a href="/arvio-iphone-ipad/">iPhone &amp; iPad guide</a><a href="https://github.com/ProdigyV21/ARVIO/blob/main/web/README.md">GitHub · Self-hosting</a><a href="https://discord.gg/UavuEYMfQ4">Discord</a><a href="https://web.arvio.tv">ARVIO Web</a></nav></footer>
   </main>
 </body>

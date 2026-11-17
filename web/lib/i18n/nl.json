@@ -80,5 +80,22 @@
   "TV release": "TV-release",
   "Release": "Release",
   "Episode": "Aflevering",
-  "Release schedule incomplete": "Releaseschema onvolledig"
+  "Release schedule incomplete": "Releaseschema onvolledig",
+  "You already have access. There is no need to pay again.": "Je hebt al toegang. Je hoeft niet opnieuw te betalen.",
+  "Open ARVIO Web": "ARVIO Web openen",
+  "Membership steps": "Stappen voor je lidmaatschap",
+  "Account": "Account",
+  "Payment": "Betaling",
+  "Your selected Premium plan": "Je gekozen Premium-lidmaatschap",
+  "Your plan is ready. Complete payment securely on Ko-fi, then return here.": "Je keuze staat klaar. Betaal veilig via Ko-fi en keer daarna hier terug.",
+  "Sign in or create your ARVIO account, then complete payment on Ko-fi.": "Log in of maak een ARVIO-account aan en betaal daarna via Ko-fi.",
+  "Your selected plan": "Je gekozen lidmaatschap",
+  "12-month pass": "Jaarpas",
+  "Monthly membership": "Maandelijks lidmaatschap",
+  "Checking your price…": "Je prijs controleren…",
+  "Save {value0} vs. 12 monthly payments of $2.99 ($35.88).": "Bespaar {value0} ten opzichte van 12 maandelijkse betalingen van $2.99 ($35.88).",
+  "24/7 hosted ARVIO Web for your supported browsers.": "24/7 gehost ARVIO Web voor je ondersteunde browsers.",
+  "This plan is unavailable right now. Please try again shortly.": "Dit lidmaatschap is momenteel niet beschikbaar. Probeer het straks opnieuw.",
+  "Continue to Ko-fi · {value0}": "Verder naar Ko-fi · {value0}",
+  "Keep exploring": "Verder verkennen"
 }

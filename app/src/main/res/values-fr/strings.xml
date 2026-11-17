@@ -1140,4 +1140,15 @@
     <string name="live_menu_hide_category">Masquer la catégorie</string>
     <string name="live_menu_unhide_category">Afficher la catégorie</string>
     <string name="ratings">Notes des Épisodes</string>
+
+    <!-- Type on the phone (QR in TV text dialogs) -->
+    <string name="phone_input_button">Utiliser le téléphone</string>
+    <string name="phone_input_button_hide">Masquer le code du téléphone</string>
+    <string name="phone_input_qr_title">📱 Depuis le téléphone</string>
+    <string name="phone_input_qr_hint">Scannez pour le saisir ou le coller sur votre téléphone.</string>
+    <string name="phone_input_page_hint">Ce que vous envoyez s’affiche sur la TV. Appuyez sur OK pour l’enregistrer.</string>
+    <string name="phone_input_page_send">Envoyer à la TV</string>
+    <string name="phone_input_page_sent">Envoyé ✓ — appuyez sur OK sur la TV.</string>
+    <string name="phone_input_page_not_sent">Non envoyé</string>
+    <string name="phone_input_page_expired">Ce code a expiré — scannez à nouveau le QR code sur la TV.</string>
 </resources>

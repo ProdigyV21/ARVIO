@@ -544,6 +544,14 @@ fun AddRepoDialog(
                         )
                     )
 
+                    // On a TV, on demand: or paste the repository link on the phone.
+                    Spacer(modifier = Modifier.height(12.dp))
+                    com.arflix.tv.ui.components.PhoneInputOnDemand(
+                        title = stringResource(R.string.plugin_screen_add_repo_dialog_title),
+                        fields = listOf(com.arflix.tv.server.PhoneInputServer.Field(stringResource(R.string.plugin_screen_repo_url), value)),
+                        onValues = { values -> values.firstOrNull()?.trim()?.takeIf { it.isNotEmpty() }?.let { value = it } },
+                    )
+
                     Spacer(modifier = Modifier.height(20.dp))
 
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {

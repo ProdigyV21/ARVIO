@@ -26,8 +26,9 @@
   <meta property="og:description" content="Gehostetes ARVIO Web. Melde dich mit deinem ARVIO-Konto an und mach dort weiter, wo du aufgehört hast. 2,99 $ pro Monat oder 20 $ für 12 Monate.">
   <meta property="og:image" content="https://arvio.tv/premium/images/home.png">
   <meta name="twitter:card" content="summary_large_image">
-  <link rel="stylesheet" href="/premium/premium.css?v=8">
-  <script defer src="/premium/premium.js?v=5"></script>
+  <link rel="stylesheet" href="/premium/premium.css?v=9">
+  <script defer src="/assets/premium-pricing.js?v=1"></script>
+  <script defer src="/premium/premium.js?v=6"></script>
 <script defer src="/assets/premium-journey.js?v=2"></script>
 <script defer src="/assets/promo-video.js?v=2"></script>
 </head>
@@ -41,13 +42,13 @@
           <li data-copy="benefitSync">Profile, Merkliste und Fortschritt über ARVIO Cloud synchronisiert</li>
           <li data-copy="benefitLive">Live-TV mit Programmführer</li>
           <li data-copy="benefitDownloads">Downloads am Computer</li>
-          <li data-copy="benefitExplore">Sieh dich in Ruhe um. Du zahlst erst, wenn du auf Play drückst.</li>
+          <li data-copy="benefitExplore">Sieh dir ARVIO Web kostenlos an. Für die Wiedergabe ist Premium erforderlich.</li>
         </ul>
         <div class="membership-actions">
-          <a class="button membership-button" href="https://web.arvio.tv/" data-premium-placement="hero-membership"><span data-copy="open">ARVIO Web öffnen</span><span aria-hidden="true">↗</span></a>
-          <a class="button preview-button" href="#plans" data-copy="comparePlans">Tarife vergleichen</a>
+          <a class="button membership-button" href="#plans" data-copy="viewPlans">Premium-Tarife ansehen</a>
+          <a class="button preview-button" href="https://web.arvio.tv/" data-premium-placement="hero-membership" data-copy="preview">ARVIO Web ansehen</a>
         </div>
-        <p class="membership-note" data-copy="fromPrice">2,99 $ pro Monat oder 20 $ für 12 Monate.</p>
+        <p class="membership-note" data-copy="fromPrice" data-plan-price-summary>2,99 $ pro Monat oder 20 $ für 12 Monate.</p>
       </div>
       <figure class="hero-video">
         <video id="promo-video" class="promo-video" width="1280" height="720" controls muted playsinline preload="none" poster="/assets/promo/arvio-premium-poster.webp" src="/assets/promo/arvio-tour-web.mp4" data-src="/assets/promo/arvio-tour-web.mp4" aria-label="ARVIO app tour"></video>
@@ -56,21 +57,24 @@
     </section>
     <section class="plans-section" id="plans" aria-labelledby="plans-title">
       <h2 id="plans-title" data-copy="plansTitle">Zwei Tarife. Dasselbe ARVIO Web.</h2>
+      <p class="plan-intro" data-copy="planIntro">Beide Tarife enthalten gehostetes ARVIO Web. Verbinde deine eigenen Quellen; Medieninhalte sind nicht enthalten.</p>
       <div class="plans">
         <article class="plan">
           <h3 data-copy="monthly">Monatlich</h3>
           <p class="plan-price"><strong>$2.99</strong> <span data-copy="period">/ Monat</span></p>
           <p class="plan-note" data-copy="membershipTerms">Monatliche Mitgliedschaft. Jederzeit über Ko-fi kündbar.</p>
-          <a class="button plan-button" href="https://web.arvio.tv/" data-premium-placement="plan-monthly" data-copy="open">ARVIO Web öffnen</a>
+          <a class="button plan-button" href="https://web.arvio.tv/?premium_plan=monthly" data-premium-placement="plan-monthly" data-copy="chooseMonthly">Monatlich wählen</a>
         </article>
         <article class="plan plan-best">
-          <p class="plan-badge" data-copy="yearlyBadge">Bester Preis · 44 % sparen</p>
+          <p class="plan-badge" data-copy="yearlyBadge" data-yearly-badge>Bester Preis · 44 % sparen</p>
           <h3 data-copy="yearly">12-Monats-Pass</h3>
-          <p class="plan-price"><strong>$20</strong> <span data-copy="once">einmalig</span></p>
+          <p class="plan-price"><s data-yearly-was hidden>$20</s> <strong data-yearly-price>$20</strong> <span data-copy="once">einmalig</span></p>
           <p class="plan-note" data-copy="yearlyNote">Eine Zahlung, keine automatische Verlängerung</p>
-          <a class="button membership-button plan-button" href="https://web.arvio.tv/" data-premium-placement="plan-yearly" data-copy="open">ARVIO Web öffnen</a>
+          <a class="button membership-button plan-button" href="https://web.arvio.tv/?premium_plan=yearly" data-premium-placement="plan-yearly" data-copy="chooseYearly">12 Monate sichern</a>
         </article>
       </div>
+      <p class="plan-saving" data-copy="yearlySaving" data-yearly-saving>Spare 44% gegenüber 12 monatlichen Zahlungen (35,88 $).</p>
+      <p class="checkout-next" data-copy="nextStep">Nächster Schritt: Melde dich bei ARVIO an und bezahle auf Ko-fi mit derselben E-Mail-Adresse.</p>
       <p class="checkout-note" data-copy="checkoutNote">Bezahlt wird über Ko-fi in US-Dollar; deine Bank rechnet den Betrag automatisch um. Nutze dieselbe E-Mail-Adresse wie für dein ARVIO-Konto.</p>
       <p class="refund"><span data-copy="refund">Funktioniert es auf deinem Gerät nicht? Schreib uns innerhalb von 7 Tagen und du bekommst den vollen Betrag zurück.</span> <a href="https://discord.gg/UavuEYMfQ4" data-copy="refundLink">Schreib uns auf Discord</a></p>
       <p class="manage"><a href="https://ko-fi.com/arvio/tiers" data-premium-placement="manage-membership" data-copy="manage">Mitgliedschaft auf Ko-fi verwalten</a></p>
@@ -88,7 +92,7 @@
       <figure><a href="/premium/images/homeserver.png"><img loading="lazy" src="/premium/images/homeserver.png" width="1920" height="1080" alt="ARVIO Web — Homeserver"></a><figcaption><h2 data-copy="server">Heimserver</h2><p data-copy="serverBody">Hol deine Jellyfin-, Plex-, Emby- oder Silo-Mediathek in dieselbe vertraute Oberfläche.</p></figcaption></figure>
       <figure><a href="/premium/images/sports.png"><img loading="lazy" src="/premium/images/sports.png" width="1920" height="1080" alt="ARVIO Web — Sports"></a><figcaption><h2 data-copy="sports">Sport</h2><p data-copy="sportsBody">Entdecke Sportereignisse und finde passende Quellen in deinen verbundenen Diensten.</p></figcaption></figure>
     </section>
-    <section class="support-panel"><div><p class="eyebrow">ARVIO PREMIUM</p><h2 data-copy="benefitExplore">Sieh dich in Ruhe um. Du zahlst erst, wenn du auf Play drückst.</h2><p data-copy="fromPrice">2,99 $ pro Monat oder 20 $ für 12 Monate.</p><p class="supports" data-copy="supports">Deine Mitgliedschaft unterstützt die Entwicklung.</p></div><div class="support-action"><a class="button membership-button" href="https://web.arvio.tv/" data-copy="open" data-premium-placement="support-membership">ARVIO Web öffnen</a><a class="secondary" href="#plans" data-copy="comparePlans">Tarife vergleichen</a></div></section>
+    <section class="support-panel"><div><p class="eyebrow">ARVIO PREMIUM</p><h2 data-copy="benefitExplore">Sieh dir ARVIO Web kostenlos an. Für die Wiedergabe ist Premium erforderlich.</h2><p data-copy="fromPrice" data-plan-price-summary>2,99 $ pro Monat oder 20 $ für 12 Monate.</p><p class="supports" data-copy="supports">Deine Mitgliedschaft unterstützt die Entwicklung.</p></div><div class="support-action"><a class="button membership-button" href="#plans" data-copy="viewPlans">Premium-Tarife ansehen</a><a class="secondary" href="https://web.arvio.tv/" data-copy="preview" data-premium-placement="support-membership">ARVIO Web ansehen</a></div></section>
     <footer><p data-copy="notice">ARVIO ist ein Media-Hub für Quellen, die du selbst einrichtest. Katalogeinträge verleihen keine Rechte zum Ansehen. Verbinde nur Dienste und Medien, die du nutzen darfst.</p><nav><a href="/arvio-iphone-ipad/">iPhone &amp; iPad guide</a><a href="https://github.com/ProdigyV21/ARVIO/blob/main/web/README.md">GitHub · Self-hosting</a><a href="https://discord.gg/UavuEYMfQ4">Discord</a><a href="https://web.arvio.tv">ARVIO Web</a></nav></footer>
   </main>
 </body>

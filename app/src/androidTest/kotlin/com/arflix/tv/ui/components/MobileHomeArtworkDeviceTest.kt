@@ -16,10 +16,13 @@ import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.unit.dp
 import androidx.test.core.app.ApplicationProvider
@@ -34,6 +37,8 @@ import coil.request.Options
 import com.arflix.tv.data.model.Category
 import com.arflix.tv.data.model.MediaItem
 import com.arflix.tv.ui.screens.home.MobileHeroCarousel
+import com.arflix.tv.ui.screens.details.DetailsContent
+import com.arflix.tv.ui.focus.FocusSection
 import com.arflix.tv.ui.theme.BackgroundDark
 import com.arflix.tv.util.DeviceType
 import com.arflix.tv.util.LocalDeviceType
@@ -66,6 +71,7 @@ class MobileHomeArtworkDeviceTest {
                     if (data.scheme != "fixture") return null
                     return Fetcher {
                         val name = data.host.orEmpty()
+                        if (name == "broken-logo") throw java.io.IOException("Fixture logo unavailable")
                         requested.add(name)
                         val bitmap = when (name) {
                             "poster" -> Bitmap.createBitmap(80, 120, Bitmap.Config.ARGB_8888).apply {
@@ -201,5 +207,50 @@ class MobileHomeArtworkDeviceTest {
         assertCentered("mobile_hero_metadata")
         assertTrue(compose.onAllNodesWithTag("mobile_hero_logo", useUnmergedTree = true)
             .fetchSemanticsNodes().isEmpty())
+    }
+
+    @Test fun failedClearlogoShowsTheTitleAndANewLogoCanStillLoad() {
+        fixtureLoader()
+        val url = mutableStateOf("fixture://broken-logo")
+        compose.setContent {
+            Box(Modifier.width(320.dp).height(480.dp).testTag("mobile_hero_pager")) {
+                MobileHeroBanner("", "A readable title", listOf("Drama"), "2026", "8.4",
+                    logoUrl = url.value, immersive = true, modifier = Modifier.fillMaxSize())
+            }
+        }
+        compose.waitUntil(8_000) {
+            compose.onAllNodesWithTag("mobile_hero_title").fetchSemanticsNodes().isNotEmpty()
+        }
+        compose.onNodeWithTag("mobile_hero_title").assertIsDisplayed()
+        assertCentered("mobile_hero_title")
+        compose.runOnIdle { url.value = "fixture://logo" }
+        compose.waitUntil(8_000) { requested.contains("logo") }
+        compose.onNodeWithTag("mobile_hero_logo").assertIsDisplayed()
+    }
+
+    @Test fun detailsAlsoRecoversFromAFailedClearlogo() {
+        fixtureLoader()
+        val url = mutableStateOf("fixture://broken-logo")
+        compose.setContent {
+            CompositionLocalProvider(LocalDeviceType provides DeviceType.PHONE) {
+                Box(Modifier.width(320.dp).height(580.dp)) {
+                    DetailsContent(MediaItem(1, "A readable title"), logoUrl = url.value,
+                        episodes = emptyList(), totalSeasons = 0, currentSeason = 1,
+                        cast = emptyList(), reviews = emptyList(), similar = emptyList(),
+                        similarLogoUrls = emptyMap(), focusedSection = FocusSection.BUTTONS,
+                        buttonIndex = 0, episodeIndex = 0, ratingsIndex = 0, seasonIndex = 0,
+                        castIndex = 0, reviewIndex = 0, similarIndex = 0,
+                        isInWatchlist = false, isMobile = true)
+                }
+            }
+        }
+        compose.waitUntil(8_000) {
+            compose.onAllNodes(androidx.compose.ui.test.hasText("A readable title"))
+                .fetchSemanticsNodes().isNotEmpty()
+        }
+        compose.onNodeWithText("A readable title").assertIsDisplayed()
+        compose.runOnIdle { url.value = "fixture://logo" }
+        compose.waitUntil(8_000) { requested.contains("logo") }
+        compose.onNodeWithContentDescription("A readable title").assertIsDisplayed()
     }
 }

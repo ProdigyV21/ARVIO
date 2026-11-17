@@ -15,6 +15,7 @@ import com.arflix.tv.network.IptvProviderAccount
 import com.arflix.tv.network.IptvStreamSession
 import com.arflix.tv.network.IptvStreamSessionTable
 import com.arflix.tv.network.MAX_IPTV_CLOSE_JOIN_MS
+import com.arflix.tv.ui.screens.player.safePlaybackHeaders
 import com.arflix.tv.ui.screens.tv.live.IPTV_HLS_CHUNKLESS_PREPARATION
 import com.arflix.tv.ui.screens.tv.live.iptvExtractorsFactory
 import com.arflix.tv.ui.screens.tv.live.iptvHlsExtractorFactory
@@ -104,20 +105,33 @@ internal class HomeIptvPreviewSessions(
     }
 }
 
-/** The hero's client for counted previews; collection videos and untagged previews keep the plain client. */
+/** The hero's client for channel previews, counted or not; collection videos keep the plain client. */
 internal fun homeHeroIptvClient(heroClient: OkHttpClient): OkHttpClient =
     heroClient.newBuilder().addInterceptor(IptvPlaybackConnections()).build()
 
-/** Every request of a counted preview, HLS playlists and segments included, carries its session. */
+/**
+ * The headers a channel preview sends: the playlist's own for that channel (a CDN may refuse a
+ * request without its Referer or User-Agent), as Live TV sends them, and the app's User-Agent
+ * only when the playlist names none.
+ */
+internal fun homeIptvPreviewHeaders(userAgent: String, channelHeaders: Map<String, String>): Map<String, String> {
+    val channel = channelHeaders.safePlaybackHeaders()
+    return if (channel.keys.any { it.equals("User-Agent", ignoreCase = true) }) channel else mapOf("User-Agent" to userAgent) + channel
+}
+
+/**
+ * Every request of a channel preview, HLS playlists and segments included, carries the channel's
+ * headers and, on a counted account, its session.
+ */
 internal fun homeIptvPreviewSource(
     context: Context,
     iptvClient: OkHttpClient,
-    userAgent: String,
-    session: IptvStreamSession,
+    headers: Map<String, String>,
+    session: IptvStreamSession?,
     item: MediaItem,
     useHls: Boolean,
 ): MediaSource {
-    val http = OkHttpDataSource.Factory(session.callFactory(iptvClient)).setUserAgent(userAgent)
+    val http = homeIptvPreviewDataSource(iptvClient, headers, session)
     return if (useHls) {
         HlsMediaSource.Factory(http)
             .setAllowChunklessPreparation(IPTV_HLS_CHUNKLESS_PREPARATION)
@@ -127,3 +141,11 @@ internal fun homeIptvPreviewSource(
         DefaultMediaSourceFactory(context, iptvExtractorsFactory()).setDataSourceFactory(http).createMediaSource(item)
     }
 }
+
+/** No setUserAgent: it would replace a User-Agent the playlist set for this channel. */
+internal fun homeIptvPreviewDataSource(
+    iptvClient: OkHttpClient,
+    headers: Map<String, String>,
+    session: IptvStreamSession?,
+): OkHttpDataSource.Factory =
+    OkHttpDataSource.Factory(session?.callFactory(iptvClient) ?: iptvClient).setDefaultRequestProperties(headers)

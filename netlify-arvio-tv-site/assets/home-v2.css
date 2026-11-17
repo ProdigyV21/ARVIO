@@ -98,8 +98,24 @@
 .hero-store img{display:block;width:100%;height:auto}
 .hero-store:focus-visible{outline:2px solid var(--mint);outline-offset:2px}
 @media(max-width:850px){.hero-store{margin-inline:auto}}
+.hero-v2 .hero-copy{min-width:0}
+.hero-downloads{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-items:center;gap:16px;width:384px;max-width:100%;margin-top:20px;margin-bottom:12px}
+.hero-downloads>a{position:relative;display:grid;place-items:center;width:100%;aspect-ratio:564/168;min-height:48px;margin:0;border-radius:6px}
+/* The unchanged 646x250 Play asset has 41px of clearspace around its 564x168 badge.
+   Keep that space visible, while matching the two actual badge faces exactly. */
+.hero-downloads .hero-store img{position:absolute;left:50%;top:50%;width:114.5390070922%;max-width:none;height:auto;transform:translate(-50%,-50%)}
+.hero-github-badge{display:grid;place-items:center;width:100%;aspect-ratio:564/168;border:1px solid #a6a6a6;border-radius:6px;background:#000;transition:background .2s,border-color .2s}
+.hero-github-badge img{width:80%;height:auto}
+.hero-github:hover .hero-github-badge{background:#111;border-color:#d0d7de}
+@media(max-width:850px){.hero-downloads{margin-inline:auto}}
 
 /* A quiet business invitation below the main product experience. */
+.plan-price s{font-size:16px;color:var(--muted);text-decoration-thickness:1px;margin-inline-end:4px}
+.plan-price [hidden]{display:none}
+#premium .premium-copy>.plan-saving{color:var(--mint);font-size:12px;line-height:1.6;max-width:480px;margin:0 0 12px}
+#premium .premium-copy>.checkout-next{color:#c9d6ce;font-size:12px;line-height:1.6;max-width:480px;margin:0 0 12px}
+.plan .plan-button{min-height:48px}
+@media(max-width:360px){.plans{grid-template-columns:1fr;gap:28px}.plan{padding:24px 20px 18px}.plan-note{font-size:12px}.plan .plan-button{font-size:14px}}
 .sponsor-invite{padding-block:8px 64px}
 .sponsor-invite-panel{display:flex;align-items:center;justify-content:space-between;gap:48px;border:1px solid #9efbd51c;border-radius:18px;padding:36px 40px;background:#0c1210}
 .sponsor-invite-copy{max-width:650px;min-width:0}

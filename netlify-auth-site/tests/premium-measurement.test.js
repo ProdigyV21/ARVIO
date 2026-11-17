@@ -104,7 +104,7 @@ test('valid marketing tags cannot alter object prototypes or corrupt counts', ()
 });
 
 test('all released checkout entry labels are counted and unknown labels remain unspecified', () => {
-  const valid = ['trial_nav', 'trial_mobile_nav', 'paywall', 'account_settings', 'account_settings_yearly', 'feature_preview',
+  const valid = ['trial_nav', 'trial_mobile_nav', 'paywall', 'account_settings', 'account_settings_yearly', 'feature_preview', 'website_monthly', 'website_yearly',
     ...['play', 'live', 'external', 'download', 'copy'].flatMap(intent => ['monthly', 'yearly'].map(plan => `explore_${intent}_${plan}`))];
   const invalid = ['explore_private_yearly', 'explore_play_daily', 'account_settings_forever', 'https://private.test/path', 'person@example.test', 'explore_play_yearly/private', '__proto__'];
   const records = [...valid, ...invalid].flatMap((entry, index) => [

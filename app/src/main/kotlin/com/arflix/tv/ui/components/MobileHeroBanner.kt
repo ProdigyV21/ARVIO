@@ -19,7 +19,10 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -70,15 +73,15 @@ internal fun MobileHeroScrim(
             0.16f to Color.Transparent,
             0.40f to Color.Transparent,
             0.52f to background.copy(alpha = 0.06f),
-            0.64f to background.copy(alpha = if (posterArtwork) 0.40f else 0.26f),
-            0.76f to background.copy(alpha = if (posterArtwork) 0.88f else 0.62f),
-            0.86f to background.copy(alpha = if (posterArtwork) 0.97f else 0.86f),
-            0.94f to background.copy(alpha = if (posterArtwork) 0.995f else 0.97f),
+            0.64f to background.copy(alpha = if (posterArtwork) 0.60f else 0.26f),
+            0.76f to background.copy(alpha = if (posterArtwork) 1f else 0.62f),
+            0.86f to background.copy(alpha = if (posterArtwork) 1f else 0.86f),
+            0.94f to background.copy(alpha = if (posterArtwork) 1f else 0.97f),
             1f to background,
         )
     }
     Box(modifier) {
-        Spacer(if (immersive) Modifier.fillMaxSize().background(immersiveScrim)
+        Spacer(if (immersive || posterArtwork) Modifier.fillMaxSize().background(immersiveScrim)
             else Modifier.fillMaxWidth().fillMaxHeight(0.65f).align(Alignment.BottomCenter).background(BottomScrim))
     }
 }
@@ -164,6 +167,7 @@ fun MobileHeroBanner(
     isPosterArtwork: Boolean = false,
 ) {
     val context = LocalContext.current
+    var logoFailed by remember(title, logoUrl) { mutableStateOf(false) }
 
     Box(
         modifier = modifier
@@ -193,7 +197,7 @@ fun MobileHeroBanner(
             verticalArrangement = Arrangement.spacedBy(if (compactContent) 4.dp else 8.dp)
         ) {
             // Element A — Logo image when available, otherwise large title text
-            if (!logoUrl.isNullOrBlank()) {
+            if (!logoUrl.isNullOrBlank() && !logoFailed) {
                 AsyncImage(
                     model = ImageRequest.Builder(context)
                         .data(logoUrl)
@@ -203,6 +207,7 @@ fun MobileHeroBanner(
                         .build(),
                     contentDescription = title,
                     contentScale = ContentScale.Fit,
+                    onError = { logoFailed = true },
                     alignment = Alignment.Center,
                     modifier = Modifier
                         .height(if (compactContent) 38.dp else 56.dp)
