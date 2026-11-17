@@ -3411,7 +3411,8 @@ class HomeViewModel @Inject constructor(
                     // Fallback: if no preinstalled loaded at all, use base/cached
                     if (preinstalled.isEmpty()) {
                         val fallback = baseCategories.ifEmpty { currentBaseCategories.ifEmpty { lastResolvedBaseCategories } }
-                        fallback.forEach { allById.putIfAbsent(it.id, it) }
+                        fallback.filterNot { isWeTrakrRecommendationRow(it.id) }
+                            .forEach { allById.putIfAbsent(it.id, it) }
                     }
 
                     // Resolve in savedCatalogs order — this is the user's configured

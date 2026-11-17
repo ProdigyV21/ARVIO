@@ -40,7 +40,7 @@ internal fun preserveExtendedCatalogRows(incoming: List<Category>, current: List
     val currentById = current.associateBy { it.id }
     val merged = incoming.map { row ->
         val visible = currentById[row.id]
-        if (row.id != "continue_watching" &&
+        if (row.id != "continue_watching" && !isWeTrakrRecommendationRow(row.id) &&
             visible != null && visible.items.size > row.items.size &&
             row.items.indices.all { index ->
                 val a = row.items[index]

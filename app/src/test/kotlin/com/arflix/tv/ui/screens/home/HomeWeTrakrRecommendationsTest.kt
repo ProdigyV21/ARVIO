@@ -86,4 +86,10 @@ class HomeWeTrakrRecommendationsTest {
         val fresh = loadWeTrakrRecommendationRows(listOf(shows, movies)) { _, _ -> empty }
         assertTrue(preserveExtendedCatalogRows(fresh, oldRows).isEmpty())
     }
+
+    @Test fun `shorter fresh recommendations replace the old single page instead of preserving stale titles`() {
+        val fresh = Category(shows.id, shows.title, listOf(item))
+        val cached = fresh.copy(items = listOf(item, item.copy(id = 20, title = "Already watched")))
+        assertSame(fresh, preserveExtendedCatalogRows(listOf(fresh), listOf(cached)).single())
+    }
 }
