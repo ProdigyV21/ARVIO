@@ -12,6 +12,8 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.ConscryptMode
 import java.net.HttpURLConnection
 import java.net.URL
+import org.json.JSONArray
+import org.json.JSONObject
 
 /** org.json is part of the Android framework, so this runs under Robolectric. */
 @RunWith(RobolectricTestRunner::class)
@@ -26,6 +28,7 @@ class PhoneInputServerTest {
         fields = listOf(
             PhoneInputServer.Field("URL", "https://example.com"),
             PhoneInputServer.Field("Key", "secret-value", secret = true),
+            PhoneInputServer.Field("EPG", GUIDES, multiline = true),
         ),
         texts = texts,
     ) { received = it }
@@ -64,16 +67,30 @@ class PhoneInputServerTest {
         assertFalse(page.contains("secret-value"))
         // The title is data inside a <script>: it must not be able to close it.
         assertFalse(page.contains("</script><b>"))
+        val config = JSONObject(page.lineSequence().first { it.startsWith("const C=") }.removePrefix("const C=").removeSuffix(";"))
+        val epg = config.getJSONArray("fields").getJSONObject(2)
+        assertTrue(epg.getBoolean("multiline"))
+        assertEquals(GUIDES, epg.getString("value"))
     }
 
     @Test fun submittedValuesReachTheDialogInFieldOrder() {
         val (code, _) = request("/submit?t=${server!!.token}", """{"values":["https://new.example","abc"]}""")
         assertEquals(200, code)
-        assertEquals(listOf("https://new.example", "abc"), received)
+        assertEquals(listOf("https://new.example", "abc", ""), received)
     }
 
     @Test fun missingValuesArriveEmpty() {
         request("/submit?t=${server!!.token}", """{"values":["only-one"]}""")
-        assertEquals(listOf("only-one", ""), received)
+        assertEquals(listOf("only-one", "", ""), received)
+    }
+
+    @Test fun multilineGuideSourcesArriveUnchanged() {
+        val body = JSONObject().put("values", JSONArray(listOf("", "", GUIDES))).toString()
+        assertEquals(200, request("/submit?t=${server!!.token}", body).first)
+        assertEquals(listOf("", "", GUIDES), received)
+    }
+
+    companion object {
+        private const val GUIDES = "https://guide.example/epg.xml\nhttps://backup.example/epg.xml"
     }
 }

@@ -159,7 +159,8 @@ fun IptvPlaylistModal(
         connectionLimitLeftIndex != null -> 7
         else -> 6
     }
-    val lastLeftIndex = refreshLeftIndex ?: connectionLimitLeftIndex ?: 5
+    val phoneLeftIndex = (refreshLeftIndex ?: connectionLimitLeftIndex ?: 5) + 1
+    val lastLeftIndex = phoneLeftIndex
     var sourceType by remember(initialSourceType, initialXtreamUser, initialXtreamPass) {
         mutableStateOf(
             when {
@@ -183,6 +184,7 @@ fun IptvPlaylistModal(
     var xtreamUser by remember(initialXtreamUser) { mutableStateOf(initialXtreamUser) }
     var xtreamPass by remember(initialXtreamPass) { mutableStateOf(initialXtreamPass) }
     var epgSources by remember(initialEpg) { mutableStateOf(initialEpg) }
+    var phoneRevealed by remember(sourceType) { mutableStateOf(false) }
 
     var stalkerName by remember(initialName, isEditing, initialSourceType) {
         mutableStateOf(
@@ -204,7 +206,7 @@ fun IptvPlaylistModal(
         mutableStateOf(if (isEditing) ActivePane.RIGHT else ActivePane.LEFT)
     }
     // Left pane indices: 0 = M3U, 1 = Xtream, 2 = Stalker, 3 = Live, 4 = Movies, 5 = Series,
-    // then 6 = Connection limit (adding, or a saved source) and 7 = Refresh (a saved source)
+    // then optional Connection limit / Refresh rows, followed by Use your phone.
     var leftFocusedIndex by remember(sourceType) {
         mutableIntStateOf(
             when (sourceType) {
@@ -233,7 +235,7 @@ fun IptvPlaylistModal(
     val modalFocusRequester = remember { FocusRequester() }
     val formScrollState = rememberScrollState()
     val leftPaneScrollState = rememberScrollState()
-    // The Stalker card below the last row can take no focus, so the last row has to reveal it.
+    // Reveal the phone button and, when expanded, its QR panel at the end of the left pane.
     val leftPaneEndFocused = activePane == ActivePane.LEFT && leftFocusedIndex == lastLeftIndex && !LocalDeviceType.current.isTouchDevice()
     LaunchedEffect(leftPaneEndFocused, leftPaneScrollState.maxValue) {
         if (leftPaneEndFocused) leftPaneScrollState.animateScrollTo(leftPaneScrollState.maxValue)
@@ -444,6 +446,7 @@ fun IptvPlaylistModal(
                                         // Jump across to Left Pane
                                         activePane = ActivePane.LEFT
                                         leftFocusedIndex = when {
+                                            rightFocusedRow == actionsRow() -> phoneLeftIndex
                                             rightFocusedRow == 0 -> 2 // Land on Stalker tab, then Left -> Xtream -> M3U
                                             rightFocusedRow == 1 -> 3 // Live toggle
                                             rightFocusedRow == 2 -> 4 // Movies toggle
@@ -476,6 +479,7 @@ fun IptvPlaylistModal(
                                             3 -> 1 // URL
                                             4 -> 2 // EPG / User / MAC
                                             5 -> if (sourceType == IptvSourceType.XTREAM) 3 else 2 // Password / EPG
+                                            phoneLeftIndex -> actionsRow()
                                             else -> if (sourceType == IptvSourceType.XTREAM) 4 else 2 // EPG
                                         }
                                         rightFocusedColumn = 0
@@ -547,6 +551,7 @@ fun IptvPlaylistModal(
                                         // A held OK repeats its key-down and must step only once.
                                         connectionLimitLeftIndex -> if (event.nativeKeyEvent.repeatCount == 0) stepConnectionLimit?.invoke()
                                         refreshLeftIndex -> if (!isAccountRefreshing) onRefreshAccount?.invoke()
+                                        phoneLeftIndex -> if (event.nativeKeyEvent.repeatCount == 0) phoneRevealed = !phoneRevealed
                                     }
                                     true
                                 } else {
@@ -767,14 +772,14 @@ fun IptvPlaylistModal(
                                 IptvSourceType.M3U -> listOf(
                                     PhoneInputServer.Field(stringResource(R.string.settings_label_playlist_name), playlistName),
                                     PhoneInputServer.Field(stringResource(R.string.settings_label_m3u_url), playlistUrl),
-                                    PhoneInputServer.Field(epgLabel, epgSources),
+                                    PhoneInputServer.Field(epgLabel, epgSources, multiline = true),
                                 )
                                 IptvSourceType.XTREAM -> listOf(
                                     PhoneInputServer.Field(stringResource(R.string.settings_label_playlist_name), playlistName),
                                     PhoneInputServer.Field(stringResource(R.string.settings_label_server_url), playlistUrl),
                                     PhoneInputServer.Field(stringResource(R.string.settings_label_username), xtreamUser),
                                     PhoneInputServer.Field(stringResource(R.string.settings_label_password), xtreamPass, secret = true),
-                                    PhoneInputServer.Field(epgLabel, epgSources),
+                                    PhoneInputServer.Field(epgLabel, epgSources, multiline = true),
                                 )
                                 IptvSourceType.STALKER -> listOf(
                                     PhoneInputServer.Field(stringResource(R.string.settings_stalker_portal_name_label), stalkerName),
@@ -782,27 +787,39 @@ fun IptvPlaylistModal(
                                     PhoneInputServer.Field(stringResource(R.string.settings_stalker_label_mac), stalkerMac),
                                 )
                             }
-                            // Keyed by type: switching M3U / Xtream / Stalker opens a new form.
-                            PhoneInputOnDemand(
-                                title = "IPTV · ${sourceType.name}",
-                                fields = phoneFields,
-                                onValues = { values ->
-                                    fun v(i: Int) = values.getOrNull(i)?.takeIf { it.isNotEmpty() }
-                                    when (sourceType) {
-                                        IptvSourceType.M3U -> {
-                                            v(0)?.let { playlistName = it }; v(1)?.let { playlistUrl = it }; v(2)?.let { epgSources = it }
-                                        }
-                                        IptvSourceType.XTREAM -> {
-                                            v(0)?.let { playlistName = it }; v(1)?.let { playlistUrl = it }
-                                            v(2)?.let { xtreamUser = it }; v(3)?.let { xtreamPass = it }; v(4)?.let { epgSources = it }
-                                        }
-                                        IptvSourceType.STALKER -> {
-                                            v(0)?.let { stalkerName = it }; v(1)?.let { stalkerPortalUrl = it }; v(2)?.let { stalkerMac = it }
-                                        }
-                                    }
+                            PhoneInputButton(
+                                revealed = phoneRevealed,
+                                focused = activePane == ActivePane.LEFT && leftFocusedIndex == phoneLeftIndex,
+                                modifier = Modifier.fillMaxWidth().revealFocusedField(revealsLeftRow(phoneLeftIndex)),
+                                onClick = {
+                                    activePane = ActivePane.LEFT
+                                    leftFocusedIndex = phoneLeftIndex
+                                    phoneRevealed = !phoneRevealed
                                 },
-                                qrSize = 88.dp,
                             )
+                            if (phoneRevealed) {
+                                Spacer(modifier = Modifier.height(10.dp))
+                                PhoneInputPanel(
+                                    title = "IPTV · ${sourceType.name}",
+                                    fields = phoneFields,
+                                    onValues = { values ->
+                                        fun v(i: Int) = values.getOrNull(i)?.takeIf { it.isNotEmpty() }
+                                        when (sourceType) {
+                                            IptvSourceType.M3U -> {
+                                                v(0)?.let { playlistName = it }; v(1)?.let { playlistUrl = it }; v(2)?.let { epgSources = it }
+                                            }
+                                            IptvSourceType.XTREAM -> {
+                                                v(0)?.let { playlistName = it }; v(1)?.let { playlistUrl = it }
+                                                v(2)?.let { xtreamUser = it }; v(3)?.let { xtreamPass = it }; v(4)?.let { epgSources = it }
+                                            }
+                                            IptvSourceType.STALKER -> {
+                                                v(0)?.let { stalkerName = it }; v(1)?.let { stalkerPortalUrl = it }; v(2)?.let { stalkerMac = it }
+                                            }
+                                        }
+                                    },
+                                    qrSize = 88.dp,
+                                )
+                            }
                         }
 
                         // Right Pane: Input Form Fields & Action Buttons
