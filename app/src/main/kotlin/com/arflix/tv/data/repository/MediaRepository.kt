@@ -1789,6 +1789,7 @@ class MediaRepository @Inject constructor(
         val region = source.watchRegion?.takeIf { it.isNotBlank() } ?: "US"
         val sortBy = source.sortBy ?: "popularity.desc"
         val genres = source.tmdbGenreId?.toString()
+        val window = WatchProviderSort.window(sortBy, java.time.LocalDate.now())
         return when (source.mediaType?.lowercase(Locale.US)) {
             "movie" -> loadPagedTmdbDiscoverRefs(
                 mediaType = MediaType.MOVIE,
@@ -1800,6 +1801,8 @@ class MediaRepository @Inject constructor(
                     watchProviders = providerId,
                     watchRegion = region,
                     sortBy = sortBy,
+                    minVoteCount = window.minVoteCount,
+                    primaryReleaseDateLte = window.releasedOnOrBefore,
                     language = contentLanguage,
                     page = page
                 )
@@ -1814,6 +1817,8 @@ class MediaRepository @Inject constructor(
                     watchRegion = region,
                     genres = genres,
                     sortBy = sortBy,
+                    minVoteCount = window.minVoteCount,
+                    firstAirDateLte = window.releasedOnOrBefore,
                     language = contentLanguage,
                     page = page
                 )

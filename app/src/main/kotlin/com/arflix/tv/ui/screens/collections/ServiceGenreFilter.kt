@@ -3,6 +3,7 @@ package com.arflix.tv.ui.screens.collections
 import com.arflix.tv.data.model.CatalogConfig
 import com.arflix.tv.data.model.CollectionSourceConfig
 import com.arflix.tv.data.model.CollectionSourceKind
+import com.arflix.tv.data.repository.WatchProviderSort
 
 /**
  * Genre filter for streaming-service pages (Netflix, HBO Max, ...). Those pages are built from
@@ -24,6 +25,18 @@ internal object ServiceGenreFilter {
     fun supports(catalog: CatalogConfig): Boolean =
         catalog.collectionSources.isNotEmpty() &&
             catalog.collectionSources.all { it.kind == CollectionSourceKind.TMDB_WATCH_PROVIDER }
+
+    /**
+     * A service page lists the newest titles first, while its Home row keeps the template's
+     * popularity order: only the page's queries are re-sorted.
+     */
+    fun newestFirst(sources: List<CollectionSourceConfig>): List<CollectionSourceConfig> = sources.map { source ->
+        if (source.kind == CollectionSourceKind.TMDB_WATCH_PROVIDER) {
+            source.copy(sortBy = WatchProviderSort.newestFor(source.mediaType))
+        } else {
+            source
+        }
+    }
 
     fun apply(sources: List<CollectionSourceConfig>, genreId: Int?): List<CollectionSourceConfig> {
         if (genreId == null) return sources

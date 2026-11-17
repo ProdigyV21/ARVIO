@@ -51,4 +51,23 @@ class ServiceGenreFilterTest {
         ServiceGenreFilter.movieGenreIds.forEach { assertTrue("movie $it", movieGenreNameRes(it) != null) }
         ServiceGenreFilter.seriesGenreIds.forEach { assertTrue("series $it", tvGenreNameRes(it) != null) }
     }
+
+    @Test
+    fun `a service page lists newest first per tab and leaves other sources alone`() {
+        val curated = CollectionSourceConfig(kind = CollectionSourceKind.CURATED_IDS, curatedRefs = listOf("movie:1"))
+        val sources = ServiceGenreFilter.newestFirst(listOf(provider("movie"), provider("series"), curated))
+        assertEquals("primary_release_date.desc", sources[0].sortBy)
+        assertEquals("first_air_date.desc", sources[1].sortBy)
+        assertSame(curated, sources[2])
+    }
+
+    @Test
+    fun `newest first keeps the chosen genre and the template stays on popularity`() {
+        val template = listOf(provider("series"))
+        val page = ServiceGenreFilter.newestFirst(ServiceGenreFilter.apply(template, 10764)).single()
+        assertEquals(10764, page.tmdbGenreId)
+        assertEquals("first_air_date.desc", page.sortBy)
+        // The Home row reads the stored template, which keeps its popularity order.
+        assertEquals("popularity.desc", template.single().sortBy)
+    }
 }

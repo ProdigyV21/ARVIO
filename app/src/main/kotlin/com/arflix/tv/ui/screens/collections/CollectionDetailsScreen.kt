@@ -690,7 +690,8 @@ class CollectionDetailsViewModel @Inject constructor(
     private fun catalogForTab(catalog: CatalogConfig, tab: CollectionTab): CatalogConfig {
         val filteredSources = catalog.collectionSources.filter { sourceMatchesTab(it, tab) }
         val genreId = _uiState.value.takeIf { it.genreFilterable }?.genreId(tab)
-        return catalog.copy(collectionSources = ServiceGenreFilter.apply(filteredSources, genreId))
+        val sources = ServiceGenreFilter.newestFirst(ServiceGenreFilter.apply(filteredSources, genreId))
+        return catalog.copy(collectionSources = sources)
     }
 
     private fun supportsTab(catalog: CatalogConfig, tab: CollectionTab): Boolean {
