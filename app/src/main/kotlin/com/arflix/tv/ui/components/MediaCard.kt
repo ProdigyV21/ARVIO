@@ -554,7 +554,7 @@ fun MediaCard(
                     val year = item.releaseDate?.takeIf { it.isNotBlank() }
                         ?: item.year.takeIf { it.isNotBlank() }
                     val dateLabel = if (isMobile && year != null) formatEpisodeAirDateLabel(year) ?: year else year
-                    if (dateLabel != null) "$typeLabel · $dateLabel"
+                    if (dateLabel != null) mediaCardSubtitle(typeLabel, dateLabel)
                     else item.subtitle.ifBlank { typeLabel }
                 }
                 Text(
@@ -574,6 +574,16 @@ fun MediaCard(
         }
     }
 }
+
+/**
+ * "{type} · {date}", e.g. "Movie · 13 Nov 2026". The date is always English, while the type
+ * follows the app language. In a right-to-left language the Hebrew/Arabic type makes the line
+ * right-to-left, and the bidi algorithm then splits the date's leading day off its month and
+ * year ("Nov 2026 13"). A left-to-right mark before the date makes the day follow a
+ * left-to-right character, so the whole date stays one run in its own order. It is invisible,
+ * and left-to-right languages are unaffected.
+ */
+internal fun mediaCardSubtitle(typeLabel: String, dateLabel: String): String = "$typeLabel · \u200E$dateLabel"
 
 /** Narrower posters show the short Continue Watching badges ("Neu", "25 Min."); the full ones overlap there. */
 private val CONTINUE_WATCHING_FULL_BADGE_MIN_WIDTH = 140.dp
