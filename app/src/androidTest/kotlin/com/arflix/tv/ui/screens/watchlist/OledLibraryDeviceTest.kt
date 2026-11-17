@@ -159,8 +159,13 @@ class OledLibraryDeviceTest {
             }
         }
         compose.onNodeWithText("\"$longQuery\"").assertIsDisplayed()
+        val clearIcon = compose.onNodeWithContentDescription("Clear search", useUnmergedTree = true).assertIsDisplayed()
+        assertTrue("The query's clear icon must not be squeezed out", clearIcon.fetchSemanticsNode().boundsInRoot.width >= 16f * density - 1f)
         compose.onNodeWithText("Filters").assertIsDisplayed()
         compose.onNodeWithTag("library-source-picker").assertIsDisplayed()
+        compose.onNodeWithText("\"$longQuery\"").performTouchInput { click() }
+        compose.onNodeWithText("\"$longQuery\"").assertDoesNotExist()
+        compose.onNodeWithContentDescription("Search library").assertIsDisplayed()
     }
     @Test fun posterAndLongGridScroll() {
         show(true)

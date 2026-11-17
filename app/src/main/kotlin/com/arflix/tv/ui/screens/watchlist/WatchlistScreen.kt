@@ -434,6 +434,7 @@ fun WatchlistScreen(
                                 compact = true,
                                 selected = true,
                                 trailingIcon = Icons.Default.Close,
+                                trailingIconDescription = tr("Clear search"),
                                 onClick = { query = "" }
                             )
                         } else {
@@ -705,6 +706,7 @@ internal fun OledControl(
     compact: Boolean = false,
     icon: ImageVector? = null,
     trailingIcon: ImageVector? = null,
+    trailingIconDescription: String? = null,
     hasActiveBadge: Boolean = false,
     maxLines: Int = 1,
     onClick: () -> Unit
@@ -742,6 +744,7 @@ internal fun OledControl(
                 }
                 Text(
                     label,
+                    modifier = if (touch && (trailingIcon != null || hasActiveBadge)) Modifier.weight(1f, fill = false) else Modifier,
                     color = foreground,
                     fontSize = if(compact) 13.sp else 14.sp,
                     fontWeight = if(selected || focused) FontWeight.SemiBold else FontWeight.Normal,
@@ -756,7 +759,7 @@ internal fun OledControl(
                     )
                 }
                 if (trailingIcon != null) {
-                    Icon(trailingIcon, contentDescription = null, tint = foreground, modifier = Modifier.size(16.dp))
+                    Icon(trailingIcon, contentDescription = trailingIconDescription, tint = foreground, modifier = Modifier.size(16.dp))
                 }
             }
         }
