@@ -98,6 +98,12 @@
 .hero-store img{display:block;width:100%;height:auto}
 .hero-store:focus-visible{outline:2px solid var(--mint);outline-offset:2px}
 @media(max-width:850px){.hero-store{margin-inline:auto}}
+.hero-downloads{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);align-items:center;gap:12px;width:340px;max-width:100%;margin-top:12px}
+.hero-downloads .hero-store{width:100%;margin:0}
+.hero-github{display:inline-flex;align-items:center;justify-content:center;gap:10px;min-height:54px;padding:10px 12px;border:1px solid #8b949e;border-radius:8px;background:#0d1117;color:#f0f6fc;font-size:18px;font-weight:650;line-height:1.2;transition:background .2s,border-color .2s}
+.hero-github svg{flex-shrink:0}.hero-github:hover{background:#1b222b;border-color:#c9d1d9}
+@media(max-width:850px){.hero-downloads{margin-inline:auto}}
+@media(max-width:360px){.hero-github{font-size:16px;gap:8px;padding-inline:9px;min-height:48px}.hero-github svg{width:20px;height:20px}}
 
 /* A quiet business invitation below the main product experience. */
 .plan-price s{font-size:16px;color:var(--muted);text-decoration-thickness:1px;margin-inline-end:4px}
