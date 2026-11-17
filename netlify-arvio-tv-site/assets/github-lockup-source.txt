@@ -1,0 +1,6 @@
+GitHub_Lockup_White_Clearspace.svg, unchanged official GitHub logo asset.
+Source: https://brand.github.com/GitHub_Logos.zip
+Archive path: GitHub Logos/SVG/GitHub_Lockup_White_Clearspace.svg
+Usage guidelines: https://brand.github.com/foundations/logo
+SHA-256: 39de9262f61907af87b428e8299fe25fb91d0d63286591cedbb6b0c32150c251
+Used as a secondary link to ARVIO's GitHub project; no GitHub endorsement is implied.
