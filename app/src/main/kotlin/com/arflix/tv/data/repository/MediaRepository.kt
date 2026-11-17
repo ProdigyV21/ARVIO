@@ -975,10 +975,18 @@ class MediaRepository @Inject constructor(
     /** One page (the only one) of WeTrakr's recommendations; empty when WeTrakr isn't connected. */
     private suspend fun loadWeTrakrRecommendations(type: MediaType, page: Int): CategoryPageResult = coroutineScope {
         if (page != 1 || !weTrakrLists.isConnected()) return@coroutineScope CategoryPageResult(emptyList(), hasMore = false)
-        val ids = runCatching { weTrakrLists.recommended(type) }.getOrDefault(emptyList())
+        val ids = runCatching { weTrakrLists.recommended(type) }
+            .onFailure { if (it is CancellationException) throw it }
+            .getOrDefault(emptyList())
         val semaphore = Semaphore(6)
         val items = ids.map { id ->
-            async { semaphore.withPermit { runCatching { catalogItemFor(type, id) }.getOrNull() } }
+            async {
+                semaphore.withPermit {
+                    runCatching { catalogItemFor(type, id) }
+                        .onFailure { if (it is CancellationException) throw it }
+                        .getOrNull()
+                }
+            }
         }.mapNotNull { it.await() }
         CategoryPageResult(items, hasMore = false)
     }

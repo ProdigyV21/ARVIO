@@ -3232,6 +3232,7 @@ class HomeViewModel @Inject constructor(
                         .filter {
                             it.isPreinstalled &&
                                 it.sourceUrl.isNullOrBlank() &&
+                                !isWeTrakrRecommendationRow(it.id) &&
                                 !isCollectionRailConfig(it) &&
                                 !isCollectionTileConfig(it)
                         }
@@ -3280,6 +3281,10 @@ class HomeViewModel @Inject constructor(
                             }
                         }
                     }
+                    // Start account recommendations after publishing the fast built-in rows.
+                    val weTrakrRecommendations = async {
+                        loadWeTrakrRecommendationRows(savedCatalogs, mediaRepository::loadHomeCategoryPage)
+                    }
                     // Load MDBList preinstalled catalogs - first 8 immediately, rest lazily on scroll
                     val mdblistConfigs = savedCatalogs.filter {
                         it.isPreinstalled &&
@@ -3315,11 +3320,19 @@ class HomeViewModel @Inject constructor(
                         }
                     }
                     val mdblistCategories = mdblistInitial.awaitAll().filterNotNull()
-                    loadedFreshCatalogRows = loadedFreshCatalogRows || mdblistCategories.any { hasRealItems(it) }
+                    val recommendationCategories = weTrakrRecommendations.await()
+                    loadedFreshCatalogRows = loadedFreshCatalogRows || mdblistCategories.any { hasRealItems(it) } ||
+                        recommendationCategories.any { hasRealItems(it) }
+                    recommendationCategories.forEach { category ->
+                        categoryPaginationStates[category.id] = CategoryPaginationState(
+                            loadedCount = category.items.size, hasMore = false
+                        )
+                    }
                     // Create placeholder categories for deferred ones (will load on scroll)
                     val deferredCategories = deferredBatch.map { cfg -> Category(id = cfg.id, title = cfg.title, items = emptyList()) }
                     // Merge both lists maintaining the saved catalog order
-                    val allPreinstalledById = (tmdbPreinstalled + mdblistCategories + deferredCategories).associateBy { it.id }
+                    val allPreinstalledById = (tmdbPreinstalled + mdblistCategories + deferredCategories +
+                        recommendationCategories).associateBy { it.id }
 
                     // Load deferred catalogs in background in batches of 3
                     if (deferredBatch.isNotEmpty()) {
@@ -3936,6 +3949,17 @@ class HomeViewModel @Inject constructor(
                             persistCategoriesCache(_uiState.value.categories)
                         }
                     }
+                } else if (isWeTrakrRecommendationRow(cfg.id)) {
+                    withContext(Dispatchers.Main.immediate) {
+                        if (requestId == loadHomeRequestId) {
+                            categoryPaginationStates.remove(cfg.id)
+                            _uiState.value = _uiState.value.copy(
+                                categories = removeEmptyWeTrakrRecommendationRow(_uiState.value.categories, cfg.id),
+                                categoryHasMoreMap = _uiState.value.categoryHasMoreMap - cfg.id
+                            )
+                            persistCategoriesCache(_uiState.value.categories)
+                        }
+                    }
                 }
             }
         }
@@ -4411,6 +4435,7 @@ class HomeViewModel @Inject constructor(
         }
 
         savedCatalogs.forEach { cfg ->
+            if (!homeCatalogHasSkeleton(cfg)) return@forEach
             if (isCollectionTileConfig(cfg)) return@forEach
             // Omit Favorite TV and Popular Live Sports from initial skeleton
             if (cfg.id == FAVORITE_TV_CATEGORY_ID) return@forEach
