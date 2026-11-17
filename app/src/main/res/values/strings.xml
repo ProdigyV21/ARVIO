@@ -2155,4 +2155,15 @@
     <string name="youtube_source_row_searching">Searching YouTube…</string>
     <string name="youtube_source_row_none">No YouTube videos of 5+ minutes — select to search again</string>
     <string name="youtube_source_row_failed">YouTube didn\'t answer — select to try again</string>
+
+    <!-- Type on the phone (QR in TV text dialogs) -->
+    <string name="phone_input_button">Use your phone</string>
+    <string name="phone_input_button_hide">Hide phone code</string>
+    <string name="phone_input_qr_title">📱 From your phone</string>
+    <string name="phone_input_qr_hint">Scan to type or paste it on your phone.</string>
+    <string name="phone_input_page_hint">Whatever you send appears on the TV. Press OK there to save it.</string>
+    <string name="phone_input_page_send">Send to TV</string>
+    <string name="phone_input_page_sent">Sent ✓ — press OK on the TV.</string>
+    <string name="phone_input_page_not_sent">Not sent</string>
+    <string name="phone_input_page_expired">This code has expired — scan the QR code on the TV again.</string>
 </resources>
