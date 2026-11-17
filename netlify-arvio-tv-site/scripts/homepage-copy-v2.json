@@ -43,14 +43,14 @@
     "Tu contenido."
   ],
   [
-    "Beautifully",
-    "Tudo bem",
-    "Todo bien"
+    "Free and",
+    "Grátis e de",
+    "Gratis y de"
   ],
   [
-    "connected.",
-    "conectado.",
-    "conectado."
+    "open source.",
+    "código aberto.",
+    "código abierto."
   ],
   [
     "Your libraries, live TV and discoveries.",
@@ -981,5 +981,10 @@
     "Monthly membership. Cancel anytime through Ko-fi.",
     "Assinatura mensal. Cancele a qualquer momento pelo Ko-fi.",
     "Suscripción mensual. Cancela cuando quieras a través de Ko-fi."
+  ],
+  [
+    "View ARVIO source on GitHub",
+    "Ver o código do ARVIO no GitHub",
+    "Ver el código de ARVIO en GitHub"
   ]
 ]
