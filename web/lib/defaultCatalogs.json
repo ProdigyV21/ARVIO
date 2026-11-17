@@ -1500,5 +1500,33 @@
     "name": "Coming Soon",
     "enabled": true,
     "mediaType": "movie"
+  },
+  {
+    "id": "wetrakr_recs_shows",
+    "title": "Recommended Shows (WeTrakr)",
+    "sourceType": "preinstalled",
+    "isPreinstalled": true,
+    "kind": "STANDARD",
+    "collectionTileShape": "LANDSCAPE",
+    "collectionHideTitle": false,
+    "collectionSources": [],
+    "requiredAddonUrls": [],
+    "name": "Recommended Shows (WeTrakr)",
+    "enabled": true,
+    "mediaType": "tv"
+  },
+  {
+    "id": "wetrakr_recs_movies",
+    "title": "Recommended Movies (WeTrakr)",
+    "sourceType": "preinstalled",
+    "isPreinstalled": true,
+    "kind": "STANDARD",
+    "collectionTileShape": "LANDSCAPE",
+    "collectionHideTitle": false,
+    "collectionSources": [],
+    "requiredAddonUrls": [],
+    "name": "Recommended Movies (WeTrakr)",
+    "enabled": true,
+    "mediaType": "movie"
   }
 ]
