@@ -179,6 +179,10 @@ essentially unchanged (+0.9%) in the reverse comparison. Do not describe vertica
 performance as consistently faster, or the application as completely jank-free / 60 fps.
 These are CPU frame measurements, not full input-to-photon latency or physical-TV guarantees.
 
+Frame-overrun p95 also improved in both orders: horizontal 111.37 to 46.75 ms and
+51.86 to 47.07 ms; vertical 329.33 to 128.37 ms and 95.93 to 55.07 ms. Long overrun
+tails remain on this emulator, so the CPU improvements do not imply perfect frame delivery.
+
 There were six measured iterations per version/direction, 648 measured D-pad presses in
 total, plus unmeasured setup and compilation warmups. Raw logs, JSON, traces, host-load
 samples and separate release screenshots are local under
@@ -204,6 +208,17 @@ The source-linked final regression run passed all 69 targeted checks:
 Functional builds are debug/test builds signed with the release key, solely to preserve the
 isolated emulator profile between installations. Frame timings use only optimized release
 builds, never debug/test builds. The physical TV was not used for these measurements.
+
+### Main Integration Verification
+
+The performance commit was merged with main through `05b9243f3`, preserving the subsequent
+Phone QR and website changes. Home's source remains byte-for-byte identical to the controlled
+comparison candidate. The merged, minified, non-debuggable release built successfully, and
+both optimized-release black-box tests passed again (35.186 seconds). The 69-check regression
+run above preceded this integration; it is not a claim that all 69 tests were rerun afterward.
+An additional three-iteration-per-direction integration benchmark passed: horizontal CPU
+median / p95 was 25.40 / 37.55 ms, vertical 37.76 / 48.52 ms. This unpaired sanity check
+is separate from the controlled comparisons above and is not used to calculate their gains.
 
 ## References
 
