@@ -729,7 +729,6 @@ fun IptvPlaylistModal(
                                     allowanceLabel = providerAllowanceLabel,
                                     checkedAtLabel = accountCheckedAtLabel,
                                     isRefreshing = isAccountRefreshing,
-                                    // Always the last row, so the end scroll above reveals it.
                                     isFocused = activePane == ActivePane.LEFT && leftFocusedIndex == refreshLeftIndex,
                                     onClick = {
                                         activePane = ActivePane.LEFT
@@ -1768,7 +1767,7 @@ private fun AccountRefreshBlock(
     isFocused: Boolean,
     onClick: () -> Unit
 ) {
-    Column(modifier = Modifier.fillMaxWidth()) {
+    Column(modifier = Modifier.fillMaxWidth().revealFocusedField(isFocused)) {
         if (allowanceLabel != null) {
             Text(
                 text = allowanceLabel,

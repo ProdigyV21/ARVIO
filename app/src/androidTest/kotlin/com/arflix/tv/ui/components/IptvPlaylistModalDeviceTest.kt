@@ -181,10 +181,12 @@ class IptvPlaylistModalDeviceTest {
     @Test
     fun tvPhoneInputDoesNotReplaceAccountControls() {
         show(DeviceType.TV, accountControls = true)
-        keys(listOf(Key.DirectionLeft) + List(6) { Key.DirectionDown } + Key.DirectionCenter)
+        keys(listOf(Key.DirectionLeft) + List(5) { Key.DirectionDown })
+        compose.onNodeWithText(compose.activity.getString(R.string.iptv_account_refresh)).assertIsDisplayed()
+        keys(listOf(Key.DirectionCenter, Key.DirectionDown, Key.DirectionCenter))
         compose.onNodeWithText(compose.activity.getString(R.string.phone_input_button_hide)).assertIsDisplayed()
         keys(listOf(Key.DirectionCenter, Key.DirectionUp, Key.DirectionCenter, Key.DirectionUp, Key.DirectionCenter))
-        assertEquals(1, accountRefreshes)
+        assertEquals(2, accountRefreshes)
         assertEquals(1, limitChanges)
     }
 
