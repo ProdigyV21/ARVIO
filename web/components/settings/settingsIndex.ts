@@ -42,6 +42,7 @@ export const SETTINGS_INDEX: SettingsIndexEntry[] = [
 
   { section: "language", label: "App and metadata language", id: "content-language", keywords: "interface menu language tmdb", scope: "all" },
   { section: "language", label: "Audio language", id: "audio-language", keywords: "dub track", scope: "all" },
+  { section: "language", label: "Second audio language", id: "secondary-audio-language", keywords: "dub track fallback", scope: "all" },
   { section: "language", label: "Subtitle language", id: "subtitle-language", keywords: "captions default", scope: "all" },
   { section: "language", label: "Second subtitle language", id: "secondary-subtitle", keywords: "captions fallback", scope: "all" },
   { section: "language", label: "Only list my subtitle languages", id: "filter-subtitles", keywords: "filter", scope: "all" },

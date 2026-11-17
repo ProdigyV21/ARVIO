@@ -81,6 +81,8 @@
     <string name="default_subtitle">Default Subtitle</string>
     <string name="secondary_subtitle">Secondary Subtitle Language</string>
     <string name="secondary_subtitle_desc">Fallback subtitle language when primary is unavailable</string>
+    <string name="secondary_audio">Secondary Audio Language</string>
+    <string name="secondary_audio_desc">Fallback audio language when the default is unavailable</string>
     <string name="filter_subtitles">Filter Subtitles by Language</string>
     <string name="filter_subtitles_desc">Show only subtitles in your preferred language</string>
     <string name="use_forced_subtitles">Forced Subtitles</string>
@@ -647,6 +649,7 @@
     <string name="settings_help_choose_desc">Move into the center panel to edit the selected section.</string>
     <string name="settings_help_app_language_desc">Changes the interface and metadata language used by ARVIO.</string>
     <string name="settings_help_default_audio_desc">Preferred audio language when multiple tracks exist.</string>
+    <string name="settings_help_secondary_audio_desc">Used when no track matches the default audio language. Off keeps the stream\'s own default track.</string>
     <string name="settings_help_default_subtitle_desc">Preferred subtitle language when playback starts.</string>
     <string name="settings_help_secondary_subtitle">Secondary subtitle</string>
     <string name="settings_help_secondary_subtitle_desc">Optional second subtitle preference where available.</string>

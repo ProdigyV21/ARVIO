@@ -139,7 +139,7 @@ async function probeInput(command: Extract<RemuxCommand, { type: "probe" }>) {
   probe = { container: format.name, videoCodec: videoCodec ?? undefined,
     videoPlayable: !videoReason, videoReason, hdr10BaseLayer: !!dolbyVision && canExtractHdr10BaseLayer(dolbyVision),
     videoProbeStatus: dolbyVision?.status === "unknown" ? dolbyVision.reason : dolbyVision?.status,
-    audioTracks, chosenAudioIndex: preferredAudioIndex(audioTracks, command.language),
+    audioTracks, chosenAudioIndex: preferredAudioIndex(audioTracks, command.language, command.secondaryLanguage),
     duration: await input.computeDuration() };
   port.postMessage({ type: "probe", probe });
 }

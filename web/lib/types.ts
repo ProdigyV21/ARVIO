@@ -535,6 +535,8 @@ export interface AppSettings {
   defaultSubtitle: string;
   secondarySubtitle: string;
   audioLanguage: string;
+  /** Fallback audio language when no track matches audioLanguage; "" = off. */
+  secondaryAudioLanguage: string;
   // Subtitles
   subtitleSize: number;
   subtitleColor: string;
