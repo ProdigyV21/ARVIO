@@ -19,7 +19,10 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -28,6 +31,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -38,6 +42,7 @@ import com.arflix.tv.R
 import com.arflix.tv.ui.skin.ArvioSkin
 import com.arflix.tv.ui.theme.BackgroundCard
 import com.arflix.tv.ui.theme.BorderLight
+import com.arflix.tv.ui.theme.appBackgroundDark
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import coil.size.Precision
@@ -51,9 +56,35 @@ private val BottomScrim = Brush.verticalGradient(
         0.48f to Color.Black.copy(alpha = 0.40f),
         0.66f to Color.Black.copy(alpha = 0.80f),
         0.82f to Color.Black.copy(alpha = 0.94f),
-        1.00f to Color(0xCC000000)
+        1.00f to Color.Black
     )
 )
+
+@Composable
+internal fun MobileHeroScrim(
+    immersive: Boolean,
+    background: Color,
+    modifier: Modifier = Modifier,
+    posterArtwork: Boolean = false,
+) {
+    val immersiveScrim = remember(background, posterArtwork) {
+        Brush.verticalGradient(
+            0f to Color.Black.copy(alpha = 0.10f),
+            0.16f to Color.Transparent,
+            0.40f to Color.Transparent,
+            0.52f to background.copy(alpha = 0.06f),
+            0.64f to background.copy(alpha = if (posterArtwork) 0.60f else 0.26f),
+            0.76f to background.copy(alpha = if (posterArtwork) 1f else 0.62f),
+            0.86f to background.copy(alpha = if (posterArtwork) 1f else 0.86f),
+            0.94f to background.copy(alpha = if (posterArtwork) 1f else 0.97f),
+            1f to background,
+        )
+    }
+    Box(modifier) {
+        Spacer(if (immersive || posterArtwork) Modifier.fillMaxSize().background(immersiveScrim)
+            else Modifier.fillMaxWidth().fillMaxHeight(0.65f).align(Alignment.BottomCenter).background(BottomScrim))
+    }
+}
 
 internal data class MobileHeroLayoutSpec(
     val cardWidthDp: Float,
@@ -61,6 +92,12 @@ internal data class MobileHeroLayoutSpec(
     val carouselHorizontalPaddingDp: Float,
     val compactContent: Boolean,
 )
+
+internal fun resolveImmersiveMobileHeroLayout(widthDp: Float, usableHeightDp: Float): MobileHeroLayoutSpec {
+    val width = widthDp.coerceAtLeast(1f)
+    val height = usableHeightDp.coerceAtLeast(1f)
+    return MobileHeroLayoutSpec(width, minOf(width * 1.65f, height * 0.88f), 0f, height < width)
+}
 
 /**
  * Resolves the mobile Home hero from the space that the Home viewport actually owns.
@@ -74,7 +111,7 @@ internal fun resolveMobileHeroLayout(
     val width = availableWidthDp.coerceAtLeast(1f)
     val height = availableHeightDp.coerceAtLeast(1f)
     val landscape = width > height
-    val horizontalPadding = if (landscape) 32f else 64f
+    val horizontalPadding = 32f
     val pageWidth = (width - horizontalPadding * 2f).coerceAtLeast(1f)
 
     return if (landscape) {
@@ -124,41 +161,30 @@ fun MobileHeroBanner(
     logoUrl: String? = null,
     onClick: (() -> Unit)? = null,
     compactContent: Boolean = false,
-    modifier: Modifier = Modifier
+    immersive: Boolean = false,
+    showPageIndicators: Boolean = false,
+    modifier: Modifier = Modifier,
+    isPosterArtwork: Boolean = false,
 ) {
     val context = LocalContext.current
+    var logoFailed by remember(title, logoUrl) { mutableStateOf(false) }
 
     Box(
         modifier = modifier
-            .shadow(elevation = 8.dp, shape = BannerShape, clip = false)
-            .clip(BannerShape)
+            .clip(if (immersive) androidx.compose.ui.graphics.RectangleShape else BannerShape)
             .background(BackgroundCard)
             .then(if (onClick != null) Modifier.clickable { onClick() } else Modifier)
-            .border(width = 1.dp, color = CardBorder, shape = BannerShape)
+            .then(if (immersive) Modifier else Modifier.border(width = 1.dp, color = CardBorder, shape = BannerShape))
     ) {
         // ── Layer 1: Full-bleed background image ────────────────────────────
         if (imageUrl.isNotBlank()) {
-            AsyncImage(
-                model = ImageRequest.Builder(context)
-                    .data(imageUrl)
-                    .precision(Precision.INEXACT)
-                    .allowHardware(true)
-                    .crossfade(300)
-                    .build(),
-                contentDescription = title,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize()
+            MobileDetailsArtwork(
+                source = MobileDetailsArtworkSource(imageUrl, isPosterArtwork),
+                modifier = Modifier.fillMaxSize(),
             )
         }
 
-        // ── Layer 2: Bottom scrim spanning the lower 65% of the card ────────
-        Spacer(
-            modifier = Modifier
-                .fillMaxWidth()
-                .fillMaxHeight(0.65f)
-                .align(Alignment.BottomCenter)
-                .background(BottomScrim)
-        )
+        MobileHeroScrim(immersive, appBackgroundDark(), Modifier.fillMaxSize(), posterArtwork = isPosterArtwork)
 
         // ── Layer 3: Content overlay — pinned to bottom-center ───────────────
         Column(
@@ -166,12 +192,12 @@ fun MobileHeroBanner(
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
                 .padding(horizontal = if (compactContent) 14.dp else 20.dp)
-                .padding(bottom = if (compactContent) 12.dp else 28.dp),
+                .padding(bottom = if (showPageIndicators) 32.dp else if (compactContent) 12.dp else 28.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(if (compactContent) 4.dp else 8.dp)
         ) {
             // Element A — Logo image when available, otherwise large title text
-            if (logoUrl != null) {
+            if (!logoUrl.isNullOrBlank() && !logoFailed) {
                 AsyncImage(
                     model = ImageRequest.Builder(context)
                         .data(logoUrl)
@@ -181,20 +207,23 @@ fun MobileHeroBanner(
                         .build(),
                     contentDescription = title,
                     contentScale = ContentScale.Fit,
+                    onError = { logoFailed = true },
                     alignment = Alignment.Center,
                     modifier = Modifier
                         .height(if (compactContent) 38.dp else 56.dp)
                         .fillMaxWidth()
+                        .testTag("mobile_hero_logo")
                 )
             } else {
                 Text(
                     text = title,
                     color = Color.White,
-                    fontSize = if (compactContent) 24.sp else 36.sp,
+                    fontSize = if (!immersive) 18.sp else if (compactContent) 24.sp else 28.sp,
                     fontWeight = FontWeight.Bold,
-                    lineHeight = if (compactContent) 28.sp else 42.sp,
+                    lineHeight = if (!immersive) 24.sp else if (compactContent) 28.sp else 42.sp,
                     textAlign = TextAlign.Center,
-                    maxLines = if (compactContent) 2 else 3,
+                    modifier = Modifier.testTag("mobile_hero_title"),
+                    maxLines = if (!immersive || compactContent) 2 else 3,
                     overflow = TextOverflow.Ellipsis
                 )
             }
@@ -229,6 +258,7 @@ private fun BannerMeta(year: String, rating: String) {
     }
 
     Row(
+        modifier = Modifier.testTag("mobile_hero_metadata"),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
@@ -266,6 +296,7 @@ private fun BannerGenres(genres: List<String>, compact: Boolean) {
     if (genres.isEmpty()) return
     Text(
         text = genres.joinToString(" · "),
+        modifier = Modifier.testTag("mobile_hero_genres"),
         color = ArvioSkin.colors.textMuted,
         fontSize = 12.sp,
         fontWeight = FontWeight.Normal,

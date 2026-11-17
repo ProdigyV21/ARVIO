@@ -27,6 +27,13 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -200,7 +207,7 @@ fun EditProfileDialog(
 // Shared dialog content — compact layout
 // ============================================================
 
-@OptIn(ExperimentalTvMaterial3Api::class)
+@OptIn(ExperimentalTvMaterial3Api::class, androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 private fun ProfileDialogContent(
     title: String,
@@ -231,9 +238,11 @@ private fun ProfileDialogContent(
     val profileNameHint = stringResource(R.string.profile_name_hint)
     val configuration = LocalConfiguration.current
     val isTouchDevice = LocalDeviceType.current.isTouchDevice()
-    val useMobileLayout = isTouchDevice && configuration.screenWidthDp < 700
+    val useMobileLayout = isTouchDevice
+    val nameBringIntoView = remember { BringIntoViewRequester() }
     var editTextRef by remember { mutableStateOf<EditText?>(null) }
     val confirmButtonFocusRequester = remember { FocusRequester() }
+
 
     fun showKeyboard(editText: EditText) {
         editText.post {
@@ -294,8 +303,19 @@ private fun ProfileDialogContent(
             hideKeyboard()
             onDismiss()
         },
-        properties = DialogProperties(usePlatformDefaultWidth = false)
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false,
+            decorFitsSystemWindows = !isTouchDevice,
+        )
     ) {
+        val imeBottom = WindowInsets.ime.getBottom(LocalDensity.current)
+        LaunchedEffect(useMobileLayout, imeBottom) {
+            if (useMobileLayout && imeBottom > 0) {
+                androidx.compose.runtime.withFrameNanos { }
+                androidx.compose.runtime.withFrameNanos { }
+                runCatching { nameBringIntoView.bringIntoView() }
+            }
+        }
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -306,8 +326,10 @@ private fun ProfileDialogContent(
                 Column(
                     modifier = Modifier
                         .padding(horizontal = 14.dp, vertical = 12.dp)
+                        .statusBarsPadding()
                         .navigationBarsPadding()
                         .imePadding()
+                        .widthIn(max = 560.dp)
                         .fillMaxWidth()
                         .heightIn(max = (configuration.screenHeightDp - 24).dp)
                         .clip(RoundedCornerShape(16.dp))
@@ -385,7 +407,7 @@ private fun ProfileDialogContent(
                         }
 
                         // 2. Profile Name Input
-                        Column(modifier = Modifier.fillMaxWidth()) {
+                        Column(modifier = Modifier.fillMaxWidth().bringIntoViewRequester(nameBringIntoView)) {
                             Text(
                                 text = profileNameHint,
                                 fontSize = 12.sp,

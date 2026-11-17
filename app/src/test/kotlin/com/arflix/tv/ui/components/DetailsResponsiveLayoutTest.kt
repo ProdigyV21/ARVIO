@@ -93,13 +93,13 @@ class DetailsResponsiveLayoutTest {
     }
 
     @Test
-    fun phonePortraitKeepsExistingBackdropRule() {
+    fun phonePortraitFitsCompletePosterAspectRatio() {
         assertThat(
             resolveDetailsBackdropHeightDp(
                 availableWidthDp = 411f,
                 availableHeightDp = 891f,
             )
-        ).isWithin(0.01f).of(472.23f)
+        ).isWithin(0.01f).of(616.5f)
     }
 
     @Test
@@ -122,14 +122,14 @@ class DetailsResponsiveLayoutTest {
         val portrait = resolveDetailsBackdropHeightDp(360f, 748f)
         val landscape = resolveDetailsBackdropHeightDp(748f, 360f)
 
-        assertThat(portrait).isWithin(0.01f).of(400f)
+        assertThat(portrait).isWithin(0.01f).of(540f)
         assertThat(landscape).isWithin(0.01f).of(198f)
     }
 
     @Test
     fun portraitTabletKeepsPortraitPresentation() {
         assertThat(resolveDetailsBackdropHeightDp(800f, 1228f))
-            .isWithin(0.01f).of(650.84f)
+            .isWithin(0.01f).of(1031.52f)
     }
 
     @Test
@@ -146,5 +146,26 @@ class DetailsResponsiveLayoutTest {
 
         assertThat(landscape).isLessThan(portrait)
         assertThat(portraitAgain).isEqualTo(portrait)
+    }
+
+    @Test fun shortPortraitLeavesRoomForActions() {
+        assertThat(resolveDetailsBackdropHeightDp(360f, 500f)).isEqualTo(420f)
+    }
+
+    @Test fun portraitPrefersPosterAndLandscapePrefersBackdrop() {
+        assertThat(mobileDetailsArtworkSource("poster", "backdrop", true))
+            .isEqualTo(MobileDetailsArtworkSource("poster", true))
+        assertThat(mobileDetailsArtworkSource("poster", "backdrop", false))
+            .isEqualTo(MobileDetailsArtworkSource("backdrop", false))
+    }
+
+    @Test fun artworkFallbackHandlesMissingAndBlankUrls() {
+        assertThat(mobileDetailsArtworkSource(" ", "backdrop", true))
+            .isEqualTo(MobileDetailsArtworkSource("backdrop", false))
+        assertThat(mobileDetailsArtworkSource("poster", null, false))
+            .isEqualTo(MobileDetailsArtworkSource("poster", true))
+        assertThat(mobileDetailsArtworkSource(null, " ", true)).isNull()
+        assertThat(mobileDetailsArtworkSource("https://image/w500/backdrop.jpg", "https://image/original/backdrop.jpg", true))
+            .isEqualTo(MobileDetailsArtworkSource("https://image/original/backdrop.jpg", false))
     }
 }

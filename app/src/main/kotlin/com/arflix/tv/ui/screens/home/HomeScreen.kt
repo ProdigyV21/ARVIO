@@ -32,6 +32,7 @@ import androidx.compose.foundation.MutatePriority
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.collectIsDraggedAsState
 import androidx.compose.ui.res.painterResource
 import com.arflix.tv.R
 import androidx.compose.foundation.rememberScrollState
@@ -161,6 +162,7 @@ import com.arflix.tv.ui.components.SkeletonMediaCard
 import androidx.compose.material3.TextButton
 import com.arflix.tv.ui.components.MobileHeroBanner
 import com.arflix.tv.ui.components.MobileHeroLayoutSpec
+import com.arflix.tv.ui.components.mobileDetailsArtworkSource
 import com.arflix.tv.ui.components.resolveMobileHeroLayout
 import com.arflix.tv.ui.components.ProfileAvatarVisual
 import com.arflix.tv.util.LocalDeviceType
@@ -210,6 +212,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import dagger.hilt.android.EntryPointAccessors
 import com.arflix.tv.ui.components.TrailerPlayerEntryPoint
@@ -1373,8 +1376,9 @@ fun HomeScreen(
                             .setMinPlaybackSpeed(1.0f).setMaxPlaybackSpeed(1.0f)
                             .setTargetOffsetMs(4_000).build()
                     ).build()
-                if (iptvSession != null) {
-                    player?.setMediaSource(homeIptvPreviewSource(context, handles.iptvClient, handles.userAgent, iptvSession, mi, useHls))
+                if (heroIptvItem != null) {
+                    val headers = homeIptvPreviewHeaders(handles.userAgent, viewModel.getIptvRequestHeaders(heroIptvItem.id))
+                    player?.setMediaSource(homeIptvPreviewSource(context, handles.iptvClient, headers, iptvSession, mi, useHls))
                 } else if (useHls) {
                     player?.setMediaSource(handles.hlsFactory.createMediaSource(mi))
                 } else {
@@ -2520,44 +2524,50 @@ private fun MobileHeroOverlay(
     }
 }
 
-/** Netflix-style mobile hero carousel: card-based banner pager with profile/search overlay. */
+@Composable
+private fun MobileHomeHeader(
+    currentProfile: com.arflix.tv.data.model.Profile?,
+    onSwitchProfile: () -> Unit,
+    onNavigateToSearch: () -> Unit,
+) {
+    Row(
+        Modifier.fillMaxWidth().statusBarsPadding()
+            .padding(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 8.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(Modifier.size(48.dp).clip(CircleShape).clickable(onClick = onSwitchProfile)
+            .padding(5.dp).clip(CircleShape)) {
+            if (currentProfile != null) ProfileAvatarVisual(
+                profile = currentProfile, letterFontSize = 15.sp, iconPadding = 5.dp)
+        }
+        Box(Modifier.size(48.dp).clip(CircleShape).clickable(onClick = onNavigateToSearch)
+            .padding(5.dp).background(Color.Black.copy(alpha = 0.32f), CircleShape),
+            contentAlignment = Alignment.Center) {
+            Icon(Icons.Filled.Search, stringResource(R.string.search), tint = Color.White,
+                modifier = Modifier.size(26.dp))
+        }
+    }
+}
+
+/** Mobile hero carousel; immersive artwork extends behind the safe-area header. */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun MobileHeroCarousel(
+internal fun MobileHeroCarousel(
     categories: List<Category>,
     heroLayout: MobileHeroLayoutSpec,
+    posterStyle: Boolean = true,
     cardLogoUrls: Map<String, String> = emptyMap(),
     cardImdbRatings: Map<String, String> = emptyMap(),
     currentProfile: com.arflix.tv.data.model.Profile? = null,
     onNavigateToSearch: () -> Unit = {},
     onSwitchProfile: () -> Unit = {},
     onNavigateToDetails: (MediaType, Int, Int?, Int?) -> Unit,
-    onPreloadHeroImdbRatings: (List<MediaItem>) -> Unit = {}
+    onPreloadHeroImdbRatings: (List<MediaItem>) -> Unit = {},
 ) {
     val context = LocalContext.current
-    val density = LocalDensity.current
-    val heroItems = remember(categories) {
-        val eligibleRows = categories.filter {
-            it.id != "continue_watching" &&
-                !it.id.startsWith("collection_row_") &&
-                it.id != SportsAddonCapabilities.SPORTS_CATEGORY_ROW_ID &&
-                it.id != SportsAddonCapabilities.POPULAR_LIVE_TV_ROW_ID
-        }
-        val firstCat = eligibleRows.getOrNull(0)
-            ?.items?.filter { !it.isPlaceholder && it.id > 0 && !SportsAddonCapabilities.isSportsHomeStatus(it.status) && !SportsAddonCapabilities.isSportsLockedStatus(it.status) }?.take(5)
-            .orEmpty()
-        val secondCat = eligibleRows.getOrNull(1)
-            ?.items?.filter { !it.isPlaceholder && it.id > 0 && !SportsAddonCapabilities.isSportsHomeStatus(it.status) && !SportsAddonCapabilities.isSportsLockedStatus(it.status) }?.take(5)
-            .orEmpty()
-        // Interleave: first[0], second[0], first[1], second[1], …
-        buildList {
-            val maxLen = maxOf(firstCat.size, secondCat.size)
-            for (i in 0 until maxLen) {
-                if (i < firstCat.size) add(firstCat[i])
-                if (i < secondCat.size) add(secondCat[i])
-            }
-        }.distinctBy { "${it.mediaType}_${it.id}" }
-    }
+    val incomingItems = remember(categories) { mobileHeroItems(categories) }
+    var heroItems by remember { mutableStateOf(incomingItems) }
 
     LaunchedEffect(heroItems) {
         if (heroItems.isNotEmpty()) {
@@ -2566,41 +2576,9 @@ private fun MobileHeroCarousel(
     }
 
     if (heroItems.isEmpty()) {
+        LaunchedEffect(incomingItems) { heroItems = incomingItems }
         Column(modifier = Modifier.fillMaxWidth()) {
-            // Profile avatar + search icon row — above the pager, respects status bar
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .statusBarsPadding()
-                    .padding(start = 26.dp, end = 26.dp, top = 12.dp, bottom = 10.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                if (currentProfile != null) {
-                    Box(
-                        modifier = Modifier
-                            .size(38.dp)
-                            .clip(CircleShape)
-                            .clickable { onSwitchProfile() }
-                    ) {
-                        ProfileAvatarVisual(
-                            profile = currentProfile,
-                            letterFontSize = 15.sp,
-                            iconPadding = 5.dp
-                        )
-                    }
-                } else {
-                    Spacer(modifier = Modifier.size(38.dp))
-                }
-                Icon(
-                    imageVector = Icons.Filled.Search,
-                    contentDescription = stringResource(R.string.search),
-                    tint = Color.White,
-                    modifier = Modifier
-                        .size(26.dp)
-                        .clickable { onNavigateToSearch() }
-                )
-            }
+            if (posterStyle) MobileHomeHeader(currentProfile, onSwitchProfile, onNavigateToSearch)
 
             Box(
                 modifier = Modifier
@@ -2615,26 +2593,42 @@ private fun MobileHeroCarousel(
                         heroLayout.cardHeightDp.dp,
                     ),
                 )
+                if (!posterStyle) Box(Modifier.align(Alignment.TopCenter)) {
+                    MobileHomeHeader(currentProfile, onSwitchProfile, onNavigateToSearch)
+                }
             }
         }
         return
     }
 
-    // Circular paging: use a large virtual page count that's a multiple of heroItems.size
-    // so page % heroItems.size always maps correctly and starts at item[0].
-    val virtualPageCount = heroItems.size * 1000
-    val initialPage = heroItems.size * 500
     val pagerState = rememberPagerState(
-        initialPage = initialPage,
-        pageCount = { virtualPageCount }
+        initialPage = mobileHeroPageForIndex(MobileHeroPageCount / 2, heroItems.size, 0),
+        pageCount = { MobileHeroPageCount },
     )
+    LaunchedEffect(incomingItems) {
+        if (incomingItems == heroItems) return@LaunchedEffect
+        if (incomingItems.isEmpty()) {
+            heroItems = emptyList()
+            return@LaunchedEffect
+        }
+        snapshotFlow { pagerState.isScrollInProgress }.first { !it }
+        val selected = heroItems[pagerState.currentPage.mod(heroItems.size)]
+        val nextIndex = incomingItems.indexOfFirst { it.id == selected.id && it.mediaType == selected.mediaType }
+            .coerceAtLeast(0)
+        pagerState.scrollToPage(mobileHeroPageForIndex(pagerState.currentPage, incomingItems.size, nextIndex))
+        heroItems = incomingItems
+    }
 
-    // Restart the 10s countdown whenever the pager settles on a new page,
-    // whether from a user swipe or the previous auto-advance. This gives
-    // the user a full 10s after any manual interaction before the next advance.
-    LaunchedEffect(pagerState.settledPage, heroItems.size) {
-        if (heroItems.size <= 1) return@LaunchedEffect
+    val isDragged by pagerState.interactionSource.collectIsDraggedAsState()
+    val lifecycleState by LocalLifecycleOwner.current.lifecycle.currentStateAsState()
+    LaunchedEffect(pagerState.settledPage, heroItems, isDragged, lifecycleState) {
+        if (heroItems.size <= 1 || isDragged || !lifecycleState.isAtLeast(Lifecycle.State.RESUMED)) return@LaunchedEffect
         delay(10000L)
+        if (pagerState.isScrollInProgress) return@LaunchedEffect
+        if (pagerState.currentPage == MobileHeroPageCount - 1) {
+            pagerState.scrollToPage(mobileHeroPageForIndex(MobileHeroPageCount / 2, heroItems.size,
+                pagerState.currentPage.mod(heroItems.size)))
+        }
         pagerState.animateScrollToPage(
             pagerState.currentPage + 1,
             animationSpec = tween(durationMillis = 900, easing = FastOutSlowInEasing)
@@ -2642,42 +2636,10 @@ private fun MobileHeroCarousel(
     }
 
     Column(modifier = Modifier.fillMaxWidth()) {
-        // Profile avatar + search icon row — above the pager, respects status bar
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .statusBarsPadding()
-                .padding(start = 26.dp, end = 26.dp, top = 12.dp, bottom = 10.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            if (currentProfile != null) {
-                Box(
-                    modifier = Modifier
-                        .size(38.dp)
-                        .clip(CircleShape)
-                        .clickable { onSwitchProfile() }
-                ) {
-                    ProfileAvatarVisual(
-                        profile = currentProfile,
-                        letterFontSize = 15.sp,
-                        iconPadding = 5.dp
-                    )
-                }
-            } else {
-                Spacer(modifier = Modifier.size(38.dp))
-            }
-            Icon(
-                imageVector = Icons.Filled.Search,
-                contentDescription = stringResource(R.string.search),
-                tint = Color.White,
-                modifier = Modifier
-                    .size(26.dp)
-                    .clickable { onNavigateToSearch() }
-            )
-        }
+        if (posterStyle) MobileHomeHeader(currentProfile, onSwitchProfile, onNavigateToSearch)
 
         // Banner card pager — circular, peeks at adjacent cards on both sides
+        Box(Modifier.fillMaxWidth().height(heroLayout.cardHeightDp.dp).testTag("mobile_hero_pager")) {
         HorizontalPager(
             state = pagerState,
             contentPadding = PaddingValues(horizontal = heroLayout.carouselHorizontalPaddingDp.dp),
@@ -2711,29 +2673,25 @@ private fun MobileHeroCarousel(
                     imdbRatingFor(item)
                 }
             }
-            val logoUrl = remember(item.id) { cardLogoUrls["${item.mediaType}_${item.id}"] }
-            val heroImageUrl = remember(item.backdrop, item.image, heroLayout, density) {
-                TmdbImageSizing.forSlot(
-                    item.backdrop ?: item.image ?: "",
-                    with(density) { heroLayout.cardWidthDp.dp.roundToPx() },
-                    with(density) { heroLayout.cardHeightDp.dp.roundToPx() },
-                    TmdbImageSizing.Kind.BACKDROP
-                )
+            val logoUrl = cardLogoUrls["${item.mediaType}_${item.id}"]
+            val heroArtwork = remember(item.backdrop, item.image, heroLayout.compactContent) {
+                mobileDetailsArtworkSource(item.image, item.backdrop, portrait = !heroLayout.compactContent)
             }
 
             // Scale down cards that aren't in the center; animate smoothly as they scroll in/out
-            val scale by remember(page) {
+            val scale by remember(page, posterStyle) {
                 derivedStateOf {
                     val offset = abs(
                         (pagerState.currentPage - page) + pagerState.currentPageOffsetFraction
                     )
-                    (1f - offset * 0.13f).coerceIn(0.87f, 1f)
+                    if (posterStyle) (1f - offset * 0.08f).coerceIn(0.92f, 1f) else 1f
                 }
             }
 
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 MobileHeroBanner(
-                    imageUrl = heroImageUrl,
+                    imageUrl = heroArtwork?.url.orEmpty(),
+                    isPosterArtwork = heroArtwork?.isPoster == true,
                     title = item.title,
                     genres = genres,
                     year = year,
@@ -2741,6 +2699,8 @@ private fun MobileHeroCarousel(
                     logoUrl = logoUrl,
                     onClick = { onNavigateToDetails(item.mediaType, item.id, null, null) },
                     compactContent = heroLayout.compactContent,
+                    immersive = !posterStyle,
+                    showPageIndicators = heroItems.size > 1,
                     modifier = Modifier
                         .size(heroLayout.cardWidthDp.dp, heroLayout.cardHeightDp.dp)
                         .graphicsLayer {
@@ -2750,14 +2710,17 @@ private fun MobileHeroCarousel(
                 )
             }
         }
+        if (!posterStyle) MobileHomeHeader(currentProfile, onSwitchProfile, onNavigateToSearch)
 
-        // Animated pill indicators — centered below the pager
+        // Keep pagination on the artwork, without adding a separate strip below the hero.
         if (heroItems.size > 1) {
             val currentIndex = pagerState.currentPage % heroItems.size
             Row(
                 modifier = Modifier
+                    .align(Alignment.BottomCenter)
                     .fillMaxWidth()
-                    .padding(top = 10.dp, bottom = 8.dp),
+                    .padding(bottom = 12.dp)
+                    .testTag("mobile_hero_indicators"),
                 horizontalArrangement = Arrangement.Center,
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -2771,6 +2734,7 @@ private fun MobileHeroCarousel(
                     )
                     Box(
                         modifier = Modifier
+                            .testTag("mobile_hero_dot_$index")
                             .height(4.dp)
                             .width(6.dp + 18.dp * expandFraction)
                             .clip(RoundedCornerShape(8.dp))
@@ -2780,6 +2744,7 @@ private fun MobileHeroCarousel(
                     )
                 }
             }
+        }
         }
     }
 }
@@ -3501,15 +3466,21 @@ private fun MobileHomeRowsLayer(
 ) {
     val mobileItemSpacing = 14.dp
     val bottomBarHeight = LocalBottomBarHeight.current
+    val posterHero = com.arflix.tv.ui.components.rememberMobileHomeHeroStyle() == com.arflix.tv.ui.components.MobileHomeHeroStyle.POSTER
+    val mobileListState = rememberLazyListState()
+    val statusScrimScrollDistance = with(LocalDensity.current) { 72.dp.toPx() }
 
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-        val heroLayout = remember(maxWidth, maxHeight, bottomBarHeight) {
-            resolveMobileHeroLayout(
+        val heroLayout = remember(maxWidth, maxHeight, bottomBarHeight, posterHero) {
+            val poster = resolveMobileHeroLayout(
                 availableWidthDp = maxWidth.value,
                 availableHeightDp = (maxHeight - bottomBarHeight).coerceAtLeast(1.dp).value,
             )
+            if (posterHero) poster else com.arflix.tv.ui.components.resolveImmersiveMobileHeroLayout(
+                maxWidth.value, (maxHeight - bottomBarHeight).coerceAtLeast(1.dp).value)
         }
         LazyColumn(
+            state = mobileListState,
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(bottom = 16.dp + LocalBottomBarInset.current),
             verticalArrangement = Arrangement.spacedBy(20.dp)
@@ -3519,6 +3490,7 @@ private fun MobileHomeRowsLayer(
             MobileHeroCarousel(
                 categories = categories,
                 heroLayout = heroLayout,
+                posterStyle = posterHero,
                 cardLogoUrls = cardLogoUrls,
                 cardImdbRatings = cardImdbRatings,
                 currentProfile = currentProfile,
@@ -3540,7 +3512,13 @@ private fun MobileHomeRowsLayer(
             val rowKey = remember(category.id) { "home:${category.id}" }
             val rowUsePosterCards = rememberCatalogueRowLayoutMode(rowKey) == CardLayoutMode.POSTER
             val isPortrait = category.isPortrait(rowUsePosterCards)
-            val rowMobileItemWidth = if (isPortrait) HOME_MOBILE_POSTER_CARD_WIDTH_DP.dp else HOME_MOBILE_LANDSCAPE_CARD_WIDTH_DP.dp
+            val isServiceRow = isCollectionRow && category.items.firstOrNull()?.status?.startsWith("collection:collection_service_") == true
+            val rowMobileItemWidth = when {
+                isServiceRow -> 112.dp
+                isPortrait -> HOME_MOBILE_POSTER_CARD_WIDTH_DP.dp
+                isContinueWatching -> HOME_MOBILE_LANDSCAPE_CARD_WIDTH_DP.dp
+                else -> 180.dp
+            }
             // The keyed lazy item saves this state across disposal and navigation.
             val rowState = rememberLazyListState()
 
@@ -3757,6 +3735,15 @@ private fun MobileHomeRowsLayer(
             }
         }
         }
+        Spacer(Modifier.align(Alignment.TopCenter).fillMaxWidth()
+            .graphicsLayer {
+                val progress = if (mobileListState.firstVisibleItemIndex > 0) 1f
+                    else (mobileListState.firstVisibleItemScrollOffset / statusScrimScrollDistance).coerceIn(0f, 1f)
+                alpha = 0.35f + progress * 0.65f
+            }
+            .background(Brush.verticalGradient(0f to Color.Black.copy(alpha = 0.65f),
+                0.75f to Color.Black.copy(alpha = 0.55f), 1f to Color.Transparent))
+            .statusBarsPadding().height(12.dp))
     }
 }
 

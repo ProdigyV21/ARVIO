@@ -3,7 +3,7 @@ const trial = { entitled: true, reason: 'trial', status: 'active', source: 'tria
 const paid = { ...trial, reason: 'subscription', source: 'kofi' };
 const scenario = new URLSearchParams(location.search).get('case');
 const unpaid = { ...trial, entitled: false, reason: 'none', source: null, expiresAt: null, trialAvailable: false, trialDurationDays: 0 };
-let state: Record<string, unknown> = scenario === 'preview-paid' ? paid : ['paywall', 'preview-unpaid', 'preview-signedout', 'preview-legacy', 'delayed-payment'].includes(scenario || '') ? unpaid : trial;
+let state: Record<string, unknown> = scenario === 'preview-paid' || scenario === 'purchase-paid' ? paid : scenario?.startsWith('purchase-') || ['paywall', 'preview-unpaid', 'preview-signedout', 'preview-legacy', 'delayed-payment'].includes(scenario || '') ? unpaid : trial;
 let checkoutSeen = false;
 let paymentChecks = 0;
 let completeStatus: ((value: typeof trial) => void) | undefined;

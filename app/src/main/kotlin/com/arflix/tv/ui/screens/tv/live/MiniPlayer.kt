@@ -147,6 +147,7 @@ fun MiniPlayerRow(
     modifier: Modifier = Modifier,
     focusedProgrammeProvider: (() -> Pair<EnrichedChannel, IptvProgram>?)? = null,
     focusedChannelProvider: (() -> Pair<EnrichedChannel, IptvNowNext?>?)? = null,
+    videoOnly: Boolean = false,
 ) {
     val drawerTranslation = LocalLiveDrawerTranslation.current
     // Read rapidly changing programme focus here, not in the surrounding guide.
@@ -159,6 +160,12 @@ fun MiniPlayerRow(
     val infoVariantCount = if (infoChannel?.id == channel?.id) variantCount else 1
     val onInfoVariants = onOpenVariants.takeIf { infoChannel?.id == channel?.id }
     val drawerDirection = if (LocalLayoutDirection.current == LayoutDirection.Rtl) 1f else -1f
+    if (videoOnly) {
+        VideoCard(exoPlayer = exoPlayer, channel = channel, compact = true, playerActive = playerActive,
+            onFullscreenClick = onFullscreenClick, onVideoBoundsPositioned = onVideoBoundsPositioned,
+            modifier = modifier.fillMaxWidth())
+        return
+    }
     if (landscapeCompact) {
         val spec = landscapePhoneMiniPlayerSpec()
         Row(

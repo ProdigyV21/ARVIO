@@ -1,4 +1,6 @@
 import type { MediaType } from "./types";
+import { premiumPurchaseLoginRedirect } from "./premiumPurchaseIntent";
+import { premiumAttributionRedirectParams } from "./premiumAnalytics";
 
 export const PARTNER_LINK_KEYS = ["open", "imdb", "type", "id", "season", "episode"] as const;
 const MAX_ID = 2_147_483_647;
@@ -68,14 +70,29 @@ export function stripPartnerLink(url: string): string {
   return clean.pathname + clean.search + clean.hash;
 }
 
-/** Used by both sign-in entry points: only validated title links survive the portal round-trip. */
+/** Only validated title links or bounded Premium selections survive sign-in. */
 export function partnerLoginRedirect(origin: string, search: string): string {
-  if (parsePartnerLink(search).status !== "valid") return origin + "/";
+  const purchase = premiumPurchaseLoginRedirect(origin, search);
+  const supplementAttribution = (url: string) => {
+    if (origin !== "https://web.arvio.tv" || typeof window === "undefined") return url;
+    const destination = new URL(url);
+    ["arvio_journey", "arvio_landing", "arvio_attribution_until", "utm_source", "utm_medium", "utm_campaign", "utm_content"].forEach(key => destination.searchParams.delete(key));
+    premiumAttributionRedirectParams().forEach((value, key) => destination.searchParams.set(key, value));
+    return destination.toString();
+  };
+  if (parsePartnerLink(search).status !== "valid") return supplementAttribution(purchase ?? origin + "/");
   // Fixed same-origin homepage, not a user-controlled return URL. Keep attribution
   // and trial intent intact; arbitrary query values are never navigation targets.
   const destination = new URL("/", origin);
   destination.search = search;
-  return destination.toString();
+  destination.searchParams.delete("premium_plan");
+  destination.searchParams.delete("premium_intent_at");
+  if (purchase) {
+    const params = new URL(purchase).searchParams;
+    destination.searchParams.set("premium_plan", params.get("premium_plan")!);
+    destination.searchParams.set("premium_intent_at", params.get("premium_intent_at")!);
+  }
+  return supplementAttribution(destination.toString());
 }
 
 type FindItem = { id?: number; adult?: boolean; show_id?: number; season_number?: number; episode_number?: number };

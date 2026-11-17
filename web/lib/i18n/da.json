@@ -6,5 +6,22 @@
   "Dropped": "Droppet",
   "ARVIO navigation": "ARVIO-navigation",
   "Silo: use the Jellyfin-compatible address. Optional profile: username#ProfileName. Protected profile: password#PIN.": "Silo: brug den Jellyfin-kompatible adresse. Valgfri profil: username#ProfileName. Beskyttet profil: password#PIN.",
-  "None of your enabled addons provide playback sources.": "Ingen af dine aktiverede tilføjelser leverer afspilningskilder."
+  "None of your enabled addons provide playback sources.": "Ingen af dine aktiverede tilføjelser leverer afspilningskilder.",
+  "You already have access. There is no need to pay again.": "Du har allerede adgang. Du behøver ikke betale igen.",
+  "Open ARVIO Web": "Åbn ARVIO Web",
+  "Membership steps": "Trin til medlemskabet",
+  "Account": "Konto",
+  "Payment": "Betaling",
+  "Your selected Premium plan": "Dit valgte Premium-abonnement",
+  "Your plan is ready. Complete payment securely on Ko-fi, then return here.": "Dit abonnement er klar. Betal sikkert på Ko-fi, og vend derefter tilbage hertil.",
+  "Sign in or create your ARVIO account, then complete payment on Ko-fi.": "Log ind eller opret en ARVIO-konto, og betal derefter på Ko-fi.",
+  "Your selected plan": "Dit valgte abonnement",
+  "12-month pass": "12-månederspas",
+  "Monthly membership": "Månedligt medlemskab",
+  "Checking your price…": "Tjekker din pris…",
+  "Save {value0} vs. 12 monthly payments of $2.99 ($35.88).": "Spar {value0} i forhold til 12 månedlige betalinger på $2.99 ($35.88).",
+  "24/7 hosted ARVIO Web for your supported browsers.": "ARVIO Web med hosting døgnet rundt til dine understøttede browsere.",
+  "This plan is unavailable right now. Please try again shortly.": "Dette abonnement er ikke tilgængeligt lige nu. Prøv igen om lidt.",
+  "Continue to Ko-fi · {value0}": "Fortsæt til Ko-fi · {value0}",
+  "Keep exploring": "Fortsæt med at udforske"
 }

@@ -1105,6 +1105,9 @@ class HomeViewModel @Inject constructor(
     /** Get the stream URL for an IPTV MediaItem. */
     fun getIptvStreamUrl(itemId: Int): String? = iptvChannelMap[itemId]?.streamUrl
 
+    /** The playlist's request headers for an IPTV MediaItem's channel (Referer, User-Agent...). */
+    fun getIptvRequestHeaders(itemId: Int): Map<String, String> = iptvChannelMap[itemId]?.requestHeaders.orEmpty()
+
     // The same resolver and client limits as the Live TV screen, so a channel previews on Home
     // exactly when it plays there.
     private val iptvPlaybackUrlResolver by lazy {

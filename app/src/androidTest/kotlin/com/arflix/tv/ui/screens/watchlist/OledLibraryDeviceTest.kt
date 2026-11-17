@@ -10,6 +10,7 @@ import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.unit.dp
 import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
@@ -119,6 +120,52 @@ class OledLibraryDeviceTest {
         }
         field.performTextInput("fixture")
         field.assertTextContains("fixture")
+    }
+
+    @Test fun phoneSearchControlsHaveFullTouchTargetsAndDoneClosesSearch() {
+        compose.runOnUiThread { WindowCompat.setDecorFitsSystemWindows(compose.activity.window, false) }
+        show(false, deviceOverride = DeviceType.PHONE)
+        val search = compose.onNodeWithContentDescription("Search library")
+        search.performTouchInput { click() }
+        val field = compose.onNodeWithTag("library-search-field")
+        field.performTextInput("fixture")
+        val density = compose.activity.resources.displayMetrics.density
+        for (tag in listOf("library-search-clear", "library-search-done")) {
+            val bounds = compose.onNodeWithTag(tag).fetchSemanticsNode().boundsInRoot
+            assertTrue("$tag needs a 48dp touch target", bounds.width >= 48f * density - 1f && bounds.height >= 48f * density - 1f)
+        }
+        compose.onNodeWithTag("library-search-clear").performTouchInput { click() }
+        assertEquals("", field.fetchSemanticsNode().config[androidx.compose.ui.semantics.SemanticsProperties.EditableText].text)
+        val longQuery = "A deliberately long search title that must never hide the library controls"
+        field.performTextInput(longQuery)
+        compose.waitUntil(5_000) {
+            compose.runOnUiThread {
+                ViewCompat.getRootWindowInsets(compose.activity.window.decorView)
+                    ?.isVisible(WindowInsetsCompat.Type.ime()) == true
+            }
+        }
+        val keyboardTop = compose.runOnUiThread {
+            val decor = compose.activity.window.decorView
+            decor.height - (ViewCompat.getRootWindowInsets(decor)?.getInsets(WindowInsetsCompat.Type.ime())?.bottom ?: 0)
+        }
+        val message = compose.onNodeWithText("Choose a source or add titles to your watchlist.").fetchSemanticsNode().boundsInRoot
+        assertTrue("Search empty state must remain above the keyboard", message.bottom < keyboardTop)
+        compose.onNodeWithTag("library-search-done").performTouchInput { click() }
+        compose.onNodeWithTag("library-search-field").assertDoesNotExist()
+        compose.waitUntil(5_000) {
+            compose.runOnUiThread {
+                ViewCompat.getRootWindowInsets(compose.activity.window.decorView)
+                    ?.isVisible(WindowInsetsCompat.Type.ime()) != true
+            }
+        }
+        compose.onNodeWithText("\"$longQuery\"").assertIsDisplayed()
+        val clearIcon = compose.onNodeWithContentDescription("Clear search", useUnmergedTree = true).assertIsDisplayed()
+        assertTrue("The query's clear icon must not be squeezed out", clearIcon.fetchSemanticsNode().boundsInRoot.width >= 16f * density - 1f)
+        compose.onNodeWithText("Filters").assertIsDisplayed()
+        compose.onNodeWithTag("library-source-picker").assertIsDisplayed()
+        compose.onNodeWithText("\"$longQuery\"").performTouchInput { click() }
+        compose.onNodeWithText("\"$longQuery\"").assertDoesNotExist()
+        compose.onNodeWithContentDescription("Search library").assertIsDisplayed()
     }
     @Test fun posterAndLongGridScroll() {
         show(true)

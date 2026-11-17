@@ -51,6 +51,8 @@ class CollectionMobileGridDeviceTest {
             }
         }
         fun checkColumns(columns: Int) {
+            // The mobile spotlight is now a real scrolling item, followed by the tabs.
+            compose.onNodeWithTag("collection_grid").performScrollToIndex(2)
             compose.waitForIdle()
             val grid = compose.onNodeWithTag("collection_grid").getUnclippedBoundsInRoot()
             val first = compose.onNodeWithTag("collection_item_0").getUnclippedBoundsInRoot()

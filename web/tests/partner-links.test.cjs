@@ -64,6 +64,21 @@ test('login redirects preserve valid pending titles and attribution, not arbitra
   assert.equal(links.partnerLoginRedirect('https://web.arvio.tv', '?return_url=https://evil.invalid'), 'https://web.arvio.tv/');
 });
 
+test('login preserves a bounded Premium plan with or without a title, never arbitrary destinations', () => {
+  const selected = new URL(links.partnerLoginRedirect('https://web.arvio.tv', '?premium_plan=yearly&utm_source=discord&return_url=https://evil.invalid'));
+  assert.equal(selected.searchParams.get('premium_plan'), 'yearly');
+  assert.match(selected.searchParams.get('premium_intent_at'), /^\d+$/);
+  assert.equal(selected.searchParams.get('utm_source'), 'discord');
+  assert.equal(selected.searchParams.has('return_url'), false);
+  const title = new URL(links.partnerLoginRedirect('https://web.arvio.tv', '?open=1&imdb=tt0137523&premium_plan=monthly'));
+  assert.equal(title.searchParams.get('imdb'), 'tt0137523');
+  assert.equal(title.searchParams.get('premium_plan'), 'monthly');
+  assert.match(title.searchParams.get('premium_intent_at'), /^\d+$/);
+  const malformed = new URL(links.partnerLoginRedirect('https://web.arvio.tv', '?open=1&imdb=tt0137523&premium_plan=yearly&premium_plan=monthly'));
+  assert.equal(malformed.searchParams.has('premium_plan'), false);
+  assert.equal(links.partnerLoginRedirect('https://web.arvio.tv', '?premium_plan=annual'), 'https://web.arvio.tv/');
+});
+
 test('IMDb find resolves films and shows with explicit type hints and excludes adult records', async () => {
   const calls = [];
   const request = async (requestPath, params) => {

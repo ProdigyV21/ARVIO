@@ -4,6 +4,8 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.runtime.staticCompositionLocalOf
@@ -121,7 +123,7 @@ internal fun appBottomBarSpec(mode: AppBottomBarMode): AppBottomBarSpec = when (
         labelFontSizeSp = 11,
     )
     AppBottomBarMode.STANDARD -> AppBottomBarSpec(
-        itemHeightDp = 52,
+        itemHeightDp = 64,
         rowVerticalPaddingDp = 0,
         itemVerticalPaddingDp = 0,
         itemSpacingDp = 0,
@@ -151,7 +153,7 @@ internal fun appBottomBarClearance(
     }
     // Standard bar measurements already include navigationBarsPadding().
     val fullHeight = maxOf(measuredHeightDp, (appBottomBarSpec(mode).itemHeightDp ?: 52) + navigationInsetDp)
-    return AppBottomBarClearance(navigationInsetDp, fullHeight)
+    return AppBottomBarClearance(fullHeight, fullHeight)
 }
 
 /** Only interactive navigation avoids a side cutout; full-width screens may draw beneath it. */
@@ -167,8 +169,13 @@ internal fun navigationRailCutoutInsetPx(
     return (cutoutStart - systemStart).coerceAtLeast(0)
 }
 
-internal fun mobileContentInsets(systemBars: WindowInsets, showBottomBar: Boolean = false): WindowInsets =
-    systemBars.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal)
+internal fun mobileContentInsets(
+    systemBars: WindowInsets,
+    showBottomBar: Boolean = false,
+    edgeToEdgeTop: Boolean = false,
+): WindowInsets = systemBars.only(
+    if (edgeToEdgeTop) WindowInsetsSides.Horizontal else WindowInsetsSides.Top + WindowInsetsSides.Horizontal
+)
 
 internal fun shouldShowBottomBar(
     isMobile: Boolean,
@@ -236,22 +243,13 @@ fun AppBottomBar(
     val spec = appBottomBarSpec(mode)
     val isRail = mode == AppBottomBarMode.LANDSCAPE_RAIL
     val accent = resolveAccentColor(fallback = Color.White)
-    val barHeight = (spec.itemHeightDp ?: 52).dp
+    val barHeight = maxOf((spec.itemHeightDp ?: 64).toFloat(), 34f + 28f * androidx.compose.ui.platform.LocalDensity.current.fontScale).dp
     val surfaceShape = RectangleShape
 
-    val baseModifier = if (hazeState != null) {
-        modifier.hazeChild(
-            state = hazeState,
-            shape = surfaceShape,
-            style = HazeStyle(
-                tint = Color(0xCC000000), // 80% black tint
-                blurRadius = 24.dp,
-                noiseFactor = 0.04f
-            )
-        )
-    } else {
-        modifier.background(Color(0xCC000000))
-    }
+    // A single dark fade stays readable over artwork without live backdrop blur.
+    val baseModifier = modifier.background(
+        Brush.verticalGradient(0f to Color.Transparent, 0.28f to Color.Black.copy(alpha = 0.9f), 1f to Color.Black)
+    )
 
     val items = bottomBarItems.filter {
         com.arflix.tv.util.isNavigationSectionVisible(it.route, NavigationVisibility.hiddenSections, KidsNavigation.hideLiveTv)
@@ -292,11 +290,6 @@ fun AppBottomBar(
     } else {
         Column(
             modifier = baseModifier.fillMaxWidth()
-                .drawBehind {
-                    val strokeWidth = 0.5.dp.toPx()
-                    drawLine(Color.White.copy(alpha = 0.12f), Offset(0f, strokeWidth / 2),
-                        Offset(size.width, strokeWidth / 2), strokeWidth)
-                }
                 .navigationBarsPadding()
         ) {
             Row(
@@ -321,7 +314,7 @@ private fun BottomBarItemButton(
     accent: Color,
     modifier: Modifier,
 ) {
-    val isSelected = currentRoute?.contains(item.route, ignoreCase = true) == true
+    val isSelected = currentRoute?.substringBefore('?') == item.route
     val haptic = LocalHapticFeedback.current
     var isFocused by remember { mutableStateOf(false) }
     val label = stringResource(item.labelRes)
@@ -334,7 +327,8 @@ private fun BottomBarItemButton(
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .clip(CircleShape)
+            .clip(RoundedCornerShape(8.dp))
+            .semantics { contentDescription = label }
             .selectable(
                 selected = isSelected,
                 role = Role.Tab,
@@ -351,11 +345,16 @@ private fun BottomBarItemButton(
             .then(if (isFocused) Modifier.border(1.dp, accent, CircleShape) else Modifier),
         contentAlignment = Alignment.Center
     ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(3.dp)) {
         Icon(
             imageVector = item.icon,
-            contentDescription = label,
+            contentDescription = null,
             tint = iconColor,
             modifier = Modifier.size(spec.iconSizeDp.dp)
         )
+        androidx.compose.material3.Text(label, color = iconColor, fontSize = spec.labelFontSizeSp.sp,
+            lineHeight = 14.sp, maxLines = 2, textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+            modifier = Modifier.padding(horizontal = 2.dp))
+        }
     }
 }

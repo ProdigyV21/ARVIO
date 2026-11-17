@@ -13,12 +13,13 @@ const assert = require('node:assert/strict');
   const fixture = name => path.join(root, 'tests/fixtures', name);
   const regionalOnly = process.env.PAYMENT_UI_ONLY === 'regional-pricing';
   const attributionOnly = process.env.PAYMENT_UI_ONLY === 'attribution';
+  const serveOnly = process.argv.includes('--serve');
   const yearlyUrl = 'https://ko-fi.com/s/373de24a07';
   const regionalUrl = 'https://ko-fi.com/arvio/link/ARVIOREGION50';
   const result = await esbuild.build({
     entryPoints: [fixture('premium-ui.tsx')], bundle: true, write: false, outdir: 'payment-fixture', jsx: 'automatic',
     define: { 'process.env': '{}', 'process.env.NODE_ENV': '"development"', 'process.env.NEXT_PUBLIC_PAYWALL_ENABLED': '"true"', 'process.env.NEXT_PUBLIC_KOFI_URL': '"https://ko-fi.com/arvio/tiers"',
-      'process.env.NEXT_PUBLIC_KOFI_YEARLY_URL': JSON.stringify(regionalOnly ? yearlyUrl : '') },
+      'process.env.NEXT_PUBLIC_KOFI_YEARLY_URL': JSON.stringify(regionalOnly || serveOnly ? yearlyUrl : '') },
     plugins: [{ name: 'local-only-payment-transport', setup(build) {
       build.onResolve({ filter: /^@\// }, args => ({ path: args.path === '@/lib/store' ? fixture('premium-store.ts') : ['.tsx', '.ts', '/index.tsx', '/index.ts', ''].map(ext => path.join(root, args.path.slice(2) + ext)).find(file => fs.existsSync(file)) }));
       build.onResolve({ filter: /(^|\/)http$/ }, () => ({ path: fixture('premium-http.ts') }));
@@ -29,6 +30,12 @@ const assert = require('node:assert/strict');
   const server = http.createServer((req, res) => {
     const url = new URL(req.url, 'http://localhost');
     res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'");
+    if (url.pathname === '/api/geo') {
+      let country = 'US';
+      try { if (new URL(req.headers.referer).searchParams.get('country') === 'BR') country = 'BR'; } catch { /* fixture default */ }
+      res.setHeader('content-type', 'application/json');
+      return res.end(JSON.stringify({ country }));
+    }
     if (url.pathname === '/bundle.js' || url.pathname === '/bundle.css') {
       res.setHeader('content-type', url.pathname.endsWith('js') ? 'text/javascript' : 'text/css');
       return res.end(url.pathname.endsWith('js') ? js : css);
@@ -41,6 +48,11 @@ const assert = require('node:assert/strict');
     res.end('<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><title>Local payment-flow test</title><link rel="stylesheet" href="/bundle.css"></head><body><div id="root"></div><script src="/bundle.js"></script></body></html>');
   });
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  if (serveOnly) {
+    console.log(`Isolated payment fixture: http://127.0.0.1:${server.address().port}/?case=purchase-yearly`);
+    console.log('Other cases: purchase-monthly, purchase-paid, purchase-signedout. Use a fresh tab/session for country=BR. No real billing or account writes.');
+    return;
+  }
   // A second, fail-closed network barrier covers native browser requests that
   // are not associated with a routed page. This proxy never opens an upstream
   // connection. Local fixture traffic bypasses it.

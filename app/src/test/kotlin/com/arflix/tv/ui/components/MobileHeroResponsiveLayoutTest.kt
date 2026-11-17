@@ -4,6 +4,16 @@ import com.google.common.truth.Truth.assertThat
 import org.junit.Test
 
 class MobileHeroResponsiveLayoutTest {
+    @Test fun immersiveHeroFillsTheWidthAndLeavesTheNextCatalogVisible() {
+        listOf(360f to 668f, 411f to 780f, 800f to 1128f, 320f to 420f).forEach { (width, height) ->
+            val layout = resolveImmersiveMobileHeroLayout(width, height)
+            assertThat(layout.cardWidthDp).isEqualTo(width)
+            assertThat(layout.carouselHorizontalPaddingDp).isEqualTo(0f)
+            assertThat(layout.cardHeightDp).isAtMost(height * 0.88f)
+            assertThat(layout.cardHeightDp).isGreaterThan(height * 0.7f)
+        }
+    }
+
 
     @Test
     fun pagerSlotsMatchTheCardWidthWhenHeightCapped() {
@@ -19,8 +29,8 @@ class MobileHeroResponsiveLayoutTest {
         val layout = resolveMobileHeroLayout(360f, 800f)
 
         assertThat(layout.compactContent).isFalse()
-        assertThat(layout.cardWidthDp).isWithin(0.01f).of(232f)
-        assertThat(layout.cardHeightDp).isWithin(0.01f).of(309.33f)
+        assertThat(layout.cardWidthDp).isWithin(0.01f).of(296f)
+        assertThat(layout.cardHeightDp).isWithin(0.01f).of(394.67f)
     }
 
     @Test

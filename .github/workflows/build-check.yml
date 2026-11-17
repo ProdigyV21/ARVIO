@@ -46,6 +46,7 @@ jobs:
           node ../netlify-arvio-tv-site/scripts/validate-localized-guides.mjs
           node --test ../netlify-arvio-tv-site/scripts/seo-guides.test.cjs
           node --test ../netlify-arvio-tv-site/scripts/premium-membership.test.cjs
+          node --test ../netlify-arvio-tv-site/scripts/premium-pricing.test.cjs
           node --test ../netlify-arvio-tv-site/scripts/premium-journey.test.cjs
           node --test ../netlify-arvio-tv-site/scripts/crash-report.test.cjs
           node --test ../netlify-arvio-tv-site/scripts/promo-video.test.cjs

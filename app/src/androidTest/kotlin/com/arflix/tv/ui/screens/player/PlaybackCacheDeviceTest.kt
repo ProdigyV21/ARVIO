@@ -133,6 +133,16 @@ class PlaybackCacheDeviceTest {
             streams = listOf(source), subtitlePreloadEnabled = false, autoPlayNext = false,
         ))
         every { model.isTranslatingLive } returns MutableStateFlow(false)
+        // The bare test activity recreates on rotation, unlike ARVIO's real player host.
+        if (!context.packageManager.hasSystemFeature(android.content.pm.PackageManager.FEATURE_LEANBACK)) {
+            compose.activityRule.scenario.onActivity {
+                it.requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+            }
+            compose.waitUntil(10_000) {
+                compose.activity.resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
+            }
+            compose.waitForIdle()
+        }
         try {
             compose.setContent {
                 CompositionLocalProvider(LocalDeviceType provides DeviceType.TV) {

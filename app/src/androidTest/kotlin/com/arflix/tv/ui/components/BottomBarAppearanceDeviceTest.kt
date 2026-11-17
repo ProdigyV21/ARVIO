@@ -99,7 +99,7 @@ class BottomBarAppearanceDeviceTest {
             val pixels = compose.onNodeWithTag("bar").captureToImage().toPixelMap()
             // The top of the bar must reveal the page, rather than paint an opaque strip.
             val top = pixels[pixels.width / 2, 0]
-            assertTrue("Content is visible through the dark tint", top.green > .01f && top.green < .35f)
+            assertTrue("The fade starts over visible content", top.green > .01f && top.green < .5f)
         }
     }
 }

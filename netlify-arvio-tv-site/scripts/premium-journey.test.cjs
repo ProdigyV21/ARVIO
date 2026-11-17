@@ -127,6 +127,20 @@ test('web feature-preview clicks retain placement while external membership URLs
   assert.equal(result.links[0].getAttribute('href'), 'https://web.arvio.tv/');
 });
 
+test('a selected Premium plan survives native marketing attribution and privacy opt-out', () => {
+  for (const plan of ['monthly', 'yearly']) {
+    for (const navigator of [{}, {doNotTrack:'1'}, {globalPrivacyControl:true}]) {
+      const result = run({url:'https://arvio.tv/premium/?utm_source=google', navigator,
+        destinations:[{href:`https://web.arvio.tv/?premium_plan=${plan}`,placement:`plan-${plan}`}]});
+      const target = new URL(result.activate(0));
+      assert.equal(target.origin, 'https://web.arvio.tv');
+      assert.equal(target.searchParams.get('premium_plan'), plan);
+      if (navigator.doNotTrack || navigator.globalPrivacyControl) assert.equal(result.events.length, 0);
+      else assert.equal(target.searchParams.get('utm_source'), 'google');
+    }
+  }
+});
+
 test('same-page anchors, assets, redirects, downloads and unsafe protocols are never decorated', () => {
   const destinations = ['#setup', '/?lang=nl', '/assets/image/', '/go/premium/', '/media-kit/arvio-media-kit.zip',
     { href: '/guides/', download: true }, 'mailto:hello@arvio.tv', 'javascript:void(0)', 'https://web.arvio.tv.evil.invalid/', 'https://example.org/'];

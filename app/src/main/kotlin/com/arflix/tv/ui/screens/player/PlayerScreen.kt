@@ -395,8 +395,13 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
     val playerAccent = LocalAccentColorOverride.current ?: Color.White
     val context = LocalContext.current
     val activity = remember(context) { context.findActivity() }
+    DisposableEffect(Unit) {
+        val previewBlock = com.arflix.tv.ui.components.TrailerPlaybackPool.fullPlayback()
+        onDispose { previewBlock.close() }
+    }
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val latestUiState by rememberUpdatedState(uiState)
+    val startupTrace = remember { com.arflix.tv.ui.screens.player.engine.exoplayer.PlaybackStartupTrace() }
     val clockFormat = rememberPlayerClockFormat()
     val focusManager = LocalFocusManager.current
     val coroutineScope = rememberCoroutineScope()
@@ -425,12 +430,13 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
         deviceType == com.arflix.tv.util.DeviceType.TV &&
             (isLowRamPlaybackDevice || playbackMemoryClassMb <= 384)
     }
-    val playbackBufferProfile = remember(isLowRamPlaybackDevice, playbackMemoryClassMb, deviceType) {
+    val playbackMemoryBudget = remember(context) { com.arflix.tv.util.playbackMemoryBudget(context) }
+    val playbackBufferProfile = remember(isLowRamPlaybackDevice, playbackMemoryClassMb, deviceType, playbackMemoryBudget) {
         buildPlaybackBufferProfile(
             memoryClassMb = playbackMemoryClassMb,
             isLowRamDevice = isLowRamPlaybackDevice,
             isTvDevice = deviceType == com.arflix.tv.util.DeviceType.TV
-        )
+        ).let { it.copy(targetBufferBytes = minOf(it.targetBufferBytes, playbackMemoryBudget.maxPlaybackBytes)) }
     }
     // No device-name decoder guessing — matches NuvioTV, which is hardware-first for video and
     // never branches on Build.MODEL/HARDWARE. The old (amlogic/sei/"Box R") heuristic force-fed
@@ -831,6 +837,27 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
         java.util.concurrent.atomic.AtomicLong(androidx.media3.common.C.TIME_UNSET)
     }
     val playbackFrameRate = remember { com.arflix.tv.util.PlaybackFrameRate() }
+    val observedFrameRates = remember(context) { com.arflix.tv.util.PlaybackFrameRates.get(context) }
+    val observedContentId = remember(args.mediaType, args.mediaId, args.imdbId, args.seasonNumber,
+        args.episodeNumber, args.kitsuId, args.kitsuEpisodeNumber) {
+        "${args.mediaType}|${args.mediaId}|${args.imdbId}|${args.seasonNumber}|${args.episodeNumber}|${args.kitsuId}|${args.kitsuEpisodeNumber}"
+    }
+    val observedRateKey = remember(uiState.selectedStream, uiState.selectedStreamUrl, args.isLiveStream, observedContentId) {
+        val stream = uiState.selectedStream
+        val url = uiState.selectedStreamUrl
+        if (!com.arflix.tv.ui.screens.player.engine.exoplayer.useVodPlaybackPolicy(stream, args.isLiveStream, url)) null
+        else com.arflix.tv.util.observedFrameRateKey(
+            url!!, stream?.behaviorHints?.proxyHeaders?.request.orEmpty().safePlaybackHeaders(),
+            stream?.behaviorHints?.filename, stream?.sizeBytes ?: stream?.behaviorHints?.videoSize,
+            observedContentId,
+            stream?.addonId.orEmpty()
+        )
+    }
+    LaunchedEffect(observedRateKey, confirmedSource, loadedSource) {
+        val key = observedRateKey ?: return@LaunchedEffect
+        if (confirmedSource == null || confirmedSource != selectedSourceKey() || confirmedSource != loadedSource) return@LaunchedEffect
+        playbackFrameRate.rate.collect { fps -> if (fps > 0f) observedFrameRates.record(key, fps) }
+    }
     var frameRateSurface by remember { mutableStateOf<android.view.Surface?>(null) }
     var playerReleased by remember { mutableStateOf(false) }
     /** The player left on its own after an idle period; its exit must not save progress. */
@@ -1141,7 +1168,8 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
         viewModel.onPlaybackStarted(
             startupMs = startupMs,
             startupRetries = startupSameSourceRetryCount + if (startupSameSourceRefreshAttempted) 1 else 0,
-            autoFailovers = autoAdvanceAttempts
+            autoFailovers = autoAdvanceAttempts,
+            networkTiming = startupTrace.finish().summary()
         )
     }
 
@@ -1153,9 +1181,24 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
         )
     }
     val playbackCookieJar = remember { PlaybackCookieJar() }
-    val playbackHttpClient = remember(playbackCookieJar) {
+    val vodPolicyEnabled = com.arflix.tv.ui.screens.player.engine.exoplayer.useVodPlaybackPolicy(
+        uiState.selectedStream, args.isLiveStream, uiState.selectedStreamUrl
+    )
+    val progressiveRetry = remember(vodPolicyEnabled, uiState.selectedStreamUrl, uiState.streamSelectionNonce) {
+        if (vodPolicyEnabled) com.arflix.tv.ui.screens.player.engine.exoplayer.VodLoadErrorHandlingPolicy(true) else null
+    }
+    val adaptiveRetry = remember(vodPolicyEnabled, uiState.selectedStreamUrl, uiState.streamSelectionNonce) {
+        if (vodPolicyEnabled) com.arflix.tv.ui.screens.player.engine.exoplayer.VodLoadErrorHandlingPolicy(false) else null
+    }
+    val playbackHttpClient = remember(playbackCookieJar, vodPolicyEnabled) {
         OkHttpProvider.playbackClient.newBuilder()
             .cookieJar(playbackCookieJar)
+            .eventListenerFactory(startupTrace.listenerFactory)
+            .apply {
+                if (vodPolicyEnabled) readTimeout(
+                    com.arflix.tv.ui.screens.player.engine.exoplayer.VOD_READ_TIMEOUT_SECONDS, TimeUnit.SECONDS
+                )
+            }
             .build()
     }
     val iptvVodGate = rememberIptvVodGate()
@@ -1226,11 +1269,15 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
 
     // Non-cached factory for heavy/debrid progressive streams to avoid disk I/O bottleneck.
     // The DV variant only differs by the rewriting ExtractorsFactory (MKV-only inside).
-    val directProgressiveFactory = remember(httpDataSourceFactory) {
+    val directProgressiveFactory = remember(httpDataSourceFactory, progressiveRetry) {
         ProgressiveMediaSource.Factory(httpDataSourceFactory, audioTapExtractorsFactory)
+            .also { factory -> progressiveRetry?.let { factory.setLoadErrorHandlingPolicy(it) } }
     }
-    val directProgressiveDvFactory = remember(httpDataSourceFactory, dvStripExtractorsFactory) {
-        dvStripExtractorsFactory?.let { ProgressiveMediaSource.Factory(httpDataSourceFactory, audioTapExtractorsFactory) }
+    val directProgressiveDvFactory = remember(httpDataSourceFactory, dvStripExtractorsFactory, progressiveRetry) {
+        dvStripExtractorsFactory?.let {
+            ProgressiveMediaSource.Factory(httpDataSourceFactory, audioTapExtractorsFactory)
+                .also { factory -> progressiveRetry?.let { factory.setLoadErrorHandlingPolicy(it) } }
+        }
     }
 
     val iptvVodMediaSources = remember(playbackHttpClient, audioTapExtractorsFactory) {
@@ -1238,24 +1285,28 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
     }
 
     // Protocol-specific media source factories for faster startup
-    val hlsFactory = remember(httpDataSourceFactory) {
+    val hlsFactory = remember(httpDataSourceFactory, adaptiveRetry) {
         HlsMediaSource.Factory(httpDataSourceFactory)
             .setAllowChunklessPreparation(true)
+            .also { factory -> adaptiveRetry?.let { factory.setLoadErrorHandlingPolicy(it) } }
     }
-    val dashFactory = remember(httpDataSourceFactory) {
+    val dashFactory = remember(httpDataSourceFactory, adaptiveRetry) {
         DashMediaSource.Factory(httpDataSourceFactory)
+            .also { factory -> adaptiveRetry?.let { factory.setLoadErrorHandlingPolicy(it) } }
     }
-    val mediaSourceFactory = remember(httpDataSourceFactory) {
+    val mediaSourceFactory = remember(httpDataSourceFactory, adaptiveRetry) {
         DefaultMediaSourceFactory(context, audioTapExtractorsFactory)
             .setDataSourceFactory(cacheDataSourceFactory)
+            .also { factory -> adaptiveRetry?.let { factory.setLoadErrorHandlingPolicy(it) } }
     }
     // "Preload Subtitles" mode: sidecar subtitle configs only merge through a
     // DefaultMediaSourceFactory, but the cached one above would route heavy/debrid video through
     // the disk cache (I/O bottleneck). This variant keeps file:// support for the local subtitle
     // copies while streaming video uncached, like directProgressiveFactory.
-    val preloadMediaSourceFactory = remember(fileCapableDataSourceFactory) {
+    val preloadMediaSourceFactory = remember(fileCapableDataSourceFactory, adaptiveRetry) {
         DefaultMediaSourceFactory(context, audioTapExtractorsFactory)
             .setDataSourceFactory(fileCapableDataSourceFactory)
+            .also { factory -> adaptiveRetry?.let { factory.setLoadErrorHandlingPolicy(it) } }
     }
 
     // ExoPlayer - tuned for both small and very large files. The byte cap scales
@@ -2691,6 +2742,7 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
         if (BuildConfig.DEBUG) {
         }
         if (url != null) {
+            startupTrace.begin()
             // Track when stream was selected (before any blocking probes)
             streamSelectedTime = System.currentTimeMillis()
             val prepareStartMs = streamSelectedTime ?: System.currentTimeMillis()
@@ -2834,7 +2886,11 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
                 // preload variant streams video uncached (like directProgressiveFactory) and
                 // resolves HLS/DASH from the MIME hints set above.
                 preloadedSubtitleConfigs.isNotEmpty() ->
-                    preloadMediaSourceFactory.createMediaSource(mediaItem)
+                    preloadMediaSourceFactory.apply {
+                        if (vodPolicyEnabled) setLoadErrorHandlingPolicy(
+                            if (isHlsStream || isDashStream) adaptiveRetry!! else progressiveRetry!!
+                        )
+                    }.createMediaSource(mediaItem)
                 isHlsStream ->
                     hlsFactory.createMediaSource(mediaItem)
                 isDashStream ->
@@ -2866,6 +2922,12 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
             // No manual startup gate - trust the CDN/debrid while keeping enough safety margin.
             exoPlayer.playWhenReady = iptvVodReopen?.playWhenReady ?: true
             loadedSource = "${uiState.streamSelectionNonce}|$url"
+            if (uiState.frameRateMatchingMode.equals("Always", ignoreCase = true)) {
+                observedRateKey?.let(observedFrameRates::get)?.let { fps ->
+                    activity?.let { com.arflix.tv.util.FrameRateUtils.applyFrameRateMode(it, fps) }
+                }
+            }
+            startupTrace.preparing()
             exoPlayer.prepare()
             iptvVodGate.afterPrepare()
             if (iptvVodReopening && hasPlaybackStarted) iptvVodGate.reattachSubtitleWhenReady()
