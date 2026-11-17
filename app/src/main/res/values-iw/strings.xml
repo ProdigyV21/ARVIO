@@ -2130,4 +2130,11 @@
     <string name="youtube_source_row_searching">מחפש ביוטיוב…</string>
     <string name="youtube_source_row_none">לא נמצאו ביוטיוב סרטונים של 5 דקות ומעלה — יש לבחור כדי לחפש שוב</string>
     <string name="youtube_source_row_failed">יוטיוב לא ענה — יש לבחור כדי לנסות שוב</string>
+    <string name="service_home_top10_series">10 הסדרות המובילות ב-%1$s</string>
+    <string name="service_home_top10_movies">10 הסרטים המובילים ב-%1$s</string>
+    <string name="service_home_new">חדש ב-%1$s</string>
+    <string name="service_home_originals">הפקות מקור של %1$s</string>
+    <string name="service_home_top_rated_series">הסדרות המדורגות ביותר</string>
+    <string name="service_home_top_rated_movies">הסרטים המדורגים ביותר</string>
+    <string name="service_home_filter_all">הכל</string>
 </resources>

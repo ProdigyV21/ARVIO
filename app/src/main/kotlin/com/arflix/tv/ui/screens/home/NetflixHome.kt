@@ -521,6 +521,16 @@ internal fun NetflixTvHomeRowsLayer(
     }
 }
 
+/** Id prefix of rows drawn with rank ribbons whatever their (translated) title says. */
+internal const val RANKED_ROW_ID_PREFIX = "ranked_"
+
+/**
+ * Rows that show rank ribbons: Home's Top 10 rows, found by their English title, and rows
+ * whose id says so, which keep their ribbons once the title is translated.
+ */
+internal fun isRankedHomeRow(category: Category): Boolean =
+    category.title.contains("Top 10", ignoreCase = true) || category.id.startsWith(RANKED_ROW_ID_PREFIX)
+
 private fun netflixRowIsSpecial(category: Category, isSpecialItem: (MediaItem) -> Boolean): Boolean =
     category.id.startsWith("collection_row_") ||
         category.items.firstOrNull { !it.isPlaceholder }?.let(isSpecialItem) == true
@@ -814,7 +824,7 @@ private fun NetflixContentRow(
     onItemClick: (MediaItem) -> Unit
 ) {
     val isContinueWatching = category.id == "continue_watching"
-    val isRanked = category.title.contains("Top 10", ignoreCase = true)
+    val isRanked = isRankedHomeRow(category)
     // Prefetching this row from the vertical list also builds its first cards.
     @OptIn(ExperimentalFoundationApi::class)
     val rowState = rememberLazyListState(

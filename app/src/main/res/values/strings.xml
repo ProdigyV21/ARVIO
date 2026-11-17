@@ -2155,4 +2155,12 @@
     <string name="youtube_source_row_searching">Searching YouTube…</string>
     <string name="youtube_source_row_none">No YouTube videos of 5+ minutes — select to search again</string>
     <string name="youtube_source_row_failed">YouTube didn\'t answer — select to try again</string>
+    <!-- Streaming-service page laid out like Home; %1$s is the service name -->
+    <string name="service_home_top10_series">Top 10 series on %1$s</string>
+    <string name="service_home_top10_movies">Top 10 movies on %1$s</string>
+    <string name="service_home_new">New on %1$s</string>
+    <string name="service_home_originals">%1$s Originals</string>
+    <string name="service_home_top_rated_series">Top rated series</string>
+    <string name="service_home_top_rated_movies">Top rated movies</string>
+    <string name="service_home_filter_all">All</string>
 </resources>
