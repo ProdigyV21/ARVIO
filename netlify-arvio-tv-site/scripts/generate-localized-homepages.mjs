@@ -386,6 +386,7 @@ function render(localeKey) {
   const translations = new Map([...copy, ...newCopy].map((entry) => [entry[0], entry[valueIndex]]));
   const attributeTranslations = new Map([...attributes, ...newCopy].map((entry) => [entry[0], entry[valueIndex]]));
   let html = replaceTextNodes(source, translations);
+  html = html.replace('data-release-label="LATEST RELEASE"', `data-release-label="${localeKey === 'pt' ? 'ÚLTIMA VERSÃO' : 'ÚLTIMA VERSIÓN'}"`);
 
   html = html.replace('<html lang="en">', `<html lang="${locale.lang}">`);
   html = html.replace(/<title>[^<]+<\/title>/u, `<title>${locale.title}</title>`);

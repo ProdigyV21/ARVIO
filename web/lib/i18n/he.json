@@ -6,5 +6,22 @@
   "Completed": "הושלמו",
   "Dropped": "ננטשו",
   "Silo: use the Jellyfin-compatible address. Optional profile: username#ProfileName. Protected profile: password#PIN.": "Silo: יש להשתמש בכתובת התואמת ל-Jellyfin. פרופיל אופציונלי: username#ProfileName. פרופיל מוגן: password#PIN.",
-  "None of your enabled addons provide playback sources.": "אף אחת מההרחבות הפעילות שלך אינה מספקת מקורות לניגון."
+  "None of your enabled addons provide playback sources.": "אף אחת מההרחבות הפעילות שלך אינה מספקת מקורות לניגון.",
+  "You already have access. There is no need to pay again.": "כבר יש לך גישה. אין צורך לשלם שוב.",
+  "Open ARVIO Web": "פתיחת ARVIO Web",
+  "Membership steps": "שלבי ההצטרפות",
+  "Account": "חשבון",
+  "Payment": "תשלום",
+  "Your selected Premium plan": "מסלול ה-Premium שבחרת",
+  "Your plan is ready. Complete payment securely on Ko-fi, then return here.": "המסלול שלך מוכן. יש להשלים את התשלום באופן מאובטח ב-Ko-fi ואז לחזור לכאן.",
+  "Sign in or create your ARVIO account, then complete payment on Ko-fi.": "יש להתחבר או ליצור חשבון ARVIO, ואז להשלים את התשלום ב-Ko-fi.",
+  "Your selected plan": "המסלול שבחרת",
+  "12-month pass": "כרטיס ל-12 חודשים",
+  "Monthly membership": "מינוי חודשי",
+  "Checking your price…": "המחיר שלך נבדק…",
+  "Save {value0} vs. 12 monthly payments of $2.99 ($35.88).": "חיסכון של {value0} לעומת 12 תשלומים חודשיים של $2.99 ($35.88).",
+  "24/7 hosted ARVIO Web for your supported browsers.": "ARVIO Web עם אחסון 24/7 לדפדפנים הנתמכים שלך.",
+  "This plan is unavailable right now. Please try again shortly.": "המסלול הזה אינו זמין כרגע. כדאי לנסות שוב בעוד כמה רגעים.",
+  "Continue to Ko-fi · {value0}": "המשך ל-Ko-fi · {value0}",
+  "Keep exploring": "להמשיך להתרשם"
 }

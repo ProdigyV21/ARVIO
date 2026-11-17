@@ -5,5 +5,22 @@
   "Completed": "पूर्ण",
   "Dropped": "छोड़े गए",
   "Silo: use the Jellyfin-compatible address. Optional profile: username#ProfileName. Protected profile: password#PIN.": "Silo: Jellyfin-संगत पता इस्तेमाल करें. वैकल्पिक प्रोफ़ाइल: username#ProfileName. सुरक्षित प्रोफ़ाइल: password#PIN.",
-  "None of your enabled addons provide playback sources.": "आपके किसी भी सक्रिय ऐडऑन में प्लेबैक स्रोत उपलब्ध नहीं हैं।"
+  "None of your enabled addons provide playback sources.": "आपके किसी भी सक्रिय ऐडऑन में प्लेबैक स्रोत उपलब्ध नहीं हैं।",
+  "You already have access. There is no need to pay again.": "आपके पास पहले से ऐक्सेस है। दोबारा भुगतान करने की ज़रूरत नहीं है।",
+  "Open ARVIO Web": "ARVIO Web खोलें",
+  "Membership steps": "सदस्यता के चरण",
+  "Account": "खाता",
+  "Payment": "भुगतान",
+  "Your selected Premium plan": "आपका चुना हुआ Premium प्लान",
+  "Your plan is ready. Complete payment securely on Ko-fi, then return here.": "आपका प्लान तैयार है। Ko-fi पर सुरक्षित भुगतान करें, फिर यहाँ वापस आएँ।",
+  "Sign in or create your ARVIO account, then complete payment on Ko-fi.": "साइन इन करें या ARVIO खाता बनाएँ, फिर Ko-fi पर भुगतान करें।",
+  "Your selected plan": "आपका चुना हुआ प्लान",
+  "12-month pass": "12 महीने का पास",
+  "Monthly membership": "मासिक सदस्यता",
+  "Checking your price…": "आपकी कीमत जाँची जा रही है…",
+  "Save {value0} vs. 12 monthly payments of $2.99 ($35.88).": "$2.99 के 12 मासिक भुगतानों ($35.88) के मुकाबले {value0} बचाएँ।",
+  "24/7 hosted ARVIO Web for your supported browsers.": "आपके समर्थित ब्राउज़र के लिए 24/7 होस्ट किया गया ARVIO Web।",
+  "This plan is unavailable right now. Please try again shortly.": "यह प्लान अभी उपलब्ध नहीं है। थोड़ी देर बाद फिर कोशिश करें।",
+  "Continue to Ko-fi · {value0}": "Ko-fi पर जाएँ · {value0}",
+  "Keep exploring": "और देखें"
 }

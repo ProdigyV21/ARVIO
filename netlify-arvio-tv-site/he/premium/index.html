@@ -26,8 +26,9 @@
   <meta property="og:description" content="ARVIO Web מתארח. התחברו עם חשבון ARVIO והמשיכו מאיפה שהפסקתם. ‎$2.99 לחודש, או ‎$20 ל-12 חודשים.">
   <meta property="og:image" content="https://arvio.tv/premium/images/home.png">
   <meta name="twitter:card" content="summary_large_image">
-  <link rel="stylesheet" href="/premium/premium.css?v=8">
-  <script defer src="/premium/premium.js?v=5"></script>
+  <link rel="stylesheet" href="/premium/premium.css?v=9">
+  <script defer src="/assets/premium-pricing.js?v=1"></script>
+  <script defer src="/premium/premium.js?v=6"></script>
 <script defer src="/assets/premium-journey.js?v=2"></script>
 <script defer src="/assets/promo-video.js?v=2"></script>
 </head>
@@ -41,13 +42,13 @@
           <li data-copy="benefitSync">פרופילים, רשימת צפייה והתקדמות מסונכרנים דרך ARVIO Cloud</li>
           <li data-copy="benefitLive">טלוויזיה בשידור חי עם לוח שידורים</li>
           <li data-copy="benefitDownloads">הורדות במחשב</li>
-          <li data-copy="benefitExplore">קודם תסתכלו מסביב. משלמים רק כשלוחצים על נגן.</li>
+          <li data-copy="benefitExplore">אפשר להתרשם מ-ARVIO Web בחינם. להפעלה נדרש Premium.</li>
         </ul>
         <div class="membership-actions">
-          <a class="button membership-button" href="https://web.arvio.tv/" data-premium-placement="hero-membership"><span data-copy="open">פתיחת ARVIO Web</span><span aria-hidden="true">↗</span></a>
-          <a class="button preview-button" href="#plans" data-copy="comparePlans">השוואת מסלולים</a>
+          <a class="button membership-button" href="#plans" data-copy="viewPlans">צפייה באפשרויות Premium</a>
+          <a class="button preview-button" href="https://web.arvio.tv/" data-premium-placement="hero-membership" data-copy="preview">התרשמות מ-ARVIO Web</a>
         </div>
-        <p class="membership-note" data-copy="fromPrice">‎$2.99 לחודש, או ‎$20 ל-12 חודשים.</p>
+        <p class="membership-note" data-copy="fromPrice" data-plan-price-summary>‎$2.99 לחודש, או ‎$20 ל-12 חודשים.</p>
       </div>
       <figure class="hero-video">
         <video id="promo-video" class="promo-video" width="1280" height="720" controls muted playsinline preload="none" poster="/assets/promo/arvio-premium-poster.webp" src="/assets/promo/arvio-tour-web.mp4" data-src="/assets/promo/arvio-tour-web.mp4" aria-label="ARVIO app tour"></video>
@@ -56,21 +57,24 @@
     </section>
     <section class="plans-section" id="plans" aria-labelledby="plans-title">
       <h2 id="plans-title" data-copy="plansTitle">שני מסלולים. אותו ARVIO Web.</h2>
+      <p class="plan-intro" data-copy="planIntro">שתי האפשרויות כוללות את ARVIO Web באירוח שלנו. חברו מקורות משלכם; לא כלול תוכן מדיה.</p>
       <div class="plans">
         <article class="plan">
           <h3 data-copy="monthly">חודשי</h3>
           <p class="plan-price"><strong>$2.99</strong> <span data-copy="period">לחודש</span></p>
           <p class="plan-note" data-copy="membershipTerms">מנוי חודשי. ניתן לבטל בכל עת דרך Ko-fi.</p>
-          <a class="button plan-button" href="https://web.arvio.tv/" data-premium-placement="plan-monthly" data-copy="open">פתיחת ARVIO Web</a>
+          <a class="button plan-button" href="https://web.arvio.tv/?premium_plan=monthly" data-premium-placement="plan-monthly" data-copy="chooseMonthly">בחירת תשלום חודשי</a>
         </article>
         <article class="plan plan-best">
-          <p class="plan-badge" data-copy="yearlyBadge">הכי משתלם · חיסכון של 44%</p>
+          <p class="plan-badge" data-copy="yearlyBadge" data-yearly-badge>הכי משתלם · חיסכון של 44%</p>
           <h3 data-copy="yearly">כרטיס ל-12 חודשים</h3>
-          <p class="plan-price"><strong>$20</strong> <span data-copy="once">פעם אחת</span></p>
+          <p class="plan-price"><s data-yearly-was hidden>$20</s> <strong data-yearly-price>$20</strong> <span data-copy="once">פעם אחת</span></p>
           <p class="plan-note" data-copy="yearlyNote">תשלום אחד, ללא חידוש אוטומטי</p>
-          <a class="button membership-button plan-button" href="https://web.arvio.tv/" data-premium-placement="plan-yearly" data-copy="open">פתיחת ARVIO Web</a>
+          <a class="button membership-button plan-button" href="https://web.arvio.tv/?premium_plan=yearly" data-premium-placement="plan-yearly" data-copy="chooseYearly">קבלת 12 חודשים</a>
         </article>
       </div>
+      <p class="plan-saving" data-copy="yearlySaving" data-yearly-saving>חיסכון של 44% לעומת 12 תשלומים חודשיים (‎$35.88).</p>
+      <p class="checkout-next" data-copy="nextStep">השלב הבא: התחברו ל-ARVIO, ואז שלמו ב-Ko-fi עם אותה כתובת אימייל.</p>
       <p class="checkout-note" data-copy="checkoutNote">התשלום מתבצע דרך Ko-fi בדולרים אמריקאיים, והבנק שלך ממיר את הסכום אוטומטית. השתמש באותה כתובת אימייל כמו בחשבון ARVIO שלך.</p>
       <p class="refund"><span data-copy="refund">לא עובד במכשיר שלכם? כתבו לנו תוך 7 ימים ונחזיר את מלוא הסכום.</span> <a href="https://discord.gg/UavuEYMfQ4" data-copy="refundLink">כתבו לנו ב-Discord</a></p>
       <p class="manage"><a href="https://ko-fi.com/arvio/tiers" data-premium-placement="manage-membership" data-copy="manage">ניהול המנוי ב-Ko-fi</a></p>
@@ -78,17 +82,17 @@
       <p class="supports" data-copy="supports">המנוי שלכם תומך בפיתוח.</p>
     </section>
     <section class="feature-strip" aria-label="Premium features">
-      <article><span class="feature-icon" aria-hidden="true">▷</span><h2 data-copy="tv">טלוויזיה בשידור חי</h2><p data-copy="tvBody">הפעלת דפדפן ולחיצה אחת VLC</p><a href="#live-tv" class="feature-link" data-copy="tv">טלוויזיה בשידור חי</a></article>
+      <article><span class="feature-icon" aria-hidden="true">▷</span><h2 data-copy="tv">שידור חי</h2><p data-copy="tvBody">הפעלת דפדפן ולחיצה אחת VLC</p><a href="#live-tv" class="feature-link" data-copy="tv">שידור חי</a></article>
       <article><span class="feature-icon" aria-hidden="true">↓</span><h2 data-copy="download">הורד את המקור הזה</h2><p data-copy="downloadBody">צפו או הורידו ישירות ב- Windows, Mac ונייד</p><a href="https://web.arvio.tv" class="feature-link">ARVIO Web ↗</a></article>
-      <article><span class="feature-icon" aria-hidden="true">∞</span><h2>ARVIO Cloud</h2><p data-copy="sync">אותם פרופילים, ספריות וצפייה בהתקדמות</p><a href="#your-library" class="feature-link" data-copy="library">רשימת צפייה</a></article>
+      <article><span class="feature-icon" aria-hidden="true">∞</span><h2>ARVIO Cloud</h2><p data-copy="sync">אותם פרופילים, ספריות וצפייה בהתקדמות</p><a href="#your-library" class="feature-link" data-copy="library">ספרייה</a></article>
     </section>
     <section class="gallery" aria-label="ARVIO Web">
-      <figure id="live-tv"><a href="/premium/images/tv.png"><img loading="lazy" src="/premium/images/tv.png" width="1920" height="1080" alt="ARVIO Web — Live TV"></a><figcaption><h2 data-copy="tv">טלוויזיה בשידור חי</h2><p data-copy="tvBody">הפעלת דפדפן ולחיצה אחת VLC</p></figcaption></figure>
-      <figure id="your-library"><a href="/premium/images/library.png"><img loading="lazy" src="/premium/images/library.png" width="1920" height="1080" alt="ARVIO Web — Library"></a><figcaption><h2 data-copy="library">רשימת צפייה</h2><p data-copy="libraryBody">אותם פרופילים, ספריות וצפייה בהתקדמות</p></figcaption></figure>
+      <figure id="live-tv"><a href="/premium/images/tv.png"><img loading="lazy" src="/premium/images/tv.png" width="1920" height="1080" alt="ARVIO Web — Live TV"></a><figcaption><h2 data-copy="tv">שידור חי</h2><p data-copy="tvBody">הפעלת דפדפן ולחיצה אחת VLC</p></figcaption></figure>
+      <figure id="your-library"><a href="/premium/images/library.png"><img loading="lazy" src="/premium/images/library.png" width="1920" height="1080" alt="ARVIO Web — Library"></a><figcaption><h2 data-copy="library">ספרייה</h2><p data-copy="libraryBody">אותם פרופילים, ספריות וצפייה בהתקדמות</p></figcaption></figure>
       <figure><a href="/premium/images/homeserver.png"><img loading="lazy" src="/premium/images/homeserver.png" width="1920" height="1080" alt="ARVIO Web — Homeserver"></a><figcaption><h2 data-copy="server">שרת ביתי</h2><p data-copy="serverBody">Jellyfin · Plex · Emby · Silo</p></figcaption></figure>
-      <figure><a href="/premium/images/sports.png"><img loading="lazy" src="/premium/images/sports.png" width="1920" height="1080" alt="ARVIO Web — Sports"></a><figcaption><h2 data-copy="sports">ספורט</h2><p data-copy="sportsBody">טלוויזיה בשידור חי</p></figcaption></figure>
+      <figure><a href="/premium/images/sports.png"><img loading="lazy" src="/premium/images/sports.png" width="1920" height="1080" alt="ARVIO Web — Sports"></a><figcaption><h2 data-copy="sports">ספורט</h2><p data-copy="sportsBody">שידור חי</p></figcaption></figure>
     </section>
-    <section class="support-panel"><div><p class="eyebrow">ARVIO PREMIUM</p><h2 data-copy="benefitExplore">קודם תסתכלו מסביב. משלמים רק כשלוחצים על נגן.</h2><p data-copy="fromPrice">‎$2.99 לחודש, או ‎$20 ל-12 חודשים.</p><p class="supports" data-copy="supports">המנוי שלכם תומך בפיתוח.</p></div><div class="support-action"><a class="button membership-button" href="https://web.arvio.tv/" data-copy="open" data-premium-placement="support-membership">פתיחת ARVIO Web</a><a class="secondary" href="#plans" data-copy="comparePlans">השוואת מסלולים</a></div></section>
+    <section class="support-panel"><div><p class="eyebrow">ARVIO PREMIUM</p><h2 data-copy="benefitExplore">אפשר להתרשם מ-ARVIO Web בחינם. להפעלה נדרש Premium.</h2><p data-copy="fromPrice" data-plan-price-summary>‎$2.99 לחודש, או ‎$20 ל-12 חודשים.</p><p class="supports" data-copy="supports">המנוי שלכם תומך בפיתוח.</p></div><div class="support-action"><a class="button membership-button" href="#plans" data-copy="viewPlans">צפייה באפשרויות Premium</a><a class="secondary" href="https://web.arvio.tv/" data-copy="preview" data-premium-placement="support-membership">התרשמות מ-ARVIO Web</a></div></section>
     <footer><p data-copy="notice">ARVIO הוא מרכז מדיה למקורות שאתה מגדיר. ערכי קטלוג אינם מעניקים זכויות צפייה. חבר רק שירותים ומדיה שבהם אתה מורשה להשתמש.
 ניווט</p><nav><a href="/arvio-iphone-ipad/">iPhone &amp; iPad guide</a><a href="https://github.com/ProdigyV21/ARVIO/blob/main/web/README.md">GitHub · Self-hosting</a><a href="https://discord.gg/UavuEYMfQ4">Discord</a><a href="https://web.arvio.tv">ARVIO Web</a></nav></footer>
   </main>
