@@ -243,13 +243,13 @@ class ArflixApplication : Application(), Configuration.Provider, ImageLoaderFact
                     // image budget instead of a percent of largeHeap memory so
                     // low-RAM TVs do not drift into zram pressure while rows
                     // are being scrolled.
-                    .maxSizeBytes(
+                    .maxSizeBytes(minOf(com.arflix.tv.util.playbackMemoryBudget(this).artworkBytes,
                         when {
                             isTvDevice && isLowRamDevice -> 32 * 1024 * 1024
                             isTvDevice -> 48 * 1024 * 1024
                             else -> 64 * 1024 * 1024
                         }
-                    )
+                    ))
                     .build()
             }
             .diskCache {
@@ -294,12 +294,20 @@ class ArflixApplication : Application(), Configuration.Provider, ImageLoaderFact
             level >= ComponentCallbacks2.TRIM_MEMORY_RUNNING_MODERATE
         ) {
             clearImageMemoryCaches()
+            if (currentProcessName()?.endsWith(":seek_preview") != true) {
+                if (level == ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN) {
+                    com.arflix.tv.ui.components.TrailerPlaybackPool.background()
+                } else com.arflix.tv.ui.components.TrailerPlaybackPool.releaseIdle()
+            }
         }
     }
 
     override fun onLowMemory() {
         super.onLowMemory()
         clearImageMemoryCaches()
+        if (currentProcessName()?.endsWith(":seek_preview") != true) {
+            com.arflix.tv.ui.components.TrailerPlaybackPool.releaseIdle()
+        }
     }
 
     private fun clearImageMemoryCaches() {

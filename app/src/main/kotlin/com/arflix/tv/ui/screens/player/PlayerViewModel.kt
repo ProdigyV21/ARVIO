@@ -2694,7 +2694,7 @@ class PlayerViewModel @Inject constructor(
         return if (fuzzyIndex >= 0) fuzzyIndex else Int.MAX_VALUE
     }
 
-    fun onPlaybackStarted(startupMs: Long, startupRetries: Int, autoFailovers: Int) {
+    fun onPlaybackStarted(startupMs: Long, startupRetries: Int, autoFailovers: Int, networkTiming: String? = null) {
         playbackErrorReportJob?.cancel()
         val currentState = _uiState.value
         if (
@@ -2716,6 +2716,10 @@ class PlayerViewModel @Inject constructor(
             .takeUnless { it.isNullOrBlank() }
             ?: currentPreferredAddonId.orEmpty()
         confirmedStartupMs = startupMs
+        networkTiming?.let {
+            Log.i(TAG, "Playback startup network $it")
+            AppLogger.breadcrumb(tag = "PlaybackTiming", message = it, severity = "info")
+        }
         Log.i(
             TAG,
             "Playback started addonId=${addonId.ifBlank { "unknown" }} " +

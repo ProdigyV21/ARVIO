@@ -39,8 +39,8 @@ class YoutubeChunkedDataSourceFactory(
         return YoutubeChunkedDataSource(upstream, chunkSizeBytes)
     }
 
-    private class YoutubeChunkedDataSource(
-        private val upstream: DefaultHttpDataSource,
+    internal class YoutubeChunkedDataSource(
+        private val upstream: DataSource,
         private val chunkSize: Long
     ) : DataSource {
 
@@ -123,7 +123,9 @@ class YoutubeChunkedDataSourceFactory(
 
                 return try {
                     openNextChunk()
-                    upstream.read(buffer, offset, length)
+                    upstream.read(buffer, offset, length).also { firstRead ->
+                        if (firstRead > 0) bytesReadInChunk += firstRead
+                    }
                 } catch (e: Exception) {
                     if (e is kotlinx.coroutines.CancellationException) throw e
 
