@@ -10,18 +10,19 @@ const fresh = () => plain(defaultCatalogs);
 const legacy = () => plain(legacyWebDefaultCatalogs);
 const custom = { id: 'my-list', name: 'My list', sourceType: 'mdblist', sourceUrl: 'https://mdblist.com/lists/me/list', enabled: true };
 
-test('fresh web defaults contain the same ten catalogs and five collection rails as Android', () => {
+test('fresh web defaults contain the same twelve catalogs and five collection rails as Android', () => {
   const defaults = mergeCatalogs(undefined);
-  assert.equal(defaults.length, 58);
+  assert.equal(defaults.length, 60);
   assert.deepEqual(ids(defaults.filter(c => c.kind === 'STANDARD')), [
     'trending_movies', 'trending_tv', 'trending_anime', 'favorite_tv', 'top10_movies_today',
-    'top10_shows_today', 'just_added', 'top_movies_week', 'new_kdramas', 'coming_soon'
+    'top10_shows_today', 'just_added', 'top_movies_week', 'new_kdramas', 'coming_soon',
+    'wetrakr_recs_shows', 'wetrakr_recs_movies'
   ]);
   const home = collectionHomeCatalogs(defaults);
-  assert.equal(home.length, 15);
+  assert.equal(home.length, 17);
   assert.deepEqual(ids(home).slice(0, 8), ['trending_movies', 'trending_tv', 'trending_anime',
     'collection_rail_featured', 'collection_rail_service', 'collection_rail_genre', 'collection_rail_franchise', 'collection_rail_decade']);
-  assert.equal(new Set(ids(defaults)).size, 58);
+  assert.equal(new Set(ids(defaults)).size, 60);
   for (const id of ['latest_tv', 'action', 'bond', 'tmdb_popular_movies', 'tmdb_popular_tv', 'sports']) {
     assert.ok(!defaults.some(c => c.id === id), `${id} is not a default row`);
   }

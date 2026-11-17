@@ -13,7 +13,7 @@ const CHECKOUT_EVENTS = {
   membership_link_started: "billingLinkStarted", membership_linked: "billingLinkReportedComplete",
   membership_link_failed: "billingLinkFailed", billing_email_verified: "billingOwnershipVerified"
 };
-const CHECKOUT_ENTRIES = new Set(["trial_nav", "trial_mobile_nav", "paywall", "account_settings", "account_settings_yearly", "feature_preview",
+const CHECKOUT_ENTRIES = new Set(["trial_nav", "trial_mobile_nav", "paywall", "account_settings", "account_settings_yearly", "feature_preview", "website_monthly", "website_yearly",
   ...["play", "live", "external", "download", "copy"].flatMap(intent => ["monthly", "yearly"].map(plan => `explore_${intent}_${plan}`))]);
 const CHECKOUT_FLOW_VERSIONS = new Set(["direct_v2", "paid_only_v1", "explore_v1"]);
 const ATTRIBUTION_EVENTS = new Set(["journey_connected", "web_opened", "account_connected", "paywall_view", "membership_cta_viewed", "checkout_opened"]);

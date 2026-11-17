@@ -249,7 +249,8 @@ class SeekPreviewFrameProvider internal constructor(
     private val lock = Any()
     private val requests = AtomicLong()
     private val memoryCache = object : LruCache<String, CachedPreview>(
-        if (memoryClassMb <= 256) 6 * 1024 * 1024 else 16 * 1024 * 1024,
+        minOf(if (memoryClassMb <= 256) 6 * 1024 * 1024 else 16 * 1024 * 1024,
+            com.arflix.tv.util.playbackMemoryBudget(context).seekPreviewBytes),
     ) {
         override fun sizeOf(key: String, value: CachedPreview): Int = value.bitmap.allocationByteCount
     }

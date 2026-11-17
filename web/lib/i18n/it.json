@@ -5,5 +5,22 @@
   "Completed": "Completati",
   "Dropped": "Abbandonati",
   "Silo: use the Jellyfin-compatible address. Optional profile: username#ProfileName. Protected profile: password#PIN.": "Silo: usa l’indirizzo compatibile con Jellyfin. Profilo facoltativo: username#ProfileName. Profilo protetto: password#PIN.",
-  "None of your enabled addons provide playback sources.": "Nessuno dei tuoi componenti aggiuntivi abilitati fornisce sorgenti di riproduzione."
+  "None of your enabled addons provide playback sources.": "Nessuno dei tuoi componenti aggiuntivi abilitati fornisce sorgenti di riproduzione.",
+  "You already have access. There is no need to pay again.": "Hai già accesso. Non è necessario pagare di nuovo.",
+  "Open ARVIO Web": "Apri ARVIO Web",
+  "Membership steps": "Passaggi per l’abbonamento",
+  "Account": "Account",
+  "Payment": "Pagamento",
+  "Your selected Premium plan": "Il tuo piano Premium scelto",
+  "Your plan is ready. Complete payment securely on Ko-fi, then return here.": "Il tuo piano è pronto. Paga in sicurezza su Ko-fi, poi torna qui.",
+  "Sign in or create your ARVIO account, then complete payment on Ko-fi.": "Accedi o crea un account ARVIO, poi paga su Ko-fi.",
+  "Your selected plan": "Il tuo piano scelto",
+  "12-month pass": "Pass di 12 mesi",
+  "Monthly membership": "Abbonamento mensile",
+  "Checking your price…": "Verifica del prezzo…",
+  "Save {value0} vs. 12 monthly payments of $2.99 ($35.88).": "Risparmia il {value0} rispetto a 12 pagamenti mensili da $2.99 ($35.88).",
+  "24/7 hosted ARVIO Web for your supported browsers.": "ARVIO Web ospitato 24 ore su 24 per i tuoi browser supportati.",
+  "This plan is unavailable right now. Please try again shortly.": "Questo piano non è disponibile al momento. Riprova tra poco.",
+  "Continue to Ko-fi · {value0}": "Continua su Ko-fi · {value0}",
+  "Keep exploring": "Continua a esplorare"
 }

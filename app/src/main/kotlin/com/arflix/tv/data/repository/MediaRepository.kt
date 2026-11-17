@@ -813,7 +813,10 @@ class MediaRepository @Inject constructor(
                 CatalogConfig("just_added", "Just Added", CatalogSourceType.MDBLIST, isPreinstalled = true, sourceUrl = "https://mdblist.com/lists/snoak/latest-movies-digital-release", sourceRef = "mdblist:https://mdblist.com/lists/snoak/latest-movies-digital-release"),
                 CatalogConfig("top_movies_week", "Top Movies This Week", CatalogSourceType.MDBLIST, isPreinstalled = true, sourceUrl = "https://mdblist.com/lists/linaspurinis/top-watched-movies-of-the-week", sourceRef = "mdblist:https://mdblist.com/lists/linaspurinis/top-watched-movies-of-the-week"),
                 CatalogConfig("new_kdramas", "New in K-Dramas", CatalogSourceType.MDBLIST, isPreinstalled = true, sourceUrl = "https://mdblist.com/lists/snoak/latest-kdrama-shows", sourceRef = "mdblist:https://mdblist.com/lists/snoak/latest-kdrama-shows"),
-                CatalogConfig("coming_soon", "Coming Soon", CatalogSourceType.MDBLIST, isPreinstalled = true, sourceUrl = "https://mdblist.com/lists/snoak/upcoming-movies", sourceRef = "mdblist:https://mdblist.com/lists/snoak/upcoming-movies")
+                CatalogConfig("coming_soon", "Coming Soon", CatalogSourceType.MDBLIST, isPreinstalled = true, sourceUrl = "https://mdblist.com/lists/snoak/upcoming-movies", sourceRef = "mdblist:https://mdblist.com/lists/snoak/upcoming-movies"),
+                // WeTrakr's personal recommendations; empty (so not shown) until WeTrakr is connected.
+                CatalogConfig(com.arflix.tv.data.repository.wetrakr.WeTrakrLists.RECS_SHOWS_ID, "Recommended Shows (WeTrakr)", CatalogSourceType.PREINSTALLED, isPreinstalled = true),
+                CatalogConfig(com.arflix.tv.data.repository.wetrakr.WeTrakrLists.RECS_MOVIES_ID, "Recommended Movies (WeTrakr)", CatalogSourceType.PREINSTALLED, isPreinstalled = true)
             )
 
             val collectionRails = CollectionTemplateManifest.railOrder.map { group ->
@@ -961,10 +964,40 @@ class MediaRepository @Inject constructor(
         nonEmpty
     }
 
+    private val weTrakrLists by lazy {
+        com.arflix.tv.data.repository.wetrakr.WeTrakrLists(
+            dagger.hilt.android.EntryPointAccessors.fromApplication(
+                context, com.arflix.tv.di.RepositoryAccessEntryPoint::class.java
+            ).weTrakrRepository()
+        )
+    }
+
+    /** One page (the only one) of WeTrakr's recommendations; empty when WeTrakr isn't connected. */
+    private suspend fun loadWeTrakrRecommendations(type: MediaType, page: Int): CategoryPageResult = coroutineScope {
+        if (page != 1 || !weTrakrLists.isConnected()) return@coroutineScope CategoryPageResult(emptyList(), hasMore = false)
+        val ids = runCatching { weTrakrLists.recommended(type) }
+            .onFailure { if (it is CancellationException) throw it }
+            .getOrDefault(emptyList())
+        val semaphore = Semaphore(6)
+        val items = ids.map { id ->
+            async {
+                semaphore.withPermit {
+                    runCatching { catalogItemFor(type, id) }
+                        .onFailure { if (it is CancellationException) throw it }
+                        .getOrNull()
+                }
+            }
+        }.mapNotNull { it.await() }
+        CategoryPageResult(items, hasMore = false)
+    }
+
     suspend fun loadHomeCategoryPage(
         categoryId: String,
         page: Int
     ): CategoryPageResult {
+        com.arflix.tv.data.repository.wetrakr.WeTrakrLists.recommendationType(categoryId)?.let { type ->
+            return loadWeTrakrRecommendations(type, page)
+        }
         if (page < 1) return CategoryPageResult(emptyList(), hasMore = false)
 
         val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.US)

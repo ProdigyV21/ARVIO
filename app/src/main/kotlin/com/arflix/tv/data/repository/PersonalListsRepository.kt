@@ -16,16 +16,18 @@ import javax.inject.Singleton
 /**
  * The user's own lists on the connected tracking services, for "Add to list".
  *
- * Trakt and MDBList can both be connected; their lists are shown together, tagged with
+ * Trakt, MDBList and WeTrakr can all be connected; their lists are shown together, tagged with
  * the service they live on. Only lists that can take items are offered (MDBList's
  * dynamic, filter-based lists cannot).
  */
 @Singleton
 class PersonalListsRepository @Inject constructor(
     private val traktRepository: TraktRepository,
-    private val mdbListRepository: MdbListRepository
+    private val mdbListRepository: MdbListRepository,
+    // WeTrakr lists (free plan: 5 lists of up to 250 titles), through the device's WeTrakr connection.
+    private val weTrakrLists: com.arflix.tv.data.repository.wetrakr.WeTrakrLists
 ) {
-    enum class Provider(val label: String) { TRAKT("Trakt"), MDBLIST("MDBList") }
+    enum class Provider(val label: String) { TRAKT("Trakt"), MDBLIST("MDBList"), WETRAKR("WeTrakr") }
 
     data class UserList(val provider: Provider, val id: String, val title: String) {
         val key: String get() = "${provider.name}:$id"
@@ -36,7 +38,7 @@ class PersonalListsRepository @Inject constructor(
 
     /** Whether any service with personal lists is connected for the active profile. */
     suspend fun hasProvider(): Boolean =
-        traktRepository.isAuthenticated.first() || mdbListRepository.isConnected()
+        traktRepository.isAuthenticated.first() || mdbListRepository.isConnected() || weTrakrLists.isConnected()
 
     /** Every list with the title's membership, loaded in parallel. */
     suspend fun choicesFor(mediaType: MediaType, tmdbId: Int): List<Choice> = coroutineScope {
@@ -62,8 +64,21 @@ class PersonalListsRepository @Inject constructor(
                 }
             }.awaitAll()
         }
-        trakt.await() + mdb.await()
+        val weTrakr = async {
+            if (!weTrakrLists.isConnected()) return@async emptyList()
+            val lists = runCatching { weTrakrLists.ownLists() }.getOrDefault(emptyList()).filterNot { it.locked }
+            if (lists.isEmpty()) return@async emptyList()
+            val holding = runCatching { weTrakrLists.listsHolding(mediaType, tmdbId) }.getOrDefault(emptySet())
+            lists.map { list -> Choice(UserList(Provider.WETRAKR, list.id.toString(), list.name), list.id in holding) }
+        }
+        trakt.await() + mdb.await() + weTrakr.await()
     }
+
+    /** The user's WeTrakr lists for the Library, and the titles of one of them. */
+    suspend fun weTrakrLibraryLists(): List<com.arflix.tv.data.repository.wetrakr.WeTrakrLists.UserList> =
+        if (!weTrakrLists.isConnected()) emptyList() else weTrakrLists.ownLists().filterNot { it.locked }
+
+    suspend fun weTrakrListItems(listId: Long) = weTrakrLists.listItems(listId)
 
     /** An MDBList list for the Library; [path] is "user/slug", as in its mdblist.com URL. */
     data class MdbListLibraryList(val id: Long, val title: String, val path: String?)
@@ -100,6 +115,9 @@ class PersonalListsRepository @Inject constructor(
             Provider.MDBLIST -> list.id.toLongOrNull()
                 ?.let { mdbListRepository.modifyList(it, mediaType, tmdbId, add) }
                 ?: false
+            Provider.WETRAKR -> list.id.toLongOrNull()?.let { id ->
+                runCatching { weTrakrLists.setMembership(id, mediaType, tmdbId, add) }.getOrDefault(false)
+            } ?: false
         }
         if (ok) {
             // The edited list must not be answered from a cached copy on its next load.
