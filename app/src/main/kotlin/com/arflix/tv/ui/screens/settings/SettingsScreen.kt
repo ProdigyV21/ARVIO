@@ -6,6 +6,7 @@ import androidx.compose.ui.text.font.FontWeight
 import com.arflix.tv.data.model.AnimeStructuringStyle
 
 import androidx.activity.compose.BackHandler
+import com.arflix.tv.server.PhoneInputServer
 import com.arflix.tv.ui.components.LocalBottomBarInset
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
@@ -46,6 +47,9 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.layout.ContentScale
 import coil.compose.AsyncImage
 import com.arflix.tv.BuildConfig
+import com.arflix.tv.ui.components.PhoneInputButton
+import com.arflix.tv.ui.components.PhoneInputOnDemand
+import com.arflix.tv.ui.components.PhoneInputPanel
 import com.arflix.tv.util.Constants
 import androidx.compose.foundation.background
 import androidx.compose.ui.input.pointer.pointerInput
@@ -2582,6 +2586,7 @@ fun SettingsScreen(
         if (showCustomAddonInput) {
             InputModal(
                 title = stringResource(R.string.add_addon),
+                phoneInput = true,
                 fields = listOf(
                     InputField(label = stringResource(R.string.settings_label_url), value = customAddonUrl, onValueChange = { customAddonUrl = it })
                 ),
@@ -2602,6 +2607,7 @@ fun SettingsScreen(
         if (showHomeServerInput) {
             InputModal(
                 title = stringResource(R.string.settings_home_server),
+                phoneInput = true,
                 supportingText = stringResource(R.string.settings_home_server_https_note) + "\n\n" + stringResource(R.string.homeserver_silo_help),
                 fields = listOf(
                     InputField(
@@ -4502,6 +4508,13 @@ private fun MdbListConnectDialog(
                     text = stringResource(R.string.mdblist_key_help),
                     style = ArflixTypography.caption,
                     color = TextSecondary
+                )
+                // On a TV, on demand: or paste the key on the phone.
+                Spacer(modifier = Modifier.height(12.dp))
+                PhoneInputOnDemand(
+                    title = stringResource(R.string.mdblist_connect_title),
+                    fields = listOf(PhoneInputServer.Field(stringResource(R.string.mdblist_key_hint), apiKey, secret = true)),
+                    onValues = { values -> values.firstOrNull()?.trim()?.takeIf { it.isNotEmpty() }?.let { apiKey = it } },
                 )
             }
         },
@@ -11937,6 +11950,8 @@ private fun InputModal(
     supportingText: String? = null,
     fields: List<InputField>,
     toggleFields: List<ToggleField> = emptyList(),
+    // On a TV: a "Use your phone" button beside Paste reveals a QR code to fill the fields from the phone.
+    phoneInput: Boolean = false,
     onConfirm: () -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -11945,6 +11960,10 @@ private fun InputModal(
         return
     }
     var focusedIndex by remember(title, fields.size) { mutableIntStateOf(0) }
+    // The paste row holds "Use your phone" on its right; Left/Right move between the two.
+    val phoneEnabled = phoneInput && fields.isNotEmpty()
+    var phoneSlotFocused by remember(title) { mutableStateOf(false) }
+    var phoneRevealed by remember(title) { mutableStateOf(false) }
     var lastFocusedFieldIndex by remember(title, fields.size) { mutableStateOf<Int?>(null) }
     val totalItems = fields.size + toggleFields.size + 3 // inputs + toggles + paste + cancel + confirm
     val isTouchDevice = LocalDeviceType.current.isTouchDevice()
@@ -12077,6 +12096,7 @@ private fun InputModal(
                                     true
                                 }
                                 Key.DirectionUp -> {
+                                    phoneSlotFocused = false
                                     if (focusedIndex > 0) {
                                         if (focusedIndex < fields.size) hideKeyboardAll()
                                         focusedIndex--
@@ -12084,6 +12104,7 @@ private fun InputModal(
                                     true
                                 }
                                 Key.DirectionDown -> {
+                                    phoneSlotFocused = false
                                     if (focusedIndex < totalItems - 1) {
                                         if (focusedIndex < fields.size) hideKeyboardAll()
                                         focusedIndex++
@@ -12091,10 +12112,12 @@ private fun InputModal(
                                     true
                                 }
                                 Key.DirectionLeft -> {
+                                    if (phoneEnabled && focusedIndex == fields.size + toggleFields.size) phoneSlotFocused = false
                                     if (focusedIndex == fields.size + toggleFields.size + 2) focusedIndex = fields.size + toggleFields.size + 1
                                     true
                                 }
                                 Key.DirectionRight -> {
+                                    if (phoneEnabled && focusedIndex == fields.size + toggleFields.size) phoneSlotFocused = true
                                     if (focusedIndex == fields.size + toggleFields.size + 1) focusedIndex = fields.size + toggleFields.size + 2
                                     true
                                 }
@@ -12110,7 +12133,8 @@ private fun InputModal(
                                             true
                                         }
                                         focusedIndex == fields.size + toggleFields.size -> {
-                                            pasteClipboardIntoTarget()
+                                            if (phoneEnabled && phoneSlotFocused) phoneRevealed = !phoneRevealed
+                                            else pasteClipboardIntoTarget()
                                             true
                                         }
                                         focusedIndex == fields.size + toggleFields.size + 1 -> {
@@ -12154,6 +12178,18 @@ private fun InputModal(
                         color = TextSecondary.copy(alpha = 0.68f),
                         textAlign = TextAlign.Center,
                         modifier = Modifier.padding(bottom = 12.dp)
+                    )
+                }
+                // On a TV, once "Use your phone" is chosen: fill these fields from the phone.
+                // An empty phone field leaves the TV's as it is.
+                if (phoneEnabled && phoneRevealed) {
+                    PhoneInputPanel(
+                        title = title,
+                        fields = fields.map { PhoneInputServer.Field(it.label, it.value, it.isSecret, !it.singleLine) },
+                        onValues = { values ->
+                            values.forEachIndexed { i, v -> if (v.isNotEmpty()) fields.getOrNull(i)?.onValueChange?.invoke(v) }
+                        },
+                        modifier = Modifier.padding(bottom = 12.dp),
                     )
                 }
 
@@ -12384,7 +12420,8 @@ private fun InputModal(
                 }
                 Spacer(modifier = Modifier.height(12.dp))
 
-                val isPasteFocused = focusedIndex == fields.size + toggleFields.size
+                val isPasteRowFocused = focusedIndex == fields.size + toggleFields.size
+                val isPasteFocused = isPasteRowFocused && !(phoneEnabled && phoneSlotFocused)
                 val fieldFallbackLabel = stringResource(R.string.settings_field_fallback)
                 val pasteTargetLabel = fields.getOrNull(pasteTargetIndex())
                     ?.label
@@ -12393,8 +12430,13 @@ private fun InputModal(
                     ?.ifBlank { fieldFallbackLabel }
                     ?: fieldFallbackLabel
                 Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                Row(
                     modifier = Modifier
-                        .fillMaxWidth()
+                        .weight(1f)
                         .clip(RoundedCornerShape(12.dp))
                         .background(
                             color = if (isPasteFocused) Color.White else Color.Black.copy(alpha = 0.82f),
@@ -12426,6 +12468,14 @@ private fun InputModal(
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
+                }
+                if (phoneEnabled) {
+                    PhoneInputButton(
+                        revealed = phoneRevealed,
+                        onClick = { phoneRevealed = !phoneRevealed },
+                        focused = isPasteRowFocused && phoneSlotFocused
+                    )
+                }
                 }
 
                 Spacer(modifier = Modifier.height(12.dp))

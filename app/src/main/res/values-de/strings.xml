@@ -1937,4 +1937,15 @@
     <string name="live_ai_subs_needs_key">Füge zuerst einen Google-Gemini-API-Schlüssel hinzu</string>
     <string name="live_ai_subs_auto_title">Automatisch übersetzen, wenn ein Sender startet</string>
     <string name="live_ai_subs_auto_desc">Jeder Sender startet mit KI-Untertiteln, ohne sie im Untertitelmenü auszuwählen</string>
+
+    <!-- Type on the phone (QR in TV text dialogs) -->
+    <string name="phone_input_button">Handy verwenden</string>
+    <string name="phone_input_button_hide">Handy-Code ausblenden</string>
+    <string name="phone_input_qr_title">📱 Vom Handy</string>
+    <string name="phone_input_qr_hint">Scannen, um es auf dem Handy einzutippen oder einzufügen.</string>
+    <string name="phone_input_page_hint">Was du sendest, erscheint auf dem Fernseher. Dort mit OK speichern.</string>
+    <string name="phone_input_page_send">An den Fernseher senden</string>
+    <string name="phone_input_page_sent">Gesendet ✓ — drücke OK auf dem Fernseher.</string>
+    <string name="phone_input_page_not_sent">Nicht gesendet</string>
+    <string name="phone_input_page_expired">Dieser Code ist abgelaufen — scanne den QR-Code auf dem Fernseher erneut.</string>
 </resources>

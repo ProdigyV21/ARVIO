@@ -77,6 +77,7 @@ import androidx.core.widget.doAfterTextChanged
 import com.arflix.tv.R
 import com.arflix.tv.data.repository.IptvConnectionLimit
 import com.arflix.tv.data.repository.IptvConnectionLimitState
+import com.arflix.tv.server.PhoneInputServer
 import com.arflix.tv.ui.skin.resolveAccentColor
 import com.arflix.tv.ui.theme.ArflixTypography
 import com.arflix.tv.ui.theme.BackgroundElevated
@@ -758,6 +759,50 @@ fun IptvPlaylistModal(
                                     )
                                 }
                             }
+
+                            // On a TV, on demand: fill the form from the phone. An empty phone field leaves the TV's as it is.
+                            Spacer(modifier = Modifier.height(16.dp))
+                            val epgLabel = stringResource(R.string.settings_label_epg_sources)
+                            val phoneFields = when (sourceType) {
+                                IptvSourceType.M3U -> listOf(
+                                    PhoneInputServer.Field(stringResource(R.string.settings_label_playlist_name), playlistName),
+                                    PhoneInputServer.Field(stringResource(R.string.settings_label_m3u_url), playlistUrl),
+                                    PhoneInputServer.Field(epgLabel, epgSources),
+                                )
+                                IptvSourceType.XTREAM -> listOf(
+                                    PhoneInputServer.Field(stringResource(R.string.settings_label_playlist_name), playlistName),
+                                    PhoneInputServer.Field(stringResource(R.string.settings_label_server_url), playlistUrl),
+                                    PhoneInputServer.Field(stringResource(R.string.settings_label_username), xtreamUser),
+                                    PhoneInputServer.Field(stringResource(R.string.settings_label_password), xtreamPass, secret = true),
+                                    PhoneInputServer.Field(epgLabel, epgSources),
+                                )
+                                IptvSourceType.STALKER -> listOf(
+                                    PhoneInputServer.Field(stringResource(R.string.settings_stalker_portal_name_label), stalkerName),
+                                    PhoneInputServer.Field(stringResource(R.string.settings_stalker_label_portal_url), stalkerPortalUrl),
+                                    PhoneInputServer.Field(stringResource(R.string.settings_stalker_label_mac), stalkerMac),
+                                )
+                            }
+                            // Keyed by type: switching M3U / Xtream / Stalker opens a new form.
+                            PhoneInputOnDemand(
+                                title = "IPTV · ${sourceType.name}",
+                                fields = phoneFields,
+                                onValues = { values ->
+                                    fun v(i: Int) = values.getOrNull(i)?.takeIf { it.isNotEmpty() }
+                                    when (sourceType) {
+                                        IptvSourceType.M3U -> {
+                                            v(0)?.let { playlistName = it }; v(1)?.let { playlistUrl = it }; v(2)?.let { epgSources = it }
+                                        }
+                                        IptvSourceType.XTREAM -> {
+                                            v(0)?.let { playlistName = it }; v(1)?.let { playlistUrl = it }
+                                            v(2)?.let { xtreamUser = it }; v(3)?.let { xtreamPass = it }; v(4)?.let { epgSources = it }
+                                        }
+                                        IptvSourceType.STALKER -> {
+                                            v(0)?.let { stalkerName = it }; v(1)?.let { stalkerPortalUrl = it }; v(2)?.let { stalkerMac = it }
+                                        }
+                                    }
+                                },
+                                qrSize = 88.dp,
+                            )
                         }
 
                         // Right Pane: Input Form Fields & Action Buttons
