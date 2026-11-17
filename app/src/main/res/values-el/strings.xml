@@ -61,4 +61,15 @@
     <string name="add_later">Προσθέστε ταινίες και σειρές για αργότερα</string>
     <string name="sources_available">διαθέσιμες πηγές</string>
     <string name="ends_at">Τελειώνει στις</string>
+
+    <!-- Type on the phone (QR in TV text dialogs) -->
+    <string name="phone_input_button">Χρήση κινητού</string>
+    <string name="phone_input_button_hide">Απόκρυψη κωδικού QR</string>
+    <string name="phone_input_qr_title">📱 Από το κινητό</string>
+    <string name="phone_input_qr_hint">Σκάναρε για να γράψεις ή να επικολλήσεις εκεί.</string>
+    <string name="phone_input_page_hint">Ό,τι στείλεις εμφανίζεται στην τηλεόραση. Πάτα OK εκεί για να αποθηκευτεί.</string>
+    <string name="phone_input_page_send">Αποστολή στην τηλεόραση</string>
+    <string name="phone_input_page_sent">Στάλθηκε ✓ — πάτα OK στην τηλεόραση.</string>
+    <string name="phone_input_page_not_sent">Δεν στάλθηκε</string>
+    <string name="phone_input_page_expired">Ο κωδικός έληξε — σκάναρε ξανά το QR στην τηλεόραση.</string>
 </resources>

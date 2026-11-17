@@ -1569,4 +1569,15 @@
     <string name="live_ai_subs_needs_key">Adicione primeiro uma chave de API do Google Gemini</string>
     <string name="live_ai_subs_auto_title">Traduzir automaticamente ao iniciar um canal</string>
     <string name="live_ai_subs_auto_desc">Cada canal começa com legendas IA, sem escolher no menu de legendas</string>
+
+    <!-- Type on the phone (QR in TV text dialogs) -->
+    <string name="phone_input_button">Usar o celular</string>
+    <string name="phone_input_button_hide">Ocultar código do celular</string>
+    <string name="phone_input_qr_title">📱 Pelo celular</string>
+    <string name="phone_input_qr_hint">Escaneie para digitar ou colar no celular.</string>
+    <string name="phone_input_page_hint">O que você enviar aparece na TV. Aperte OK lá para salvar.</string>
+    <string name="phone_input_page_send">Enviar para a TV</string>
+    <string name="phone_input_page_sent">Enviado ✓ — aperte OK na TV.</string>
+    <string name="phone_input_page_not_sent">Não enviado</string>
+    <string name="phone_input_page_expired">Este código expirou — escaneie o QR code na TV de novo.</string>
 </resources>
