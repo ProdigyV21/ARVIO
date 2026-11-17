@@ -49,6 +49,14 @@ h1 .headline{display:block;color:#f7f7f7}h1 .headline-accent{display:block;margi
 .plan-price span{white-space:nowrap}.plan-badge{top:auto;bottom:calc(100% - 13px)}
 
 /* Let both header controls shrink instead of widening a narrow viewport. */
+.plan-intro{max-width:640px;margin:-18px auto 36px;color:#b9c4bd;font-size:15px;line-height:1.6}
+.plan-saving{max-width:660px;margin:20px auto 0;color:#b8f5d9;font-size:13px;line-height:1.6}
+.checkout-next{max-width:640px;margin:12px auto 0;color:#e3e9e5;font-size:14px;line-height:1.6}
+.plan-price s{font-size:18px;color:#98a39c;text-decoration-thickness:1px;margin-inline-end:5px}
+.plan-price [hidden]{display:none}
+.plans-section .checkout-note{margin-top:8px}
+.preview-button{font-weight:500}
+@media(max-width:360px){.plans{grid-template-columns:1fr;gap:28px}.plan{padding:28px 22px 20px}.plan-price strong{font-size:38px}.plan-note{font-size:14px}.plan h3{font-size:16px}.plan-badge{font-size:12px}.plan-button{font-size:15px}}
 @media (max-width: 600px) {
   header { gap: 16px; }
   .brand { flex: 0 1 160px; min-width: 0; }

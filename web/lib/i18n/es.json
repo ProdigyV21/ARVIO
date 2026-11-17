@@ -796,5 +796,22 @@
   "{value0} is hidden on Home — showing any item turns {value0} back on.": "{value0} está oculta en Inicio; al mostrar cualquier elemento, se vuelve a activar {value0}.",
   "No rows are currently shown on Home.": "Actualmente no se muestran filas en Inicio.",
   "Add default collections": "Añadir colecciones predeterminadas",
-  "Add Featured, Services, Genres, Franchises and Decades without changing your other rows.": "Añade Destacados, Servicios, Géneros, Franquicias y Décadas sin modificar tus otras filas."
+  "Add Featured, Services, Genres, Franchises and Decades without changing your other rows.": "Añade Destacados, Servicios, Géneros, Franquicias y Décadas sin modificar tus otras filas.",
+  "You already have access. There is no need to pay again.": "Ya tienes acceso. No necesitas volver a pagar.",
+  "Open ARVIO Web": "Abrir ARVIO Web",
+  "Membership steps": "Pasos de la suscripción",
+  "Account": "Cuenta",
+  "Payment": "Pago",
+  "Your selected Premium plan": "Tu plan Premium elegido",
+  "Your plan is ready. Complete payment securely on Ko-fi, then return here.": "Tu plan está listo. Paga de forma segura en Ko-fi y vuelve aquí después.",
+  "Sign in or create your ARVIO account, then complete payment on Ko-fi.": "Inicia sesión o crea una cuenta de ARVIO y después paga en Ko-fi.",
+  "Your selected plan": "Tu plan elegido",
+  "12-month pass": "Pase de 12 meses",
+  "Monthly membership": "Suscripción mensual",
+  "Checking your price…": "Comprobando tu precio…",
+  "Save {value0} vs. 12 monthly payments of $2.99 ($35.88).": "Ahorra {value0} frente a 12 pagos mensuales de $2.99 ($35.88).",
+  "24/7 hosted ARVIO Web for your supported browsers.": "ARVIO Web alojado las 24 horas para tus navegadores compatibles.",
+  "This plan is unavailable right now. Please try again shortly.": "Este plan no está disponible ahora. Vuelve a intentarlo en unos instantes.",
+  "Continue to Ko-fi · {value0}": "Continuar a Ko-fi · {value0}",
+  "Keep exploring": "Seguir explorando"
 }

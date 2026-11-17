@@ -7,5 +7,22 @@
   "Channel categories": "Catégories de chaînes",
   "Silo: use the Jellyfin-compatible address. Optional profile: username#ProfileName. Protected profile: password#PIN.": "Silo: utilisez l’adresse compatible avec Jellyfin. Profil facultatif: username#ProfileName. Profil protégé: password#PIN.",
   "None of your enabled addons provide playback sources.": "Aucune de vos extensions activées ne fournit de sources de lecture.",
-  "Add movies and series to this watchlist to see their releases here.": "Ajoutez des films et des séries à cette liste pour voir leurs dates de sortie ici."
+  "Add movies and series to this watchlist to see their releases here.": "Ajoutez des films et des séries à cette liste pour voir leurs dates de sortie ici.",
+  "You already have access. There is no need to pay again.": "Vous avez déjà accès. Inutile de payer à nouveau.",
+  "Open ARVIO Web": "Ouvrir ARVIO Web",
+  "Membership steps": "Étapes de l’abonnement",
+  "Account": "Compte",
+  "Payment": "Paiement",
+  "Your selected Premium plan": "Votre formule Premium choisie",
+  "Your plan is ready. Complete payment securely on Ko-fi, then return here.": "Votre formule est prête. Payez en toute sécurité sur Ko-fi, puis revenez ici.",
+  "Sign in or create your ARVIO account, then complete payment on Ko-fi.": "Connectez-vous ou créez un compte ARVIO, puis payez sur Ko-fi.",
+  "Your selected plan": "Votre formule choisie",
+  "12-month pass": "Pass 12 mois",
+  "Monthly membership": "Abonnement mensuel",
+  "Checking your price…": "Vérification de votre tarif…",
+  "Save {value0} vs. 12 monthly payments of $2.99 ($35.88).": "Économisez {value0} par rapport à 12 paiements mensuels de $2.99 ($35.88).",
+  "24/7 hosted ARVIO Web for your supported browsers.": "ARVIO Web hébergé 24 h/24 et 7 j/7 pour vos navigateurs compatibles.",
+  "This plan is unavailable right now. Please try again shortly.": "Cette formule est indisponible pour le moment. Réessayez dans quelques instants.",
+  "Continue to Ko-fi · {value0}": "Continuer sur Ko-fi · {value0}",
+  "Keep exploring": "Continuer à explorer"
 }

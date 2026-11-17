@@ -4,9 +4,10 @@ import { useSyncExternalStore } from 'react';
 const listeners = new Set<() => void>();
 type FixtureSession = { userId: string; email: string; accessToken: string; provider: string };
 const scenario = new URLSearchParams(location.search).get('case');
-let view = scenario === 'preview-signedout' ? 'login' : 'profiles';
+const signedOut = scenario === 'preview-signedout' || scenario === 'purchase-signedout';
+let view = signedOut ? 'login' : 'profiles';
 export const authClient = {
-  session: (scenario === 'preview-signedout' ? null : { userId: 'premium-fixture', email: 'tester@example.test', accessToken: 'fixture', provider: 'netlify' }) as FixtureSession | null,
+  session: (signedOut ? null : { userId: 'premium-fixture', email: 'tester@example.test', accessToken: 'fixture', provider: 'netlify' }) as FixtureSession | null,
   accessToken: async () => 'fixture',
   refresh: async () => undefined
 };
