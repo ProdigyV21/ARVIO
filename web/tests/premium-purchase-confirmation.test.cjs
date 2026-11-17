@@ -17,7 +17,21 @@ function confirmationFixture(options = {}) {
   let cursor = 0, dirty = false, effects = [], tree;
   const app = { auth: options.signedOut ? null : { userId: 'account-a', email: 'a@example.test' } };
   const authClient = { session: app.auth };
-  const calls = { requests: 0, signIns: 0, closes: 0 };
+  const calls = { requests: 0, signIns: 0, closes: 0, consumed: 0, attribution: 0, redirect: null };
+  const config = { paywallEnabled: options.paywallEnabled ?? true, selfHosted: options.selfHosted ?? false };
+  const location = new URL(options.url ?? `https://web.arvio.tv/?premium_plan=${options.plan ?? 'yearly'}`);
+  const values = options.values ?? new Map();
+  const window = { setTimeout, clearTimeout, location, history: { state: null, replaceState(_state, _title, value) { location.href = new URL(value, location).href; } } };
+  Object.defineProperty(window, 'sessionStorage', { get() {
+    if (options.blocked) throw Error('blocked storage');
+    return { getItem: key => values.get(key) ?? null, setItem: (key, value) => values.set(key, value), removeItem: key => values.delete(key) };
+  } });
+  const intent = options.wrapper ? load('lib/premiumPurchaseIntent.ts', { './config': { config } }, { window }) : null;
+  app.goToLogin = () => {
+    calls.signIns++;
+    if (options.redirectError) throw Error('redirect blocked');
+    calls.redirect = intent?.premiumPurchaseLoginRedirect(location.origin, location.search) ?? null;
+  };
   function MembershipCheckout() {}
   const same = (a, b) => a?.length === b?.length && a.every((value, index) => Object.is(value, b[index]));
   const react = {
@@ -34,7 +48,7 @@ function confirmationFixture(options = {}) {
     useEffect: (effect, deps) => {
       const index = cursor++, previous = slots[index];
       if (previous && same(previous.deps, deps)) return;
-      slots[index] = { deps, cleanup: previous?.cleanup };
+      slots[index] = { deps, effect, cleanup: previous?.cleanup };
       effects.push(() => { slots[index].cleanup?.(); slots[index].cleanup = effect(); });
     }
   };
@@ -44,14 +58,14 @@ function confirmationFixture(options = {}) {
     'react/jsx-runtime': { jsx: (type, props) => ({ type, props }), jsxs: (type, props) => ({ type, props }) },
     'lucide-react': Object.fromEntries(['ArrowRight', 'BadgeCheck', 'Check', 'Loader2', 'ShieldCheck', 'X'].map(key => [key, () => null])),
     '@/lib/store': { useAppPick: () => app, authClient },
-    '@/lib/config': { config: { paywallEnabled: true, selfHosted: false } },
+    '@/lib/config': { config },
     '@/lib/entitlement': {
       cachedEntitlement: () => options.cached ?? null,
       fetchEntitlement: async () => { calls.requests++; return options.fetch ? options.fetch(calls.requests) : options.state ?? unpaid; },
       kofiYearlyUrl: () => options.yearlyMissing ? '' : regional ? 'https://ko-fi.com/arvio/link/ARVIOREGION50' : 'https://ko-fi.com/s/373de24a07'
     },
-    '@/lib/premiumAnalytics': { capturePremiumAttribution() {} },
-    '@/lib/premiumPurchaseIntent': {},
+    '@/lib/premiumAnalytics': { capturePremiumAttribution() { calls.attribution++; } },
+    '@/lib/premiumPurchaseIntent': intent ? { ...intent, consumePremiumPurchaseIntent() { calls.consumed++; return intent.consumePremiumPurchaseIntent(); } } : {},
     '@/lib/premiumPurchaseOffer': offer,
     '@/lib/regionalPricing': { useRegionalYearly: () => regional, loadVisitorCountry: () => Promise.resolve(regional ? 'BR' : 'US') },
     '@/lib/i18n': { useTranslation: () => (text, values = {}) => text.replace(/\{(\w+)\}/g, (_, key) => values[key] ?? '') },
@@ -64,14 +78,14 @@ function confirmationFixture(options = {}) {
   const module = { exports: {} };
   vm.runInNewContext(code, {
     module, exports: module.exports, require: name => { if (!(name in mocks)) throw Error(`Unmocked ${name}`); return mocks[name]; },
-    document: { activeElement: null }, HTMLElement: class {}, window: { setTimeout, clearTimeout }
+    document: { activeElement: null }, HTMLElement: class {}, window
   }, { filename });
   const props = { plan: options.plan ?? 'yearly', onSignIn: () => calls.signIns++, onClose: () => calls.closes++ };
   function render(patch) {
     if (patch) { Object.assign(app, patch); authClient.session = app.auth; }
     for (let pass = 0; pass < 15; pass++) {
       dirty = false; cursor = 0; effects = [];
-      tree = module.exports.PremiumPurchaseConfirmation(props);
+      tree = options.wrapper ? module.exports.PremiumPurchaseIntent().type() : module.exports.PremiumPurchaseConfirmation(props);
       effects.forEach(effect => effect());
       if (!dirty) return tree;
     }
@@ -89,7 +103,9 @@ function confirmationFixture(options = {}) {
   }
   render();
   return {
-    app, calls, render,
+    app, calls, render, location, values,
+    tree: () => tree,
+    replayEffects: () => { slots.forEach(slot => { if (slot?.effect) { slot.cleanup?.(); slot.cleanup = slot.effect(); } }); return render(); },
     flush: async () => { await new Promise(setImmediate); render(); },
     checkout: () => nodes(tree, node => node.type === MembershipCheckout),
     buttons: () => nodes(tree, node => node.type === 'button'),
@@ -177,5 +193,66 @@ test('a stale paid response or checkout callback cannot apply to another account
   await ui.flush();
   assert.equal(ui.checkout().length, 1);
   assert.doesNotMatch(ui.text(), /already have access/);
+  ui.unmount();
+});
+
+test('production wrapper sends a selected website plan straight to sign-in once without consuming it', () => {
+  for (const plan of ['monthly', 'yearly']) for (const blocked of [false, true]) {
+    const ui = confirmationFixture({ wrapper: true, signedOut: true, plan, blocked,
+      url: `https://web.arvio.tv/?premium_plan=${plan}&return_url=https://evil.invalid` });
+    assert.equal(ui.calls.signIns, 1);
+    assert.equal(ui.calls.attribution, 1, 'capture acquisition before the sign-in handoff');
+    assert.equal(ui.calls.consumed, 0);
+    assert.equal(ui.tree(), null, 'there is no extra anonymous confirmation click');
+    const redirect = new URL(ui.calls.redirect);
+    assert.equal(redirect.origin, 'https://web.arvio.tv');
+    assert.equal(redirect.pathname, '/');
+    assert.equal(redirect.searchParams.get('premium_plan'), plan);
+    assert.equal(redirect.searchParams.has('return_url'), false);
+    assert.ok(Number(redirect.searchParams.get('premium_intent_at')) > 0);
+    ui.render(); ui.replayEffects(); ui.render();
+    assert.equal(ui.calls.signIns, 1, 'rerenders and Strict Mode effect replay do not redirect twice');
+    assert.equal(ui.calls.consumed, 0);
+    const returned = confirmationFixture({ wrapper: true, url: redirect.href, blocked, values: ui.values });
+    assert.equal(returned.calls.signIns, 0);
+    assert.equal(returned.calls.consumed, 1);
+    assert.equal(returned.tree().props.plan, plan);
+    assert.equal(returned.location.searchParams.has('premium_plan'), false);
+    assert.equal(returned.location.searchParams.has('premium_intent_at'), false);
+    returned.replayEffects();
+    assert.equal(returned.calls.consumed, 1, 'the signed-in confirmation consumes the selection once');
+    ui.unmount(); returned.unmount();
+  }
+});
+
+test('production wrapper cannot auto-sign-in from expired, malformed or nonofficial checkout intent', () => {
+  const expired = Date.now() - 31 * 60 * 1000;
+  for (const options of [
+    { url: `https://web.arvio.tv/?premium_plan=yearly&premium_intent_at=${expired}` },
+    { url: 'https://web.arvio.tv/?premium_plan=yearly&premium_plan=monthly' },
+    { url: 'https://web.arvio.tv/?premium_plan=https://evil.invalid' },
+    { url: 'https://web.arvio.tv/?return_url=https://evil.invalid' },
+    { url: 'https://selfhost.example/?premium_plan=yearly' },
+    { url: 'https://web.arvio.tv/?premium_plan=yearly', selfHosted: true },
+    { url: 'https://web.arvio.tv/?premium_plan=yearly', paywallEnabled: false }
+  ]) {
+    const ui = confirmationFixture({ wrapper: true, signedOut: true, blocked: true, ...options });
+    assert.equal(ui.calls.signIns, 0);
+    assert.equal(ui.calls.consumed, 0);
+    assert.equal(ui.tree(), null);
+    ui.unmount();
+  }
+});
+
+test('a synchronously blocked sign-in redirect retains a manual retry without losing the selected plan', () => {
+  const ui = confirmationFixture({ wrapper: true, signedOut: true, plan: 'yearly', redirectError: true, blocked: true });
+  assert.equal(ui.calls.signIns, 1);
+  assert.equal(ui.calls.consumed, 0);
+  assert.equal(ui.tree().props.plan, 'yearly');
+  assert.equal(ui.location.searchParams.get('premium_plan'), 'yearly');
+  assert.equal(typeof ui.tree().props.onSignIn, 'function');
+  ui.tree().props.onClose(); ui.render();
+  assert.equal(ui.tree(), null);
+  assert.equal(ui.location.searchParams.has('premium_plan'), false);
   ui.unmount();
 });

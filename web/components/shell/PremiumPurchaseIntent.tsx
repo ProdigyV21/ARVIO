@@ -30,8 +30,13 @@ function PurchaseIntentSession() {
     // Save acquisition before either the sign-in redirect or intent URL cleanup.
     capturePremiumAttribution();
     const pending = capturePremiumPurchaseIntent();
-    if (pending) setPlan(auth ? consumePremiumPurchaseIntent() : pending.plan);
-  }, [auth]);
+    if (!pending) return;
+    if (auth) { setPlan(consumePremiumPurchaseIntent()); return; }
+    // The website already showed this plan and the sign-in next step. Keep the
+    // selection for the auth round trip instead of requesting that click again.
+    try { goToLogin(); }
+    catch { setPlan(pending.plan); } // A blocked redirect keeps a manual retry.
+  }, [auth, goToLogin]);
   if (!plan) return null;
   return <PremiumPurchaseConfirmation key={plan} plan={plan} onSignIn={goToLogin} onClose={() => {
     clearPremiumPurchaseIntent(); setPlan(null);
