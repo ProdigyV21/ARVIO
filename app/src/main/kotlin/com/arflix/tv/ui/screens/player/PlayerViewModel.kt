@@ -107,6 +107,11 @@ import com.arflix.tv.ui.screens.player.subtitles.SubtitleTranslationManager
 import com.arflix.tv.ui.screens.player.subtitles.SubtitleTranslationService
 import com.arflix.tv.ui.screens.player.subtitles.TRANSLATION_ERROR_CONTENT_BLOCKED
 import com.arflix.tv.ui.screens.player.subtitles.GeminiLiveTranslationService
+import com.arflix.tv.ui.screens.player.subtitles.bilingual.BilingualPlayerBridge
+import com.arflix.tv.ui.screens.player.subtitles.bilingual.BilingualSubtitleSettingsStore
+import com.arflix.tv.ui.screens.player.subtitles.bilingual.SmartBilingualRequest
+import com.arflix.tv.ui.screens.player.subtitles.bilingual.SmartBilingualSession
+import com.arflix.tv.ui.screens.player.subtitles.bilingual.SubtitleModeSnapshot
 import com.arflix.tv.ui.screens.player.subtitles.GeminiLiveState
 import com.arflix.tv.ui.screens.player.subtitles.AudioCaptureProcessor
 import com.arflix.tv.ui.screens.player.common.NextEpisodePromptGate
@@ -286,6 +291,17 @@ data class PlayerUiState(
     val isFindingBestMatch: Boolean = false,
     /** Sync by hearing is working on the subtitle and has not confirmed its timing yet. */
     val isHearingSync: Boolean = false,
+    /** True while the smart bilingual layer owns the subtitle display. */
+    val smartBilingualActive: Boolean = false,
+    /** Explicit per-video intent for the smart bilingual mode (Live audio only suspends it). */
+    val smartBilingualRequest: com.arflix.tv.ui.screens.player.subtitles.bilingual.SmartBilingualRequest =
+        com.arflix.tv.ui.screens.player.subtitles.bilingual.SmartBilingualRequest(),
+    /** Bumped when the user asks for the smart bilingual mode from the subtitle menu. */
+    val smartBilingualRequestNonce: Int = 0,
+    /** Nonzero once the user picked a subtitle in this video; smart mode never overrides that pick. */
+    val subtitleUserPickNonce: Int = 0,
+    /** True while a manually picked remote subtitle is still being localized. */
+    val subtitleSelectionPending: Boolean = false,
     val matchToast: PlayerMessage? = null,
     // Persistent status shown on screen for the whole duration of a "Find best match" scan.
     // Null while no scan is running.
@@ -574,6 +590,162 @@ class PlayerViewModel @Inject constructor(
                 _uiState.value = _uiState.value.copy(aiErrorToast = msg)
             }
         }
+    }
+
+    // ── Bilingual subtitles: smart mode ─────────────────────────────────────
+    private val smartBilingualSession = SmartBilingualSession()
+    private val bilingualSettingsStore by lazy { BilingualSubtitleSettingsStore.from(context) }
+
+    private val aiKeyReady: Boolean get() = aiApiKey.isNotBlank()
+
+    fun isAiTranslationConfigured(): Boolean = aiKeyReady
+
+    /** Revisit a deferred startup auto-select once the persisted policy is loaded (AI path, later PR). */
+    fun onBilingualPolicyReady() = Unit
+
+    /** Player menu: (re)start the smart bilingual mode for this video. */
+    fun requestSmartBilingual() {
+        _uiState.value = _uiState.value.copy(
+            smartBilingualRequestNonce = _uiState.value.smartBilingualRequestNonce + 1,
+            smartBilingualRequest = _uiState.value.smartBilingualRequest.start(),
+        )
+    }
+
+    /** Called when playback moves to a different media URI, never restores the old video's track. */
+    fun resetSmartBilingualForStream() {
+        leaveSmartBilingual(restorePrevious = false)
+        _uiState.value = _uiState.value.copy(smartBilingualRequest = SmartBilingualRequest())
+    }
+
+    /** An explicit Off clears the per-video request as well as the track overrides. */
+    fun stopSmartBilingualForVideo(restorePrevious: Boolean = true) {
+        _uiState.value = _uiState.value.copy(smartBilingualRequest = _uiState.value.smartBilingualRequest.stop())
+        BilingualPlayerBridge.primaryOverride.value = null
+        BilingualPlayerBridge.secondaryOverride.value = null
+        leaveSmartBilingual(restorePrevious)
+    }
+
+    /** Takes ownership once; subsequent re-plans keep the original regular-mode snapshot. */
+    private fun claimSubtitleForSmartMode(): Boolean {
+        val state = _uiState.value
+        if (state.isLiveAudioTranslating || state.isFindingBestMatch || state.subtitleSelectionPending ||
+            state.smartBilingualRequest.suppressedForVideo ||
+            !bilingualSettingsStore.isLoadedForCurrentProfile
+        ) return false
+        translationManager.displayMode = bilingualSettingsStore.settings.value.mode
+        smartBilingualSession.enter(
+            SubtitleModeSnapshot(
+                streamUrl = state.selectedStreamUrl,
+                selectedSubtitle = state.selectedSubtitle,
+                aiSourceSubtitle = aiSourceSubtitle,
+                aiTranslating = state.isAiTranslating,
+                managerEnabled = translationManager.isEnabled,
+                targetLanguage = translationManager.targetLanguage,
+                targetLanguageName = state.aiTargetLanguageName,
+                aiAvailable = state.isAiAvailable,
+                manualSelection = hasManualSubtitleSelection,
+                userPicked = userPickedSubtitle,
+            )
+        )
+        cancelFindBestMatch("smart bilingual")
+        subtitleSelectionJob?.cancel()
+        cancelSubtitleLocalization()
+        hasManualSubtitleSelection = true
+        // Not a menu pick, but it must not be displaced by a late preferred-language track.
+        userPickedSubtitle = true
+        return true
+    }
+
+    /**
+     * Path A: show [primary] with the second language from another embedded track (no AI).
+     * The caller sets [SubtitleTranslationManager.secondarySource].
+     */
+    fun activateSmartBilingualMerge(primary: Subtitle) {
+        if (!claimSubtitleForSmartMode()) return
+        translationManager.bilingualSource = SubtitleTranslationManager.BilingualSource.EMBEDDED_TRACK
+        translationManager.isEnabled = true
+        val changed = _uiState.value.selectedSubtitle?.id != primary.id
+        android.util.Log.i("Bilingual", "smart merge: primary=${primary.lang}/${primary.label}")
+        _uiState.value = _uiState.value.copy(
+            selectedSubtitle = primary,
+            isAiTranslating = false,
+            smartBilingualActive = true,
+            subtitleSelectionNonce = _uiState.value.subtitleSelectionNonce + if (changed) 1 else 0
+        )
+    }
+
+    /** Path B: AI-translate [primary] into [targetLanguageName] and show both lines. */
+    fun activateSmartBilingualAi(primary: Subtitle, targetLanguageName: String) {
+        if (!aiKeyReady || !bilingualSettingsStore.isLoadedForCurrentProfile ||
+            !bilingualSettingsStore.settings.value.generationMode.allowsAi) return
+        if (!claimSubtitleForSmartMode()) return
+        aiSourceSubtitle = primary
+        translationManager.secondarySource = null
+        translationManager.bilingualSource = SubtitleTranslationManager.BilingualSource.AI_TRANSLATION
+        translationManager.targetLanguage = targetLanguageName
+        val wasActive = translationManager.isEnabled && _uiState.value.selectedSubtitle?.id == primary.id
+        translationManager.isEnabled = true
+        if (!wasActive) translationManager.reset()
+        aiErrorToastShown = false
+        val changed = _uiState.value.selectedSubtitle?.id != primary.id
+        android.util.Log.i("Bilingual", "smart AI: primary=${primary.lang}/${primary.label} target=$targetLanguageName")
+        _uiState.value = _uiState.value.copy(
+            selectedSubtitle = primary,
+            isAiTranslating = true,
+            isAiAvailable = true,
+            aiTargetLanguageName = targetLanguageName,
+            aiErrorToast = null,
+            smartBilingualActive = true,
+            subtitleSelectionNonce = _uiState.value.subtitleSelectionNonce + if (changed) 1 else 0
+        )
+    }
+
+    /** Smart mode, primary only (same language / nothing to pair with). */
+    fun activateSmartBilingualPrimaryOnly(primary: Subtitle) {
+        if (!claimSubtitleForSmartMode()) return
+        translationManager.secondarySource = null
+        translationManager.bilingualSource = SubtitleTranslationManager.BilingualSource.EMBEDDED_TRACK
+        translationManager.isEnabled = true
+        val changed = _uiState.value.selectedSubtitle?.id != primary.id
+        _uiState.value = _uiState.value.copy(
+            selectedSubtitle = primary,
+            isAiTranslating = false,
+            smartBilingualActive = true,
+            subtitleSelectionNonce = _uiState.value.subtitleSelectionNonce + if (changed) 1 else 0
+        )
+    }
+
+    /** Releases only smart-owned work. A regular AI mode that predated smart mode is restored. */
+    fun leaveSmartBilingual(restorePrevious: Boolean = true) {
+        if (!_uiState.value.smartBilingualActive && !smartBilingualSession.isActive) return
+        val state = _uiState.value
+        val previous = smartBilingualSession.leave(state.selectedStreamUrl, restorePrevious)
+        // Disable FIRST: switching an enabled merge manager back to AI must not issue requests.
+        translationManager.isEnabled = false
+        translationManager.secondarySource = null
+        translationManager.bilingualSource = SubtitleTranslationManager.BilingualSource.AI_TRANSLATION
+        translationManager.bilingualNotice.value = null
+        translationManager.reset()
+        val restoreAi = previous?.aiTranslating == true && previous.managerEnabled &&
+            aiKeyReady && !state.isLiveAudioTranslating
+        if (previous != null) {
+            hasManualSubtitleSelection = previous.manualSelection
+            userPickedSubtitle = previous.userPicked
+            aiSourceSubtitle = previous.aiSourceSubtitle
+            translationManager.targetLanguage = previous.targetLanguage
+        } else {
+            aiSourceSubtitle = null
+        }
+        _uiState.value = state.copy(
+            smartBilingualActive = false,
+            isAiTranslating = restoreAi,
+            selectedSubtitle = if (previous != null) previous.selectedSubtitle else state.selectedSubtitle,
+            isAiAvailable = previous?.aiAvailable ?: state.isAiAvailable,
+            aiTargetLanguageName = previous?.targetLanguageName ?: state.aiTargetLanguageName,
+            subtitleSelectionNonce = state.subtitleSelectionNonce +
+                if (previous != null && previous.selectedSubtitle != state.selectedSubtitle) 1 else 0,
+        )
+        translationManager.isEnabled = restoreAi
     }
 
     val geminiLiveService: GeminiLiveTranslationService = GeminiLiveTranslationService(

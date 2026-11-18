@@ -1288,9 +1288,16 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
 
     // Sync by hearing (audiosync.ArvioAudioSync): every extractor also copies the playing stream's
     // audio to the audio sync — idle unless it is listening. DV stripping, when on, stays underneath.
+    // Bilingual subtitles: the second-subtitle text tap copies the text of every embedded subtitle
+    // track (selected or not) while the extractor demuxes it anyway, so the bilingual layer can
+    // merge a second embedded language without a second player/decoder or any AI call.
+    val embeddedSubtitleStore = remember { com.arflix.tv.ui.screens.player.subtitles.bilingual.EmbeddedSubtitleStore() }
     val audioTapExtractorsFactory = remember(dvStripExtractorsFactory) {
-        com.arflix.tv.ui.screens.player.audiosync.AudioSyncTaps.wrapExtractors(
-            dvStripExtractorsFactory ?: androidx.media3.extractor.DefaultExtractorsFactory()
+        com.arflix.tv.ui.screens.player.subtitles.bilingual.SubtitleTextTapExtractorsFactory(
+            com.arflix.tv.ui.screens.player.audiosync.AudioSyncTaps.wrapExtractors(
+                dvStripExtractorsFactory ?: androidx.media3.extractor.DefaultExtractorsFactory()
+            ) { latestUiState.selectedStreamUrl },
+            embeddedSubtitleStore,
         ) { latestUiState.selectedStreamUrl }
     }
 
@@ -4474,6 +4481,23 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
                     }
                 },
                 modifier = Modifier.fillMaxSize()
+            )
+
+            // Bilingual subtitles: the smart bilingual layer draws the two lines above the video.
+            // Fed by the same single text track; ordinary subtitle tracks are still drawn by the
+            // PlayerView's SubtitleView above.
+            com.arflix.tv.ui.screens.player.subtitles.bilingual.SmartBilingualController(
+                viewModel = viewModel,
+                uiState = uiState,
+                store = embeddedSubtitleStore,
+                audioLanguage = { exoPlayer.audioFormat?.language },
+            )
+            com.arflix.tv.ui.screens.player.subtitles.bilingual.BilingualSubtitleOverlay(
+                manager = viewModel.translationManager,
+                aiActive = uiState.isAiTranslating || uiState.smartBilingualActive,
+                hidden = false,
+                isInPictureInPicture = isInPipMode,
+                modifier = Modifier.fillMaxSize(),
             )
         }
 
