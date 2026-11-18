@@ -152,7 +152,8 @@ data class CollectionDetailsUiState(
     val movieGenreId: Int? = null,
     val seriesGenreId: Int? = null,
     /** A streaming service shown as its own Home (ServiceHomeScreen) instead of the grid. */
-    val serviceHome: Boolean = false
+    val serviceHome: Boolean = false,
+    val initialTab: CollectionTab? = null
 ) {
     fun genreId(tab: CollectionTab): Int? = if (tab == CollectionTab.MOVIES) movieGenreId else seriesGenreId
     val hasMovies: Boolean get() = movieItems.isNotEmpty()
@@ -206,9 +207,9 @@ class CollectionDetailsViewModel @Inject constructor(
 
     /**
      * [serviceHome] lets a streaming service open as its Home-like page; the grid otherwise.
-     * [movieGenreId]/[seriesGenreId] preselect the grid's genres (a service row's "View all").
+     * [serviceRowId] opens the full query for one row rather than the whole service.
      */
-    fun load(catalogId: String, serviceHome: Boolean = false, movieGenreId: Int? = null, seriesGenreId: Int? = null) {
+    fun load(catalogId: String, serviceHome: Boolean = false, serviceRowId: String? = null, serviceFilter: String? = null) {
         val normalizedCatalogId = normalizeCatalogId(catalogId)
         // Preserve partial and paginated data when composition is recreated during a load.
         if (loadedCatalogId == normalizedCatalogId &&
@@ -223,10 +224,15 @@ class CollectionDetailsViewModel @Inject constructor(
         _providerLogos.value = emptyMap()
         _uiState.value = CollectionDetailsUiState()
         loadJob = collectionScope.launch {
-            val catalog = sportsRepository.sportsCollectionCatalog(normalizedCatalogId)
+            val baseCatalog = sportsRepository.sportsCollectionCatalog(normalizedCatalogId)
                 ?: catalogRepository.getCatalogs().firstOrNull { it.id == normalizedCatalogId || it.id == catalogId }
                 ?: syntheticTmdbCollectionCatalog(normalizedCatalogId)
             ensureCurrentLoad(generation)
+            val filter = ServiceHome.Filter.entries.firstOrNull { it.name == serviceFilter } ?: ServiceHome.Filter.ALL
+            val serviceRow = if (baseCatalog != null && serviceRowId != null) {
+                ServiceHome.gridRow(baseCatalog, java.time.LocalDate.now(), serviceRowId, filter)
+            } else null
+            val catalog = if (serviceRowId == null) baseCatalog else serviceRow?.catalog
             if (catalog == null) {
                 _uiState.value = CollectionDetailsUiState(
                     isLoadingMovies = false,
@@ -253,11 +259,10 @@ class CollectionDetailsViewModel @Inject constructor(
                 isLoadingMovies = true,
                 isLoadingSeries = true,
                 genreFilterable = genreFilterable,
-                movieGenreId = movieGenreId?.takeIf { genreFilterable && it in ServiceGenreFilter.movieGenreIds },
-                seriesGenreId = seriesGenreId?.takeIf { genreFilterable && it in ServiceGenreFilter.seriesGenreIds }
+                initialTab = serviceRow?.viewAll?.tab
             )
 
-            val primaryTab = when {
+            val primaryTab = serviceRow?.viewAll?.tab ?: when {
                 _uiState.value.supportsMovies -> CollectionTab.MOVIES
                 _uiState.value.supportsSeries -> CollectionTab.SERIES
                 else -> CollectionTab.MOVIES
@@ -754,13 +759,10 @@ fun CollectionDetailsScreen(
     onNavigateToTv: () -> Unit,
     onNavigateToSettings: () -> Unit,
     onSwitchProfile: () -> Unit = {},
-    /** The grid itself, never the service Home (a service row's "View all"). */
-    gridOnly: Boolean = false,
-    initialTab: CollectionTab? = null,
-    initialMovieGenreId: Int? = null,
-    initialSeriesGenreId: Int? = null,
+    serviceRowId: String? = null,
+    serviceFilter: String? = null,
     onNavigateToDetailsAutoPlay: (MediaType, Int) -> Unit = onNavigateToDetails,
-    onOpenServiceGrid: (catalogId: String, tab: CollectionTab, movieGenreId: Int?, seriesGenreId: Int?) -> Unit = { _, _, _, _ -> },
+    onOpenServiceGrid: (catalogId: String, rowId: String, filter: String) -> Unit = { _, _, _ -> },
     onBack: () -> Unit
 ) {
     val rawUiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -775,9 +777,9 @@ fun CollectionDetailsScreen(
     LaunchedEffect(catalogId) {
         viewModel.load(
             catalogId,
-            serviceHome = !gridOnly && !isTouchDevice,
-            movieGenreId = initialMovieGenreId,
-            seriesGenreId = initialSeriesGenreId
+            serviceHome = serviceRowId == null && !isTouchDevice,
+            serviceRowId = serviceRowId,
+            serviceFilter = serviceFilter
         )
     }
     BackHandler(onBack = onBack)
@@ -790,7 +792,7 @@ fun CollectionDetailsScreen(
                 if (play) onNavigateToDetailsAutoPlay(item.mediaType, item.id) else onNavigateToDetails(item.mediaType, item.id)
             },
             onViewAll = { viewAll ->
-                onOpenServiceGrid(serviceCatalog.id, viewAll.tab, viewAll.movieGenreId, viewAll.seriesGenreId)
+                onOpenServiceGrid(serviceCatalog.id, viewAll.rowId, viewAll.filter.name)
             },
             onBack = onBack
         )
@@ -809,7 +811,7 @@ fun CollectionDetailsScreen(
         else -> CollectionTab.MOVIES
     }
     var selectedTab by rememberSaveable(uiState.catalog?.id) {
-        mutableStateOf(initialTab?.takeIf { requested ->
+        mutableStateOf(uiState.initialTab?.takeIf { requested ->
             if (requested == CollectionTab.MOVIES) uiState.supportsMovies else uiState.supportsSeries
         } ?: defaultTab)
     }
@@ -949,7 +951,9 @@ fun CollectionDetailsScreen(
             seriesGridState
         }
         CollectionItemsGrid(
-            catalog = uiState.catalog,
+            catalog = uiState.catalog?.let { catalog ->
+                if (serviceRowId == null) catalog else catalog.copy(title = serviceRowTitle(serviceRowId, catalog.title))
+            },
             onBack = onBack,
             items = items,
             usePosterCards = usePosterCards,

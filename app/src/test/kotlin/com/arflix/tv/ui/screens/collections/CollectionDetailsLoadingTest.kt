@@ -82,6 +82,40 @@ class CollectionDetailsLoadingTest {
         coVerify(exactly = 1) { media.getStreamingServices(MediaType.MOVIE, 2, any()) }
     }
 
+    @Test fun viewAllOriginalsUsesTheSameNetworkQueryWhenPaging() = runTest {
+        val service = MediaRepository.buildPreinstalledDefaults().first { it.id == "collection_service_netflix" }
+        coEvery { catalogs.getCatalogs() } returns listOf(service)
+        val calls = mutableListOf<CatalogConfig>()
+        coEvery { media.loadCollectionCatalogPage(capture(calls), 0, any(), MediaType.TV, any()) } returns
+            page(listOf(item(1).copy(mediaType = MediaType.TV)), hasMore = true, nextOffset = 8)
+        coEvery { media.loadCollectionCatalogPage(capture(calls), 8, any(), MediaType.TV, any()) } returns
+            page(listOf(item(2).copy(mediaType = MediaType.TV)), nextOffset = 9)
+        model.load(service.id, serviceRowId = ServiceHome.ORIGINALS_ROW_ID, serviceFilter = "ALL")
+        advanceUntilIdle()
+        assertEquals(CollectionTab.SERIES, model.uiState.value.initialTab)
+        assertFalse(model.uiState.value.supportsMovies)
+        assertFalse(model.uiState.value.genreFilterable)
+        assertEquals(2, calls.size)
+        assertEquals(calls[0], calls[1])
+        val source = calls.first().collectionSources.single()
+        assertEquals("213", source.discoverParams?.get("with_networks"))
+        assertEquals("popularity.desc", source.sortBy)
+    }
+
+    @Test fun viewAllTopRatedRetainsTheVoteFilterAndSort() = runTest {
+        val service = MediaRepository.buildPreinstalledDefaults().first { it.id == "collection_service_netflix" }
+        coEvery { catalogs.getCatalogs() } returns listOf(service)
+        val calls = mutableListOf<CatalogConfig>()
+        coEvery { media.loadCollectionCatalogPage(capture(calls), any(), any(), MediaType.MOVIE, any()) } returns
+            page(listOf(item(1)))
+        model.load(service.id, serviceRowId = ServiceHome.TOP_RATED_MOVIES_ROW_ID, serviceFilter = "MOVIES")
+        advanceUntilIdle()
+        val source = calls.single().collectionSources.single()
+        assertEquals("vote_average.desc", source.sortBy)
+        assertEquals("500", source.discoverParams?.get("vote_count.gte"))
+        assertEquals("8", source.discoverParams?.get("with_watch_providers"))
+    }
+
     @Test fun unavailableProviderDoesNotRepeatOrInventABrand() = runTest {
         coEvery { media.getStreamingServices(any(), any(), any()) } returns null
         model.loadPreviewProvider(item(1))

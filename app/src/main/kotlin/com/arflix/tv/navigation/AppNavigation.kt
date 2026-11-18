@@ -91,16 +91,15 @@ sealed class Screen(val route: String) {
     data object Search : Screen("search")
     data object Watchlist : Screen("watchlist")
     data object CollectionDetails : Screen(
-        "collections/{catalogId}?grid={grid}&tab={tab}&movieGenre={movieGenre}&seriesGenre={seriesGenre}"
+        "collections/{catalogId}?serviceRow={serviceRow}&serviceFilter={serviceFilter}"
     ) {
         fun createRoute(catalogId: String): String {
             return "collections/${android.net.Uri.encode(catalogId)}"
         }
 
-        /** A service's grid page (never its Home-like page) on [tab], with genres preselected. */
-        fun createGridRoute(catalogId: String, tab: String, movieGenre: Int?, seriesGenre: Int?): String =
-            "collections/${android.net.Uri.encode(catalogId)}?grid=true&tab=$tab" +
-                "&movieGenre=${movieGenre ?: -1}&seriesGenre=${seriesGenre ?: -1}"
+        /** Open the full query for one service row, not the unfiltered service page. */
+        internal fun createGridRoute(catalogId: String, rowId: String, filter: String): String =
+            "${createRoute(catalogId)}?serviceRow=${android.net.Uri.encode(rowId)}&serviceFilter=${android.net.Uri.encode(filter)}"
     }
     data object CategoryViewAll : Screen("home_category/{categoryId}") {
         fun createRoute(categoryId: String): String {
@@ -529,10 +528,8 @@ fun AppNavigation(
             route = Screen.CollectionDetails.route,
             arguments = listOf(
                 navArgument("catalogId") { type = NavType.StringType },
-                navArgument("grid") { type = NavType.BoolType; defaultValue = false },
-                navArgument("tab") { type = NavType.StringType; nullable = true; defaultValue = null },
-                navArgument("movieGenre") { type = NavType.IntType; defaultValue = -1 },
-                navArgument("seriesGenre") { type = NavType.IntType; defaultValue = -1 }
+                navArgument("serviceRow") { type = NavType.StringType; nullable = true; defaultValue = null },
+                navArgument("serviceFilter") { type = NavType.StringType; nullable = true; defaultValue = null }
             )
         ) { backStackEntry ->
             val catalogId = backStackEntry.arguments?.getString("catalogId").orEmpty()
@@ -544,29 +541,16 @@ fun AppNavigation(
             CollectionDetailsScreen(
                 catalogId = catalogId,
                 currentProfile = currentProfile,
-                gridOnly = gridArgs?.getBoolean("grid") == true,
-                initialTab = when (gridArgs?.getString("tab")) {
-                    "movies" -> com.arflix.tv.ui.screens.collections.CollectionTab.MOVIES
-                    "series" -> com.arflix.tv.ui.screens.collections.CollectionTab.SERIES
-                    else -> null
-                },
-                initialMovieGenreId = gridArgs?.getInt("movieGenre", -1)?.takeIf { it >= 0 },
-                initialSeriesGenreId = gridArgs?.getInt("seriesGenre", -1)?.takeIf { it >= 0 },
+                serviceRowId = gridArgs?.getString("serviceRow"),
+                serviceFilter = gridArgs?.getString("serviceFilter"),
                 onNavigateToDetails = { mediaType, mediaId ->
                     navController.navigate(Screen.Details.createRoute(mediaType, mediaId))
                 },
                 onNavigateToDetailsAutoPlay = { mediaType, mediaId ->
                     navController.navigate(Screen.Details.createRoute(mediaType, mediaId, autoPlay = true))
                 },
-                onOpenServiceGrid = { serviceId, tab, movieGenre, seriesGenre ->
-                    navController.navigate(
-                        Screen.CollectionDetails.createGridRoute(
-                            serviceId,
-                            tab = if (tab == com.arflix.tv.ui.screens.collections.CollectionTab.SERIES) "series" else "movies",
-                            movieGenre = movieGenre,
-                            seriesGenre = seriesGenre
-                        )
-                    )
+                onOpenServiceGrid = { serviceId, rowId, filter ->
+                    navController.navigate(Screen.CollectionDetails.createGridRoute(serviceId, rowId, filter))
                 },
                 onNavigateToPlayer = { mediaType, mediaId, streamUrl, preferredAddonId, preferredSourceName ->
                     navController.navigate(

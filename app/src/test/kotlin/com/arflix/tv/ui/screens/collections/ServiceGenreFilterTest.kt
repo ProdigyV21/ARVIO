@@ -7,6 +7,7 @@ import com.arflix.tv.data.model.CollectionSourceConfig
 import com.arflix.tv.data.model.CollectionSourceKind
 import com.arflix.tv.ui.components.movieGenreNameRes
 import com.arflix.tv.ui.components.tvGenreNameRes
+import java.time.LocalDate
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -69,5 +70,27 @@ class ServiceGenreFilterTest {
         assertEquals("first_air_date.desc", page.sortBy)
         // The Home row reads the stored template, which keeps its popularity order.
         assertEquals("popularity.desc", template.single().sortBy)
+    }
+
+    @Test
+    fun `a dual provider gets one sorted query per tab with its genre and date cutoff`() {
+        val movie = provider("movie").copy(tmdbWatchProviderId = 2303, tmdbGenreId = 28)
+        val series = provider("series").copy(tmdbWatchProviderId = 2303, tmdbGenreId = 10759)
+        val sources = listOf(movie, series, movie.copy(tmdbWatchProviderId = 2616), series.copy(tmdbWatchProviderId = 2616))
+        val (movies, shows) = ServiceGenreFilter.newestFirst(sources, LocalDate.of(2026, 11, 18)).also {
+            assertEquals(2, it.size)
+        }
+        assertEquals(CollectionSourceKind.TMDB_DISCOVER, movies.kind)
+        assertEquals("primary_release_date.desc", movies.sortBy)
+        assertEquals(mapOf(
+            "with_watch_providers" to "2303|2616", "watch_region" to "US", "with_genres" to "28",
+            "primary_release_date.lte" to "2026-11-18", "vote_count.gte" to "10"
+        ), movies.discoverParams)
+        assertEquals("first_air_date.desc", shows.sortBy)
+        assertEquals(mapOf(
+            "with_watch_providers" to "2303|2616", "watch_region" to "US", "with_genres" to "10759",
+            "first_air_date.lte" to "2026-11-18", "vote_count.gte" to "10"
+        ), shows.discoverParams)
+        assertTrue(sources.all { it.sortBy == "popularity.desc" })
     }
 }

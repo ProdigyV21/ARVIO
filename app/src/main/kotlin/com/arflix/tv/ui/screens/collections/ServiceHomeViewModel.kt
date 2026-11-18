@@ -33,14 +33,19 @@ import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 
 /** A loaded row of a service page: its spec and its titles, in TMDB's order. */
-internal data class ServiceHomeRowState(val row: ServiceHome.Row, val items: List<MediaItem>)
+internal data class ServiceHomeRowState(
+    val row: ServiceHome.Row,
+    val items: List<MediaItem>,
+    val sourceLoadFailed: Boolean = false
+)
 
 /** One filter's page: its rows and the title its big card shows. */
 internal data class ServiceHomePage(
     /** Loaded rows with at least one title, in the page's order. */
     val rows: List<ServiceHomeRowState> = emptyList(),
     val billboard: MediaItem? = null,
-    val isLoading: Boolean = true
+    val isLoading: Boolean = true,
+    val sourceLoadFailed: Boolean = false
 )
 
 /** A title's trailer, kept with the title it belongs to so it never plays on another card. */
@@ -114,17 +119,26 @@ internal class ServiceHomeViewModel @Inject constructor(
         loadPage(filter)
     }
 
+    fun retry() {
+        val filter = _uiState.value.filter
+        if (loadJobs[filter]?.isActive == true) return
+        pages.remove(filter)
+        _uiState.update { it.copy(page = ServiceHomePage()) }
+        loadPage(filter)
+    }
+
     private fun loadPage(filter: ServiceHome.Filter) {
         val service = service ?: return
-        if (loadJobs[filter]?.isActive == true || pages[filter]?.isLoading == false) return
+        if (loadJobs[filter]?.isActive == true ||
+            pages[filter]?.let { !it.isLoading && (!it.sourceLoadFailed || it.rows.isNotEmpty()) } == true
+        ) return
         val rows = ServiceHome.rows(service, LocalDate.now(), filter)
         val loaded = arrayOfNulls<ServiceHomeRowState>(rows.size)
-        val slots = Semaphore(ROW_CONCURRENCY)
+        val rowSlots = Semaphore(ROW_CONCURRENCY)
         loadJobs[filter] = viewModelScope.launch {
             rows.mapIndexed { index, row ->
                 launch {
-                    val items = slots.withPermit { loadRow(row) }
-                    loaded[index] = ServiceHomeRowState(row, items)
+                    loaded[index] = rowSlots.withPermit { loadRow(row) }
                     publish(filter, loaded, done = false)
                 }
             }.forEach { it.join() }
@@ -132,15 +146,17 @@ internal class ServiceHomeViewModel @Inject constructor(
         }
     }
 
-    private suspend fun loadRow(row: ServiceHome.Row): List<MediaItem> = try {
-        mediaRepository.loadCollectionCatalogPage(row.catalog, offset = 0, limit = row.limit).items
+    private suspend fun loadRow(row: ServiceHome.Row): ServiceHomeRowState = try {
+        val page = mediaRepository.loadCollectionCatalogPage(row.catalog, offset = 0, limit = row.limit)
+        val items = page.items
             .filter { it.id > 0 }
             .distinctBy { it.mediaType to it.id }
             .take(row.limit)
+        ServiceHomeRowState(row, items, page.sourceLoadFailed)
     } catch (e: CancellationException) {
         throw e
     } catch (_: Exception) {
-        emptyList()
+        ServiceHomeRowState(row, emptyList(), sourceLoadFailed = true)
     }
 
     /** Rows appear in the page's order as they arrive; empty ones never show. */
@@ -148,7 +164,10 @@ internal class ServiceHomeViewModel @Inject constructor(
         val rows = loaded.filterNotNull().filter { it.items.isNotEmpty() }
         val previous = pages[filter]
         val billboard = previous?.billboard ?: pickBillboard(rows, done)
-        val page = ServiceHomePage(rows = rows, billboard = billboard, isLoading = !done)
+        val page = ServiceHomePage(
+            rows = rows, billboard = billboard, isLoading = !done,
+            sourceLoadFailed = loaded.any { it?.sourceLoadFailed == true }
+        )
         pages[filter] = page
         if (_uiState.value.filter == filter) _uiState.update { it.copy(page = page) }
         billboard?.let(::loadLogo)

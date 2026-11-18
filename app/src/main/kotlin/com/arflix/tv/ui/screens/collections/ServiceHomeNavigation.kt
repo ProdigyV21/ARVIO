@@ -16,6 +16,7 @@ internal sealed interface ServiceHomeAction {
     data class Open(val item: MediaItem, val play: Boolean) : ServiceHomeAction
     data class ViewAll(val rowId: String) : ServiceHomeAction
     data class Filter(val filter: ServiceHome.Filter) : ServiceHomeAction
+    data object Retry : ServiceHomeAction
     data object Exit : ServiceHomeAction
 }
 
@@ -36,6 +37,7 @@ internal fun handleServiceHomeKey(
     now: Long,
     /** The applied filter: Up from the content lands on its button. */
     selectedFilter: ServiceHome.Filter = ServiceHome.Filter.ALL,
+    canRetry: Boolean = false,
 ): ServiceHomeAction {
     focusState.reconcile(rows, hasMore)
     focusState.userHasNavigated = true
@@ -83,9 +85,13 @@ internal fun handleServiceHomeKey(
                 if (rows.isNotEmpty()) enterRow(focusState, rows, 0)
                 ServiceHomeAction.Moved
             }
-            ServiceHomeKey.SELECT -> billboard?.takeIf { isActionableHomeItem(it) }
-                ?.let { ServiceHomeAction.Open(it, play = focusState.heroButtonIndex == 0) }
-                ?: ServiceHomeAction.Moved
+            ServiceHomeKey.SELECT -> if (canRetry && rows.isEmpty()) {
+                ServiceHomeAction.Retry
+            } else {
+                billboard?.takeIf { isActionableHomeItem(it) }
+                    ?.let { ServiceHomeAction.Open(it, play = focusState.heroButtonIndex == 0) }
+                    ?: ServiceHomeAction.Moved
+            }
             ServiceHomeKey.BACK -> ServiceHomeAction.Exit
         }
     }

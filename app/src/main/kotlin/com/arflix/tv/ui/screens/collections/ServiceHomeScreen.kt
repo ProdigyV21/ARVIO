@@ -3,7 +3,9 @@ package com.arflix.tv.ui.screens.collections
 import android.os.SystemClock
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.width
@@ -17,14 +19,18 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
@@ -35,7 +41,9 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.unit.LayoutDirection
@@ -82,19 +90,42 @@ internal fun ServiceHomeScreen(
     val page = state.page
     val visibleRows = remember(page.rows, kids) { viewModel.visibleRows(page, kids) }
 
-    // Service names are Latin; the mark keeps a trailing "+" (Disney+) on its side in right-to-left titles.
-    val titleName = service.title + "\u200E"
-    val titles = visibleRows.associate { it.row.id to serviceRowTitle(it.row, titleName) }
-    val categories = remember(visibleRows, titles) {
-        visibleRows.map { Category(id = it.row.id, title = titles.getValue(it.row.id), items = it.items) }
-    }
-    val hasMore = remember(visibleRows) { visibleRows.associate { it.row.id to (it.row.viewAll != null) } }
-    val viewAllByRow = remember(visibleRows) { visibleRows.associate { it.row.id to it.row.viewAll } }
     val billboard = remember(page.billboard, visibleRows, kids) {
         page.billboard?.takeIf { viewModel.allows(it, kids) }
             ?: visibleRows.flatMap { it.items }.firstOrNull { !it.backdrop.isNullOrBlank() }
     }
 
+    ServiceHomeContent(
+        service = service, state = state, visibleRows = visibleRows, billboard = billboard,
+        cardLogoUrls = cardLogoUrls, trailerSettings = trailerSettings,
+        onFocus = viewModel::focus, onPreloadLogos = viewModel::preloadLogos,
+        onFilter = viewModel::selectFilter, onRetry = viewModel::retry,
+        onOpen = onOpen, onViewAll = onViewAll, onBack = onBack
+    )
+}
+
+private data class ServiceHomeRails(
+    val categories: List<Category> = emptyList(),
+    val hasMore: Map<String, Boolean> = emptyMap(),
+    val viewAllByRow: Map<String, ServiceHome.ViewAll?> = emptyMap()
+)
+
+@Composable
+internal fun ServiceHomeContent(
+    service: CatalogConfig,
+    state: ServiceHomeUiState,
+    visibleRows: List<ServiceHomeRowState>,
+    billboard: MediaItem?,
+    cardLogoUrls: Map<String, String>,
+    trailerSettings: ServiceHomeTrailerSettings,
+    onFocus: (MediaItem?) -> Unit,
+    onPreloadLogos: (List<MediaItem>) -> Unit,
+    onFilter: (ServiceHome.Filter) -> Unit,
+    onRetry: () -> Unit,
+    onOpen: (MediaItem, Boolean) -> Unit,
+    onViewAll: (ServiceHome.ViewAll) -> Unit,
+    onBack: () -> Unit
+) {
     // Saved like Home's, so returning from a title lands on the card it was opened from.
     val focusState = rememberSaveable(service.id, saver = HomeFocusState.Saver) {
         HomeFocusState().apply {
@@ -103,6 +134,27 @@ internal fun ServiceHomeScreen(
             sidebarFocusIndex = 0
         }
     }
+    val titles = visibleRows.associate { it.row.id to serviceRowTitle(it.row.id, service.title) }
+    val incomingRails = remember(visibleRows, titles) {
+        ServiceHomeRails(
+            categories = visibleRows.map { Category(id = it.row.id, title = titles.getValue(it.row.id), items = it.items) },
+            hasMore = visibleRows.associate { it.row.id to (it.row.viewAll != null) },
+            viewAllByRow = visibleRows.associate { it.row.id to it.row.viewAll }
+        )
+    }
+    var rails by remember(service.id) { mutableStateOf(ServiceHomeRails()) }
+    SideEffect {
+        // The rendered list and the key handler adopt the new rows only after focus is re-anchored.
+        if (rails != incomingRails) {
+            focusState.reconcile(incomingRails.categories, incomingRails.hasMore)
+            rails = incomingRails
+        }
+    }
+    val (categories, hasMore, viewAllByRow) = rails
+    val latestViewAllByRow by rememberUpdatedState(viewAllByRow)
+    val latestOnViewAll by rememberUpdatedState(onViewAll)
+    val page = state.page
+    val showEmpty = !page.isLoading && visibleRows.isEmpty()
     val isRtl = LocalLayoutDirection.current == LayoutDirection.Rtl
     val focusRequester = remember { FocusRequester() }
     val scope = rememberCoroutineScope()
@@ -131,22 +183,23 @@ internal fun ServiceHomeScreen(
     }
     val billboardFocused = focusState.isHeroFocused && !focusState.isSidebarFocused
     LaunchedEffect(billboardFocused, billboard?.id, billboard?.mediaType) {
-        if (billboardFocused) viewModel.focus(billboard)
+        if (billboardFocused) onFocus(billboard)
     }
     LaunchedEffect(focusedItem?.first?.id, focusedItem?.first?.mediaType) {
         val (item, rowItems) = focusedItem ?: return@LaunchedEffect
-        viewModel.focus(item)
+        onFocus(item)
         val at = rowItems.indexOf(item)
-        viewModel.preloadLogos(rowItems.subList((at - 1).coerceAtLeast(0), (at + 3).coerceAtMost(rowItems.size)))
+        onPreloadLogos(rowItems.subList((at - 1).coerceAtLeast(0), (at + 3).coerceAtMost(rowItems.size)))
     }
     LaunchedEffect(categories.firstOrNull()?.id) {
-        categories.firstOrNull()?.items?.take(3)?.let(viewModel::preloadLogos)
+        categories.firstOrNull()?.items?.take(3)?.let(onPreloadLogos)
     }
 
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(appBackgroundDark())
+            .testTag("service_home")
             .focusRequester(focusRequester)
             .focusable()
             .onPreviewKeyEvent { event ->
@@ -157,13 +210,15 @@ internal fun ServiceHomeScreen(
                     return@onPreviewKeyEvent true
                 }
                 when (val action = handleServiceHomeKey(
-                    key, focusState, categories, hasMore, billboard, isRtl, SystemClock.elapsedRealtime(), state.filter
+                    key, focusState, categories, hasMore, billboard, isRtl, SystemClock.elapsedRealtime(), state.filter,
+                    canRetry = showEmpty
                 )) {
                     ServiceHomeAction.Moved -> Unit
                     is ServiceHomeAction.Filter -> if (action.filter != state.filter) {
                         focusState.startFilteredPage()
-                        viewModel.selectFilter(action.filter)
+                        onFilter(action.filter)
                     }
+                    ServiceHomeAction.Retry -> onRetry()
                     is ServiceHomeAction.Open -> onOpen(action.item, action.play)
                     is ServiceHomeAction.ViewAll -> viewAllByRow[action.rowId]?.let(onViewAll)
                     ServiceHomeAction.Exit -> latestOnBack()
@@ -180,7 +235,25 @@ internal fun ServiceHomeScreen(
                 .padding(start = 40.dp, end = 40.dp, top = 18.dp)
                 .height(AppTopBarHeight - 18.dp)
         )
-        NetflixTvHomeRowsLayer(
+        if (showEmpty) {
+            Column(
+                modifier = Modifier.align(Alignment.Center).padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                Text(
+                    text = stringResource(if (page.sourceLoadFailed) R.string.collection_failed_load else R.string.collection_empty),
+                    style = ArflixTypography.sectionTitle,
+                    color = Color.White
+                )
+                ServiceHomeFilterButton(
+                    label = stringResource(R.string.retry),
+                    isSelected = false,
+                    isFocused = !focusState.isSidebarFocused,
+                    modifier = Modifier.focusProperties { canFocus = false }.clickable(role = Role.Button, onClick = onRetry)
+                )
+            }
+        } else NetflixTvHomeRowsLayer(
             categories = categories,
             cardLogoUrls = cardLogoUrls,
             focusState = focusState,
@@ -188,7 +261,7 @@ internal fun ServiceHomeScreen(
             categoryHasMoreMap = hasMore,
             smoothScrolling = true,
             onLoadMoreCategory = {},
-            onViewAllCategory = { id -> viewAllByRow[id]?.let(onViewAll) },
+            onViewAllCategory = { id -> latestViewAllByRow[id]?.let(latestOnViewAll) },
             netflix = NetflixHomeContent(
                 billboardItem = billboard,
                 billboardLogoUrl = billboard?.let { cardLogoUrls["${it.mediaType}_${it.id}"] },
@@ -222,19 +295,20 @@ private fun serviceHomeKey(event: KeyEvent): ServiceHomeKey? = when (event.key) 
 }
 
 @Composable
-private fun serviceRowTitle(row: ServiceHome.Row, service: String): String = when (row.kind) {
-    ServiceHome.RowKind.TOP10_SERIES -> stringResource(R.string.service_home_top10_series, service)
-    ServiceHome.RowKind.TOP10_MOVIES -> stringResource(R.string.service_home_top10_movies, service)
-    ServiceHome.RowKind.NEW -> stringResource(R.string.service_home_new, service)
-    ServiceHome.RowKind.ORIGINALS -> stringResource(R.string.service_home_originals, service)
-    ServiceHome.RowKind.TOP_RATED_SERIES -> stringResource(R.string.service_home_top_rated_series)
-    ServiceHome.RowKind.TOP_RATED_MOVIES -> stringResource(R.string.service_home_top_rated_movies)
-    ServiceHome.RowKind.GENRE -> {
-        val genre = row.genre
+internal fun serviceRowTitle(rowId: String, service: String): String = when (rowId) {
+    // Keep a trailing "+" (Disney+) on its side in right-to-left titles.
+    ServiceHome.TOP10_SERIES_ROW_ID -> stringResource(R.string.service_home_top10_series, service + "\u200E")
+    ServiceHome.TOP10_MOVIES_ROW_ID -> stringResource(R.string.service_home_top10_movies, service + "\u200E")
+    ServiceHome.NEW_ROW_ID -> stringResource(R.string.service_home_new, service + "\u200E")
+    ServiceHome.ORIGINALS_ROW_ID -> stringResource(R.string.service_home_originals, service + "\u200E")
+    ServiceHome.TOP_RATED_SERIES_ROW_ID -> stringResource(R.string.service_home_top_rated_series)
+    ServiceHome.TOP_RATED_MOVIES_ROW_ID -> stringResource(R.string.service_home_top_rated_movies)
+    else -> {
+        val genre = ServiceHome.genres.firstOrNull { ServiceHome.GENRE_ROW_PREFIX + it.key == rowId }
         val res = genre?.let {
             if (it.labelIsSeries) it.seriesGenreId?.let(::tvGenreNameRes) else it.movieGenreId?.let(::movieGenreNameRes)
         }
-        if (res != null) stringResource(res) else genre?.key.orEmpty()
+        if (res != null) stringResource(res) else genre?.key ?: service
     }
 }
 
@@ -280,10 +354,10 @@ private fun ServiceHomeHeader(
 }
 
 @Composable
-private fun ServiceHomeFilterButton(label: String, isSelected: Boolean, isFocused: Boolean) {
+private fun ServiceHomeFilterButton(label: String, isSelected: Boolean, isFocused: Boolean, modifier: Modifier = Modifier) {
     val shape = RoundedCornerShape(50)
     Box(
-        modifier = Modifier
+        modifier = modifier
             .clip(shape)
             .background(
                 when {

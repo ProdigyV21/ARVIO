@@ -2,18 +2,23 @@ package com.arflix.tv.data.repository
 
 import com.arflix.tv.data.api.TmdbApi
 import com.arflix.tv.data.api.TmdbListResponse
+import com.arflix.tv.data.api.TmdbMediaItem
 import com.arflix.tv.data.model.CatalogConfig
 import com.arflix.tv.data.model.CatalogKind
 import com.arflix.tv.data.model.CatalogSourceType
 import com.arflix.tv.data.model.CollectionSourceConfig
 import com.arflix.tv.data.model.CollectionSourceKind
 import com.arflix.tv.data.model.MediaType
+import com.arflix.tv.ui.screens.collections.ServiceGenreFilter
+import java.io.IOException
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk
 import java.time.LocalDate
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class WatchProviderSortTest {
@@ -77,6 +82,37 @@ class WatchProviderSortTest {
                 language = any(), page = any()
             )
         }
+    }
+
+    @Test fun `two providers are fetched in one newest-first stream across pages`() = runTest {
+        val api = api()
+        val first = source("movie", "popularity.desc").copy(tmdbWatchProviderId = 2303)
+        val sources = ServiceGenreFilter.newestFirst(listOf(first, first.copy(tmdbWatchProviderId = 2616)), today)
+        val query = sources.single().discoverParams!!
+        coEvery { api.discoverWithParams("movie", any(), query, "primary_release_date.desc", any(), any()) } answers {
+            val page = arg<Int>(5)
+            val start = (page - 1) * 20 + 1
+            TmdbListResponse(page, (start until start + 20).map { id -> TmdbMediaItem(id, "Movie $id") }, 2, 40)
+        }
+        val repository = repository(api)
+        val catalog = catalog(sources.single())
+        assertEquals("2303|2616", query["with_watch_providers"])
+        assertEquals((1..20).toList(), repository.loadCollectionCatalogPage(catalog, 0, 20, MediaType.MOVIE).items.map { it.id })
+        assertEquals((21..28).toList(), repository.loadCollectionCatalogPage(catalog, 20, 8, MediaType.MOVIE).items.map { it.id })
+        coVerify(exactly = 1) { api.discoverWithParams("movie", any(), query, "primary_release_date.desc", any(), 2) }
+    }
+
+    @Test fun `a source failure is distinct from an empty result and can be retried`() = runTest {
+        val api = api()
+        val source = CollectionSourceConfig(CollectionSourceKind.TMDB_DISCOVER, mediaType = "series")
+        coEvery { api.discoverWithParams("tv", any(), any(), any(), any(), any()) } throws IOException("Offline")
+        val repository = repository(api)
+        val catalog = catalog(source)
+        assertTrue(repository.loadCollectionCatalogPage(catalog, 0, 8, MediaType.TV).sourceLoadFailed)
+        coEvery { api.discoverWithParams("tv", any(), any(), any(), any(), any()) } returns TmdbListResponse()
+        val empty = repository.loadCollectionCatalogPage(catalog, 0, 8, MediaType.TV)
+        assertFalse(empty.sourceLoadFailed)
+        assertTrue(empty.items.isEmpty())
     }
 
     private fun source(type: String, sort: String) = CollectionSourceConfig(

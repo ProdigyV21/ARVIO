@@ -81,8 +81,8 @@ internal object ServiceHome {
         Genre("romance", 10749, null)
     )
 
-    /** Where a row's "View all" leads: the service's grid page on this tab and genres. */
-    data class ViewAll(val tab: CollectionTab, val movieGenreId: Int? = null, val seriesGenreId: Int? = null)
+    /** Enough to rebuild the exact row's catalog when opening its grid. */
+    data class ViewAll(val rowId: String, val tab: CollectionTab, val filter: Filter = Filter.ALL)
 
     data class Row(
         val id: String,
@@ -99,6 +99,9 @@ internal object ServiceHome {
 
     /** What the page lists: both kinds of title, or only series or only movies. */
     enum class Filter { ALL, SERIES, MOVIES }
+
+    fun gridRow(service: CatalogConfig, today: LocalDate, rowId: String, filter: Filter): Row? =
+        if (!supports(service)) null else rows(service, today, filter).firstOrNull { it.id == rowId && it.viewAll != null }
 
     /**
      * The page's rows for [filter]. A filtered page keeps each row's sources of that kind
@@ -119,7 +122,7 @@ internal object ServiceHome {
                     collectionGroup = CollectionGroupKind.SERVICE,
                     collectionSources = sources
                 ),
-                viewAll = row.viewAll?.copy(tab = tab)
+                viewAll = row.viewAll?.copy(tab = tab, filter = filter)
             )
         }
     }
@@ -154,7 +157,7 @@ internal object ServiceHome {
                 series("popularity.desc", recentSeries(popularSince))),
             row(service, TOP10_MOVIES_ROW_ID, RowKind.TOP10_MOVIES, TOP10_SIZE, null,
                 movie("popularity.desc", recentMovies(popularSince))),
-            row(service, NEW_ROW_ID, RowKind.NEW, ROW_SIZE, ViewAll(CollectionTab.MOVIES),
+            row(service, NEW_ROW_ID, RowKind.NEW, ROW_SIZE, CollectionTab.MOVIES,
                 movie(WatchProviderSort.MOVIES_NEWEST, newest + ("primary_release_date.lte" to todayText)),
                 series(WatchProviderSort.SERIES_NEWEST, newest + ("first_air_date.lte" to todayText)),
                 mixed = true)
@@ -162,24 +165,20 @@ internal object ServiceHome {
         providerIds.firstNotNullOfOrNull { ORIGINALS_NETWORKS[it] }?.let { networks ->
             // The service's own series: by network, without the provider filter, since a
             // network's shows are on its service even where the availability data lags.
-            rows += row(service, ORIGINALS_ROW_ID, RowKind.ORIGINALS, ROW_SIZE, ViewAll(CollectionTab.SERIES),
+            rows += row(service, ORIGINALS_ROW_ID, RowKind.ORIGINALS, ROW_SIZE, CollectionTab.SERIES,
                 source("series", "popularity.desc", mapOf("with_networks" to networks) + recentSeries(genreSince)))
         }
-        rows += row(service, TOP_RATED_SERIES_ROW_ID, RowKind.TOP_RATED_SERIES, ROW_SIZE, ViewAll(CollectionTab.SERIES),
+        rows += row(service, TOP_RATED_SERIES_ROW_ID, RowKind.TOP_RATED_SERIES, ROW_SIZE, CollectionTab.SERIES,
             series("vote_average.desc", mapOf("vote_count.gte" to TOP_RATED_SERIES_VOTES.toString())))
-        rows += row(service, TOP_RATED_MOVIES_ROW_ID, RowKind.TOP_RATED_MOVIES, ROW_SIZE, ViewAll(CollectionTab.MOVIES),
+        rows += row(service, TOP_RATED_MOVIES_ROW_ID, RowKind.TOP_RATED_MOVIES, ROW_SIZE, CollectionTab.MOVIES,
             movie("vote_average.desc", mapOf("vote_count.gte" to TOP_RATED_MOVIE_VOTES.toString())))
         genres.forEach { genre ->
             val sources = listOfNotNull(
                 genre.movieGenreId?.let { movie("popularity.desc", recentMovies(genreSince) + ("with_genres" to it.toString())) },
                 genre.seriesGenreId?.let { series("popularity.desc", recentSeries(genreSince) + ("with_genres" to it.toString())) }
             )
-            val viewAll = ViewAll(
-                tab = if (genre.movieGenreId != null) CollectionTab.MOVIES else CollectionTab.SERIES,
-                movieGenreId = genre.movieGenreId,
-                seriesGenreId = genre.seriesGenreId
-            )
-            rows += row(service, GENRE_ROW_PREFIX + genre.key, RowKind.GENRE, ROW_SIZE, viewAll, *sources.toTypedArray(),
+            val tab = if (genre.movieGenreId != null) CollectionTab.MOVIES else CollectionTab.SERIES
+            rows += row(service, GENRE_ROW_PREFIX + genre.key, RowKind.GENRE, ROW_SIZE, tab, *sources.toTypedArray(),
                 mixed = sources.size > 1, genre = genre)
         }
         return rows
@@ -197,7 +196,7 @@ internal object ServiceHome {
         id: String,
         kind: RowKind,
         limit: Int,
-        viewAll: ViewAll?,
+        gridTab: CollectionTab?,
         vararg sources: CollectionSourceConfig,
         mixed: Boolean = false,
         genre: Genre? = null
@@ -217,6 +216,6 @@ internal object ServiceHome {
         ),
         limit = limit,
         genre = genre,
-        viewAll = viewAll
+        viewAll = gridTab?.let { ViewAll(id, it) }
     )
 }

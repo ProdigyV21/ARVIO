@@ -91,11 +91,11 @@ class ServiceHomeTest {
         val rows = ServiceHome.rows(service(8), today).associateBy { it.id }
         val action = rows.getValue(ServiceHome.GENRE_ROW_PREFIX + "action")
         assertEquals(listOf("28", "10759"), action.catalog.collectionSources.map { it.discoverParams?.get("with_genres") })
-        assertEquals(ServiceHome.ViewAll(CollectionTab.MOVIES, 28, 10759), action.viewAll)
+        assertEquals(ServiceHome.ViewAll(action.id, CollectionTab.MOVIES), action.viewAll)
         val horror = rows.getValue(ServiceHome.GENRE_ROW_PREFIX + "horror")
         assertEquals(listOf("movie"), horror.catalog.collectionSources.map { it.mediaType })
         val reality = rows.getValue(ServiceHome.GENRE_ROW_PREFIX + "reality")
-        assertEquals(ServiceHome.ViewAll(CollectionTab.SERIES, null, 10764), reality.viewAll)
+        assertEquals(ServiceHome.ViewAll(reality.id, CollectionTab.SERIES), reality.viewAll)
     }
 
     @Test fun `every genre a row opens is one the grid's filter offers`() {
@@ -123,7 +123,7 @@ class ServiceHomeTest {
         assertTrue(rows.all { row -> row.catalog.collectionSources.all { it.mediaType == "series" } })
         assertTrue(rows.all { it.catalog.collectionGroup == CollectionGroupKind.SERVICE })
         val comedy = rows.first { it.id == ServiceHome.GENRE_ROW_PREFIX + "comedy" }
-        assertEquals(ServiceHome.ViewAll(CollectionTab.SERIES, 35, 35), comedy.viewAll)
+        assertEquals(ServiceHome.ViewAll(comedy.id, CollectionTab.SERIES, ServiceHome.Filter.SERIES), comedy.viewAll)
     }
 
     @Test fun `the movies filter keeps movie rows only, with their own cache identity`() {
@@ -135,5 +135,18 @@ class ServiceHomeTest {
         val newMovies = rows.first { it.id == ServiceHome.NEW_ROW_ID }
         assertTrue(newMovies.catalog.id != all.getValue(ServiceHome.NEW_ROW_ID).catalog.id)
         assertEquals(CollectionTab.MOVIES, newMovies.viewAll?.tab)
+    }
+
+    @Test fun `view all resolves the exact row under every filter`() {
+        val service = service(2303, 2616)
+        ServiceHome.Filter.entries.forEach { filter ->
+            val rows = ServiceHome.rows(service, today, filter)
+            rows.forEach { row ->
+                val resolved = ServiceHome.gridRow(service, today, row.id, filter)
+                assertEquals(row.takeIf { it.viewAll != null }, resolved)
+            }
+        }
+        assertNull(ServiceHome.gridRow(service, today, "unknown", ServiceHome.Filter.ALL))
+        assertNull(ServiceHome.gridRow(service, today, ServiceHome.ORIGINALS_ROW_ID, ServiceHome.Filter.MOVIES))
     }
 }
