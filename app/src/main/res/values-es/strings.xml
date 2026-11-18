@@ -1,5 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="settings_preference_save_failed">No se pudo guardar este ajuste. Inténtalo de nuevo.</string>
+    <string name="stream_source_cached">En caché</string>
+    <string name="live_sports_source_count">Fuentes: %1$d</string>
+    <string name="live_sports_addon_sources">Emisión indicada por el addon</string>
+    <string name="live_sports_addon_retry">No se han devuelto fuentes. Selecciona para reintentar.</string>
+    <string name="live_sports_external_source">Se abre en el navegador</string>
     <string name="library_sort_release_newest">Fecha de lanzamiento: más recientes primero</string>
     <string name="library_sort_release_oldest">Fecha de lanzamiento: más antiguos primero</string>
     <string name="app_name">ARVIO</string>
@@ -8,6 +14,7 @@
     <string name="tmdb_attribution" translatable="false">Este producto utiliza la API de TMDB, pero no cuenta con el respaldo ni la certificación de TMDB.</string>
     <string name="authorized_sources_notice">ARVIO es un centro multimedia para las fuentes que configures. Una entrada de catálogo no otorga derechos de visualización. Conecta solo servicios y medios que estés autorizado a usar.</string>
     <string name="credits_and_copyright">Créditos e informes de derechos de autor</string>
+    <string name="thesportsdb_attribution">Datos e imágenes deportivas proporcionados por TheSportsDB.</string>
     <string name="trailers_on_youtube">Tráilers en YouTube</string>
     <string name="trailer_open_failed">No se pudo abrir el tráiler. Instala YouTube o un navegador web e inténtalo de nuevo.</string>
     <string name="now_playing">Reproduciendo ahora</string>
@@ -99,6 +106,10 @@
     <string name="cancel">Cancelar</string>
     <string name="confirm">Confirmar</string>
     <string name="retry">Reintentar</string>
+    <string name="search_discover_load_failed">No se pudieron cargar los títulos</string>
+    <string name="partner_link_loading">Abriendo los detalles del título…</string>
+    <string name="partner_link_failed">No se pudo encontrar o cargar este título. Inténtalo de nuevo o abre otro enlace.</string>
+    <string name="search_discover_load_more">Cargar más</string>
     <string name="delete">Eliminar</string>
     <string name="add">Añadir</string>
     <string name="refresh">Actualizar</string>
@@ -180,7 +191,7 @@
     <string name="subtitle_font_desc">Tipo de letra usado durante la reproducción. Las fuentes incluidas anulan las fuentes ASS/SSA incrustadas para que tu elección siempre sea visible.</string>
     <string name="subtitle_offset_desc">Posición vertical de los subtítulos</string>
     <string name="subtitle_stylized">Subtítulos estilizados</string>
-    <string name="subtitle_stylized_desc">Respetar estilos incrustados de los subtítulos ASS/SSA. Si está desactivado, todos los subtítulos usarán tus ajustes de tamaño, color y estilo.</string>
+    <string name="subtitle_stylized_desc">Respetar los estilos incrustados de ASS/SSA al usar la fuente del sistema. Las fuentes incluidas que elijas anulan los estilos incrustados.</string>
     <string name="auto_play_desc">Comenzar el siguiente episodio automáticamente</string>
     <string name="autoplay_desc">Si está desactivado, abre el selector de fuentes al pulsar Reproducir</string>
     <string name="auto_play_quality_desc">Calidad mínima para la reproducción automática</string>
@@ -189,8 +200,13 @@
     <string name="trailer_sound_desc">TV: activar el audio de las vistas previas de tráilers</string>
     <string name="trailer_delay">Retraso del tráiler</string>
     <string name="trailer_delay_desc">Segundos antes de que el tráiler comience a reproducirse</string>
+    <string name="guide_rows">Filas de la guía</string>
+    <string name="guide_rows_desc">Filas de canales que se muestran en la guía de TV</string>
     <string name="trailer_in_cards">Tráilers en tarjetas</string>
     <string name="trailer_in_cards_desc">TV: previsualizar tráilers en la tarjeta ampliada en lugar del encabezado</string>
+    <string name="netflix_home_style">Inicio estilo Netflix</string>
+    <string name="netflix_home_style_desc">TV: gran cartel destacado con tráiler; la tarjeta enfocada se amplía con su descripción</string>
+    <string name="home_more_info">Más información</string>
     <string name="frame_rate_desc">Desactivado, Fluido (Seamless) o Siempre</string>
     <string name="quality_filters_desc">Excluir niveles de calidad en este dispositivo</string>
     <string name="card_layout_desc">Tarjetas en formato horizontal o póster</string>
@@ -204,12 +220,22 @@
     <string name="show_episode_ratings_desc">Mostrar puntuaciones de episodios como una fila visual debajo de la lista de episodios</string>
     <string name="spoiler_blur">Desenfoque anti-spoilers</string>
     <string name="spoiler_blur_desc">Desenfocar las tarjetas de los episodios no vistos para evitar spoilers</string>
+    <string name="anime_episode_structuring">Orden de episodios de anime</string>
+    <string name="anime_episode_structuring_desc">Cambia entre el orden de emisión (cours) y las temporadas estándar (TMDB)</string>
+    <string name="anime_structuring_broadcast">Orden de emisión</string>
+    <string name="anime_structuring_standard">Estándar (TMDB)</string>
+    <string name="anime_structuring_japanese">Orden de emisión</string>
+    <string name="anime_structuring_western">Estándar (TMDB)</string>
+    <string name="anime_structuring_switch_to_western">Cambiar a estándar (TMDB)</string>
+    <string name="anime_structuring_switch_to_japanese">Cambiar a orden de emisión</string>
+    <string name="anime_structuring_toggled_japanese">Cambiado a orden de emisión</string>
+    <string name="anime_structuring_toggled_western">Cambiado a estándar (TMDB)</string>
     <string name="accent_color">Color de acento</string>
     <string name="accent_color_desc">Elige el color de acento para los anillos de enfoque, botones y elementos seleccionados</string>
     <string name="show_loading_stats_desc">Mostrar el progreso de resolución del stream</string>
     <string name="volume_boost_desc">Amplificar fuentes con volumen bajo (vía LoudnessEnhancer del sistema)</string>
     <string name="dns_desc">Resolver solicitudes de API y streams</string>
-    <string name="add_catalog_desc">Importar una URL de catálogo de Trakt o MDBList</string>
+    <string name="add_catalog_desc">Importar una URL de catálogo de Trakt, MDBList o TMDB, o añadir un enlace de vídeo de YouTube</string>
 
     <!-- Player / audio -->
     <string name="audio_track">Pista de audio</string>
@@ -257,6 +283,9 @@
     <string name="ai_auto_select_desc">Activar automáticamente la IA cuando cualquier idioma integrado esté disponible</string>
     <string name="ai_find_best_match_title">Encontrar mejor coincidencia de subtítulos</string>
     <string name="ai_find_best_match_desc">Seleccionar automáticamente el subtítulo mejor sincronizado de tus addons</string>
+    <string name="subtitle_hearing_sync_title">Sincronizar por audición</string>
+    <string name="subtitle_hearing_sync_desc">Si ningún subtítulo coincide, sincroniza uno con el audio (descarga una sola vez un modelo de voz de 74 MB)</string>
+    <string name="subtitle_hearing_sync_desc_low_memory">Si ningún subtítulo coincide, sincroniza uno con el audio (modelo de voz de 74 MB, se descarga una sola vez). Desactivado por defecto en dispositivos con poca memoria</string>
     <string name="subtitle_preload_title">Precargar subtítulos</string>
     <string name="subtitle_preload_desc">Esperar a los subtítulos antes de empezar el vídeo para que el cambio sea instantáneo</string>
     <string name="dv_compat_title">Compatibilidad con Dolby Vision</string>
@@ -275,6 +304,10 @@
     <string name="ai_gemini_model_note">Mejor calidad · Requiere una cuenta de Google con facturación activada</string>
     <string name="ai_api_key_dialog_subtitle_groq">Introduce tu clave API de Groq</string>
     <string name="ai_api_key_dialog_subtitle_gemini">Introduce tu clave API de Gemini</string>
+    <string name="ai_api_key_dialog_subtitle_claude">Introduce tu clave API de Anthropic</string>
+    <string name="ai_claude_model_note">Clave API de Anthropic de pago</string>
+    <string name="ai_model_switched_from_gemini">Modelo cambiado según la clave. Los subtítulos IA de la TV en vivo y la referencia por audición necesitan una clave de Gemini</string>
+    <string name="ai_claude_disclaimer">Clave API de Anthropic de pago. Coste: unos $0.02–0.05 por episodio. Las funciones de audio (referencia por audición, TV en vivo) siguen necesitando Gemini</string>
     <string name="ai_key_saved_title">Clave API guardada</string>
     <string name="ai_key_saved_subtitle">La traducción por IA está lista para usarse</string>
     <string name="ai_qr_scan_hint">Escanea con tu teléfono — elige Groq, Gemini o Claude</string>
@@ -312,16 +345,59 @@
     <string name="plugins_loading">Plugins: %1$s</string>
 
     <!-- IPTV / Live TV Quick Zap Navigation -->
-    <string name="select_category">Seleccionar categoría</string>
-    <string name="channel_categories">Categorías de canales</string>
+    <string name="select_category">Seleccionar grupo</string>
+    <string name="channel_categories">Grupos de canales</string>
     <string name="channel_guide">Guía de canales</string>
+    <string name="live_groups_title">Listas</string>
+    <string name="live_group_back">Listas</string>
+    <string name="live_quick_all_channels">Todos los canales</string>
+    <string name="live_quick_sports">Deportes</string>
+    <string name="live_quick_favourites">Favoritos</string>
+    <string name="live_quick_recent">Vistos recientemente</string>
+    <string name="live_channels_count">%1$d canales</string>
+    <string name="live_sports_live_and_upcoming">En vivo y próximos</string>
+    <string name="live_channel_count_one">%1$d canal</string>
+    <string name="live_cat_sports">Deportes</string>
+
+    <!-- Extracted from code: Live TV sports guide -->
+    <string name="live_sports_badge_on_air">EN EMISIÓN</string>
+    <string name="live_sports_badge_scheduled_now">PROGRAMADO AHORA</string>
+    <string name="live_sports_reading_schedule">Leyendo la programación deportiva</string>
+    <string name="live_sports_schedule_unavailable">Programación no disponible</string>
+    <string name="live_sports_artwork_unavailable">Imagen del evento no disponible</string>
+    <string name="live_sports_no_events_matched">Ningún evento deportivo coincide con tus canales</string>
+    <string name="live_sports_round">Jornada %1$s</string>
+    <string name="live_sports_show_score">Mostrar resultado</string>
+    <string name="live_sports_channels">Canales</string>
+    <string name="live_sports_scheduled_channels">Canales programados</string>
+    <string name="live_sports_possible_broadcast">Posible emisión</string>
+    <string name="live_sports_guide_match">Coincidencia en la guía</string>
+    <string name="live_sports_no_matching_channels">No hay canales coincidentes en tus listas.</string>
+    <string name="live_sports_event_gone">Este evento ya no está en la guía disponible.</string>
+
+    <!-- Extracted from code: Live TV programme guide grid -->
+    <string name="live_guide_earlier_programmes">Programas anteriores</string>
+    <string name="live_guide_later_programmes">Programas posteriores</string>
+    <string name="live_guide_channels_count">%1$s canales</string>
+
+    <!-- Extracted from code: Live TV group home (touch) -->
+    <string name="live_home_all_providers">Todos los proveedores</string>
+    <string name="live_home_current_playlist">Lista actual: %1$s. Toca para cambiar de lista.</string>
+    <string name="live_home_select_playlist">Seleccionar lista</string>
+    <string name="live_home_playlist_selected">Seleccionada</string>
+
 
     <!-- Extracted from code: Settings screen -->
     <string name="settings_home_server">Servidor local</string>
     <string name="library_homeserver_tab">Servidor local</string>
+    <string name="settings_trakt_rate_limited">Trakt está limitando temporalmente las solicitudes de activación. Espera unos minutos e inténtalo de nuevo.</string>
     <string name="settings_app_version_label">ARVIO V%1$s</string>
     <string name="settings_label_url">URL</string>
     <string name="settings_home_server_https_note">Usa HTTPS donde sea posible. Las URLs de servidores HTTP se permiten en redes locales pero no están cifradas.</string>
+    <string name="homeserver_silo_help">Silo: usa la dirección del servidor compatible con Jellyfin que te haya dado el propietario. Si hace falta, introduce usuario#NombreDePerfil (o email#NombreDePerfil). Para un perfil protegido, introduce contraseña#PIN. No se necesita una cuenta de administrador.</string>
+    <string name="homeserver_silo_profile">Silo necesita un perfil. Introduce usuario#NombreDePerfil (o email#NombreDePerfil), con el nombre exacto del perfil en Silo.</string>
+    <string name="homeserver_silo_pin">Silo necesita un PIN de perfil válido. Introduce usuario#NombreDePerfil y usa contraseña#PIN en el campo de la contraseña.</string>
+    <string name="homeserver_compat_endpoint">Esta dirección no ofrece la API de inicio de sesión compatible con Jellyfin. Para Silo, pide al propietario del servidor su dirección compatible con Jellyfin; la web puede usar otro puerto u otra URL.</string>
     <string name="settings_label_server_name">Nombre del servidor</string>
     <string name="settings_ph_server_name">Opcional, se muestra en las fuentes</string>
     <string name="settings_label_server_url">URL del servidor</string>
@@ -334,10 +410,10 @@
     <string name="settings_ph_server_url_discover">Déjalo vacío para descubrir automáticamente</string>
     <string name="settings_edit_tv_playlist">Editar lista de TV</string>
     <string name="settings_add_tv_playlist">Añadir lista de TV</string>
-    <string name="settings_catalog_pack_import_title">Importar paquete de catálogos</string>
-    <string name="settings_catalog_pack_import_desc">Importar un paquete de catálogos desde una URL de manifiesto JSON</string>
+    <string name="settings_catalog_pack_import_title">Importar paquete de catálogos / colecciones</string>
+    <string name="settings_catalog_pack_import_desc">Importar un paquete de catálogos o un archivo de colecciones (p. ej., una exportación de colecciones de Nuvio) desde una URL o un JSON pegado</string>
     <string name="settings_catalog_pack_import_badge">IMPORTAR</string>
-    <string name="settings_catalog_pack_url_label">URL del paquete</string>
+    <string name="settings_catalog_pack_url_label">URL o JSON del paquete / colecciones</string>
     <string name="settings_catalog_pack_loading">Cargando detalles del paquete de catálogos...</string>
     <string name="settings_catalog_pack_import_failed">Error al importar</string>
     <string name="settings_catalog_pack_author">Autor: %1$s • v%2$s</string>
@@ -348,6 +424,8 @@
     <string name="settings_catalog_pack_delete_confirm">Eliminar paquete</string>
     <string name="settings_cd_unpack_catalog_row">Desempaquetar fila de catálogo</string>
     <string name="settings_simkl_connect_title">Conectar Simkl</string>
+    <string name="settings_simkl_copy_and_open">Copiar código y abrir Simkl</string>
+    <string name="settings_simkl_instruction_touch">Toca el botón. Copia el código y abre %1$s. Pega allí el código (mantén pulsado el campo) e inicia sesión. Esta ventana se cerrará sola.</string>
     <string name="settings_activation_visit_instruction">Visita %1$s en tu teléfono u ordenador e introduce este código:</string>
     <string name="settings_input_hint_enter">Introduce %1$s...</string>
     <string name="settings_iptv_epg_note">El EPG soporta múltiples fuentes para esta lista. Añade una URL por línea; ARVIO las buscará en orden.</string>
@@ -395,8 +473,11 @@
     <string name="settings_use_email_password_short">Usar correo/contraseña</string>
     <string name="settings_connect_trakt">Conectar Trakt.tv</string>
     <string name="settings_trakt_instruction">Ve a %1$s e introduce este código</string>
+    <string name="settings_activation_instruction_tv">Escanea el código QR con tu teléfono. Ya incluye el código. También puedes abrir %1$s e introducirlo.</string>
+    <string name="settings_activation_instruction_touch">Toca el botón e inicia sesión. No hace falta introducir el código. Esta ventana se cerrará sola.</string>
     <string name="settings_waiting_for_authorization">Esperando autorización</string>
     <string name="settings_open_auth_page">Abrir página de autorización</string>
+    <string name="settings_open_trakt_page">Abrir la página de Trakt</string>
     <string name="settings_copy_code">Copiar código</string>
     <string name="settings_cat_playback_controls">Reproducción y controles</string>
     <string name="settings_cat_audio_subtitles">Audio y subtítulos</string>
@@ -480,12 +561,20 @@
     <string name="mdblist_account">MDBList</string>
     <string name="mdblist_connected">MDBList conectado</string>
     <string name="mdblist_disconnected">MDBList desconectado</string>
-    <string name="mdblist_invalid_key">Clave API de MDBList no válida</string>
-    <string name="mdblist_key_hint">Pega tu clave API de MDBList</string>
-    <string name="mdblist_key_help">Obtén tu clave API en mdblist.com/preferences</string>
     <string name="mdblist_connect_title">Conectar MDBList</string>
     <string name="mdblist_disconnect_confirm_title">¿Desconectar MDBList?</string>
     <string name="mdblist_disconnect_confirm_desc">Tu historial de visionado y listas ya no se sincronizarán.</string>
+    <string name="mdblist_invalid_key">Clave API de MDBList no válida</string>
+    <string name="mdblist_key_hint">Pega tu clave API de MDBList</string>
+    <string name="mdblist_key_help">Obtén tu clave API en mdblist.com/preferences</string>
+    <string name="mdblist_auth_error">Error de conexión con MDBList: %1$s</string>
+    <string name="mdblist_code_expired">El código de MDBList ha caducado. Inténtalo de nuevo.</string>
+    <string name="mdblist_code_denied">Autorización de MDBList denegada.</string>
+    <string name="mdblist_connect_with_key">Introducir la clave API manualmente</string>
+    <string name="mdblist_reconnect_required">MDBList ya no acepta esta conexión. Vuelve a conectar MDBList para reanudar la sincronización.</string>
+    <string name="mdblist_session_unavailable">No se pudo contactar con MDBList, así que la sincronización está en pausa. ARVIO sigue reintentándolo; vuelve a conectar MDBList si esto continúa.</string>
+    <string name="mdblist_library_unavailable">No se puede contactar con MDBList en este momento. Inténtalo de nuevo en unos minutos.</string>
+    <string name="mdblist_library_load_failed">No se pudo cargar esta lista de MDBList. Inténtalo de nuevo.</string>
     <!-- Tracking Integrations sub-page -->
     <string name="settings_tracking_integrations">Integraciones de seguimiento</string>
     <string name="settings_connected_as">Conectado como %1$s</string>
@@ -514,6 +603,8 @@
     <string name="settings_routing_update_simkl">Actualizar Simkl durante la reproducción</string>
     <string name="settings_routing_update_simkl_on">Enviar progreso y cambios de visionado a Simkl.</string>
     <string name="settings_routing_update_simkl_off">Conecta Simkl para habilitar esto.</string>
+    <string name="settings_routing_update_wetrakr_on">Enviar progreso y cambios de visionado a WeTrakr.</string>
+    <string name="settings_routing_update_wetrakr_off">Conecta WeTrakr para habilitar esto.</string>
     <string name="settings_tracking_mode_automatic">Automático</string>
 
     <string name="settings_fact_app_language">Idioma de la app</string>
@@ -567,7 +658,7 @@
     <string name="settings_help_source_autoplay">Auto-reproducir fuente</string>
     <string name="settings_help_source_autoplay_desc">Controla si una fuente individual comienza inmediatamente o abre el selector.</string>
     <string name="settings_help_trailers">Tráilers</string>
-    <string name="settings_help_trailers_desc">Ajusta el comportamiento de auto-reproducción y sonido de los tráilers en el fondo de la pantalla de inicio.</string>
+    <string name="settings_help_trailers_desc">Ajusta la reproducción automática, el sonido y la ubicación de los tráilers en Inicio.</string>
     <string name="settings_help_volume_boost_desc">Aumenta el nivel de audio durante la reproducción si está activado.</string>
     <string name="settings_help_playback_desc">Ajusta la calidad de la fuente, el ajuste de frame-rate y el comportamiento de reproducción.</string>
     <string name="settings_help_interface_desc">Controla el diseño, modo OLED, reloj y estilo de enfoque.</string>
@@ -619,6 +710,11 @@
     <string name="settings_test">Probar</string>
     <string name="settings_cd_qr_code">Código QR</string>
     <string name="settings_cd_drag_reorder">Arrastra para reordenar</string>
+    <string name="settings_source_menu_categories">Categorías</string>
+    <string name="settings_source_menu_edit">Editar</string>
+    <string name="settings_source_menu_delete_confirm">Toca de nuevo para eliminar</string>
+    <string name="settings_source_menu_open">abrir menú</string>
+    <string name="settings_source_menu_select">seleccionar</string>
     <string name="settings_progress_format">%1$s (%2$d%%)</string>
     <string name="settings_refreshing_channels_epg">Actualizando canales y EPG...</string>
     <string name="settings_reload_playlists_now">Recargar listas ahora</string>
@@ -669,7 +765,7 @@
     <string name="settings_badge_full_short">COMPLETA</string>
     <string name="settings_search_lists">Buscar listas</string>
     <string name="settings_paste_url">Pegar URL</string>
-    <string name="settings_ph_trakt_mdblist">URL de Trakt, MDBList, SIMKL o TMDB</string>
+    <string name="settings_ph_trakt_mdblist">URL de YouTube, Trakt, MDBList, SIMKL o TMDB</string>
     <string name="settings_add_url">Añadir URL</string>
     <string name="settings_searching_both_sources">Buscando en ambas fuentes</string>
     <string name="settings_lists_found">%1$d listas encontradas</string>
@@ -728,6 +824,10 @@
     <string name="settings_update_ready_install">Última actualización descargada y lista para instalar</string>
     <string name="settings_update_checking">Buscando una APK más reciente en GitHub Releases</string>
     <string name="settings_update_available_format">Actualización disponible: %1$s</string>
+    <string name="settings_quiet_update_notifications">Avisos de actualización discretos</string>
+    <string name="settings_quiet_update_notifications_desc">Muestra un pequeño aviso al iniciar en lugar de la ventana de actualización. Instálala desde Actualización de la app.</string>
+    <string name="settings_sidebar_update_available">Actualización %1$s disponible. Instálala desde Cuentas → Actualización de la app.</string>
+    <string name="home_update_available_quiet">La actualización %1$s está disponible. Instálala desde Ajustes → Cuentas → Actualización de la app.</string>
     <string name="settings_update_latest">Ya tienes la última versión de ARVIO</string>
     <string name="settings_update_check_releases">Buscar la última APK de ARVIO en GitHub Releases</string>
     <string name="settings_badge_play">PLAY</string>
@@ -735,14 +835,16 @@
     <string name="settings_badge_checking">COMPROBANDO</string>
     <string name="settings_badge_update">ACTUALIZAR</string>
     <string name="settings_badge_check">COMPROBAR</string>
-    <string name="settings_diagnostics_sharing">Compartir diagnósticos y uso</string>
-    <string name="settings_diagnostics_sharing_desc">Enviar diagnósticos de fallos anónimos y eventos de inicio de la aplicación para ayudar a mejorar ARVIO</string>
+    <string name="settings_diagnostics_sharing">Compartir diagnósticos de fallos</string>
+    <string name="settings_diagnostics_sharing_desc">Enviar informes de fallos y bloqueos a Firebase Crashlytics. Esta opción solo se aplica a este dispositivo.</string>
+    <string name="settings_usage_statistics">Compartir estadísticas de uso</string>
+    <string name="settings_usage_statistics_desc">Firebase Analytics opcional para el uso de las pantallas y la fiabilidad de la reproducción. Sin títulos, búsquedas ni URLs de proveedores. Desactivado por defecto; las funciones publicitarias siguen desactivadas.</string>
     <string name="settings_privacy_policy">Política de privacidad</string>
     <string name="settings_privacy_policy_desc">Lee cómo ARVIO procesa los datos, las políticas de retención, los proveedores de datos y tus derechos de privacidad</string>
     <string name="settings_account_data_deletion">Eliminar cuenta en la nube y datos</string>
     <string name="settings_account_data_deletion_desc">Abre la página segura de eliminación de la cuenta de ARVIO Cloud</string>
     <string name="settings_privacy_data_deletion">Privacidad y eliminación de datos</string>
-    <string name="settings_privacy_data_deletion_desc">Abre las instrucciones de privacidad y eliminación de cuentas de ARVIO Cloud</string>
+    <string name="settings_privacy_data_deletion_desc">Abre la política de privacidad y la página de eliminación de la cuenta en la nube</string>
     <string name="settings_privacy_data_title">Privacidad y Datos</string>
     <string name="settings_privacy_data_sub_desc">Uso compartido de diagnósticos, política de privacidad y documentación legal</string>
     <string name="settings_cloud_account_sub_title">Sincronización en la nube y Cuenta</string>
@@ -811,10 +913,48 @@
     <string name="settings_iptv_hide_all">Ocultar todo</string>
     <string name="settings_iptv_show_all_desc">Mostrar todas las categorías de esta fuente</string>
     <string name="settings_iptv_hide_all_desc">Ocultar todas las categorías de esta fuente</string>
+    <string name="settings_iptv_tab_live">TV en vivo</string>
+    <string name="settings_iptv_tab_movies">Películas</string>
+    <string name="settings_iptv_tab_series">Series</string>
+    <string name="settings_iptv_catalog_loading">Cargando categorías…</string>
+    <string name="settings_iptv_catalog_not_loaded">Estas categorías llegarán con la próxima actualización de este portal. No hacen falta para reproducir nada — hasta entonces se busca en todas las categorías.</string>
+    <string name="settings_iptv_catalog_unsupported">Este portal no ha indicado ninguna categoría. No cambia nada: se busca en todas las categorías.</string>
+    <string name="settings_iptv_catalog_all_searched">Se busca en todas las categorías</string>
+    <string name="settings_iptv_catalog_searched">Se busca</string>
+    <string name="settings_iptv_catalog_skipped">No se busca</string>
+    <string name="settings_iptv_catalog_movies_desc">Categorías de este portal en las que se busca al reproducir una película</string>
+    <string name="settings_iptv_catalog_series_desc">Categorías de este portal en las que se busca al reproducir un episodio</string>
     <string name="settings_stalker_categories">Categorías Stalker</string>
     <string name="settings_stalker_configured">Configurado</string>
     <string name="settings_stalker_not_configured">No configurado</string>
     <string name="settings_stalker_remove">Eliminar portal</string>
+    <!-- IPTV account details: subscription end and stream limit -->
+    <string name="iptv_account_days_left">Quedan %1$d días</string>
+    <string name="iptv_account_one_day_left">Queda 1 día</string>
+    <string name="iptv_account_ends_today">Termina hoy</string>
+    <string name="iptv_account_unlimited">Ilimitado</string>
+    <string name="iptv_account_expired">Caducado</string>
+    <string name="iptv_account_until">hasta el %1$s</string>
+    <string name="iptv_account_since">desde el %1$s</string>
+    <string name="iptv_account_no_info">Sin datos de la cuenta</string>
+    <string name="iptv_account_streams">%1$d streams</string>
+    <string name="iptv_account_one_stream">1 stream</string>
+    <string name="iptv_account_checked_at">Última comprobación: %1$s</string>
+    <string name="iptv_account_refresh">Actualizar ahora</string>
+    <string name="iptv_account_refreshing">Comprobando…</string>
+    <string name="iptv_account_refresh_failed">El proveedor no ha respondido. Inténtalo de nuevo dentro de un minuto.</string>
+    <string name="iptv_connection_limit_title">Límite de conexiones en este dispositivo</string>
+    <string name="iptv_connection_limit_auto">Auto</string>
+    <string name="iptv_connection_limit_no_limit">Sin límite</string>
+    <string name="iptv_connection_limit_at_a_time">%1$d a la vez</string>
+    <string name="iptv_connection_limit_with_effective">%1$s (%2$d a la vez)</string>
+    <string name="iptv_provider_allowance">Límite del proveedor: %1$s</string>
+    <string name="iptv_provider_allowance_not_reported">Límite del proveedor: no indicado</string>
+    <string name="iptv_account_busy_title">Esta cuenta está al límite</string>
+    <string name="iptv_account_busy_live_detail">El proveedor indica %1$d de %2$d streams en uso.</string>
+    <string name="iptv_account_busy_vod">El proveedor indica que todos los streams de esta cuenta están en uso. Cierra uno en otro lugar e inténtalo de nuevo.</string>
+    <string name="iptv_account_busy_dismissed_hint">Pulsa OK para volver a intentarlo.</string>
+    <string name="iptv_account_play_anyway">Reproducir igualmente</string>
     <string name="settings_cd_edit_stalker_config">Editar portal Stalker</string>
     <string name="settings_section_stalker_portals">PORTALES STALKER</string>
     <string name="settings_add_stalker_portal_button">Añadir portal Stalker</string>
@@ -871,6 +1011,11 @@
     <string name="telegram_disconnect_btn">DESCONECTAR</string>
     <string name="telegram_video_cache">Caché de vídeo</string>
     <string name="telegram_clear_cache_btn">LIMPIAR</string>
+    <string name="telegram_search_on_click_title">Buscar en Telegram solo al pulsar la fuente de Telegram</string>
+    <string name="telegram_search_on_click_desc">Evita el límite de búsqueda de Telegram. Desactívalo para buscar en Telegram automáticamente junto con las demás fuentes.</string>
+    <string name="telegram_search_row_idle">Pulsa para buscar en Telegram</string>
+    <string name="telegram_search_row_searching">Buscando en Telegram…</string>
+    <string name="telegram_search_row_none">No se encontraron fuentes de Telegram — selecciona para buscar de nuevo</string>
     <string name="telegram_connection_failed">Conexión fallida</string>
     <string name="telegram_try_again">INTENTAR DE NUEVO</string>
     <string name="telegram_disconnect_confirm_title">¿Desconectar Telegram?</string>
@@ -896,17 +1041,35 @@
     <string name="crash_qr_hint">Escanea para abrir arvio.tv — 1 toque para copiar el informe e ir a Discord.</string>
     <string name="crash_details_title">Detalles de referencia del error</string>
     <string name="crash_details_body">ID: %1$s\nHora: %2$s\nVersión: %3$s\nError: %4$s</string>
+    <string name="crash_error_unexpected">Error inesperado</string>
     <string name="crash_copied_toast">¡Detalles del error copiados! Abriendo Discord...</string>
     <string name="crash_report_discord">Informar en Discord</string>
     <string name="crash_restart_app">Reiniciar ARVIO</string>
 
     <!-- Extracted from code: Profile, Login and Collections -->
     <string name="profile_edit_title">Editar perfil</string>
+    <string name="profile_choose_avatar">Elige un avatar</string>
     <string name="profile_name_hint">Nombre del perfil</string>
     <string name="profile_lock">Bloqueo de perfil</string>
+    <string name="profile_lock_desc">Pedir un PIN para acceder a este perfil</string>
+    <string name="profile_pin_active">La protección con PIN está activada</string>
     <string name="profile_set_pin">Establecer PIN</string>
     <string name="profile_change_pin">Cambiar PIN</string>
     <string name="profile_remove_pin">Eliminar PIN</string>
+    <string name="profile_kids">Perfil infantil</string>
+    <string name="profile_kids_on">Sí</string>
+    <string name="profile_kids_off">No</string>
+    <string name="profile_kids_badge">Infantil</string>
+    <string name="profile_kids_max_age">Edad máxima</string>
+    <string name="profile_kids_little">Hasta 7 años</string>
+    <string name="profile_kids_older">Hasta 10 años</string>
+    <string name="profile_kids_teens">Hasta 14 años</string>
+    <string name="profile_kids_hint">Solo títulos aptos para esta edad. Se ocultan los títulos sin clasificación y la TV en vivo.</string>
+    <string name="kids_title_blocked">No disponible en este perfil infantil</string>
+    <string name="kids_row_movies">Películas para niños</string>
+    <string name="kids_row_shows">Series infantiles</string>
+    <string name="kids_row_animated">Favoritos de animación</string>
+    <string name="kids_row_family_shows">Series para toda la familia</string>
     <string name="profile_change_photo">Cambiar foto</string>
     <string name="profile_upload_photo">Subir foto</string>
     <string name="profile_remove_photo">Eliminar foto</string>
@@ -933,6 +1096,8 @@
     <string name="collection_tab_live_upcoming">En vivo y Próximamente</string>
 
     <!-- Extracted from code: Details, Home, Search and Player -->
+    <string name="details_episodes_previous_page">Página anterior</string>
+    <string name="details_episodes_next_page">Página siguiente</string>
     <string name="details_toast_debrid_downloading">Este torrent debrid aún se está descargando. Prueba con otra fuente o espera un poco.</string>
     <string name="details_episode_code_short">T%1$d:E%2$d</string>
     <string name="details_label_tv_series">Serie de TV</string>
@@ -956,12 +1121,60 @@
     <string name="home_sports_opening">Abriendo evento en vivo...</string>
     <string name="home_sports_playback_failed">No se pudo reproducir este evento en vivo</string>
     <string name="home_sports_event_not_live">Este evento aún no está en vivo</string>
+    <string name="home_optimizing_notice">ARVIO aún se está optimizando para este dispositivo. Por ahora, el desplazamiento puede ir lento.</string>
+    <string name="settings_optimizing_notice">Aún se está optimizando para este dispositivo. Por ahora, el desplazamiento puede ir lento.</string>
     <string name="home_cd_primary_provider">Proveedor de streaming principal</string>
     <string name="home_cd_rank">Puesto #%1$d</string>
     <string name="search_filter_all">Todo</string>
     <string name="search_filter_anime">Anime</string>
+    <!-- Discover filter row (step 3): one chip per filter, its panel, and the values inside. -->
+    <string name="search_filter_genre">Género</string>
+    <string name="search_filter_genres">Géneros</string>
+    <string name="search_filter_sort">Ordenar</string>
+    <string name="search_filter_rating">Valoración</string>
+    <string name="search_filter_year">Año</string>
+    <string name="search_filter_age">Clasificación por edad</string>
+    <string name="search_filter_language">Idioma</string>
+    <string name="search_filter_language_ja">Japonés</string>
+    <string name="search_filter_language_ko">Coreano</string>
+    <string name="search_filter_language_hi">Hindi</string>
+    <string name="search_filter_hide_watched">Ocultar vistos</string>
+    <string name="search_filter_any">Cualquiera</string>
+    <string name="search_filter_match_all">Y</string>
+    <string name="search_filter_match_any">O</string>
+    <string name="search_filter_selected_count">%1$d seleccionados</string>
+    <string name="search_filter_min_votes">Votos mínimos</string>
+    <string name="search_filter_rating_from">Valoración desde</string>
+    <string name="search_filter_rating_to">Valoración hasta</string>
+    <string name="search_filter_rating_range">%1$s – %2$s</string>
+    <string name="search_filter_clear">Borrar filtros</string>
+    <string name="search_recent">Recientes</string>
+    <string name="search_recent_clear">Borrar</string>
+    <string name="search_clear_query">Borrar búsqueda</string>
+    <string name="search_voice">Buscar por voz</string>
+    <string name="search_voice_listening">Escuchando…</string>
+    <string name="search_voice_no_match">No te he entendido. Inténtalo de nuevo.</string>
+    <string name="search_voice_network">La búsqueda por voz necesita conexión a internet.</string>
+    <string name="search_voice_permission">Permite el acceso al micrófono para buscar por voz.</string>
+    <string name="search_filter_panel_hint">La cuadrícula se actualiza al marcar · ATRÁS cierra el panel</string>
+    <string name="search_filter_age_movies_only">Solo películas — TMDB no tiene filtro de edad para series</string>
+    <string name="search_filter_language_hint">El idioma original del título — no el idioma de la app</string>
+    <string name="search_filter_votes_hint">Un mínimo alto oculta los estrenos recientes, por eso el valor por defecto es Cualquiera</string>
+    <string name="search_filter_match_hint">Y: solo títulos con todos los géneros · O: títulos con al menos uno</string>
+    <string name="search_filter_rating_from_short">Desde</string>
+    <string name="search_filter_rating_to_short">Hasta</string>
+    <string name="search_filter_rating_hint">Solo puntos enteros — sin 7,5 · la barra muestra el valor fijado</string>
+    <string name="search_filter_decade_caption">Década</string>
+    <string name="search_filter_decade">Años %1$s</string>
+    <string name="search_filter_decade_older">anteriores</string>
+    <string name="search_filter_exact_year">Año exacto</string>
+    <string name="search_filter_year_hint">La década ya filtra por sí sola · el año exacto es una pulsación más, no es obligatorio</string>
+    <string name="search_sort_popular">Populares</string>
+    <string name="search_sort_top_rated">Mejor valorados</string>
+    <string name="search_sort_newest">Más recientes</string>
     <string name="home_no_description">No hay descripción disponible.</string>
     <string name="home_still_loading_catalogue">Aún cargando tu catálogo…</string>
+    <string name="home_view_all">Ver todo</string>
     <string name="search_row_trending">Tendencias</string>
     <string name="search_row_popular_this_year">Populares Este Año</string>
     <string name="search_row_top_rated">Mejor Valorados</string>
@@ -979,6 +1192,85 @@
     <string name="player_muted">Silenciado</string>
     <string name="player_cd_setup">Configuración</string>
     <string name="player_cd_error">Error</string>
+    <!-- Mobile player -->
+    <string name="mplayer_audio_track_number">Audio %1$d</string>
+    <string name="mplayer_cd_unlock">Desbloquear</string>
+    <string name="mplayer_tap_to_unlock">Toca para desbloquear</string>
+    <string name="mplayer_error_no_streams_title">No hay streams reproducibles</string>
+    <string name="mplayer_error_playback_failed_title">Error de reproducción</string>
+    <string name="mplayer_error_no_streams_message">No se encontraron streams reproducibles para este contenido. Prueba a recargar los streams o revisa los ajustes de los addons.</string>
+    <string name="mplayer_error_playback_failed_message">Se interrumpió la conexión o no se pudo reproducir el formato de este stream.</string>
+    <string name="mplayer_reload_streams">Recargar streams</string>
+    <string name="mplayer_cd_lock_controls">Bloquear controles</string>
+    <string name="mplayer_more_settings">Más ajustes</string>
+    <string name="mplayer_playing_next_in">SIGUIENTE EN %1$dS</string>
+    <string name="mplayer_up_next">A CONTINUACIÓN</string>
+    <string name="mplayer_subtitles_off">Subtítulos desactivados</string>
+    <string name="mplayer_subtitles_track">Subtítulos: %1$s</string>
+    <string name="mplayer_this_season">Esta temporada</string>
+    <string name="mplayer_source">Fuente</string>
+    <string name="mplayer_no_sources">No hay fuentes disponibles</string>
+    <string name="mplayer_audio_delay">Retraso del audio</string>
+    <string name="mplayer_audio_settings">Ajustes de audio</string>
+    <string name="mplayer_audio_settings_meta">Mejoras y sincronización</string>
+    <string name="mplayer_section_enhancements">MEJORAS</string>
+    <string name="mplayer_section_tracks">PISTAS</string>
+    <string name="mplayer_section_settings">AJUSTES</string>
+    <string name="mplayer_volume_normalization">Normalización del volumen</string>
+    <string name="mplayer_gemini_live_translation">Traducción de voz en vivo con Gemini</string>
+    <string name="mplayer_default_audio_track">Pista de audio predeterminada</string>
+    <string name="mplayer_subtitle_delay">Retraso de los subtítulos</string>
+    <string name="mplayer_language_subtitles">Subtítulos en %1$s</string>
+    <string name="mplayer_language_track">Pista %2$d (%1$s)</string>
+    <string name="mplayer_badge_embedded">Incrustado</string>
+    <string name="mplayer_find_best_match_language">Buscar la mejor coincidencia (%1$s)</string>
+    <string name="mplayer_find_best_match_auto">Buscar la mejor coincidencia (auto)</string>
+    <string name="mplayer_scanning_best_match">Buscando la mejor coincidencia…</string>
+    <string name="mplayer_find_best_match_desc">Sincronizar automáticamente y elegir la mejor coincidencia de tiempos</string>
+    <string name="mplayer_badge_scanning">Analizando</string>
+    <string name="mplayer_badge_auto_sync">Sincronización auto</string>
+    <string name="mplayer_ai_translation_language">Traducción IA (%1$s)</string>
+    <string name="mplayer_ai_translation">Traducción IA</string>
+    <string name="mplayer_no_subtitles">No se encontraron subtítulos</string>
+    <string name="mplayer_track_active">Pista activa</string>
+    <string name="mplayer_subtitle_settings_meta">Tamaño, estilo, fuente y más</string>
+    <string name="mplayer_section_preview">VISTA PREVIA</string>
+    <string name="mplayer_subtitle_preview_sample">Hola, ¿qué tal?</string>
+    <string name="mplayer_section_size">TAMAÑO</string>
+    <string name="mplayer_text_size">Tamaño del texto</string>
+    <string name="mplayer_section_color">COLOR</string>
+    <string name="mplayer_section_position">POSICIÓN</string>
+    <string name="mplayer_percent_from_bottom">%1$d%% desde abajo</string>
+    <string name="mplayer_adjust_on_screen">Ajustar en pantalla</string>
+    <string name="mplayer_section_style_font">ESTILO Y FUENTE</string>
+    <string name="mplayer_font_weight">Grosor de la fuente</string>
+    <string name="mplayer_font_family">Tipo de letra</string>
+    <string name="mplayer_stylized_subtitles">Subtítulos con estilo (ASS / SSA)</string>
+    <string name="mplayer_section_general">GENERAL</string>
+    <string name="mplayer_filter_by_app_language">Filtrar por idioma de la app</string>
+    <string name="mplayer_remove_sdh">Eliminar texto para personas con problemas auditivos (SDH)</string>
+    <string name="mplayer_playback_speed">Velocidad de reproducción</string>
+    <string name="mplayer_aspect_ratio">Relación de aspecto</string>
+    <string name="mplayer_aspect_fit_screen">Ajustar a la pantalla</string>
+    <string name="mplayer_aspect_stretch">Estirar</string>
+    <string name="mplayer_aspect_crop">Recortar</string>
+    <string name="mplayer_autoplay_next_episode">Reproducir automáticamente el siguiente episodio</string>
+    <string name="mplayer_auto_skip_intro">Omitir la intro automáticamente</string>
+    <string name="mplayer_auto_skip_outro">Omitir los créditos finales automáticamente</string>
+    <string name="mplayer_section_video">VÍDEO</string>
+    <string name="mplayer_delay_dialog_hint">Introduce el desfase en milisegundos (negativo = adelantar, positivo = retrasar):</string>
+    <string name="mplayer_apply">Aplicar</string>
+    <string name="mplayer_reset_zero">Restablecer (0 ms)</string>
+    <string name="mplayer_delay_synchronized">Sincronizado • Toca para escribir un número</string>
+    <string name="mplayer_delay_delayed">Retrasado (+) • Toca para escribir un número</string>
+    <string name="mplayer_delay_advanced">Adelantado (–) • Toca para escribir un número</string>
+    <string name="mplayer_reset_to_zero">Restablecer a 0 ms</string>
+    <string name="mplayer_adjust_subtitle_position">Ajustar la posición de los subtítulos</string>
+    <string name="mplayer_drag_subtitle_hint">Arrastra arriba o abajo en cualquier punto para moverlos • %1$d%% desde abajo</string>
+    <string name="mplayer_reset">Restablecer</string>
+    <string name="mplayer_sample_subtitle">Subtítulo de ejemplo</string>
+    <string name="mplayer_unknown_language">Desconocido</string>
+    <string name="mplayer_speed_chip">Velocidad %1$s</string>
     <string name="player_addon_setup_required">Configuración de addon requerida</string>
     <string name="player_addon_setup_hint">Configura e instala addons de vídeo en Ajustes para transmitir contenido</string>
     <string name="player_season_episode_short">T%1$d E%2$d</string>
@@ -994,6 +1286,8 @@
     <string name="player_fail_startup_generic">La fuente falló durante el inicio. Prueba con otra.</string>
     <string name="player_fail_buffering_slow">Búfer demasiado lento</string>
     <string name="player_fail_device_cannot_play">El vídeo no se puede reproducir en este dispositivo</string>
+    <string name="player_fail_source_not_ready">La fuente aún no está lista</string>
+    <string name="player_toast_placeholder_video">Esta fuente aún no está lista: el addon solo muestra un vídeo provisional. Prueba otra fuente o inténtalo más tarde.</string>
     <string name="player_fail_source_too_slow">La fuente es demasiado lenta para cargar</string>
     <string name="player_fail_no_start_after_retries">La fuente no se inició tras los reintentos. Prueba con otra.</string>
     <string name="player_fail_no_start_in_time">La fuente no se inició a tiempo. Prueba con otra.</string>
@@ -1054,8 +1348,19 @@
     <string name="player_match_remembered_offset">Coincidencia: %1$s (recordado) (auto-ajuste %2$s)</string>
     <string name="player_match_exact_release_name">Coincidencia: %1$s (nombre de lanzamiento exacto)</string>
     <string name="player_match_sync_unverified">Seleccionado %1$s (sincronización no verificada)</string>
+    <!-- Reference taken from the container's own subtitle index (Matroska Cues), not from a
+         decoded track or from audio. Distinct from "built-in" and "hearing" so the match toast
+         never claims a hearing scan that did not run. -->
+    <string name="player_match_source_index">índice del contenedor</string>
+    <!-- Shown when the scan could not verify anything but a subtitle in the preferred language is
+         on screen anyway. Saying "no subtitle found" there is false: one was chosen and is
+         playing; only the verification failed. -->
+    <string name="player_match_kept_unverified">Se mantiene %1$s — no se pudo verificar la sincronización</string>
+    <string name="player_match_kept_unverified_score">Se mantiene %1$s — sincronización sin confirmar (mejor %2$d%%)</string>
     <string name="player_match_scored">Coincidencia: %1$s · %2$d%% (%3$s)</string>
     <string name="player_match_scored_offset">Coincidencia: %1$s · %2$d%% (%3$s) (auto-ajuste %4$s)</string>
+    <!-- Marks a subtitle row whose timing auto-match corrected: it is no longer the file as the
+         addon published it. Shown with the shift, e.g. "fixed +1.0s". -->
     <string name="player_subtitle_auto_retimed">resincronizado</string>
     <string name="player_match_scored_retimed">Coincidencia: %1$s · %2$d%% (%3$s) (resincronizado)</string>
     <string name="player_subtitle_auto_fixed">corregido</string>
@@ -1092,6 +1397,12 @@
     <string name="live_cat_recently_watched">Vistos recientemente</string>
     <string name="live_cat_adult">Adultos</string>
     <string name="live_cat_ungrouped">Sin agrupar</string>
+    <string name="live_cat_global_sports">Deportes · Global</string>
+    <string name="live_cat_global_movies">Películas · Global</string>
+    <string name="live_cat_global_news">Noticias · Global</string>
+    <string name="live_cat_global_kids">Infantil · Global</string>
+    <string name="live_cat_documentary">Documentales</string>
+    <string name="live_cat_music">Música</string>
     <string name="live_section_playlist">LISTA</string>
     <string name="live_section_adult">ADULTOS</string>
     <string name="live_section_hidden">OCULTO</string>
@@ -1111,7 +1422,7 @@
     <string name="live_empty_no_channel">Sin canal</string>
     <string name="live_empty_no_timeline_channel">No hay cronología de programación disponible para este canal.</string>
     <string name="live_empty_no_timeline_yet">Aún no hay cronología de guía disponible.</string>
-    <string name="live_empty_no_channels_category">No hay canales en esta categoría</string>
+    <string name="live_empty_no_channels_category">No hay canales en este grupo</string>
     <string name="live_empty_no_playlist">No hay lista IPTV configurada.</string>
     <string name="live_placeholder_loading_guide">Cargando guía...</string>
     <string name="live_placeholder_no_guide_matched">No coincidieron datos de la guía</string>
@@ -1119,7 +1430,7 @@
     <string name="live_placeholder_no_guide_source">Sin fuente de guía</string>
     <string name="live_btn_guide">GUÍA</string>
     <string name="live_btn_open_settings">Abrir ajustes</string>
-    <string name="live_hint_search">Nombre del canal, número o categoría…</string>
+    <string name="live_hint_search">Nombre del canal, número o grupo…</string>
     <string name="live_cd_fullscreen">Pantalla completa</string>
     <string name="live_cd_close_guide">Cerrar guía</string>
     <string name="live_cd_catchup_available">Catchup disponible</string>
@@ -1151,6 +1462,13 @@
     <string name="component_media_logo">Logo de %1$s</string>
     <string name="component_badge_new_episode">Nuevo Episodio</string>
     <string name="component_badge_new_episode_short">Nuevo</string>
+    <string name="component_next_season_episode">Siguiente: T%1$dE%2$d</string>
+    <string name="component_time_left_minutes">Quedan %1$d min</string>
+    <string name="component_time_left_hours">Quedan %1$d h</string>
+    <string name="component_time_left_hours_minutes">Quedan %1$d h %2$d min</string>
+    <string name="component_time_left_minutes_short">%1$dm</string>
+    <string name="component_time_left_hours_short">%1$dh</string>
+    <string name="component_time_left_hours_minutes_short">%1$dh %2$dm</string>
     <string name="component_ep_left_one">Queda 1 ep</string>
     <string name="component_eps_left">Quedan %1$d eps</string>
     <string name="component_season_episode_marker">T%1$d • E%2$d</string>
@@ -1187,6 +1505,7 @@
     <string name="update_msg_ready">La última actualización de ARVIO se ha descargado y está lista para instalarse.</string>
     <string name="update_msg_installer_hint">El instalador de paquetes de Android debería aparecer. Si no es así, puedes intentar pulsar Instalar de nuevo.</string>
     <string name="stream_tab_all_sources">Todas las fuentes</string>
+    <string name="stream_recently_played">Reproducido recientemente</string>
     <string name="stream_title_select_source">Seleccionar Fuente</string>
     <string name="stream_no_streaming_addons">No hay Addons de Streaming</string>
     <string name="stream_no_sources_found">No se encontraron fuentes</string>
@@ -1242,6 +1561,9 @@
 
     <!-- Extracted from code (data layer): shared labels and errors -->
     <string name="continue_season_episode">Continuar T%1$dE%2$d</string>
+    <string name="syncing_progress">Sincronizando el progreso…</string>
+    <string name="details_progress_refresh_failed">No se pudo actualizar el progreso de visionado. Se muestra el progreso guardado.</string>
+    <string name="play_season_episode">Reproducir T%1$dE%2$d</string>
     <string name="continue_season_episode_at">Continuar T%1$dE%2$d en %3$s</string>
     <string name="continue_at">Continuar en %1$s</string>
     <string name="continue_from">Continuar desde %1$s</string>
@@ -1285,6 +1607,43 @@
     <string name="settings_quality_filters_custom">Filtros personalizados detectados — usa la edición manual para modificarlos</string>
     <string name="settings_addon_added_with_catalogs">Añadido %1$s (%2$d catálogos importados)</string>
     <string name="settings_addon_added_no_catalogs">Añadido %1$s (sin catálogos expuestos)</string>
+    <string name="settings_addon_configure">Configurar addon</string>
+    <string name="settings_addon_setup_required">Requiere configuración</string>
+    <string name="settings_addon_setup">Configurar</string>
+    <string name="settings_addon_setup_first">Configura primero %1$s</string>
+    <string name="settings_addon_loading">Cargando addon…</string>
+    <string name="settings_addon_install_title">¿Instalar el addon?</string>
+    <string name="settings_addon_install_trust">Añade solo addons de confianza.</string>
+    <string name="settings_addon_install">Instalar</string>
+    <string name="settings_addon_already_installed_title">%1$s ya está instalado</string>
+    <string name="settings_addon_already_installed_message">Este enlace tiene otros ajustes. ¿Quieres reemplazar el instalado o conservar ambos?</string>
+    <string name="settings_addon_replace_existing">Reemplazar el instalado</string>
+    <string name="settings_addon_keep_both">Conservar ambos</string>
+    <string name="settings_addon_configure_qr_title">Configurar %1$s</string>
+    <string name="settings_addon_configure_qr_hint">Escanea con tu teléfono, cambia allí los ajustes y toca Instalar en ARVIO en tu teléfono. Después elige Actualizar Addons aquí.</string>
+    <string name="settings_community_addons">Addons de la comunidad</string>
+    <string name="settings_community_addons_desc">Explora e instala addons creados por la comunidad de Stremio</string>
+    <string name="settings_community_addons_count">%1$d addons de la comunidad de Stremio</string>
+    <string name="settings_community_addons_search">Buscar addons</string>
+    <string name="settings_community_addons_all">Todos</string>
+    <string name="settings_community_addons_empty">Ningún addon coincide con tu búsqueda</string>
+    <string name="settings_community_addons_clear_filters">Borrar búsqueda y filtros</string>
+    <string name="settings_community_addons_failed">No se pudieron cargar los addons de la comunidad</string>
+    <string name="settings_copied_url">URL copiada al portapapeles</string>
+    <string name="settings_community_addon_configure">Configurar</string>
+    <string name="settings_community_addon_configurable">Configurable</string>
+    <string name="settings_community_addon_uninstall">Desinstalar</string>
+    <string name="settings_community_addon_removed">%1$s eliminado</string>
+    <string name="settings_community_addon_setup_hint">Este addon tiene que configurarse antes de funcionar. Abre Configurar, elige tus ajustes y toca Instalar en su página.</string>
+    <string name="settings_community_addon_disclaimer">Los addons de la comunidad los crean terceros, no ARVIO. Añade solo addons de confianza.</string>
+    <string name="settings_community_addon_type_movie">Películas</string>
+    <string name="settings_community_addon_type_series">Series</string>
+    <string name="settings_community_addon_type_anime">Anime</string>
+    <string name="settings_community_addon_type_subtitles">Subtítulos</string>
+    <string name="settings_community_addon_type_other">Otros</string>
+    <string name="settings_community_addon_type_channel">Canales</string>
+    <string name="settings_community_addon_type_tv">TV</string>
+    <string name="settings_community_addon_type_music">Música</string>
     <string name="settings_addons_cloud_restore_failed">La restauración desde la nube falló; los addons no se han cambiado</string>
     <string name="settings_addons_refresh_report">%1$d addons actualizados, %2$d fallaron</string>
     <string name="settings_addons_refresh_failed">Error al actualizar los addons</string>
@@ -1298,6 +1657,21 @@
     <string name="settings_catalog_added">Añadido %1$s</string>
     <string name="settings_catalog_updated">Actualizado %1$s</string>
     <string name="settings_catalog_removed">Catálogo eliminado</string>
+    <string name="kids_list_approve_title">Aprobar un título sin clasificación</string>
+    <string name="kids_list_approval_pin_required">PIN parental incorrecto. Si hace falta, establece un PIN parental en Gestionar perfiles.</string>
+    <string name="kids_list_approval_changed">El perfil o la lista han cambiado. Vuelve a abrir la aprobación.</string>
+    <string name="kids_list_approval_unavailable">No se pudo verificar la lista o la clasificación. No se ha guardado ninguna aprobación.</string>
+    <string name="kids_list_approval_rated">Este título tiene clasificación por edad. El filtro de edad sigue aplicándose.</string>
+    <string name="kids_list_approval_empty">No hay títulos disponibles en esta lista.</string>
+    <string name="kids_catalog_explain">Aprueba este catálogo de addon para este perfil infantil: sus títulos aparecerán aquí aunque no tengan clasificación por edad. Los títulos con clasificación siguen respetando el límite de edad.</string>
+    <string name="kids_catalog_approved_state">Este catálogo de addon está aprobado para este perfil infantil.</string>
+    <string name="kids_catalog_approve">Aprobar para este perfil infantil</string>
+    <string name="kids_catalog_unapprove">Quitar la aprobación</string>
+    <string name="kids_catalog_approved_toast">%1$s está aprobado para este perfil infantil</string>
+    <string name="kids_catalog_unapproved_toast">%1$s ya no está aprobado para este perfil infantil</string>
+    <string name="kids_catalog_unavailable">El addon de este catálogo no está instalado en este perfil.</string>
+    <string name="kids_list_more_titles">Más títulos</string>
+    <string name="kids_list_title_approved">%1$s aprobado</string>
     <string name="settings_catalog_unpacked">Fila de catálogo extraída del paquete</string>
     <string name="settings_catalog_search_min_chars">Escribe al menos 2 caracteres</string>
     <string name="settings_catalog_search_no_lists">No se encontraron listas públicas de Trakt</string>
@@ -1357,6 +1731,7 @@
     <!-- SettingsViewModel messages: Trakt, Simkl and sign-out -->
     <string name="settings_trakt_activation_failed_code">La activación de Trakt falló (%1$d)</string>
     <string name="settings_trakt_activation_failed">La activación de Trakt falló</string>
+    <string name="settings_trakt_unavailable">Trakt no está disponible temporalmente. Inténtalo de nuevo más tarde.</string>
     <string name="settings_trakt_connected_toast">Trakt conectado correctamente</string>
     <string name="settings_trakt_code_invalid">El código de activación de Trakt no es válido</string>
     <string name="settings_trakt_code_used">El código de activación de Trakt ya se ha utilizado</string>
@@ -1416,7 +1791,7 @@
     <string name="catalog_url_invalid_format">Formato de URL no válido</string>
     <string name="catalog_url_invalid_host">Host no válido</string>
     <string name="catalog_url_trakt_hint">Usa una URL de lista de Trakt: trakt.tv/users/{user}/lists/{list}</string>
-    <string name="catalog_url_unsupported">Solo se admiten URLs de Trakt y MDBList, SIMKL</string>
+    <string name="catalog_url_unsupported">Solo se admiten URLs de Trakt, MDBList, SIMKL, TMDB y vídeos de YouTube</string>
     <string name="iptv_progress_loading_channels">Cargando canales desde el portal...</string>
     <string name="iptv_progress_loading_full_epg">Cargando EPG completa (%1$d/%2$d)...</string>
     <string name="iptv_progress_loading_live">Cargando streams en vivo...</string>
@@ -1446,6 +1821,9 @@
     <string name="trakt_not_authenticated">No autenticado con Trakt</string>
     <string name="trakt_reconnect_required">Tu autorización de Trakt ha caducado o fue revocada. Vuelve a conectar Trakt para reanudar la sincronización.</string>
     <string name="trakt_sync_refresh_failed">Se importó el historial, pero no se pudo actualizar completamente Continuar viendo. Se conservaron los elementos guardados; inténtalo más tarde.</string>
+    <string name="trakt_session_unavailable">No se pudo contactar con Trakt, así que la sincronización está en pausa. ARVIO sigue reintentándolo; vuelve a conectar Trakt si esto continúa.</string>
+    <string name="trakt_library_unavailable">No se puede contactar con Trakt en este momento. Inténtalo de nuevo en unos minutos.</string>
+    <string name="trakt_library_load_failed">No se pudo cargar esta lista de Trakt. Inténtalo de nuevo.</string>
     <string name="sync_supabase_auth_failed">Error en la autorización de Supabase</string>
     <string name="launcher_continue_dash">%1$s - %2$s</string>
     <string name="telegram_search_timed_out">La búsqueda en Telegram agotó el tiempo de espera</string>
@@ -1467,6 +1845,7 @@
     <string name="watchlist_failed_remove_trakt">Error al eliminar de la lista de Trakt</string>
     <string name="watchlist_failed_remove">Error al eliminar de la lista</string>
     <string name="collection_failed_load">Error al cargar la colección</string>
+    <string name="collection_missing_addon">Esta colección necesita un addon que no está instalado o está desactivado: %1$s</string>
     <string name="collection_not_found">Colección no encontrada</string>
 
 
@@ -1618,8 +1997,8 @@
     <string name="live_menu_move_top">Mover arriba del todo</string>
     <string name="live_menu_move_up">Subir</string>
     <string name="live_menu_move_down">Bajar</string>
-    <string name="live_menu_hide_category">Ocultar categoría</string>
-    <string name="live_menu_unhide_category">Mostrar categoría</string>
+    <string name="live_menu_hide_category">Ocultar grupo</string>
+    <string name="live_menu_unhide_category">Mostrar grupo</string>
     <string name="live_menu_lock_category">Bloquear con PIN del perfil</string>
     <string name="live_menu_unlock_category">Quitar bloqueo por PIN</string>
     <string name="live_group_enter_pin">Introduce el PIN para abrir este grupo</string>
@@ -1639,6 +2018,99 @@
     <string name="discord_rpc_help_desc">Muestra tu estado de visionado en tu perfil de Discord.</string>
     <string name="live_sources_empty">No se encontraron otras fuentes para este canal.</string>
     <string name="live_sources_failed">No se pudieron cargar las fuentes. Por favor, inténtalo de nuevo.</string>
+    <string name="settings_iptv_fallback_logos">Logos de canal alternativos</string>
+    <string name="settings_iptv_fallback_logos_desc">Usa imágenes alternativas solo cuando falte el logo del proveedor o no se pueda cargar.</string>
+
+    <!-- Stream Integrations & Priority -->
+    <string name="settings_stream_integrations">Integraciones de streams</string>
+    <string name="settings_desc_stream_integrations">Reordena las integraciones para controlar la prioridad de reproducción y de carga.</string>
+    <string name="settings_stream_integrations_list_title">Integraciones</string>
+    <string name="settings_stream_integrations_helper">Las integraciones de más arriba se buscan primero.</string>
+    <string name="settings_no_stream_integrations_configured">No hay integraciones de streams configuradas. Añade addons, plugins, servidores locales, listas IPTV o Telegram para fijar su orden de reproducción.</string>
+    <string name="stream_integration_home_server">Servidor local</string>
+    <string name="stream_integration_home_server_desc">Servidores multimedia locales y personales (Jellyfin, Emby, Plex).</string>
+    <string name="stream_integration_stremio">Addons de Stremio</string>
+    <string name="stream_integration_stremio_desc">Addons de streaming y debrid de la comunidad instalados.</string>
+    <string name="stream_integration_plugins">Plugins y extensiones</string>
+    <string name="stream_integration_plugins_desc">Extensiones de scrapers personalizadas y plugins en tiempo de ejecución.</string>
+    <string name="stream_integration_telegram">Telegram</string>
+    <string name="stream_integration_telegram_desc">Streaming directo desde tus chats y canales de Telegram conectados.</string>
+    <string name="stream_integration_iptv_vod">IPTV VOD</string>
+    <string name="stream_integration_iptv_vod_desc">Películas y series bajo demanda de tus listas IPTV.</string>
+    <string name="stream_integration_youtube">YouTube</string>
+    <string name="stream_integration_youtube_desc">Vídeos de 5 minutos o más; se buscan al pulsar Buscar en YouTube</string>
+    <string name="stream_integration_move_up">Subir</string>
+    <string name="stream_integration_move_down">Bajar</string>
+    <string name="stream_integration_toggle_enabled">Obtener streams</string>
+    <string name="stream_integration_priority">Prioridad #%1$d</string>
+    <string name="stream_integration_open_settings">Configurar</string>
+    <string name="stream_integration_reorder">Reordenar</string>
+    <string name="settings_pill_integrations">%1$d activas</string>
+    <string name="settings_fact_integrations">Integraciones activas</string>
+    <string name="settings_stream_search_mode">Modo de búsqueda</string>
+    <string name="settings_stream_search_mode_parallel">En paralelo</string>
+    <string name="settings_stream_search_mode_parallel_desc">Buscar en todas las integraciones a la vez.</string>
+    <string name="settings_stream_search_mode_sequential">Secuencial</string>
+    <string name="settings_stream_search_mode_sequential_desc">Buscar en las integraciones por orden de prioridad.</string>
+    <string name="settings_stream_switch_to_parallel">Cambiar a búsqueda en paralelo</string>
+    <string name="settings_stream_switch_to_sequential">Cambiar a búsqueda secuencial</string>
+    <string name="settings_builtin_collections_title">Colecciones integradas</string>
+    <string name="settings_builtin_collections_desc">Mostrar las filas integradas de ARVIO de Servicios / Géneros / Franquicias. Desactívalo para usar solo tus propias colecciones importadas</string>
+    <string name="settings_collections_installed">Colecciones instaladas: %1$s (%2$d filas)</string>
+    <string name="catalog_collections_invalid">No es un archivo de colecciones válido (se esperaba un JSON de exportación de colecciones de Nuvio)</string>
+    <string name="catalog_tmdb_title">Catálogo TMDB</string>
+    <string name="catalog_url_tmdb_hint">Usa la URL de una página de TMDB de lista, colección, productora, cadena, persona, palabra clave o género</string>
+    <string name="catalog_url_simkl_hint">Usa la URL de una lista personalizada de SIMKL, p. ej., simkl.com/5/list/14462.</string>
+    <string name="settings_simkl_lists_hint">Listas de SIMKL personales, seguidas y oficiales destacadas. Los elementos de las listas requieren SIMKL PRO/VIP.</string>
+    <string name="settings_simkl_lists_connect">Conectar SIMKL</string>
+    <string name="settings_simkl_lists_connected">SIMKL conectado</string>
+    <string name="settings_simkl_open">Abrir SIMKL</string>
+    <string name="live_subtitles">Subtítulos</string>
+    <string name="live_subtitles_off">Desactivados</string>
+    <string name="live_audio">Audio</string>
+    <string name="watchlist_on_home">Mostrar la lista en Inicio</string>
+    <string name="watchlist_on_home_desc">Coloca tu lista debajo de Seguir viendo.</string>
+    <string name="list_add_to">Añadir a una lista</string>
+    <string name="list_picker_loading">Cargando tus listas…</string>
+    <string name="list_picker_empty">No hay listas en tus servicios conectados</string>
+    <string name="list_added_to">Añadido a %1$s</string>
+    <string name="list_removed_from">Eliminado de %1$s</string>
+    <string name="list_update_failed">No se pudo actualizar %1$s</string>
+    <string name="profile_parent_pin_set">Establece un PIN parental para este perfil infantil</string>
+    <string name="profile_parent_pin_enter">PIN parental</string>
+    <string name="profile_parent_pin_hint">4-5 dígitos. Se necesita para cambiar o eliminar este perfil infantil, no para ver contenido.</string>
+    <!-- YouTube collection -->
+    <string name="youtube_add_link">Añadir enlace de YouTube</string>
+    <string name="youtube_link_label">Enlace de YouTube</string>
+    <string name="youtube_add_link_desc">Pega un enlace de vídeo de youtu.be o youtube.com</string>
+    <string name="youtube_video_count">%1$d vídeos de YouTube</string>
+    <string name="youtube_no_videos">Aún no hay vídeos. Añade un enlace de YouTube.</string>
+    <string name="youtube_videos_home_order">%1$d vídeos • se muestran en Inicio en este orden</string>
+    <string name="youtube_videos_home_order_tv">%1$d vídeos • se muestran en Inicio en este orden • Izquierda/Derecha: mover o quitar</string>
+    <string name="youtube_rename_row">Renombrar fila</string>
+    <string name="youtube_press_ok_again_remove">Pulsa OK otra vez para quitarlo</string>
+    <string name="youtube_ok_move_up">%1$d • OK: subir</string>
+    <string name="youtube_ok_move_down">%1$d • OK: bajar</string>
+    <string name="youtube_ok_remove">%1$d • OK: quitar</string>
+    <string name="youtube_video_removed">%1$s eliminado</string>
+    <string name="youtube_collection_full">Esta colección ha alcanzado el límite de %1$d vídeos. Quita un vídeo antes de añadir otro.</string>
+    <string name="youtube_parent_approval_required">Se necesita el PIN parental correcto para añadir vídeos a este perfil infantil. Si hace falta, establece un PIN parental en Gestionar perfiles.</string>
+    <string name="youtube_profile_changed">El perfil ha cambiado. Vuelve a añadir el vídeo.</string>
+    <string name="settings_wetrakr_tagline">Listas, historial y progreso de reproducción</string>
+    <string name="settings_wetrakr_device">Conexión para este dispositivo y perfil</string>
+    <string name="settings_wetrakr_update">Actualizar WeTrakr durante la reproducción</string>
+    <string name="settings_connect_wetrakr">Conectar WeTrakr</string>
+    <string name="settings_wetrakr_copy_open">Copiar código y abrir WeTrakr</string>
+    <string name="settings_iptv_max_reached">Se ha alcanzado el máximo de 10 listas IPTV</string>
+    <!-- Playback cache (on-disk cache of streamed video for instant rewinds) -->
+    <string name="settings_section_playback_cache">CACHÉ DE REPRODUCCIÓN</string>
+    <string name="playback_cache_size">Tamaño de la caché de reproducción</string>
+    <string name="playback_cache_size_desc">Vídeo guardado por la reproducción con caché para retroceder en local. En uso: %1$s</string>
+    <string name="playback_cache_limited">%1$s (espacio libre)</string>
+    <string name="clear_playback_cache">Borrar la caché de reproducción</string>
+    <string name="clear_playback_cache_desc">Elimina todos los datos de vídeo en caché. Lo que se esté reproduciendo simplemente se vuelve a descargar.</string>
+    <string name="playback_cache_cleared">Caché de reproducción borrada</string>
+    <string name="settings_help_playback_cache_desc">La reproducción con caché guarda el vídeo para poder retroceder en local. Los streams grandes o remotos pueden saltarse esta caché por rendimiento. El tamaño se adapta al almacenamiento disponible e intenta dejar 1 GB libre.</string>
 
     <!-- Live TV AI subtitles -->
     <string name="live_ai_subtitles">Subtítulos IA</string>
@@ -1657,6 +2129,30 @@
     <string name="live_ai_subs_needs_key">Primero añade una clave de API de Google Gemini</string>
     <string name="live_ai_subs_auto_title">Traducir automáticamente al iniciar un canal</string>
     <string name="live_ai_subs_auto_desc">Cada canal empieza con subtítulos IA, sin elegirlos en el menú de subtítulos</string>
+    <string name="show_addon_stream_details">Mostrar detalles de los streams de addons</string>
+    <string name="show_addon_stream_details_desc">Muestra las descripciones de los addons bajo las etiquetas de las fuentes en TV. Enfoca una fuente para ampliar sus detalles.</string>
+    <string name="navigation_sections">Navegación</string>
+    <string name="navigation_show_search">Mostrar Buscar</string>
+    <string name="navigation_show_library">Mostrar Biblioteca</string>
+    <string name="navigation_show_tv">Mostrar el reproductor de TV</string>
+    <!-- YouTube search on the Search screen -->
+    <string name="youtube_search_row_title">YouTube</string>
+    <string name="youtube_search_button">Buscar en YouTube</string>
+    <string name="youtube_kids_search_button">Buscar en YouTube Kids</string>
+    <string name="youtube_search_for">para \"%1$s\"</string>
+    <string name="youtube_search_loading">Buscando en YouTube…</string>
+    <string name="youtube_search_no_results">No hay vídeos de YouTube</string>
+    <string name="youtube_search_failed">YouTube no ha respondido</string>
+    <string name="youtube_search_retry">Pulsa para volver a intentarlo</string>
+    <string name="youtube_favorite_added">Guardado en tu fila de YouTube de Inicio</string>
+    <string name="youtube_favorite_removed">Quitado de tu fila de YouTube</string>
+    <string name="youtube_favorite">Favorito de YouTube</string>
+    <string name="youtube_favorite_add">Guardar en tu fila de YouTube</string>
+    <string name="youtube_parent_pin_title">PIN parental para guardar este vídeo</string>
+    <string name="youtube_source_row_idle">Pulsa para buscar en YouTube</string>
+    <string name="youtube_source_row_searching">Buscando en YouTube…</string>
+    <string name="youtube_source_row_none">No hay vídeos de YouTube de 5 minutos o más — selecciona para buscar de nuevo</string>
+    <string name="youtube_source_row_failed">YouTube no ha respondido — selecciona para volver a intentarlo</string>
 
     <!-- Type on the phone (QR in TV text dialogs) -->
     <string name="phone_input_button">Usar el móvil</string>
@@ -1668,4 +2164,13 @@
     <string name="phone_input_page_sent">Enviado ✓ — pulsa OK en la TV.</string>
     <string name="phone_input_page_not_sent">No enviado</string>
     <string name="phone_input_page_expired">Este código ha caducado: vuelve a escanear el QR de la TV.</string>
+    <!-- Streaming-service page laid out like Home; %1$s is the service name -->
+    <string name="service_home_top10_series">Top 10 series en %1$s</string>
+    <string name="service_home_top10_movies">Top 10 películas en %1$s</string>
+    <string name="service_home_new">Novedades en %1$s</string>
+    <string name="service_home_originals">Originales de %1$s</string>
+    <string name="service_home_top_rated_series">Series mejor valoradas</string>
+    <string name="service_home_top_rated_movies">Películas mejor valoradas</string>
+    <string name="service_home_filter_all">Todo</string>
+    <string name="service_home_filter_grid">Filtrar</string>
 </resources>
