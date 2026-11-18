@@ -82,7 +82,7 @@ internal object ServiceHome {
     )
 
     /** Enough to rebuild the exact row's catalog when opening its grid. */
-    data class ViewAll(val rowId: String, val tab: CollectionTab, val filter: Filter = Filter.ALL)
+    data class ViewAll(val rowId: String?, val tab: CollectionTab, val filter: Filter = Filter.ALL)
 
     data class Row(
         val id: String,
@@ -102,6 +102,10 @@ internal object ServiceHome {
 
     fun gridRow(service: CatalogConfig, today: LocalDate, rowId: String, filter: Filter): Row? =
         if (!supports(service)) null else rows(service, today, filter).firstOrNull { it.id == rowId && it.viewAll != null }
+
+    /** The grid the header's Filter button opens: the series tab under Series, else movies, no genre yet. */
+    fun grid(filter: Filter): ViewAll =
+        ViewAll(null, if (filter == Filter.SERIES) CollectionTab.SERIES else CollectionTab.MOVIES, filter)
 
     /**
      * The page's rows for [filter]. A filtered page keeps each row's sources of that kind

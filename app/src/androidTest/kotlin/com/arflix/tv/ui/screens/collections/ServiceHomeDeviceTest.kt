@@ -92,6 +92,11 @@ class ServiceHomeDeviceTest {
         press(Key.DirectionRight)
         press(Key.DirectionCenter)
         compose.runOnIdle { assertEquals(ServiceHome.ViewAll(rowId, CollectionTab.MOVIES, filter), request) }
+        press(Key.Escape)
+        press(Key.DirectionUp)
+        press(Key.DirectionRight)
+        press(Key.DirectionCenter)
+        compose.runOnIdle { assertEquals(ServiceHome.grid(filter), request) }
     }
 
     @Test fun remoteRetryRecoversAnInitiallyFailedServicePage() {

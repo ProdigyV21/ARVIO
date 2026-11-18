@@ -97,9 +97,10 @@ sealed class Screen(val route: String) {
             return "collections/${android.net.Uri.encode(catalogId)}"
         }
 
-        /** Open the full query for one service row, not the unfiltered service page. */
-        internal fun createGridRoute(catalogId: String, rowId: String, filter: String): String =
-            "${createRoute(catalogId)}?serviceRow=${android.net.Uri.encode(rowId)}&serviceFilter=${android.net.Uri.encode(filter)}"
+        /** A row opens its exact query; the header Filter action opens the full service grid. */
+        internal fun createGridRoute(catalogId: String, rowId: String?, filter: String): String =
+            "${createRoute(catalogId)}?serviceFilter=${android.net.Uri.encode(filter)}" +
+                rowId?.let { "&serviceRow=${android.net.Uri.encode(it)}" }.orEmpty()
     }
     data object CategoryViewAll : Screen("home_category/{categoryId}") {
         fun createRoute(categoryId: String): String {

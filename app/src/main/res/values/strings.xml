@@ -2174,4 +2174,5 @@
     <string name="service_home_top_rated_series">Top rated series</string>
     <string name="service_home_top_rated_movies">Top rated movies</string>
     <string name="service_home_filter_all">All</string>
+    <string name="service_home_filter_grid">Filter</string>
 </resources>

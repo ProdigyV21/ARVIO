@@ -17,13 +17,19 @@ internal sealed interface ServiceHomeAction {
     data class ViewAll(val rowId: String) : ServiceHomeAction
     data class Filter(val filter: ServiceHome.Filter) : ServiceHomeAction
     data object Retry : ServiceHomeAction
+    /** The header's Filter button: the grid, with its genre filter, on the applied filter's tab. */
+    data object OpenGrid : ServiceHomeAction
     data object Exit : ServiceHomeAction
 }
+
+/** The header's Filter button, after the All / Series / Movies buttons. */
+internal val SERVICE_HOME_GRID_BUTTON_INDEX = ServiceHome.Filter.entries.size
 
 /**
  * D-pad on a service page, on the same focus model as the Netflix-style Home: the big card
  * (with Play and More info) above the rows, rows of titles with a trailing "View all" slot.
- * Where Home has its top bar, the page has its All / Series / Movies buttons
+ * Where Home has its top bar, the page has its All / Series / Movies buttons and a Filter button
+ * that opens the grid
  * ([HomeFocusState.isSidebarFocused], the button at [HomeFocusState.sidebarFocusIndex]).
  * Back from the big card or the buttons leaves the page.
  */
@@ -49,10 +55,14 @@ internal fun handleServiceHomeKey(
             ServiceHomeKey.LEFT, ServiceHomeKey.RIGHT -> {
                 val forward = (key == ServiceHomeKey.RIGHT) != isRtl
                 focusState.sidebarFocusIndex = (focusState.sidebarFocusIndex + if (forward) 1 else -1)
-                    .coerceIn(0, filters.lastIndex)
+                    .coerceIn(0, SERVICE_HOME_GRID_BUTTON_INDEX)
                 ServiceHomeAction.Moved
             }
-            ServiceHomeKey.SELECT -> ServiceHomeAction.Filter(filters[focusState.sidebarFocusIndex.coerceIn(0, filters.lastIndex)])
+            ServiceHomeKey.SELECT -> {
+                val index = focusState.sidebarFocusIndex.coerceIn(0, SERVICE_HOME_GRID_BUTTON_INDEX)
+                if (index == SERVICE_HOME_GRID_BUTTON_INDEX) ServiceHomeAction.OpenGrid
+                else ServiceHomeAction.Filter(filters[index])
+            }
             ServiceHomeKey.DOWN -> {
                 focusState.isSidebarFocused = false
                 if (billboard == null && rows.isNotEmpty()) {

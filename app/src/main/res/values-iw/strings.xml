@@ -2148,4 +2148,5 @@
     <string name="service_home_top_rated_series">הסדרות המדורגות ביותר</string>
     <string name="service_home_top_rated_movies">הסרטים המדורגים ביותר</string>
     <string name="service_home_filter_all">הכל</string>
+    <string name="service_home_filter_grid">סינון</string>
 </resources>

@@ -252,6 +252,8 @@ class CollectionDetailsViewModel @Inject constructor(
                 return@launch
             }
             val genreFilterable = ServiceGenreFilter.supports(catalog)
+            val requestedTab = serviceRow?.viewAll?.tab
+                ?: ServiceHome.grid(filter).tab.takeIf { serviceFilter != null && genreFilterable }
             _uiState.value = CollectionDetailsUiState(
                 catalog = catalog,
                 supportsMovies = supportsTab(catalog, CollectionTab.MOVIES),
@@ -259,10 +261,10 @@ class CollectionDetailsViewModel @Inject constructor(
                 isLoadingMovies = true,
                 isLoadingSeries = true,
                 genreFilterable = genreFilterable,
-                initialTab = serviceRow?.viewAll?.tab
+                initialTab = requestedTab
             )
 
-            val primaryTab = serviceRow?.viewAll?.tab ?: when {
+            val primaryTab = requestedTab?.takeIf { supportsTab(catalog, it) } ?: when {
                 _uiState.value.supportsMovies -> CollectionTab.MOVIES
                 _uiState.value.supportsSeries -> CollectionTab.SERIES
                 else -> CollectionTab.MOVIES
@@ -762,7 +764,7 @@ fun CollectionDetailsScreen(
     serviceRowId: String? = null,
     serviceFilter: String? = null,
     onNavigateToDetailsAutoPlay: (MediaType, Int) -> Unit = onNavigateToDetails,
-    onOpenServiceGrid: (catalogId: String, rowId: String, filter: String) -> Unit = { _, _, _ -> },
+    onOpenServiceGrid: (catalogId: String, rowId: String?, filter: String) -> Unit = { _, _, _ -> },
     onBack: () -> Unit
 ) {
     val rawUiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -777,7 +779,7 @@ fun CollectionDetailsScreen(
     LaunchedEffect(catalogId) {
         viewModel.load(
             catalogId,
-            serviceHome = serviceRowId == null && !isTouchDevice,
+            serviceHome = serviceRowId == null && serviceFilter == null && !isTouchDevice,
             serviceRowId = serviceRowId,
             serviceFilter = serviceFilter
         )
