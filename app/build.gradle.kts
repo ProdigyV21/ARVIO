@@ -520,7 +520,8 @@ ksp {
     add("sideloadImplementation", "com.fasterxml.jackson.core:jackson-databind:2.17.0")
     add("sideloadImplementation", "com.fasterxml.jackson.module:jackson-module-kotlin:2.17.0")
     add("sideloadImplementation", "com.github.Blatzar:NiceHttp:0.4.11")
-    add("sideloadImplementation", "org.conscrypt:conscrypt-android:2.5.3")
+    // The 2.5.3 ARM64 binary has a 4 KB RELRO boundary inside a writable segment.
+    add("sideloadImplementation", "org.conscrypt:conscrypt-android:2.6.3")
     add("sideloadImplementation", "com.github.recloudstream.cloudstream:library-android:v4.7.0") {
         exclude(group = "org.mozilla", module = "rhino")
     }
@@ -687,7 +688,6 @@ dependencies {
     add("sideloadImplementation", "com.fasterxml.jackson.core:jackson-databind:2.17.0")
     add("sideloadImplementation", "com.fasterxml.jackson.module:jackson-module-kotlin:2.17.0")
     add("sideloadImplementation", "com.github.Blatzar:NiceHttp:0.4.11")
-    add("sideloadImplementation", "org.conscrypt:conscrypt-android:2.5.3")
     add("sideloadImplementation", "com.github.recloudstream.cloudstream:library-android:v4.7.0") {
         exclude(group = "org.mozilla", module = "rhino")
     }

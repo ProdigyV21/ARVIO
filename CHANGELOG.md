@@ -14,6 +14,7 @@ All notable changes to this project are documented in this file.
 - **Better IPTV connection handling.** Set a device-side connection limit per playlist or portal. The app counts sessions rather than individual requests, releases the previous channel before tuning, and avoids speculative VOD requests on capped accounts. Home previews retain per-channel headers; VOD respects quality limits and tracks matched titles even when duration is still unknown.
 - **AI subtitles and localization.** On Live TV, Gemini translates available channel captions first and uses audio when captions are unavailable. Added Claude Haiku as a translation provider and improved repair of lines in the wrong script. Expanded Spanish and Hebrew translations, and fixed episode dates and English metadata ordering in right-to-left layouts.
 - **Add-ons and catalogs.** Safer add-on sync keeps configuration separate from refreshable metadata; compatible add-ons can delegate catalogs, filtering and IPTV VOD lookups to the client.
+- **16 KB Android compatibility.** Updated the GitHub build's add-on TLS library to avoid an unsafe native memory boundary on ARM64 devices with 16 KB pages.
 - **GitHub APK only:** Search YouTube and use YouTube results as sources, subject to the profile's parental controls. This feature is not in the Play build.
 
 ### ARVIO Web, Cloud and Website
