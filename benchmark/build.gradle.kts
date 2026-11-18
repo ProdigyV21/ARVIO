@@ -16,6 +16,7 @@ android {
     }
 
     targetProjectPath = ":app"
+    experimentalProperties["android.experimental.self-instrumenting"] = true
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
@@ -48,8 +49,9 @@ android {
 }
 
 baselineProfile {
-    managedDevices += "pixel6Api34"
-    useConnectedDevices = false
+    val connectedTv = providers.gradleProperty("baselineProfileTv").orNull == "true"
+    if (!connectedTv) managedDevices += "pixel6Api34"
+    useConnectedDevices = connectedTv
 }
 
 dependencies {

@@ -56,6 +56,8 @@ import androidx.compose.runtime.State
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -73,6 +75,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
@@ -88,6 +91,9 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.constrainHeight
+import androidx.compose.ui.unit.constrainWidth
+import androidx.compose.ui.unit.offset
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -106,6 +112,7 @@ import coil.compose.rememberAsyncImagePainter
 import coil.request.ImageRequest
 import coil.size.Precision
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
 import com.arflix.tv.R
 import com.arflix.tv.data.model.Category
 import com.arflix.tv.data.model.MediaItem
@@ -336,7 +343,8 @@ internal fun NetflixTvHomeRowsLayer(
         var appliedTarget by remember { mutableIntStateOf(-1) }
         var appliedScrollReset by rememberSaveable { mutableIntStateOf(0) }
         val verticalOffset = remember { Animatable(0f) }
-        var verticalAnimating by remember { mutableStateOf(false) }
+        val verticalAnimation = remember { mutableStateOf(false) }
+        var verticalAnimating by verticalAnimation
         LaunchedEffect(targetIndex, focusedRowId, focusState.scrollResetRequest) {
             val previousTarget = appliedTarget
             val reset = appliedScrollReset != focusState.scrollResetRequest
@@ -473,11 +481,26 @@ internal fun NetflixTvHomeRowsLayer(
                             )
                         }
                     } else {
+                        val cacheArtwork = remember(category.items) {
+                            category.items.isNotEmpty() && category.items.none { it.isPlaceholder }
+                        }
+                        val cacheInactiveRow by remember(listState, rowIndex, rowIsFocused, cacheArtwork) {
+                            derivedStateOf {
+                                cacheArtwork && !rowIsFocused &&
+                                    listState.layoutInfo.visibleItemsInfo.any { it.index == rowIndex + 1 }
+                            }
+                        }
+                        val rowFeaturedItem = netflix.featuredItem?.takeIf { featured ->
+                            category.items.any { it.isSameHomeHero(featured) }
+                        }
+                        val rowLogos = rememberNetflixRowLogos(category.items, cardLogoUrls)
                         NetflixContentRow(
                             category = category,
                             scrollResetRequest = focusState.scrollResetRequest,
-                            cardLogoUrls = cardLogoUrls,
+                            cardLogoUrls = rowLogos,
                             isCurrentRow = rowIsFocused,
+                            cacheInactiveRow = cacheInactiveRow,
+                            verticalAnimating = verticalAnimation,
                             collapsesOffScreen = !focusState.isSidebarFocused && !focusState.isHeroFocused &&
                                 rowIndex < focusState.currentRowIndex,
                             focusedItemIndex = focusedItemIndex,
@@ -487,8 +510,8 @@ internal fun NetflixTvHomeRowsLayer(
                             startPadding = contentStartPadding,
                             categoryHasMore = rowHasMore,
                             showViewAll = viewAllIndex >= 0,
-                            featuredItem = netflix.featuredItem,
-                            featuredOverview = netflix.featuredOverview,
+                            featuredItem = rowFeaturedItem,
+                            featuredOverview = netflix.featuredOverview.takeIf { rowFeaturedItem != null },
                             onChannelCardPlaced = onChannelCardPlaced,
                             trailerKey = if (rowIsFocused) netflix.cardTrailerKey else null,
                             trailerDelayMs = netflix.cardTrailerDelayMs,
@@ -804,6 +827,8 @@ private fun NetflixContentRow(
     scrollResetRequest: Int,
     cardLogoUrls: Map<String, String>,
     isCurrentRow: Boolean,
+    cacheInactiveRow: Boolean,
+    verticalAnimating: State<Boolean>,
     /** The row sits above the focused one, so the vertical scroll carries it out the top. */
     collapsesOffScreen: Boolean,
     focusedItemIndex: Int,
@@ -859,6 +884,32 @@ private fun NetflixContentRow(
         }
     }
     val expanded = isCurrentRow || holdExpanded
+    val settlingForCache = remember(isCurrentRow) {
+        !isCurrentRow && hasComposed[0] && !collapseOffScreen
+    }
+    var cacheSettled by remember(isCurrentRow) { mutableStateOf(!settlingForCache) }
+    LaunchedEffect(settlingForCache) {
+        if (settlingForCache) {
+            delay(NETFLIX_RAIL_MORPH_MS.toLong())
+            cacheSettled = true
+        }
+    }
+    val renderCacheReady = remember { mutableStateOf(false) }
+    LaunchedEffect(cacheInactiveRow, cacheSettled, verticalAnimating) {
+        if (!cacheInactiveRow || !cacheSettled) {
+            renderCacheReady.value = false
+        } else {
+            snapshotFlow { verticalAnimating.value }.collectLatest { moving ->
+                renderCacheReady.value = false
+                if (!moving) {
+                    // Avoid texture creation between successive D-pad moves. Readiness is
+                    // consumed by the graphics layer, not by the row's composition/layout.
+                    delay((NETFLIX_RAIL_MORPH_MS + NETFLIX_COLLAPSE_SETTLE_MS).toLong())
+                    renderCacheReady.value = true
+                }
+            }
+        }
+    }
     val expandedIndex = if (isCurrentRow) focusedItemIndex else restingItemIndex
     val focusedItem = items.getOrNull(expandedIndex)?.takeIf { expanded && !it.isPlaceholder }
     val sizeSpec: AnimationSpec<Dp> =
@@ -892,12 +943,14 @@ private fun NetflixContentRow(
     }
     val latestOnItemClick by rememberUpdatedState(onItemClick)
 
-    val bottomPadding by animateDpAsState(if (expanded) 20.dp else 10.dp,
+    val bottomPadding = animateDpAsState(if (expanded) 20.dp else 10.dp,
         if (collapseOffScreen) snap<Dp>() else tween<Dp>(NETFLIX_RAIL_MORPH_MS), label = "netflixRowSpacing")
     // Scaled at draw time: animating the font size re-measures the text on every frame.
     val headingScale = animateFloatAsState(if (expanded) 1f else NETFLIX_RESTING_HEADING_SCALE,
         if (collapseOffScreen) snap<Float>() else tween<Float>(NETFLIX_RAIL_MORPH_MS), label = "netflixRowHeading")
-    Column(modifier = Modifier.padding(bottom = bottomPadding).testTag("netflix_row_${category.id}")) {
+    Column(modifier = Modifier.netflixRowSpacing(bottomPadding)
+        .netflixRowRenderCache(cacheInactiveRow && cacheSettled, renderCacheReady)
+        .testTag("netflix_row_${category.id}")) {
         Text(
             text = localizedCategoryTitle(category),
             style = ArflixTypography.sectionTitle.copy(
@@ -1105,6 +1158,53 @@ private fun Modifier.netflixMorphSize(width: State<Dp>, height: State<Dp>): Modi
         val placeable = measurable.measure(Constraints.fixed(w, h))
         layout(w, h) { placeable.place(0, 0) }
     }
+
+/** Row spacing still morphs, but must not recompose all cards on each animation frame. */
+internal fun Modifier.netflixRowSpacing(bottom: State<Dp>): Modifier =
+    layout { measurable, constraints ->
+        val padding = bottom.value.roundToPx().coerceAtLeast(0)
+        val placeable = measurable.measure(constraints.offset(vertical = -padding))
+        layout(placeable.width, constraints.constrainHeight(placeable.height + padding)) {
+            placeable.placeRelative(0, 0)
+        }
+    }
+
+/** Preserve the map identity when enrichment only changes logos in other rails. */
+@Composable
+internal fun rememberNetflixRowLogos(items: List<MediaItem>, logos: Map<String, String>): Map<String, String> {
+    val keys = remember(items) { items.map { "${it.mediaType}_${it.id}" } }
+    val values = keys.map { logos[it] }
+    return remember(keys, values) {
+        buildMap { keys.forEachIndexed { index, key -> values[index]?.let { put(key, it) } } }
+    }
+}
+
+/** Rasterize stationary neighbours once, not their artwork/clips/borders on every scroll frame. */
+internal fun Modifier.netflixRowRenderCache(enabled: Boolean, ready: State<Boolean>? = null): Modifier {
+    if (!enabled) return this
+    // Offscreen layers clip to their bounds. Expand only the layer, not the row's layout,
+    // so shadows and half-outside border strokes retain their original pixels and position.
+    return layout { measurable, constraints ->
+        val pixels = maxOf(16, 8.dp.roundToPx())
+        val extra = pixels * 2
+        val placeable = measurable.measure(constraints.offset(horizontal = extra, vertical = extra))
+        layout(constraints.constrainWidth(placeable.width - extra),
+            constraints.constrainHeight(placeable.height - extra)) {
+            placeable.place(-pixels, -pixels)
+        }
+    }.graphicsLayer {
+        compositingStrategy = if (ready?.value != false) CompositingStrategy.Offscreen else CompositingStrategy.Auto
+    }
+        .layout { measurable, constraints ->
+            val pixels = maxOf(16, 8.dp.roundToPx())
+            val extra = pixels * 2
+            val placeable = measurable.measure(constraints.offset(horizontal = -extra, vertical = -extra))
+            layout(constraints.constrainWidth(placeable.width + extra),
+                constraints.constrainHeight(placeable.height + extra)) {
+                placeable.place(pixels, pixels)
+            }
+        }
+}
 
 /** Keep the current image while loading, then blend the ready poster/backdrop without a blank frame. */
 @Composable

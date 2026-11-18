@@ -77,7 +77,7 @@ class SettingsRemoteInputDeviceTest {
 
     @Test fun closingQualityDialogRestoresNativeRemoteInput() {
         show()
-        repeat(9) { compose.onRoot().performKeyInput { pressKey(Key.DirectionDown) } }
+        repeat(tvGeneralRowsForSection("playback").indexOf(16)) { compose.onRoot().performKeyInput { pressKey(Key.DirectionDown) } }
         compose.onRoot().performKeyInput { pressKey(Key.DirectionCenter) }
         compose.onNode(isDialog()).assertExists()
         val instrumentation = InstrumentationRegistry.getInstrumentation()
@@ -92,7 +92,7 @@ class SettingsRemoteInputDeviceTest {
 
     @Test fun nativeDownAfterDialogDismissalMovesExactlyOneRow() {
         show()
-        repeat(9) { compose.onRoot().performKeyInput { pressKey(Key.DirectionDown) } }
+        repeat(tvGeneralRowsForSection("playback").indexOf(16)) { compose.onRoot().performKeyInput { pressKey(Key.DirectionDown) } }
         compose.onRoot().performKeyInput { pressKey(Key.DirectionCenter) }
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         instrumentation.waitForIdleSync()
@@ -111,6 +111,18 @@ class SettingsRemoteInputDeviceTest {
             pressKey(Key.DirectionCenter)
         }
         compose.waitForIdle()
+        verify(exactly = 1) { viewModel.setAutoPlaySingleSource(false) }
+        verify(exactly = 0) { viewModel.setAutoPlayNext(any()) }
+    }
+
+    @Test fun rapidReversalKeepsTheLatestRowVisibleAndSelectable() {
+        show()
+        compose.onRoot().performKeyInput {
+            repeat(8) { pressKey(Key.DirectionDown) }
+            repeat(7) { pressKey(Key.DirectionUp) }
+        }
+        assertRowVisible(1)
+        compose.onRoot().performKeyInput { pressKey(Key.DirectionCenter) }
         verify(exactly = 1) { viewModel.setAutoPlaySingleSource(false) }
         verify(exactly = 0) { viewModel.setAutoPlayNext(any()) }
     }
@@ -139,11 +151,12 @@ class SettingsRemoteInputDeviceTest {
 
     @Test fun singlePressesRevealEveryPlaybackRowDownAndUp() {
         show()
-        for (index in 1..11) {
+        val lastRow = tvGeneralRowsForSection("playback").lastIndex
+        for (index in 1..lastRow) {
             compose.onRoot().performKeyInput { pressKey(Key.DirectionDown) }
             assertRowVisible(index)
         }
-        for (index in 10 downTo 0) {
+        for (index in lastRow - 1 downTo 0) {
             compose.onRoot().performKeyInput { pressKey(Key.DirectionUp) }
             assertRowVisible(index)
         }

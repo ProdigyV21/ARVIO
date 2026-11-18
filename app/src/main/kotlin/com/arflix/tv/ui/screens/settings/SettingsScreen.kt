@@ -18,6 +18,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import androidx.compose.animation.AnimatedVisibility
@@ -187,6 +188,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
@@ -923,7 +925,6 @@ fun SettingsScreen(
     // TV reveals measured rows; touch uses native bring-into-view. A new
     // subpage gets its own tracker even if its first focused index is unchanged.
     LaunchedEffect(
-        contentFocusIndex,
         focusTracker,
         sectionIndex,
         activeZone,
@@ -933,44 +934,43 @@ fun SettingsScreen(
         if (activeZone != Zone.CONTENT) return@LaunchedEffect
         if (!isTouchDevice && sections[sectionIndex] == "catalogs") return@LaunchedEffect
 
-        if (!isTouchDevice) {
-            // Let newly selected sections attach; never retain detached coordinates.
-            androidx.compose.runtime.withFrameNanos { }
-            focusTracker.revealDelta(contentFocusIndex)?.let { delta ->
-                val target = (scrollState.value + delta).toInt().coerceIn(0, scrollState.maxValue)
-                if (target != scrollState.value) scrollState.animateScrollTo(target, tween(100, easing = FastOutSlowInEasing))
-                return@LaunchedEffect
+        // Observe focus outside composition. Restarting the whole SettingsScreen for
+        // every row move recreates unrelated panels and their callbacks on the UI thread.
+        snapshotFlow { contentFocusIndex }.collectLatest { focusedIndex ->
+            if (!isTouchDevice) {
+                // Let newly selected sections attach; never retain detached coordinates.
+                androidx.compose.runtime.withFrameNanos { }
+                focusTracker.revealDelta(focusedIndex)?.let { delta ->
+                    val target = (scrollState.value + delta).toInt().coerceIn(0, scrollState.maxValue)
+                    if (target != scrollState.value) scrollState.animateScrollTo(target, tween(100, easing = FastOutSlowInEasing))
+                    return@collectLatest
+                }
             }
-        }
 
-        val requester = focusTracker.requesters[contentFocusIndex]
-        if (requester != null && isTouchDevice) {
-            // Native branch — handles all geometry correctly.
-            runCatching { requester.bringIntoView() }
-            return@LaunchedEffect
-        }
+            val requester = focusTracker.requesters[focusedIndex]
+            if (requester != null && isTouchDevice) {
+                runCatching { requester.bringIntoView() }
+                return@collectLatest
+            }
 
-        // Fallback: legacy ratio heuristic, only when positions are unknown
-        // and scrolling is actually possible.
-        val maxScroll = scrollState.maxValue
-        val currentScroll = scrollState.value
-        if (maxScroll <= 0) return@LaunchedEffect
-        val currentSection = sections.getOrNull(sectionIndex).orEmpty()
-        val maxIndex = sectionMaxIndex(currentSection).coerceAtLeast(1)
-        val clampedFocus = contentFocusIndex.coerceIn(0, maxIndex)
-        val ratio = clampedFocus.toFloat() / maxIndex.toFloat()
-        val targetScroll = (maxScroll * ratio).toInt().coerceIn(0, maxScroll)
-        if (abs(currentScroll - targetScroll) > 24) {
-            if (isTouchDevice) {
-                scrollState.animateScrollTo(targetScroll)
-            } else {
-                // Settings uses a single, manually managed focus target on TV.
-                // A short animation keeps larger row jumps readable without
-                // building a long animation queue behind the remote input.
-                scrollState.animateScrollTo(
-                    targetScroll,
-                    animationSpec = tween(100, easing = FastOutSlowInEasing)
-                )
+            // Fall back to the ratio only while measured positions are unknown.
+            val maxScroll = scrollState.maxValue
+            val currentScroll = scrollState.value
+            if (maxScroll <= 0) return@collectLatest
+            val currentSection = sections.getOrNull(sectionIndex).orEmpty()
+            val maxIndex = sectionMaxIndex(currentSection).coerceAtLeast(1)
+            val clampedFocus = focusedIndex.coerceIn(0, maxIndex)
+            val ratio = clampedFocus.toFloat() / maxIndex.toFloat()
+            val targetScroll = (maxScroll * ratio).toInt().coerceIn(0, maxScroll)
+            if (abs(currentScroll - targetScroll) > 24) {
+                if (isTouchDevice) {
+                    scrollState.animateScrollTo(targetScroll)
+                } else {
+                    scrollState.animateScrollTo(
+                        targetScroll,
+                        animationSpec = tween(100, easing = FastOutSlowInEasing)
+                    )
+                }
             }
         }
     }
