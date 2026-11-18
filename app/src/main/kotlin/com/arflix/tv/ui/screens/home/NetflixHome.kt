@@ -818,8 +818,9 @@ private fun NetflixMetaLine(item: MediaItem, fontSize: Int) {
 
 /**
  * A Netflix row. In the focused row the focused title is a wide backdrop card with its
- * description below, and the other titles are posters of the same height. Other rows
- * keep the regular card size.
+ * description below, and the other titles are portrait cards of the same height. Other rows
+ * keep the regular card size. A portrait card shows the middle of the same wide picture
+ * ([sharesWideArt]), so a card that expands widens its picture instead of swapping it.
  */
 @Composable
 private fun NetflixContentRow(
@@ -992,9 +993,12 @@ private fun NetflixContentRow(
                 val cardHeight = if (expanded) bigCardHeight else cardWidth / (if (landscape) (16f / 9f) else (2f / 3f))
                 val animatedWidth = animateDpAsState(cardWidth, sizeSpec, label = "netflixCardWidth")
                 val animatedHeight = animateDpAsState(cardHeight, sizeSpec, label = "netflixCardHeight")
+                // One picture per title, as Netflix does: a portrait card shows the middle of
+                // the wide artwork that it reveals in full when it expands, never a separate poster.
+                val sharedArt = !item.isPlaceholder && sharesWideArt(category, item, isContinueWatching)
                 // Decode once for the target geometry, never once per animation frame.
                 val artwork = if (item.isPlaceholder) null else rememberNetflixArtwork(
-                    item, landscape, cardWidth, cardHeight, isContinueWatching)
+                    item, landscape || sharedArt, cardWidth, cardHeight, isContinueWatching)
                 Box(Modifier.testTag("netflix_morph_${item.mediaType}_${item.id}")) {
                     // The morph size is applied at layout time: the cards get their target
                     // size and are only re-measured each frame, not recomposed.
@@ -1047,6 +1051,10 @@ private fun NetflixContentRow(
                             )
                         }
                     }
+                    if (sharedArt && !landscape) {
+                        // The slice rarely shows the title, so the card carries its clear logo.
+                        NetflixSliceTitle(item, cardLogoUrls["${item.mediaType}_${item.id}"], Modifier.matchParentSize())
+                    }
                     if (isRanked && index < 10 && !item.isPlaceholder) {
                         TopRankRibbon(
                             rank = index + 1,
@@ -1091,6 +1099,61 @@ private fun NetflixContentRow(
                     .padding(start = startPadding + 4.dp, end = startPadding, top = 10.dp)
                     .widthIn(max = bigCardWidth + focusedPosterWidth + 12.dp)
                     .fillMaxWidth()
+            )
+        }
+    }
+}
+
+/** The wide picture a title's expanded card shows: the episode still when continuing, else the backdrop. */
+internal fun netflixWideArt(item: MediaItem, watching: Boolean): String? =
+    item.episodeStill?.takeIf { watching && it.isNotBlank() } ?: item.backdrop?.takeIf(String::isNotBlank)
+
+/**
+ * True when [item]'s card shows its wide picture in every shape. Channel cards and collection
+ * tiles keep their own artwork, as does a title without a wide picture.
+ */
+internal fun sharesWideArt(category: Category, item: MediaItem, watching: Boolean): Boolean =
+    !category.id.startsWith("collection_row_") && !item.isIptvChannel() && netflixWideArt(item, watching) != null
+
+/** A portrait card's title over its slice of the wide picture: the clear logo, or the name until one arrives. */
+@Composable
+internal fun NetflixSliceTitle(
+    item: MediaItem,
+    logoUrl: String?,
+    modifier: Modifier = Modifier,
+    imageLoader: coil.ImageLoader = LocalContext.current.imageLoader
+) {
+    var logoLoaded by remember(logoUrl, imageLoader) { mutableStateOf(false) }
+    Box(
+        modifier
+            .clip(RoundedCornerShape(10.dp))
+            .background(Brush.verticalGradient(0.55f to Color.Transparent, 1f to Color.Black.copy(alpha = 0.7f)))
+    ) {
+        if (!logoUrl.isNullOrBlank()) {
+            CardClearLogo(
+                url = logoUrl,
+                imageLoader = imageLoader,
+                onLoadedChanged = { logoLoaded = it },
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .padding(start = 10.dp, end = 10.dp, bottom = 14.dp)
+                    .testTag("netflix_slice_logo_${item.mediaType}_${item.id}")
+            )
+        }
+        if (!logoLoaded) {
+            Text(
+                text = item.title,
+                style = ArflixTypography.sectionTitle.copy(
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Black,
+                    shadow = NetflixTextShadow
+                ),
+                color = Color.White,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .padding(start = 10.dp, end = 10.dp, bottom = 12.dp)
             )
         }
     }
@@ -1206,6 +1269,10 @@ internal fun Modifier.netflixRowRenderCache(enabled: Boolean, ready: State<Boole
         }
 }
 
+/** The smallest 16:9 box that covers a [width] × [height] card. */
+internal fun netflixWideBox(width: Dp, height: Dp): Pair<Dp, Dp> =
+    maxOf(width, height * (16f / 9f)) to maxOf(height, width * (9f / 16f))
+
 /** Keep the current image while loading, then blend the ready poster/backdrop without a blank frame. */
 @Composable
 internal fun rememberNetflixArtwork(
@@ -1214,16 +1281,18 @@ internal fun rememberNetflixArtwork(
 ): Painter {
     val context = LocalContext.current
     val density = LocalDensity.current
-    val raw = if (landscape) item.episodeStill?.takeIf { watching && it.isNotBlank() }
-        ?: item.backdrop?.takeIf(String::isNotBlank) ?: item.image else item.image
+    val raw = if (landscape) netflixWideArt(item, watching) ?: item.image else item.image
     var poster by remember(homeRowItemKey(item)) { mutableStateOf<Painter?>(null) }
     var backdrop by remember(homeRowItemKey(item)) { mutableStateOf<Painter?>(null) }
     if (raw.isBlank()) {
         return poster ?: backdrop ?: remember { androidx.compose.ui.graphics.painter.ColorPainter(Color.Transparent) }
     }
     val request = remember(raw, width, height, density, context, landscape) {
-        val widthPx = with(density) { width.roundToPx() }.coerceAtLeast(1)
-        val heightPx = with(density) { height.roundToPx() }.coerceAtLeast(1)
+        // A wide picture is decoded for the 16:9 box covering the card, the size it has once
+        // the card expands, so a portrait card and its expanded self share one decoded image.
+        val (slotWidth, slotHeight) = if (landscape) netflixWideBox(width, height) else width to height
+        val widthPx = with(density) { slotWidth.roundToPx() }.coerceAtLeast(1)
+        val heightPx = with(density) { slotHeight.roundToPx() }.coerceAtLeast(1)
         val url = TmdbImageSizing.forSlot(raw, widthPx, heightPx,
             TmdbImageSizing.cardArtworkKind(raw, item.backdrop, landscape))
         val cacheKey = "$url|${widthPx}x$heightPx"

@@ -109,6 +109,10 @@ internal fun ServiceHomeScreen(
     )
 }
 
+/** Cards a row shows at once, and the rows on screen below the focused one, for logo loading. */
+private const val VISIBLE_CARDS = 8
+private const val LOGO_ROWS = 3
+
 private data class ServiceHomeRails(
     val categories: List<Category> = emptyList(),
     val hasMore: Map<String, Boolean> = emptyMap(),
@@ -194,10 +198,15 @@ internal fun ServiceHomeContent(
         val (item, rowItems) = focusedItem ?: return@LaunchedEffect
         onFocus(item)
         val at = rowItems.indexOf(item)
-        onPreloadLogos(rowItems.subList((at - 1).coerceAtLeast(0), (at + 3).coerceAtMost(rowItems.size)))
+        onPreloadLogos(rowItems.subList((at - 1).coerceAtLeast(0), (at + VISIBLE_CARDS).coerceAtMost(rowItems.size)))
     }
-    LaunchedEffect(categories.firstOrNull()?.id) {
-        categories.firstOrNull()?.items?.take(3)?.let(onPreloadLogos)
+    // Every card carries its title's clear logo, so the rows on screen get theirs up front.
+    val logoRow = if (focusedItem == null) 0 else focusState.currentRowIndex
+    val logoRowIds = categories.drop(logoRow).take(LOGO_ROWS).map { it.id }
+    LaunchedEffect(logoRowIds) {
+        categories.drop(logoRow).take(LOGO_ROWS).forEach { row ->
+            onPreloadLogos(navigableHomeItems(row.items).take(VISIBLE_CARDS))
+        }
     }
 
     Box(
