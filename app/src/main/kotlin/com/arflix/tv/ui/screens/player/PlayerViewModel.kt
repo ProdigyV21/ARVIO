@@ -276,6 +276,8 @@ data class PlayerUiState(
     val isFindingBestMatch: Boolean = false,
     /** Sync by hearing is working on the subtitle and has not confirmed its timing yet. */
     val isHearingSync: Boolean = false,
+    /** True while the user-requested "Sync to Audio" is timing the selected subtitle. */
+    val isSubtitleAudioSyncRequested: Boolean = false,
     val matchToast: PlayerMessage? = null,
     // Persistent status shown on screen for the whole duration of a "Find best match" scan.
     // Null while no scan is running.
@@ -6427,6 +6429,79 @@ class PlayerViewModel @Inject constructor(
             else -> "series" to "$imdb:${currentSeason ?: 1}:${currentEpisode ?: 1}"
         }
         sync.arm(references, type, videoId)
+    }
+
+    /**
+     * Explicit "Sync to Audio": time the subtitle currently on screen with the audio.
+     *
+     * Unlike the scan's hearing fallback this is a user request, so it runs even when the automatic
+     * fallback setting is off, and it never swaps in a different track: the subtitle the viewer is
+     * looking at is the one that gets timed. It only needs a build with audio sync.
+     */
+    fun syncCurrentSubtitleToAudio() {
+        val state = _uiState.value
+        if (!com.arflix.tv.BuildConfig.AUDIO_SYNC_AVAILABLE) {
+            showMatchToast(PlayerMessage.Res(R.string.player_audio_sync_unavailable))
+            return
+        }
+        val pick = state.selectedSubtitle?.takeIf { !it.isEmbedded && !it.isBitmap }
+        if (pick == null) {
+            showMatchToast(PlayerMessage.Res(R.string.player_audio_sync_pick_external))
+            return
+        }
+        if (!hearingAvailable) {
+            showMatchToast(PlayerMessage.Res(R.string.player_audio_sync_unavailable))
+            return
+        }
+        val sync = audioSyncOrNull() ?: run {
+            showMatchToast(PlayerMessage.Res(R.string.player_audio_sync_unavailable))
+            return
+        }
+        // The addon entry (its http url is what the controller's candidates are keyed by), not a
+        // localized file:// copy.
+        val original = state.subtitles.firstOrNull {
+            !it.isEmbedded && it.provider == pick.provider &&
+                it.id == pick.id.removeSuffix(RETIMED_SUBTITLE_ID_SUFFIX)
+        } ?: pick
+        val streamUrl = state.selectedStreamUrl
+        val generation = audioSyncGeneration
+        audioSyncWorkJob?.cancel()
+        audioSyncWorkJob = viewModelScope.launch {
+            val raw = (preloadedCopyFor(original)?.url?.let { SubtitleSyncMatcher.loadRaw(it, original.lang) })
+                ?: SubtitleSyncMatcher.loadRaw(original.url, original.lang)
+            if (generation != audioSyncGeneration || _uiState.value.selectedStreamUrl != streamUrl) return@launch
+            if (raw == null) {
+                showMatchToast(PlayerMessage.Res(R.string.player_audio_sync_unavailable))
+                return@launch
+            }
+            val cues = withContext(Dispatchers.Default) { SubtitleSyncMatcher.parseCues(raw) }
+            if (generation != audioSyncGeneration) return@launch
+            audioSyncTarget = original
+            audioSyncRaw = raw
+            _uiState.value = _uiState.value.copy(isSubtitleAudioSyncRequested = true)
+            val failed = {
+                _uiState.value = _uiState.value.copy(isSubtitleAudioSyncRequested = false)
+                showMatchToast(PlayerMessage.Res(R.string.player_audio_sync_no_match))
+            }
+            val started = sync.takeOver(
+                key = original.url,
+                cues = cues,
+                onFailed = failed,
+                localAnchor = null,
+                // An explicit request has no better fallback: the subtitle keeps its own timing.
+                hasBetterFallback = { false },
+                holdUntilConfirmed = false,
+            )
+            if (!started) failed()
+        }
+    }
+
+    /** Stops a running explicit "Sync to Audio" and leaves the subtitle on its own timing. */
+    fun stopSubtitleAudioSync() {
+        if (!_uiState.value.isSubtitleAudioSyncRequested) return
+        stopAudioSync()
+        _uiState.value = _uiState.value.copy(isSubtitleAudioSyncRequested = false)
+        showMatchToast(PlayerMessage.Res(R.string.player_audio_sync_stopped))
     }
 
     /**

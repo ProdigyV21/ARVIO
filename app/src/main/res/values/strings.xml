@@ -2175,4 +2175,11 @@
     <string name="service_home_top_rated_movies">Top rated movies</string>
     <string name="service_home_filter_all">All</string>
     <string name="service_home_filter_grid">Filter</string>
+    <string name="player_audio_sync_action">Sync to Audio</string>
+    <string name="player_audio_sync_stop">Stop audio sync</string>
+    <string name="player_audio_sync_action_hint">Time the selected online subtitle using the audio</string>
+    <string name="player_audio_sync_unavailable">Audio sync is not available in this build</string>
+    <string name="player_audio_sync_pick_external">Select an online text subtitle first</string>
+    <string name="player_audio_sync_no_match">Audio sync could not confirm the timing; the subtitle keeps its own timing</string>
+    <string name="player_audio_sync_stopped">Audio sync stopped</string>
 </resources>
