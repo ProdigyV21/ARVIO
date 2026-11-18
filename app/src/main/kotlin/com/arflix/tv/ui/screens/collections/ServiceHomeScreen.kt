@@ -7,6 +7,11 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Tune
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.tv.material3.Icon
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.focusable
@@ -166,6 +171,7 @@ internal fun ServiceHomeScreen(
                     }
                     is ServiceHomeAction.Open -> onOpen(action.item, action.play)
                     is ServiceHomeAction.ViewAll -> viewAllByRow[action.rowId]?.let(onViewAll)
+                    ServiceHomeAction.OpenGrid -> onViewAll(ServiceHome.grid(state.filter))
                     ServiceHomeAction.Exit -> latestOnBack()
                 }
                 true
@@ -238,7 +244,7 @@ private fun serviceRowTitle(row: ServiceHome.Row, service: String): String = whe
     }
 }
 
-/** The service's name and its All / Series / Movies buttons, where Home has its top bar. */
+/** The service's name, its All / Series / Movies buttons and its Filter button, where Home has its top bar. */
 @Composable
 private fun ServiceHomeHeader(
     serviceName: String,
@@ -276,11 +282,23 @@ private fun ServiceHomeHeader(
                 isFocused = focusedIndex == filter.ordinal
             )
         }
+        Spacer(Modifier.width(10.dp))
+        ServiceHomeFilterButton(
+            label = stringResource(R.string.service_home_filter_grid),
+            isSelected = false,
+            isFocused = focusedIndex == SERVICE_HOME_GRID_BUTTON_INDEX,
+            icon = Icons.Default.Tune
+        )
     }
 }
 
 @Composable
-private fun ServiceHomeFilterButton(label: String, isSelected: Boolean, isFocused: Boolean) {
+private fun ServiceHomeFilterButton(
+    label: String,
+    isSelected: Boolean,
+    isFocused: Boolean,
+    icon: ImageVector? = null
+) {
     val shape = RoundedCornerShape(50)
     Box(
         modifier = Modifier
@@ -296,11 +314,18 @@ private fun ServiceHomeFilterButton(label: String, isSelected: Boolean, isFocuse
             .padding(horizontal = 20.dp, vertical = 8.dp),
         contentAlignment = Alignment.Center
     ) {
-        Text(
-            text = label,
-            style = ArflixTypography.label.copy(fontSize = 17.sp, fontWeight = FontWeight.SemiBold),
-            color = if (isFocused) Color.Black else Color.White,
-            maxLines = 1
-        )
+        val color = if (isFocused) Color.Black else Color.White
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            if (icon != null) {
+                Icon(imageVector = icon, contentDescription = null, tint = color, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+            }
+            Text(
+                text = label,
+                style = ArflixTypography.label.copy(fontSize = 17.sp, fontWeight = FontWeight.SemiBold),
+                color = color,
+                maxLines = 1
+            )
+        }
     }
 }

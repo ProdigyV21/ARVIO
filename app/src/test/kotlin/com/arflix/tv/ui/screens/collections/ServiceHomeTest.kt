@@ -126,6 +126,12 @@ class ServiceHomeTest {
         assertEquals(ServiceHome.ViewAll(CollectionTab.SERIES, 35, 35), comedy.viewAll)
     }
 
+    @Test fun `the Filter button opens the grid on the applied filter's tab, with no genre`() {
+        assertEquals(ServiceHome.ViewAll(CollectionTab.MOVIES), ServiceHome.grid(ServiceHome.Filter.ALL))
+        assertEquals(ServiceHome.ViewAll(CollectionTab.SERIES), ServiceHome.grid(ServiceHome.Filter.SERIES))
+        assertEquals(ServiceHome.ViewAll(CollectionTab.MOVIES), ServiceHome.grid(ServiceHome.Filter.MOVIES))
+    }
+
     @Test fun `the movies filter keeps movie rows only, with their own cache identity`() {
         val all = ServiceHome.rows(service(8), today).associateBy { it.id }
         val rows = ServiceHome.rows(service(8), today, ServiceHome.Filter.MOVIES)

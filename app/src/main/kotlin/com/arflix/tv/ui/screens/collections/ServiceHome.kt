@@ -100,6 +100,10 @@ internal object ServiceHome {
     /** What the page lists: both kinds of title, or only series or only movies. */
     enum class Filter { ALL, SERIES, MOVIES }
 
+    /** The grid the header's Filter button opens: the series tab under Series, else movies, no genre yet. */
+    fun grid(filter: Filter): ViewAll =
+        ViewAll(if (filter == Filter.SERIES) CollectionTab.SERIES else CollectionTab.MOVIES)
+
     /**
      * The page's rows for [filter]. A filtered page keeps each row's sources of that kind
      * (a genre row keeps its series or its movie query) and drops rows left with none.

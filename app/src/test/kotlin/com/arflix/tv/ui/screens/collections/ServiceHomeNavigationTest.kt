@@ -46,6 +46,16 @@ class ServiceHomeNavigationTest {
         assertTrue(focus.isHeroFocused)
     }
 
+    @Test fun `the Filter button after Movies opens the grid, and focus stops there`() {
+        val focus = state()
+        focus.press(ServiceHomeKey.UP)
+        repeat(5) { focus.press(ServiceHomeKey.RIGHT) }
+        assertEquals(SERVICE_HOME_GRID_BUTTON_INDEX, focus.sidebarFocusIndex)
+        assertEquals(ServiceHomeAction.OpenGrid, focus.press(ServiceHomeKey.SELECT))
+        focus.press(ServiceHomeKey.LEFT)
+        assertEquals(ServiceHomeAction.Filter(ServiceHome.Filter.MOVIES), focus.press(ServiceHomeKey.SELECT))
+    }
+
     @Test fun `Back from the filter buttons leaves the page`() {
         val focus = state()
         focus.press(ServiceHomeKey.UP)
