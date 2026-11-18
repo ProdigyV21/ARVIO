@@ -4,6 +4,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.util.Locale
 
 class DlnaRendererTest {
     private val description = """<?xml version="1.0"?>
@@ -55,5 +56,37 @@ class DlnaRendererTest {
         val didl = DlnaController.didl("http://a/b?x=1&y=2", "Tom & Jerry", "video/mp4")
         assertTrue(didl.contains("x=1&amp;y=2"))
         assertTrue(didl.contains("Tom &amp; Jerry"))
+    }
+
+    @Test fun seekTargetUsesAsciiDigitsInArabicLocale() {
+        val original = Locale.getDefault()
+        try {
+            Locale.setDefault(Locale.forLanguageTag("ar"))
+            val target = DlnaController.formatTime(3_723_000L)
+            assertEquals("01:02:03", target)
+            assertTrue("REL_TIME must be ASCII digits, got $target", target.matches(Regex("\\d{2}:\\d{2}:\\d{2}")))
+            assertEquals("10:00:00", DlnaController.formatTime(36_000_000L))
+        } finally {
+            Locale.setDefault(original)
+        }
+    }
+
+    @Test fun seekTargetUsesAsciiDigitsInPersianLocale() {
+        val original = Locale.getDefault()
+        try {
+            Locale.setDefault(Locale.forLanguageTag("fa"))
+            val target = DlnaController.formatTime(3_723_000L)
+            assertEquals("01:02:03", target)
+            assertTrue("REL_TIME must be ASCII digits, got $target", target.matches(Regex("\\d{2}:\\d{2}:\\d{2}")))
+        } finally {
+            Locale.setDefault(original)
+        }
+    }
+
+    @Test fun loadClassificationSeparatesUriRejectionFromPlayRejection() {
+        assertEquals(DlnaLoadOutcome.Ok, classifyLoad(uriAccepted = true, playAccepted = true))
+        assertEquals(DlnaLoadOutcome.PlayRejected, classifyLoad(uriAccepted = true, playAccepted = false))
+        assertEquals(DlnaLoadOutcome.UriRejected, classifyLoad(uriAccepted = false, playAccepted = true))
+        assertEquals(DlnaLoadOutcome.UriRejected, classifyLoad(uriAccepted = false, playAccepted = false))
     }
 }

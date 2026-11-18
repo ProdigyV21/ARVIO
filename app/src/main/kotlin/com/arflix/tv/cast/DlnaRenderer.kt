@@ -3,7 +3,11 @@ package com.arflix.tv.cast
 import android.content.Context
 import android.net.wifi.WifiManager
 import android.util.Log
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
 import org.w3c.dom.Element
 import java.io.ByteArrayInputStream
@@ -14,6 +18,7 @@ import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.net.SocketTimeoutException
 import java.net.URL
+import java.util.Locale
 import javax.xml.parsers.DocumentBuilderFactory
 
 /**
@@ -30,6 +35,24 @@ data class DlnaDevice(
     val renderingControlUrl: String?,
 )
 
+/**
+ * Outcome of a load attempt. A successful SetAVTransportURI means the renderer accepted
+ * the media, even when Play was rejected (some renderers reject Play with UPnP 701 while
+ * still TRANSITIONING, and some start playback by themselves).
+ */
+sealed class DlnaLoadOutcome {
+    data object Ok : DlnaLoadOutcome()
+    data object PlayRejected : DlnaLoadOutcome()
+    data object UriRejected : DlnaLoadOutcome()
+}
+
+/** Pure classification so the load decision can be unit-tested without a renderer. */
+internal fun classifyLoad(uriAccepted: Boolean, playAccepted: Boolean): DlnaLoadOutcome = when {
+    !uriAccepted -> DlnaLoadOutcome.UriRejected
+    !playAccepted -> DlnaLoadOutcome.PlayRejected
+    else -> DlnaLoadOutcome.Ok
+}
+
 object DlnaDiscovery {
     private const val TAG = "DlnaDiscovery"
     private const val SSDP_ADDR = "239.255.255.250"
@@ -40,16 +63,26 @@ object DlnaDiscovery {
     )
 
     /**
-     * Sends SSDP M-SEARCH requests and reports each renderer as soon as its description has
-     * been read. Blocking; call from Dispatchers.IO.
+     * Sends SSDP M-SEARCH requests, collects the LOCATION headers during the receive window,
+     * then resolves the descriptions in parallel and reports each unique renderer.
+     * Suspending: [shouldStop] lets the caller cancel the blocking receive loop.
      */
-    fun discover(context: Context, timeoutMs: Long = 5_000L, onFound: (DlnaDevice) -> Unit) {
+    suspend fun discover(
+        context: Context,
+        timeoutMs: Long = 5_000L,
+        shouldStop: () -> Boolean = { false },
+        onFound: (DlnaDevice) -> Unit,
+    ) {
         val wifi = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager
         val lock = try {
-            wifi?.createMulticastLock("arvio-dlna")?.apply { setReferenceCounted(false); acquire() }
+            wifi?.createMulticastLock("arvio-dlna")?.apply {
+                // Reference counted: two overlapping scans (dialog closed and reopened
+                // quickly) must not release each other's multicast filter.
+                setReferenceCounted(true)
+                acquire()
+            }
         } catch (t: Throwable) { null }
-        val seenLocations = HashSet<String>()
-        val seenIds = HashSet<String>()
+        val locations = LinkedHashSet<String>()
         var socket: DatagramSocket? = null
         try {
             socket = DatagramSocket(null).apply {
@@ -74,7 +107,12 @@ object DlnaDiscovery {
             val deadline = System.currentTimeMillis() + timeoutMs
             var resent = 0
             val buf = ByteArray(4096)
-            while (System.currentTimeMillis() < deadline && !Thread.currentThread().isInterrupted) {
+            // Phase 1: collect LOCATIONs only. Fetching a description inline here used to
+            // eat the whole receive window (2.5 s connect + 2.5 s read per device) and
+            // made slow renderers invisible while the loop was not receiving SSDP replies.
+            while (System.currentTimeMillis() < deadline &&
+                !shouldStop() && !Thread.currentThread().isInterrupted
+            ) {
                 val elapsed = timeoutMs - (deadline - System.currentTimeMillis())
                 if (resent < 2 && elapsed > (resent + 1) * 1_200L) { search(); resent++ }
                 val packet = DatagramPacket(buf, buf.size)
@@ -83,19 +121,37 @@ object DlnaDiscovery {
                 } catch (_: SocketTimeoutException) {
                     continue
                 }
-                val text = String(packet.data, 0, packet.length)
-                val location = headerValue(text, "LOCATION") ?: continue
-                if (!seenLocations.add(location)) continue
-                val device = runCatching { readDescription(location) }
-                    .onFailure { Log.w(TAG, "description failed for $location: ${it.message}") }
-                    .getOrNull() ?: continue
-                if (seenIds.add(device.id)) onFound(device)
+                val location = headerValue(String(packet.data, 0, packet.length), "LOCATION") ?: continue
+                locations.add(location)
             }
         } catch (t: Throwable) {
+            // Cancellation must propagate. Swallowing it here is what kept the socket and
+            // multicast lock alive after the chooser was dismissed.
+            if (t is CancellationException) throw t
             Log.w(TAG, "SSDP discovery failed", t)
         } finally {
             runCatching { socket?.close() }
             runCatching { lock?.release() }
+        }
+        if (shouldStop()) return
+        // Phase 2: resolve descriptions in parallel after the receive window. The socket and
+        // multicast lock are already released; cancelling the caller cancels every fetch.
+        val resolved = coroutineScope {
+            locations.map { location ->
+                async(Dispatchers.IO) {
+                    try {
+                        readDescription(location)
+                    } catch (t: Throwable) {
+                        if (t is CancellationException) throw t
+                        Log.w(TAG, "description failed for $location: ${t.message}")
+                        null
+                    }
+                }
+            }.awaitAll()
+        }
+        val seenIds = HashSet<String>()
+        resolved.filterNotNull().forEach { device ->
+            if (seenIds.add(device.id)) onFound(device)
         }
     }
 
@@ -166,17 +222,19 @@ object DlnaDiscovery {
 class DlnaController(val device: DlnaDevice) {
     data class Position(val positionMs: Long, val durationMs: Long)
 
-    suspend fun load(url: String, title: String, mimeType: String): Boolean = withContext(Dispatchers.IO) {
+    suspend fun load(url: String, title: String, mimeType: String): DlnaLoadOutcome = withContext(Dispatchers.IO) {
         runCatching { soap("Stop", "") }
         val meta = didl(url, title, mimeType)
         val withMeta = runCatching {
             soap("SetAVTransportURI", "<CurrentURI>${esc(url)}</CurrentURI><CurrentURIMetaData>${esc(meta)}</CurrentURIMetaData>")
         }
-        if (withMeta.isFailure) {
+        val uriAccepted = withMeta.isSuccess || runCatching {
             // Some renderers reject DIDL-Lite they do not understand; retry without metadata.
             soap("SetAVTransportURI", "<CurrentURI>${esc(url)}</CurrentURI><CurrentURIMetaData></CurrentURIMetaData>")
-        }
-        runCatching { soap("Play", "<Speed>1</Speed>") }.isSuccess
+        }.isSuccess
+        if (!uriAccepted) return@withContext DlnaLoadOutcome.UriRejected
+        val playAccepted = runCatching { soap("Play", "<Speed>1</Speed>") }.isSuccess
+        classifyLoad(uriAccepted = true, playAccepted = playAccepted)
     }
 
     suspend fun play() = withContext(Dispatchers.IO) { runCatching { soap("Play", "<Speed>1</Speed>") }.isSuccess }
@@ -247,7 +305,10 @@ class DlnaController(val device: DlnaDevice) {
 
         internal fun formatTime(ms: Long): String {
             val t = ms.coerceAtLeast(0L) / 1000L
-            return "%02d:%02d:%02d".format(t / 3600, (t % 3600) / 60, t % 60)
+            // REL_TIME must use ASCII digits. With the device set to Arabic or Persian,
+            // String.format without a locale writes non-ASCII digits and every Seek is
+            // rejected by the renderer, including the resume seek.
+            return String.format(Locale.US, "%02d:%02d:%02d", t / 3600, (t % 3600) / 60, t % 60)
         }
 
         internal fun parseTime(value: String?): Long {

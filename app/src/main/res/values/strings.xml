@@ -1153,6 +1153,7 @@
     <string name="cast_chooser_cancel">Cancel</string>
     <string name="cast_error_local_source">This source plays through the phone and can\'t be cast. Pick a direct or debrid source.</string>
     <string name="cast_error_format_refused">The TV refused this video format</string>
+    <string name="cast_error_no_playback">The TV accepted the video but did not start playback</string>
     <string name="player_muted">Muted</string>
     <string name="player_cd_setup">Setup</string>
     <string name="player_cd_error">Error</string>
@@ -1930,4 +1931,3 @@
     <string name="profile_parent_pin_enter">Parent PIN</string>
     <string name="profile_parent_pin_hint">4-5 digits. Needed to change or delete this kids profile, not to watch.</string>
 </resources>
-

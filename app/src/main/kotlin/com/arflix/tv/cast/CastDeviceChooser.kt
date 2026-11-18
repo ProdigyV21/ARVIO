@@ -23,6 +23,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
@@ -44,6 +45,7 @@ import androidx.compose.material3.Text
 import androidx.compose.ui.res.stringResource
 import com.arflix.tv.R
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
 
 private sealed class CastTarget {
@@ -66,10 +68,14 @@ private sealed class CastTarget {
 /**
  * One chooser for every TV on the local network — Google Cast devices
  * (through MediaRouter, when Google Play services is present) and DLNA/UPnP renderers.
+ *
+ * [canCast] is checked before a device is selected, so a source that only plays through
+ * the phone never opens a cast session at all (the player would already be paused by then).
  */
 @Composable
 fun CastDeviceChooserDialog(
     castManager: CastManager,
+    canCast: () -> Boolean = { true },
     onDismiss: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -77,11 +83,15 @@ fun CastDeviceChooserDialog(
     val dlnaTargets = remember { mutableStateListOf<CastTarget.Dlna>() }
     var scanning by remember { mutableStateOf(true) }
     var scanRound by remember { mutableIntStateOf(0) }
+    val googleCastReady by castManager.googleCastReady.collectAsState()
 
     // Google Cast routes via MediaRouter (active scan while the dialog is open).
-    DisposableEffect(Unit) {
+    // Readiness is observed rather than read once: CastContext starts asynchronously,
+    // so opening the chooser shortly after the player starts must still attach the callback.
+    DisposableEffect(googleCastReady) {
         val router = runCatching { MediaRouter.getInstance(context) }.getOrNull()
         val selector = castManager.getRouteSelector()
+        var registered: MediaRouter.Callback? = null
         fun refresh() {
             val r = router ?: return
             googleTargets.clear()
@@ -89,23 +99,29 @@ fun CastDeviceChooserDialog(
                 .filter { !it.isDefaultOrBluetooth && it.isEnabled && it.matchesSelector(selector) }
                 .forEach { googleTargets.add(CastTarget.Google(it)) }
         }
-        val callback = object : MediaRouter.Callback() {
-            override fun onRouteAdded(router: MediaRouter, route: MediaRouter.RouteInfo) = refresh()
-            override fun onRouteRemoved(router: MediaRouter, route: MediaRouter.RouteInfo) = refresh()
-            override fun onRouteChanged(router: MediaRouter, route: MediaRouter.RouteInfo) = refresh()
-        }
-        if (router != null && castManager.isGoogleCastReady) {
+        if (googleCastReady && router != null) {
+            val callback = object : MediaRouter.Callback() {
+                override fun onRouteAdded(router: MediaRouter, route: MediaRouter.RouteInfo) = refresh()
+                override fun onRouteRemoved(router: MediaRouter, route: MediaRouter.RouteInfo) = refresh()
+                override fun onRouteChanged(router: MediaRouter, route: MediaRouter.RouteInfo) = refresh()
+            }
+            registered = callback
             router.addCallback(selector, callback, MediaRouter.CALLBACK_FLAG_PERFORM_ACTIVE_SCAN)
             refresh()
         }
-        onDispose { runCatching { router?.removeCallback(callback) } }
+        onDispose { registered?.let { runCatching { router?.removeCallback(it) } } }
     }
 
-    // DLNA renderers via SSDP.
+    // DLNA renderers via SSDP. Cancelling this effect (dialog dismissed) stops the scan
+    // instead of leaving the socket and multicast lock behind for the full receive window.
     LaunchedEffect(scanRound) {
         scanning = true
         withContext(Dispatchers.IO) {
-            DlnaDiscovery.discover(context, timeoutMs = 6_000L) { device ->
+            DlnaDiscovery.discover(
+                context,
+                timeoutMs = 6_000L,
+                shouldStop = { !isActive },
+            ) { device ->
                 val target = CastTarget.Dlna(device)
                 android.os.Handler(android.os.Looper.getMainLooper()).post {
                     if (dlnaTargets.none { it.key == target.key }) dlnaTargets.add(target)
@@ -170,6 +186,11 @@ fun CastDeviceChooserDialog(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clickable {
+                                    if (!canCast()) {
+                                        castManager.reportLocalSource()
+                                        onDismiss()
+                                        return@clickable
+                                    }
                                     when (target) {
                                         is CastTarget.Google -> runCatching {
                                             MediaRouter.getInstance(context).selectRoute(target.route)

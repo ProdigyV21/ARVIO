@@ -373,6 +373,7 @@ fun PlayerScreen(
     if (showCastChooser) {
         com.arflix.tv.cast.CastDeviceChooserDialog(
             castManager = castManager,
+            canCast = { castManager.isCastableUrl(uiState.selectedStreamUrl) },
             onDismiss = { showCastChooser = false }
         )
     }
