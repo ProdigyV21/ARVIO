@@ -742,6 +742,16 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
     LaunchedEffect(uiState.subtitleVerticalPct) {
         subtitleVerticalPct = uiState.subtitleVerticalPct
     }
+    // One path for D-pad, TV buttons and touch controls: update the visible overlay now, then
+    // persist the same clamped value for ordinary subtitles and the next playback session.
+    val updateSubtitleSize: (Int) -> Unit = { percent ->
+        subtitleSizePct = percent.coerceIn(50, 250)
+        viewModel.setSubtitleSizePct(subtitleSizePct)
+    }
+    val updateSubtitleVertical: (Int) -> Unit = { percent ->
+        subtitleVerticalPct = percent.coerceIn(1, 88)
+        viewModel.setSubtitleVerticalPct(subtitleVerticalPct)
+    }
     var useVideoFrameSubtitleViewport by remember { mutableStateOf(false) }
     var hasActiveSubtitleCues by remember { mutableStateOf(false) }
     val subtitleGroups = remember(uiState.subtitles, uiState.preferredSubtitleLang, uiState.secondarySubtitleLang, uiState.selectedStream, uiState.isAiAvailable, uiState.aiTargetLanguageName) {
@@ -4132,16 +4142,16 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
                             Key.DirectionLeft -> {
                                 when (subtitleSettingsRow) {
                                     0 -> subtitleSyncOffsetMs = (subtitleSyncOffsetMs - SUBTITLE_OFFSET_STEP_MS).coerceAtLeast(-MAX_SUBTITLE_OFFSET_MS)
-                                    1 -> subtitleSizePct = (subtitleSizePct - 10).coerceAtLeast(50)
-                                    2 -> subtitleVerticalPct = (subtitleVerticalPct - 1).coerceAtLeast(0)
+                                    1 -> updateSubtitleSize(subtitleSizePct - 10)
+                                    2 -> updateSubtitleVertical(subtitleVerticalPct - 1)
                                 }
                                 true
                             }
                             Key.DirectionRight -> {
                                 when (subtitleSettingsRow) {
                                     0 -> subtitleSyncOffsetMs = (subtitleSyncOffsetMs + SUBTITLE_OFFSET_STEP_MS).coerceAtMost(MAX_SUBTITLE_OFFSET_MS)
-                                    1 -> subtitleSizePct = (subtitleSizePct + 10).coerceAtMost(300)
-                                    2 -> subtitleVerticalPct = (subtitleVerticalPct + 1).coerceAtMost(50)
+                                    1 -> updateSubtitleSize(subtitleSizePct + 10)
+                                    2 -> updateSubtitleVertical(subtitleVerticalPct + 1)
                                 }
                                 true
                             }
@@ -4498,6 +4508,18 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
                 hidden = false,
                 isInPictureInPicture = isInPipMode,
                 modifier = Modifier.fillMaxSize(),
+                // Player-local values make the TV +/- controls visible before the DataStore write
+                // completes; the same numbers are what ordinary subtitles use.
+                legacyAppearance = com.arflix.tv.ui.screens.player.subtitles.bilingual.LegacySubtitleAppearance(
+                    size = subtitleSizePref,
+                    sizePercent = subtitleSizePct,
+                    color = subtitleColorPref,
+                    position = subtitleOffsetPref,
+                    verticalPercent = subtitleVerticalPct,
+                    style = subtitleStylePref,
+                    font = subtitleFontPref,
+                    stylized = subtitleStylizedPref,
+                ),
             )
         }
 
