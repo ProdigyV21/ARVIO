@@ -4692,6 +4692,10 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
                 onFindBestMatch = {
                     viewModel.runFindBestMatch()
                 },
+                onSyncSubtitleToAudio = {
+                    if (uiState.isSubtitleAudioSyncRequested) viewModel.stopSubtitleAudioSync()
+                    else viewModel.syncCurrentSubtitleToAudio()
+                },
                 onActivateAiTranslation = {
                     viewModel.activateAiTranslation()
                 },
