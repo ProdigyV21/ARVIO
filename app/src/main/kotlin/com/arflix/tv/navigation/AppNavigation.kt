@@ -55,6 +55,7 @@ import com.arflix.tv.ui.screens.settings.telegram.TelegramSettingsScreen
 import com.arflix.tv.ui.screens.tv.live.LiveTvScreen
 import com.arflix.tv.ui.screens.watchlist.WatchlistScreen
 import com.arflix.tv.ui.screens.watchlist.calendar.ReleaseCalendarViewModel
+import com.arflix.tv.ui.screens.home.HOME_COMING_UP_ROW_ID
 import com.arflix.tv.ui.screens.profile.ProfileSelectionScreen
 import com.arflix.tv.util.LocalDeviceType
 import kotlinx.coroutines.delay
@@ -298,12 +299,14 @@ fun AppNavigation(
         composable(Screen.Home.route) {
             NavigationRailScreen(navigationRailInset, bottomInset = navigationRailBottomInset) {
               CalendarIdlePreload(calendarViewModel, currentProfile?.id) {
+                val upcoming by calendarViewModel.homeUpcomingItems.collectAsState()
                 HomeScreen(
                     preloadedCategories = preloadedCategories,
                     preloadedHeroItem = preloadedHeroItem,
                     preloadedHeroLogoUrl = preloadedHeroLogoUrl,
                     preloadedLogoCache = preloadedLogoCache,
                     currentProfile = currentProfile,
+                    upcomingItems = upcoming,
                     onNavigateToDetails = { mediaType, mediaId, initialSeason, initialEpisode, autoPlay ->
                         navController.navigate(Screen.Details.createRoute(mediaType, mediaId, initialSeason, initialEpisode, autoPlay))
                     },
@@ -311,7 +314,12 @@ fun AppNavigation(
                         navController.navigate(Screen.CollectionDetails.createRoute(catalogId))
                     },
                     onNavigateToCategory = { categoryId ->
-                        if (categoryId == com.arflix.tv.ui.screens.home.HOME_WATCHLIST_ROW_ID) {
+                        if (categoryId == HOME_COMING_UP_ROW_ID) {
+                            navController.navigate("${Screen.Watchlist.route}?openCalendar=true") {
+                                popUpTo(Screen.Home.route) { saveState = true }
+                                launchSingleTop = true
+                            }
+                        } else if (categoryId == com.arflix.tv.ui.screens.home.HOME_WATCHLIST_ROW_ID) {
                             // "View all" means this watchlist, not a previously restored server/calendar tab.
                             navController.navigate(Screen.Watchlist.route) {
                                 popUpTo(Screen.Home.route) { saveState = true }
@@ -376,7 +384,10 @@ fun AppNavigation(
         }
 
         // Watchlist screen
-        composable(Screen.Watchlist.route) {
+        composable(
+            route = "${Screen.Watchlist.route}?openCalendar={openCalendar}",
+            arguments = listOf(navArgument("openCalendar") { type = NavType.BoolType; defaultValue = false })
+        ) { entry ->
             NavigationRailScreen(navigationRailInset, bottomInset = navigationRailBottomInset) {
                 DisposableEffect(calendarViewModel) {
                     calendarViewModel.onVisible()
@@ -384,6 +395,7 @@ fun AppNavigation(
                 }
                 WatchlistScreen(
                     calendarViewModel = calendarViewModel,
+                    openCalendar = entry.arguments?.getBoolean("openCalendar") == true,
                     onCalendarOpenRelease = { release ->
                         navController.navigate(Screen.Details.createRoute(release.media.mediaType, release.media.id,
                             release.seasonNumber, release.episodeNumber))

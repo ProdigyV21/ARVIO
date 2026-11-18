@@ -1242,6 +1242,7 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
     // source): a URL first gets safe-audio (constrain channels + no tunneling), then audio-disabled
     // (video keeps playing). Each fires once per URL; cleared on new-source load.
     val safeAudioForcedUrls = remember { mutableSetOf<String>() }
+    val surroundFallbackUrls = remember { mutableSetOf<String>() }
     val audioDisabledForcedUrls = remember { mutableSetOf<String>() }
     fun dvStripEnabledNow(): Boolean =
         latestUiState.dolbyVisionCompatEnabled ||
@@ -1360,7 +1361,13 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
         }
     }
 
-    val exoPlayer = remember(isConstrainedPlaybackDevice, preferExtensionDecoder, playbackBufferProfile) {
+    val compatibility = remember(activity) {
+        PlaybackCompatibility.session {
+            @Suppress("DEPRECATION")
+            activity?.windowManager?.defaultDisplay?.refreshRate
+        }
+    }
+    val exoPlayer = remember(isConstrainedPlaybackDevice, preferExtensionDecoder, playbackBufferProfile, compatibility) {
         val loadControl = DefaultLoadControl.Builder()
             .setBufferDurationsMs(
                 playbackBufferProfile.minBufferMs,
@@ -1428,6 +1435,8 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
                 /* handleAudioFocus = */ true
             )
             .build().apply {
+                addAnalyticsListener(compatibility)
+                addListener(compatibility)
                 // Ensure volume is at maximum
                 volume = 1.0f
                 setVideoFrameMetadataListener { presentationTimeUs, _, format, _ ->
@@ -1686,6 +1695,7 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
                                     (error as? androidx.media3.exoplayer.ExoPlaybackException)?.rendererFormat
                                 )
                             ) {
+                                compatibility.onRecovery(PlaybackCompatibility.Recovery.SOFTWARE)
                                 playbackStartupDiag(
                                     "audio recovery: software decoder after crash in $crashedAudioDecoder"
                                 )
@@ -1700,11 +1710,33 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
                             }
 
                             // An encoded AudioTrack can fail without any MediaCodec crashing.
-                            // Retry through software PCM before constraining or disabling audio.
+                            // Try a compatible surround track before the normal PCM recovery.
                             val outputFailure = error.errorCode == androidx.media3.common.PlaybackException.ERROR_CODE_AUDIO_TRACK_INIT_FAILED ||
                                 error.errorCode == androidx.media3.common.PlaybackException.ERROR_CODE_AUDIO_TRACK_WRITE_FAILED
                             val failedFormat = (error as? androidx.media3.exoplayer.ExoPlaybackException)?.rendererFormat
+                                ?: this@apply.audioFormat
+                            val source = latestUiState.selectedStreamUrl.orEmpty()
+                            if (outputFailure && source.isNotBlank() && source !in surroundFallbackUrls) {
+                                val alternate = com.arflix.tv.ui.screens.player.engine.exoplayer.compatibleSurroundTrack(
+                                    failedFormat, this@apply.currentTracks
+                                )
+                                if (alternate != null) {
+                                    surroundFallbackUrls.add(source)
+                                    compatibility.onRecovery(PlaybackCompatibility.Recovery.SURROUND_TRACK)
+                                    val player = this@apply
+                                    val resumeAt = player.currentPosition.coerceAtLeast(0L)
+                                    val keepPlaying = player.playWhenReady
+                                    player.trackSelectionParameters = player.trackSelectionParameters.buildUpon()
+                                        .setOverrideForType(alternate).build()
+                                    player.stop()
+                                    player.prepare()
+                                    player.seekTo(resumeAt)
+                                    player.playWhenReady = keepPlaying
+                                    return
+                                }
+                            }
                             if (outputFailure && aiRenderersFactory.blockAudioPassthrough(failedFormat)) {
+                                compatibility.onRecovery(PlaybackCompatibility.Recovery.PCM)
                                 playbackStartupDiag("audio recovery: PCM after failed passthrough ${failedFormat?.sampleMimeType}")
                                 val resumeAt = this@apply.currentPosition.coerceAtLeast(0L)
                                 val keepPlaying = this@apply.playWhenReady
@@ -1733,6 +1765,7 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
                                 if (selector != null && currentUrl.isNotBlank() &&
                                     safeAudioForcedUrls.add(currentUrl)
                                 ) {
+                                    compatibility.onRecovery(PlaybackCompatibility.Recovery.CONSTRAINED)
                                     playbackStartupDiag("audio recovery: safe-audio for source")
                                     selector.parameters = selector.buildUponParameters()
                                         .setConstrainAudioChannelCountToDeviceCapabilities(true)
@@ -1745,6 +1778,7 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
                                 if (selector != null && currentUrl.isNotBlank() &&
                                     audioDisabledForcedUrls.add(currentUrl)
                                 ) {
+                                    compatibility.onRecovery(PlaybackCompatibility.Recovery.DISABLED)
                                     playbackStartupDiag("audio recovery: audio-disabled for source")
                                     selector.parameters = selector.buildUponParameters()
                                         .setDisabledTrackTypes(setOf(C.TRACK_TYPE_AUDIO))
@@ -2676,6 +2710,7 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
                     }
                 }
                 val modeHandled = com.arflix.tv.util.FrameRateUtils.matchFrameRateAndWait(targetActivity, fps)
+                compatibility.onFrameRateRequest(fps)
                 if (!modeHandled && !playerReleased && android.os.Build.VERSION.SDK_INT >= 31) {
                     frameRateSurface?.takeIf { it.isValid }?.let { surface ->
                         runCatching {
@@ -2769,6 +2804,7 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
 
             val isNewStartupSource = startupUrlLock != url
             if (isNewStartupSource) {
+                val hadSurroundFallback = startupUrlLock?.let(surroundFallbackUrls::contains) == true
                 startupUrlLock = url
                 startupRecoverAttempted = false
                 startupHardFailureReported = false
@@ -2781,6 +2817,7 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
                 blackVideoRecoveryStage = 0
                 blackVideoReadySinceMs = null
                 firstVideoFrameRendered = false
+                compatibility.reset()
                 val selector = exoPlayer.trackSelector as? androidx.media3.exoplayer.trackselection.DefaultTrackSelector
                 selector?.let {
                     // Reset per-source track state, then re-apply any audio-recovery rung this
@@ -2789,6 +2826,7 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
                     val audioDisabled = audioDisabledForcedUrls.contains(url)
                     val safeAudio = safeAudioForcedUrls.contains(url)
                     it.parameters = it.buildUponParameters()
+                        .apply { if (hadSurroundFallback) clearOverridesOfType(C.TRACK_TYPE_AUDIO) }
                         .setPreferredVideoMimeType(null)
                         .setExceedVideoConstraintsIfNecessary(allowVideoExceedCodecCapabilities)
                         .setExceedAudioConstraintsIfNecessary(allowAudioExceedCodecCapabilities)

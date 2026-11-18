@@ -767,13 +767,13 @@ private fun NetflixBillboardButton(
 
 /** "Series • Drama • 2026 • 16+": the Netflix metadata line. */
 @Composable
-private fun NetflixMetaLine(item: MediaItem, fontSize: Int) {
+private fun NetflixMetaLine(item: MediaItem, fontSize: Int, upcomingDate: String? = null) {
     val context = LocalContext.current
-    val parts = remember(item.id, item.mediaType, item.genreIds, item.year, item.duration, item.contentRating, context) {
+    val parts = remember(item.id, item.mediaType, item.genreIds, item.year, item.duration, item.contentRating, context, upcomingDate) {
         buildList {
             add(context.getString(if (item.mediaType == MediaType.TV) R.string.series else R.string.movie))
             context.genreNames(item.mediaType, item.genreIds).firstOrNull()?.let(::add)
-            item.year.takeIf { it.isNotBlank() }?.let(::add)
+            (upcomingDate ?: item.year).takeIf { it.isNotBlank() }?.let(::add)
             item.duration.takeIf { it.isNotBlank() && it != "0m" }?.let(::add)
             item.contentRating?.takeIf { it.isNotBlank() }?.let(::add)
         }
@@ -1093,6 +1093,7 @@ private fun NetflixContentRow(
             NetflixCardDescription(
                 item = details,
                 overviewOverride = featuredOverview?.takeIf { isFeatured },
+                upcomingDate = descriptionItem.releaseDate.takeIf { category.id == HOME_COMING_UP_ROW_ID },
                 // Spans the big card and the next poster, as Netflix does, so the
                 // overview is not cut at the card edge.
                 modifier = Modifier
@@ -1163,6 +1164,7 @@ internal fun NetflixSliceTitle(
 private fun NetflixCardDescription(
     item: MediaItem,
     overviewOverride: String?,
+    upcomingDate: String?,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -1173,7 +1175,7 @@ private fun NetflixCardDescription(
     }
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Box(Modifier.heightIn(min = 18.dp)) {
-            if (item.isIptvChannel()) NetflixLiveLine(item) else NetflixMetaLine(item = item, fontSize = 13)
+            if (item.isIptvChannel()) NetflixLiveLine(item) else NetflixMetaLine(item = item, fontSize = 13, upcomingDate = upcomingDate)
         }
         Text(
             text = overview,

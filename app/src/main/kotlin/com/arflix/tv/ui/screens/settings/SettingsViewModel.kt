@@ -250,6 +250,7 @@ data class SettingsUiState(
     val trailerInCards: Boolean = true,
     val netflixHomeStyle: Boolean = true,
     val watchlistOnHome: Boolean = false,
+    val comingUpOnHome: Boolean = false,
     val hiddenNavigationSections: Set<String> = emptySet(),
     val showBudget: Boolean = true,
     val showEpisodeRatings: Boolean = false,
@@ -598,6 +599,7 @@ class SettingsViewModel @Inject constructor(
     private fun trailerInCardsKey() = profileManager.profileBooleanKey("trailer_in_cards")
     private fun netflixHomeStyleKey() = profileManager.profileBooleanKey(com.arflix.tv.ui.screens.home.NETFLIX_HOME_STYLE_KEY)
     private fun watchlistOnHomeKey() = profileManager.profileBooleanKey(com.arflix.tv.util.WATCHLIST_ON_HOME)
+    private fun comingUpOnHomeKey() = profileManager.profileBooleanKey(com.arflix.tv.ui.screens.home.COMING_UP_ON_HOME)
     private fun showBudgetKey() = profileManager.profileBooleanKey("show_budget_on_home")
     private fun showEpisodeRatingsKey() = profileManager.profileBooleanKey("show_episode_ratings")
     private fun animeStructuringStyleKey() = profileManager.profileStringKey(AnimeStructuringStyle.PREFERENCE_KEY)
@@ -904,6 +906,7 @@ class SettingsViewModel @Inject constructor(
             val trailerInCards = prefs[trailerInCardsKey()] ?: true
             val netflixHomeStyle = prefs[netflixHomeStyleKey()] ?: true
             val watchlistOnHome = prefs[watchlistOnHomeKey()] ?: false
+            val comingUpOnHome = prefs[comingUpOnHomeKey()] ?: false
             val spoilerBlurEnabled = prefs[spoilerBlurKey()] ?: false
             val showBudget = prefs[showBudgetKey()] ?: true
             val showEpisodeRatings = prefs[showEpisodeRatingsKey()] ?: false
@@ -1028,6 +1031,7 @@ class SettingsViewModel @Inject constructor(
                 trailerInCards = trailerInCards,
                 netflixHomeStyle = netflixHomeStyle,
                 watchlistOnHome = watchlistOnHome,
+                comingUpOnHome = comingUpOnHome,
                 showBudget = showBudget,
                 showEpisodeRatings = showEpisodeRatings,
                 animeStructuringStyle = animeStructuringStyle,
@@ -2165,6 +2169,11 @@ class SettingsViewModel @Inject constructor(
     fun setWatchlistOnHome(enabled: Boolean) {
         if (!canManage("appearance")) return
         preferenceWriter.save(watchlistOnHomeKey(), enabled, { it.watchlistOnHome }, { state, value -> state.copy(watchlistOnHome = value) })
+    }
+
+    fun setComingUpOnHome(enabled: Boolean) {
+        if (!canManage("appearance")) return
+        preferenceWriter.save(comingUpOnHomeKey(), enabled, { it.comingUpOnHome }, { state, value -> state.copy(comingUpOnHome = value) })
     }
 
     fun cycleGuideRowCount() {

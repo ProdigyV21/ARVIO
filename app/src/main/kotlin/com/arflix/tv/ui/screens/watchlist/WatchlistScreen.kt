@@ -121,7 +121,8 @@ fun WatchlistScreen(
     onCalendarSelectSource: (String) -> Unit = {},
     onCalendarRefresh: () -> Unit = {},
     calendarViewModel: ReleaseCalendarViewModel? = null,
-    onCalendarOpenRelease: ((com.arflix.tv.data.model.CalendarRelease) -> Unit)? = null
+    onCalendarOpenRelease: ((com.arflix.tv.data.model.CalendarRelease) -> Unit)? = null,
+    openCalendar: Boolean = false
 ) {
     val rawState by viewModel.uiState.collectAsStateWithLifecycle()
     val rawServers by viewModel.libraryState.collectAsStateWithLifecycle()
@@ -135,7 +136,7 @@ fun WatchlistScreen(
     val isRtl = LocalLayoutDirection.current == LayoutDirection.Rtl
     val poster = rememberCardLayoutMode() == CardLayoutMode.POSTER
     val scrollScope = rememberCoroutineScope()
-    var section by rememberSaveable { mutableStateOf(LibrarySection.WATCHLISTS) }
+    var section by rememberSaveable(openCalendar) { mutableStateOf(if (openCalendar) LibrarySection.CALENDAR else LibrarySection.WATCHLISTS) }
     val calendarMode = section == LibrarySection.CALENDAR
     val calendarTab = remember { FocusRequester() }
     var openedList by rememberSaveable { mutableStateOf<String?>(null) }

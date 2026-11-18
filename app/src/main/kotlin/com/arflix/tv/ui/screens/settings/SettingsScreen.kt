@@ -346,9 +346,9 @@ internal fun tvGeneralRowsForSection(section: String): List<Int> {
             (if (BuildConfig.AUDIO_SYNC_AVAILABLE) listOf(48) else emptyList()) +
             listOf(39, 9, 45)
         "ai_subtitles" -> listOf(28, 29, 30, 31, 32, 33) + LIVE_AI_SUBS_ROWS
-        "playback" -> listOf(10, 11, 12, 43, 44, 55, 13, 14, 34, 37, 16, 15, 40, 27, 53, 54)
+        "playback" -> listOf(10, 11, 12, 43, 44, 55, 13, 14, 34, 37, 16, 15, 40, 27, 53, 54, 60)
         "appearance" -> listOf(17, 49, 50, 18, 20, 21, 24, 23, 22, 41, 46, 36, 47, 56, 57) +
-            (if (com.arflix.tv.ui.components.KidsNavigation.hideLiveTv) emptyList() else listOf(58))
+            (if (com.arflix.tv.ui.components.KidsNavigation.hideLiveTv) emptyList() else listOf(58)) + 59
         "profiles" -> listOf(19)
         "network" -> listOf(25, 26, 35)
         else -> emptyList()
@@ -571,6 +571,10 @@ fun SettingsScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     var showCredits by remember { mutableStateOf(false) }
+    var showPlaybackCompatibility by remember { mutableStateOf(false) }
+    if (showPlaybackCompatibility) {
+        PlaybackCompatibilityDialog { showPlaybackCompatibility = false }
+    }
     if (showCredits) {
         com.arflix.tv.ui.components.AboutCreditsDialog { showCredits = false }
     }
@@ -1037,7 +1041,7 @@ fun SettingsScreen(
         showUiModeWarningDialog ||
         showQualityFiltersModal ||
         showQualityFilterEditor ||
-        showCredits ||
+        showCredits || showPlaybackCompatibility ||
         addonConfigureTarget != null ||
         showAiModelDialog ||
         showAiApiKeyDialog ||
@@ -1516,8 +1520,10 @@ fun SettingsScreen(
                                                 37 -> viewModel.setTrailerInCards(!uiState.trailerInCards)
                                                 49 -> viewModel.setNetflixHomeStyle(!uiState.netflixHomeStyle)
                                                 50 -> viewModel.setWatchlistOnHome(!uiState.watchlistOnHome)
+                                                59 -> viewModel.setComingUpOnHome(!uiState.comingUpOnHome)
                                                 53 -> viewModel.cyclePlaybackCacheSize()
                                                 54 -> viewModel.clearPlaybackCache()
+                                                60 -> showPlaybackCompatibility = true
                                                 55 -> viewModel.setShowAddonStreamDetails(!uiState.showAddonStreamDetails)
                                                 in 56..58 -> {
                                                     val section = com.arflix.tv.util.OPTIONAL_NAVIGATION_SECTIONS[
@@ -2151,6 +2157,8 @@ fun SettingsScreen(
                             onNetflixHomeStyleToggle = { viewModel.setNetflixHomeStyle(it) },
                             watchlistOnHome = uiState.watchlistOnHome,
                             onWatchlistOnHomeToggle = viewModel::setWatchlistOnHome,
+                            comingUpOnHome = uiState.comingUpOnHome,
+                            onComingUpOnHomeToggle = viewModel::setComingUpOnHome,
                             trailerDelaySeconds = uiState.trailerDelaySeconds,
                             onTrailerDelayClick = { viewModel.cycleTrailerDelay() },
                             guideRowCount = uiState.guideRowCount,
@@ -2213,6 +2221,7 @@ fun SettingsScreen(
                             playbackCacheMaxBytes = uiState.playbackCacheMaxBytes,
                             onPlaybackCacheSizeClick = { viewModel.cyclePlaybackCacheSize() },
                             onClearPlaybackCacheClick = { viewModel.clearPlaybackCache() },
+                            onPlaybackCompatibilityClick = { showPlaybackCompatibility = true },
                             showAddonStreamDetails = uiState.showAddonStreamDetails,
                             onShowAddonStreamDetailsToggle = { viewModel.setShowAddonStreamDetails(it) },
                             hiddenNavigationSections = uiState.hiddenNavigationSections,
@@ -5348,6 +5357,16 @@ private fun MobileSettingsSubPage(
             }
             "Playback & Controls" -> {
                 MobileSettingsCategory(title = stringResource(R.string.settings_section_playback)) {
+                    var showCompatibility by remember { mutableStateOf(false) }
+                    if (showCompatibility) PlaybackCompatibilityDialog { showCompatibility = false }
+                    MobileSettingsRow(
+                        icon = Icons.Default.Settings,
+                        title = stringResource(R.string.playback_compatibility),
+                        subtitle = stringResource(R.string.playback_compatibility_desc),
+                        value = null,
+                        isFocused = false,
+                        onClick = { showCompatibility = true }
+                    )
                     MobileSettingsRow(
                         icon = Icons.Default.PlayArrow,
                         title = stringResource(R.string.auto_play_next_title),
@@ -5678,6 +5697,15 @@ private fun MobileSettingsSubPage(
                         toggleChecked = uiState.watchlistOnHome,
                         isFocused = false,
                         onClick = { viewModel.setWatchlistOnHome(!uiState.watchlistOnHome) }
+                    )
+                    MobileSettingsRow(
+                        icon = Icons.Default.Bookmark,
+                        title = stringResource(R.string.coming_up_on_home),
+                        subtitle = stringResource(R.string.coming_up_on_home_desc),
+                        value = stringResource(if (uiState.comingUpOnHome) R.string.on else R.string.off),
+                        toggleChecked = uiState.comingUpOnHome,
+                        isFocused = false,
+                        onClick = { viewModel.setComingUpOnHome(!uiState.comingUpOnHome) }
                     )
                     MobileSettingsRow(
                         icon = Icons.Default.Palette,
@@ -6954,6 +6982,8 @@ private fun TvGeneralSettingsRows(
     netflixHomeStyle: Boolean = true,
     onNetflixHomeStyleToggle: (Boolean) -> Unit = {},
     watchlistOnHome: Boolean = false,
+    comingUpOnHome: Boolean = false,
+    onComingUpOnHomeToggle: (Boolean) -> Unit = {},
     onWatchlistOnHomeToggle: (Boolean) -> Unit = {},
     trailerDelaySeconds: Int = 1,
     onTrailerDelayClick: () -> Unit = {},
@@ -6988,6 +7018,7 @@ private fun TvGeneralSettingsRows(
     playbackCacheMaxBytes: Long = 0L,
     onPlaybackCacheSizeClick: () -> Unit = {},
     onClearPlaybackCacheClick: () -> Unit = {},
+    onPlaybackCompatibilityClick: () -> Unit = {},
     showAddonStreamDetails: Boolean = false,
     onShowAddonStreamDetailsToggle: (Boolean) -> Unit = {},
     hiddenNavigationSections: Set<String> = emptySet(),
@@ -7146,6 +7177,7 @@ private fun TvGeneralSettingsRows(
                 37 -> SettingsToggleRow(stringResource(R.string.trailer_in_cards), stringResource(R.string.trailer_in_cards_desc), trailerInCards, focusedIndex == localIndex, onTrailerInCardsToggle, Modifier.settingsFocusSlot(localIndex))
                 49 -> SettingsToggleRow(stringResource(R.string.netflix_home_style), stringResource(R.string.netflix_home_style_desc), netflixHomeStyle, focusedIndex == localIndex, onNetflixHomeStyleToggle, Modifier.settingsFocusSlot(localIndex))
                 50 -> SettingsToggleRow(stringResource(R.string.watchlist_on_home), stringResource(R.string.watchlist_on_home_desc), watchlistOnHome, focusedIndex == localIndex, onWatchlistOnHomeToggle, Modifier.settingsFocusSlot(localIndex))
+                59 -> SettingsToggleRow(stringResource(R.string.coming_up_on_home), stringResource(R.string.coming_up_on_home_desc), comingUpOnHome, focusedIndex == localIndex, onComingUpOnHomeToggle, Modifier.settingsFocusSlot(localIndex))
                 53 -> SettingsRow(
                     icon = Icons.Default.Storage,
                     title = stringResource(R.string.playback_cache_size),
@@ -7163,6 +7195,11 @@ private fun TvGeneralSettingsRows(
                     isFocused = focusedIndex == localIndex,
                     onClick = onClearPlaybackCacheClick,
                     modifier = Modifier.settingsFocusSlot(localIndex)
+                )
+                60 -> SettingsRow(
+                    Icons.Default.Settings, stringResource(R.string.playback_compatibility),
+                    stringResource(R.string.playback_compatibility_desc), "",
+                    focusedIndex == localIndex, onPlaybackCompatibilityClick, Modifier.settingsFocusSlot(localIndex)
                 )
                 in LIVE_AI_SUBS_ROWS -> LiveAiSubsTvRow(rowId, focusedIndex == localIndex, Modifier.settingsFocusSlot(localIndex))
             }

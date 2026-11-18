@@ -387,6 +387,7 @@ internal class HomeFocusState(
 internal fun localizedCategoryTitle(category: Category): String = when (category.id) {
     "continue_watching"        -> stringResource(R.string.continue_watching)
     HOME_WATCHLIST_ROW_ID       -> stringResource(R.string.watchlist)
+    HOME_COMING_UP_ROW_ID      -> stringResource(R.string.home_coming_up)
     "trending_movies"          -> stringResource(R.string.trending_movies)
     "trending_series"          -> stringResource(R.string.trending_series)
     "trending_tv"              -> stringResource(R.string.trending_in_shows)
@@ -800,7 +801,8 @@ fun HomeScreen(
     onNavigateToPlayer: (MediaType, Int, String, String?, String?) -> Unit = { _, _, _, _, _ -> },
     onNavigateToSettings: () -> Unit = {},
     onSwitchProfile: () -> Unit = {},
-    onExitApp: () -> Unit = {}
+    onExitApp: () -> Unit = {},
+    upcomingItems: List<MediaItem> = emptyList()
 ) {
     val isMobile = LocalDeviceType.current.isTouchDevice()
 
@@ -901,8 +903,9 @@ fun HomeScreen(
     val rawDisplayCategories = remember(rawDisplayCategoriesBase, sportsHomeRows) {
         viewModel.withSportsHomeRows(rawDisplayCategoriesBase, sportsHomeRows)
     }
-    val displayCategories = remember(rawDisplayCategories, homeWatchlistItems) {
-        withHomeWatchlistRow(deduplicateHomeCategories(rawDisplayCategories), homeWatchlistItems, enabled = true)
+    val displayCategories = remember(rawDisplayCategories, homeWatchlistItems, upcomingItems, kidsFilterState) {
+        val rows = withHomeWatchlistRow(deduplicateHomeCategories(rawDisplayCategories), homeWatchlistItems, enabled = true)
+        withHomeComingUpRow(rows, viewModel.filterForKids(upcomingItems, kidsFilterState))
     }
     val displayHeroItem = uiState.heroItem ?: preloadedHeroItem?.takeIf { !kidsFilterState.isActive }
         ?: if (uiState.categories.isEmpty()) {
@@ -964,7 +967,7 @@ fun HomeScreen(
     var billboardItem by remember(currentProfile?.id) { mutableStateOf<MediaItem?>(null) }
     LaunchedEffect(netflixHome, displayCategories, kidsFilterState) {
         if (!netflixHome) return@LaunchedEffect
-        val candidates = netflixBillboardCandidates(displayCategories) { item ->
+        val candidates = netflixBillboardCandidates(displayCategories.filterNot { it.id == HOME_COMING_UP_ROW_ID }) { item ->
             viewModel.isIptvItem(item) || viewModel.isCollectionItem(item) || viewModel.isSportsHomeItem(item)
         }
         // The billboard keeps its title for the whole visit; on a kids profile that title

@@ -2175,4 +2175,13 @@
     <string name="service_home_top_rated_movies">Top rated movies</string>
     <string name="service_home_filter_all">All</string>
     <string name="service_home_filter_grid">Filter</string>
+    <string name="home_coming_up">Coming Up</string>
+    <string name="coming_up_on_home">Coming Up on Home</string>
+    <string name="coming_up_on_home_desc">Show upcoming episodes from your Calendar.</string>
+    <string name="playback_compatibility">Playback compatibility</string>
+    <string name="playback_compatibility_desc">Device capabilities and your last playback session.</string>
+    <string name="playback_compatibility_checking">Checking device capabilities...</string>
+    <string name="playback_compatibility_copy">Copy report</string>
+    <string name="playback_compatibility_test">Run format test</string>
+    <string name="playback_compatibility_test_failed">Could not run the format test.</string>
 </resources>

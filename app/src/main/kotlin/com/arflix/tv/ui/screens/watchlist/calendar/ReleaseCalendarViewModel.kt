@@ -21,11 +21,18 @@ import com.arflix.tv.util.traktDataStore
 import com.arflix.tv.data.repository.effectiveSettingsDataStore as settingsDataStore
 import com.arflix.tv.util.resolveAppLanguage
 import com.arflix.tv.util.ContentRating
+import androidx.datastore.preferences.core.booleanPreferencesKey
+import com.arflix.tv.data.model.MediaItem
+import com.arflix.tv.ui.screens.home.COMING_UP_ON_HOME
+import com.arflix.tv.ui.screens.home.upcomingHomeItems
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.time.LocalDate
 import java.time.YearMonth
 import java.time.ZoneId
+import java.time.Instant
+import java.time.format.DateTimeFormatter
+import java.time.format.FormatStyle
 import java.util.Locale
 import javax.inject.Inject
 import kotlinx.coroutines.CancellationException
@@ -82,6 +89,9 @@ class ReleaseCalendarViewModel @Inject constructor(
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(ReleaseCalendarUiState())
     val uiState: StateFlow<ReleaseCalendarUiState> = _uiState.asStateFlow()
+    private val _homeUpcomingItems = MutableStateFlow<List<MediaItem>>(emptyList())
+    val homeUpcomingItems: StateFlow<List<MediaItem>> = _homeUpcomingItems.asStateFlow()
+    private var homeUpcomingEnabled = false
     private var sourceSnapshot: CalendarWatchlists? = null
     private var sourceLoadedAt = 0L
     private var loadJob: Job? = null
@@ -95,6 +105,17 @@ class ReleaseCalendarViewModel @Inject constructor(
     private var backgroundLoad = false
 
     init {
+        viewModelScope.launch {
+            profileManager.activeProfileId.collectLatest { profileId ->
+                homeUpcomingEnabled = false
+                _homeUpcomingItems.value = emptyList()
+                val key = booleanPreferencesKey("profile_${profileId}_$COMING_UP_ON_HOME")
+                context.settingsDataStore.data.map { it[key] == true }.distinctUntilChanged().collectLatest { enabled ->
+                    homeUpcomingEnabled = enabled
+                    if (enabled) refreshHomeUpcoming() else _homeUpcomingItems.value = emptyList()
+                }
+            }
+        }
         viewModelScope.launch {
             profileManager.activeProfileId.distinctUntilChanged().collectLatest { profileId ->
                 activeProfileId = profileId
@@ -125,6 +146,7 @@ class ReleaseCalendarViewModel @Inject constructor(
                 }.distinctUntilChanged().collectLatest { (items, connectionsKey, languageTag) ->
                     contentLanguage = languageTag
                     privateCacheIdentity = calendarCacheDigest("$profileId|$connectionsKey|$items|$languageTag")
+                    _homeUpcomingItems.value = emptyList()
                     readyIdentity.value = privateCacheIdentity
                     loadJob?.cancel()
                     requestId++
@@ -192,6 +214,7 @@ class ReleaseCalendarViewModel @Inject constructor(
     suspend fun preloadIdle() {
         val identity = withTimeoutOrNull(5_000) { readyIdentity.first { it.isNotBlank() } } ?: return
         if (foreground) return
+        refreshHomeUpcoming()
         if (loadJob?.isActive != true && (_uiState.value.isLoading || sourceSnapshot == null ||
             System.currentTimeMillis() - sourceLoadedAt >= 2 * 60_000L)) reload(background = true)
         val job = loadJob
@@ -214,11 +237,32 @@ class ReleaseCalendarViewModel @Inject constructor(
                 if (result.entries.isNotEmpty()) cache.writeMonth(key, CalendarMonthPreview(result.entries,
                     state.sources.associate { it.id to countForSource(it.id) }))
             }
+            refreshHomeUpcoming()
         } finally {
             if (loadJob === job && backgroundLoad && job?.isActive == true) {
                 requestId++
                 job.cancel()
             }
+        }
+    }
+
+    private suspend fun refreshHomeUpcoming() {
+        val identity = privateCacheIdentity.takeIf { it.isNotBlank() && homeUpcomingEnabled } ?: return
+        val profileId = activeProfileId ?: return
+        val zone = ZoneId.systemDefault()
+        val today = LocalDate.now(zone)
+        val firstMonth = YearMonth.from(today)
+        val lastMonth = YearMonth.from(today.plusDays(14))
+        val region = ContentRating.regionOf(contentLanguage)
+        val formatter = DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM).withLocale(Locale.forLanguageTag(contentLanguage))
+        val items = withContext(Dispatchers.Default) {
+            val releases = listOf(firstMonth, lastMonth).distinct().flatMap { month ->
+                cache.readMonth("$identity|$month|${zone.id}|$region")?.entries.orEmpty()
+            }
+            upcomingHomeItems(releases, today, Instant.now(), formatter)
+        }
+        if (identity == privateCacheIdentity && profileManager.getProfileIdSync() == profileId && homeUpcomingEnabled) {
+            _homeUpcomingItems.value = items
         }
     }
 
@@ -332,6 +376,7 @@ class ReleaseCalendarViewModel @Inject constructor(
                     (if (source.id in failedSources) preview?.sourceCounts?.get(source.id) ?: countForSource(source.id) else countForSource(source.id)) }
                 val refreshedAt = if (result.warnings.isNotEmpty() && preview != null) preview.refreshedAt else System.currentTimeMillis()
                 cache.writeMonth(cacheKey, CalendarMonthPreview(finalEntries, counts, refreshedAt))
+                if (!background) refreshHomeUpcoming()
             } catch (error: CancellationException) {
                 throw error
             } catch (_: Exception) {
