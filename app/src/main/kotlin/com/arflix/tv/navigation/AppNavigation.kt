@@ -90,10 +90,17 @@ sealed class Screen(val route: String) {
     data object Home : Screen("home")
     data object Search : Screen("search")
     data object Watchlist : Screen("watchlist")
-    data object CollectionDetails : Screen("collections/{catalogId}") {
+    data object CollectionDetails : Screen(
+        "collections/{catalogId}?serviceRow={serviceRow}&serviceFilter={serviceFilter}"
+    ) {
         fun createRoute(catalogId: String): String {
             return "collections/${android.net.Uri.encode(catalogId)}"
         }
+
+        /** A row opens its exact query; the header Filter action opens the full service grid. */
+        internal fun createGridRoute(catalogId: String, rowId: String?, filter: String): String =
+            "${createRoute(catalogId)}?serviceFilter=${android.net.Uri.encode(filter)}" +
+                rowId?.let { "&serviceRow=${android.net.Uri.encode(it)}" }.orEmpty()
     }
     data object CategoryViewAll : Screen("home_category/{categoryId}") {
         fun createRoute(categoryId: String): String {
@@ -520,9 +527,14 @@ fun AppNavigation(
         // Details screen
         composable(
             route = Screen.CollectionDetails.route,
-            arguments = listOf(navArgument("catalogId") { type = NavType.StringType })
+            arguments = listOf(
+                navArgument("catalogId") { type = NavType.StringType },
+                navArgument("serviceRow") { type = NavType.StringType; nullable = true; defaultValue = null },
+                navArgument("serviceFilter") { type = NavType.StringType; nullable = true; defaultValue = null }
+            )
         ) { backStackEntry ->
             val catalogId = backStackEntry.arguments?.getString("catalogId").orEmpty()
+            val gridArgs = backStackEntry.arguments
             if (catalogId.isBlank()) {
                 navigateHome()
                 return@composable
@@ -530,8 +542,16 @@ fun AppNavigation(
             CollectionDetailsScreen(
                 catalogId = catalogId,
                 currentProfile = currentProfile,
+                serviceRowId = gridArgs?.getString("serviceRow"),
+                serviceFilter = gridArgs?.getString("serviceFilter"),
                 onNavigateToDetails = { mediaType, mediaId ->
                     navController.navigate(Screen.Details.createRoute(mediaType, mediaId))
+                },
+                onNavigateToDetailsAutoPlay = { mediaType, mediaId ->
+                    navController.navigate(Screen.Details.createRoute(mediaType, mediaId, autoPlay = true))
+                },
+                onOpenServiceGrid = { serviceId, rowId, filter ->
+                    navController.navigate(Screen.CollectionDetails.createGridRoute(serviceId, rowId, filter))
                 },
                 onNavigateToPlayer = { mediaType, mediaId, streamUrl, preferredAddonId, preferredSourceName ->
                     navController.navigate(

@@ -3,6 +3,8 @@ package com.arflix.tv.ui.screens.collections
 import com.arflix.tv.data.model.CatalogConfig
 import com.arflix.tv.data.model.CollectionSourceConfig
 import com.arflix.tv.data.model.CollectionSourceKind
+import com.arflix.tv.data.repository.WatchProviderSort
+import java.time.LocalDate
 
 /**
  * Genre filter for streaming-service pages (Netflix, HBO Max, ...). Those pages are built from
@@ -24,6 +26,47 @@ internal object ServiceGenreFilter {
     fun supports(catalog: CatalogConfig): Boolean =
         catalog.collectionSources.isNotEmpty() &&
             catalog.collectionSources.all { it.kind == CollectionSourceKind.TMDB_WATCH_PROVIDER }
+
+    /**
+     * A service page lists the newest titles first, while its Home row keeps the template's
+     * popularity order: only the page's queries are re-sorted.
+     */
+    fun newestFirst(sources: List<CollectionSourceConfig>, today: LocalDate = LocalDate.now()): List<CollectionSourceConfig> {
+        // Query compatible providers together so TMDB sorts the union before it is paginated.
+        val providers = sources.filter { it.kind == CollectionSourceKind.TMDB_WATCH_PROVIDER }
+            .groupBy(::providerScope)
+        val emitted = mutableSetOf<ProviderScope>()
+        return sources.mapNotNull { source ->
+            if (source.kind != CollectionSourceKind.TMDB_WATCH_PROVIDER) return@mapNotNull source
+            val scope = providerScope(source)
+            if (!emitted.add(scope)) return@mapNotNull null
+            val sort = WatchProviderSort.newestFor(scope.type)
+            val ids = providers.getValue(scope).mapNotNull { it.tmdbWatchProviderId }.distinct()
+            if (ids.size <= 1) return@mapNotNull source.copy(sortBy = sort, tmdbWatchProviderId = ids.firstOrNull())
+            val window = WatchProviderSort.window(sort, today)
+            val dateParam = if (scope.type == "series") "first_air_date.lte" else "primary_release_date.lte"
+            CollectionSourceConfig(
+                kind = CollectionSourceKind.TMDB_DISCOVER,
+                mediaType = scope.type,
+                sortBy = sort,
+                discoverParams = buildMap {
+                    put("with_watch_providers", ids.joinToString("|"))
+                    put("watch_region", scope.region)
+                    scope.genreId?.let { put("with_genres", it.toString()) }
+                    window.releasedOnOrBefore?.let { put(dateParam, it) }
+                    window.minVoteCount?.let { put("vote_count.gte", it.toString()) }
+                }
+            )
+        }
+    }
+
+    private data class ProviderScope(val type: String, val region: String, val genreId: Int?)
+
+    private fun providerScope(source: CollectionSourceConfig) = ProviderScope(
+        type = if (WatchProviderSort.isSeries(source.mediaType)) "series" else "movie",
+        region = source.watchRegion?.takeIf(String::isNotBlank) ?: "US",
+        genreId = source.tmdbGenreId
+    )
 
     fun apply(sources: List<CollectionSourceConfig>, genreId: Int?): List<CollectionSourceConfig> {
         if (genreId == null) return sources

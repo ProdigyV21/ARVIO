@@ -125,7 +125,8 @@ class MediaRepository @Inject constructor(
         val items: List<MediaItem>,
         val hasMore: Boolean,
         val nextOffset: Int? = null,
-        val totalCount: Int? = null
+        val totalCount: Int? = null,
+        val sourceLoadFailed: Boolean = false
     )
 
     private val apiKey = Constants.TMDB_API_KEY
@@ -237,7 +238,11 @@ class MediaRepository @Inject constructor(
      * Resolved refs of a collection. [complete] is true when no source would return more for a
      * larger request (it ran out, or hit its budget ceiling).
      */
-    private data class CollectionRefs(val refs: List<Pair<MediaType, Int>>, val complete: Boolean)
+    private data class CollectionRefs(
+        val refs: List<Pair<MediaType, Int>>,
+        val complete: Boolean,
+        val sourceLoadFailed: Boolean = false
+    )
 
     private data class CollectionSourceRefs(
         val refs: List<Pair<MediaType, Int>>,
@@ -410,9 +415,9 @@ class MediaRepository @Inject constructor(
             !sourceResults[index].failed && (perSourceRefs[index].size < sourceBudgets[index] ||
                 (ceiling != null && sourceBudgets[index] >= ceiling))
         }
-        val resolved = CollectionRefs(refs.toList(), complete)
+        val resolved = CollectionRefs(refs.toList(), complete, sourceResults.any { it.failed })
         // Empty is a valid result. A failed page is not, even if earlier pages delivered items.
-        if (sourceResults.none { it.failed }) {
+        if (!resolved.sourceLoadFailed) {
             collectionRefsCache[cacheKey] = CacheEntry(resolved, System.currentTimeMillis())
         } else {
             collectionRefsCache.remove(cacheKey)
@@ -1440,7 +1445,9 @@ class MediaRepository @Inject constructor(
         )
         if (requestLanguage != contentLanguage) throw CancellationException("Collection language changed")
         val refs = if (mediaType == null) resolved.refs else resolved.refs.filter { it.first == mediaType }
-        if (refs.isEmpty()) return@coroutineScope CategoryPageResult(emptyList(), hasMore = false)
+        if (refs.isEmpty()) {
+            return@coroutineScope CategoryPageResult(emptyList(), hasMore = false, sourceLoadFailed = resolved.sourceLoadFailed)
+        }
 
         val pageRefs = refs.drop(offset).take(limit)
         val itemsByRef = LinkedHashMap<Pair<MediaType, Int>, MediaItem>()
@@ -1511,7 +1518,8 @@ class MediaRepository @Inject constructor(
         CategoryPageResult(
             items = items,
             hasMore = hasMore,
-            nextOffset = offset + pageRefs.size
+            nextOffset = offset + pageRefs.size,
+            sourceLoadFailed = resolved.sourceLoadFailed || items.size < pageRefs.size
         )
     }
 
@@ -1822,6 +1830,7 @@ class MediaRepository @Inject constructor(
         val region = source.watchRegion?.takeIf { it.isNotBlank() } ?: "US"
         val sortBy = source.sortBy ?: "popularity.desc"
         val genres = source.tmdbGenreId?.toString()
+        val window = WatchProviderSort.window(sortBy, java.time.LocalDate.now())
         return when (source.mediaType?.lowercase(Locale.US)) {
             "movie" -> loadPagedTmdbDiscoverRefs(
                 mediaType = MediaType.MOVIE,
@@ -1833,6 +1842,8 @@ class MediaRepository @Inject constructor(
                     watchProviders = providerId,
                     watchRegion = region,
                     sortBy = sortBy,
+                    minVoteCount = window.minVoteCount,
+                    primaryReleaseDateLte = window.releasedOnOrBefore,
                     language = contentLanguage,
                     page = page
                 )
@@ -1847,6 +1858,8 @@ class MediaRepository @Inject constructor(
                     watchRegion = region,
                     genres = genres,
                     sortBy = sortBy,
+                    minVoteCount = window.minVoteCount,
+                    firstAirDateLte = window.releasedOnOrBefore,
                     language = contentLanguage,
                     page = page
                 )

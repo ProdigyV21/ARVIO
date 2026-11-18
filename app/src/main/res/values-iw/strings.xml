@@ -2141,4 +2141,12 @@
     <string name="phone_input_page_sent">נשלח ✓ — לחצו OK בטלוויזיה.</string>
     <string name="phone_input_page_not_sent">לא נשלח</string>
     <string name="phone_input_page_expired">הקוד פג — סרקו שוב את קוד ה-QR בטלוויזיה.</string>
+    <string name="service_home_top10_series">10 הסדרות המובילות ב-%1$s</string>
+    <string name="service_home_top10_movies">10 הסרטים המובילים ב-%1$s</string>
+    <string name="service_home_new">חדש ב-%1$s</string>
+    <string name="service_home_originals">הפקות מקור של %1$s</string>
+    <string name="service_home_top_rated_series">הסדרות המדורגות ביותר</string>
+    <string name="service_home_top_rated_movies">הסרטים המדורגים ביותר</string>
+    <string name="service_home_filter_all">הכל</string>
+    <string name="service_home_filter_grid">סינון</string>
 </resources>
