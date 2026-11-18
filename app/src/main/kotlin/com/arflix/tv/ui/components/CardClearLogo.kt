@@ -21,7 +21,8 @@ import coil.size.Scale
 internal fun CardClearLogo(
     url: String,
     modifier: Modifier = Modifier,
-    imageLoader: ImageLoader = LocalContext.current.imageLoader
+    imageLoader: ImageLoader = LocalContext.current.imageLoader,
+    onLoadedChanged: ((Boolean) -> Unit)? = null
 ) {
     val context = LocalContext.current
     val density = LocalDensity.current
@@ -45,6 +46,9 @@ internal fun CardClearLogo(
         contentScale = ContentScale.Inside,
         alignment = Alignment.BottomStart,
         filterQuality = FilterQuality.High,
-        modifier = modifier.size(144.dp, 40.dp)
+        modifier = modifier.size(144.dp, 40.dp),
+        onLoading = { onLoadedChanged?.invoke(false) },
+        onSuccess = { onLoadedChanged?.invoke(true) },
+        onError = { onLoadedChanged?.invoke(false) }
     )
 }

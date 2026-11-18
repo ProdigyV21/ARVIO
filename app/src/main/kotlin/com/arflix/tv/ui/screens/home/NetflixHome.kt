@@ -1117,7 +1117,13 @@ internal fun sharesWideArt(category: Category, item: MediaItem, watching: Boolea
 
 /** A portrait card's title over its slice of the wide picture: the clear logo, or the name until one arrives. */
 @Composable
-private fun NetflixSliceTitle(item: MediaItem, logoUrl: String?, modifier: Modifier = Modifier) {
+internal fun NetflixSliceTitle(
+    item: MediaItem,
+    logoUrl: String?,
+    modifier: Modifier = Modifier,
+    imageLoader: coil.ImageLoader = LocalContext.current.imageLoader
+) {
+    var logoLoaded by remember(logoUrl, imageLoader) { mutableStateOf(false) }
     Box(
         modifier
             .clip(RoundedCornerShape(10.dp))
@@ -1126,12 +1132,15 @@ private fun NetflixSliceTitle(item: MediaItem, logoUrl: String?, modifier: Modif
         if (!logoUrl.isNullOrBlank()) {
             CardClearLogo(
                 url = logoUrl,
+                imageLoader = imageLoader,
+                onLoadedChanged = { logoLoaded = it },
                 modifier = Modifier
                     .align(Alignment.BottomStart)
                     .padding(start = 10.dp, end = 10.dp, bottom = 14.dp)
                     .testTag("netflix_slice_logo_${item.mediaType}_${item.id}")
             )
-        } else {
+        }
+        if (!logoLoaded) {
             Text(
                 text = item.title,
                 style = ArflixTypography.sectionTitle.copy(
