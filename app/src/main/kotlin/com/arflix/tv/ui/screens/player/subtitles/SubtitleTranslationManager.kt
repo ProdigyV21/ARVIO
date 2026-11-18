@@ -28,6 +28,42 @@ class SubtitleTranslationManager(
     var removeHearingImpaired: Boolean = true
     @Volatile var removeSubtitleHearingImpaired: Boolean = false
 
+    // ── Bilingual subtitles ─────────────────────────────────────────────────
+
+    /** Cue bus the renderer publishes primary/secondary lines to; the overlay draws them. */
+    val bilingualBus = com.arflix.tv.ui.screens.player.subtitles.bilingual.BilingualCueBus()
+
+    /** How the two languages are shown (original only / translation only / both / off). */
+    var displayMode: com.arflix.tv.ui.screens.player.subtitles.bilingual.BilingualDisplayMode =
+        com.arflix.tv.ui.screens.player.subtitles.bilingual.BilingualDisplayMode.BILINGUAL
+
+    /** Where the second language comes from while the bilingual layer is active. */
+    enum class BilingualSource { AI_TRANSLATION, EMBEDDED_TRACK }
+
+    var bilingualSource: BilingualSource = BilingualSource.AI_TRANSLATION
+        set(value) {
+            if (field !== value) bilingualBus.resetSecondary()
+            field = value
+        }
+
+    /** Path A's secondary-line provider (null = primary only). */
+    var secondarySource: com.arflix.tv.ui.screens.player.subtitles.bilingual.DualTrackSecondarySource? = null
+        set(value) {
+            if (field !== value) bilingualBus.resetSecondary()
+            field = value
+        }
+
+    /** Short user-facing notice about the smart bilingual mode (shown briefly by the overlay). */
+    val bilingualNotice =
+        kotlinx.coroutines.flow.MutableStateFlow<com.arflix.tv.ui.screens.player.subtitles.bilingual.BilingualNotice?>(null)
+
+    var onSecondaryLookup:
+        ((com.arflix.tv.ui.screens.player.subtitles.bilingual.DualTrackSecondarySource.Lookup) -> Unit)? = null
+
+    /** Translation requests are made only when the display mode needs them and path B is selected. */
+    val translationNeeded: Boolean
+        get() = isEnabled && displayMode.needsTranslation && bilingualSource == BilingualSource.AI_TRANSLATION
+
     var onTranslatingChanged: ((Boolean) -> Unit)? = null
     var onBatchResult: ((success: Boolean, error: String?) -> Unit)? = null
     /**
@@ -120,6 +156,22 @@ class SubtitleTranslationManager(
 
     fun getCached(text: String): String? = cache[text]
 
+    /**
+     * Like [translate] but reports whether the line really was translated. A cue already on screen
+     * uses it to attach the second line only when a real translation arrived, so a failed request
+     * never replaces the original text with a duplicate.
+     */
+    suspend fun translateDetailed(text: String): Pair<String, Boolean> {
+        if (!translationNeeded) return text to false
+        return try {
+            translate(text) to true
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            text to false
+        }
+    }
+
     fun isInFlight(text: String): Boolean = inFlight.containsKey(text)
 
     suspend fun translate(text: String): String {
@@ -154,6 +206,7 @@ class SubtitleTranslationManager(
     fun reset() {
         cache.clear()
         inFlight.clear()
+        bilingualBus.clear()
         if (pendingCount.get() == 0) {
             isTranslating = false
             onTranslatingChanged?.invoke(false)
@@ -164,7 +217,7 @@ class SubtitleTranslationManager(
         // The lookahead triggers fire whenever a text track renders cues — including tracks
         // selected under the hood by "find best match" with AI translation off. Never spend
         // API requests unless translation is actually active.
-        if (!isEnabled) return
+        if (!translationNeeded) return
         val uncached = texts.filter { !cache.containsKey(it) && !inFlight.containsKey(it) }
         if (uncached.isEmpty()) return
         uncached.chunked(40).forEach { chunk ->
