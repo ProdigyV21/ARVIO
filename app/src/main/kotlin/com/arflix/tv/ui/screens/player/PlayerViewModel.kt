@@ -509,10 +509,19 @@ class PlayerViewModel @Inject constructor(
     // Per-file state: cleared on every new media/stream so it can't leak across sources.
     private val untranslatableSourceKeys = mutableSetOf<String>()
 
+    /** User-configured translation endpoints (Settings → Audio & Subtitles → Translation service). */
+    private val customAiStore by lazy {
+        com.arflix.tv.ui.screens.player.subtitles.ai.CustomAiConfigStore.from(context)
+    }
+    private val customAiProvider: () -> com.arflix.tv.ui.screens.player.subtitles.ai.CustomAiConfig? = {
+        customAiStore.profiles.value.active
+    }
+
     /** Shared with [translationManager]; also used directly for AI subtitle line-matching. */
     private val translationService = SubtitleTranslationService(
         apiKeyProvider = { aiApiKey },
-        modelProvider = { aiModel }
+        modelProvider = { aiModel },
+        customConfigProvider = customAiProvider,
     )
 
     val translationManager: SubtitleTranslationManager = SubtitleTranslationManager(
@@ -941,7 +950,11 @@ class PlayerViewModel @Inject constructor(
                 SubtitleAiModel.valueOf(prefs[aiModelKey] ?: SubtitleAiModel.GROQ_LLAMA_70B.name)
             }.getOrDefault(SubtitleAiModel.GROQ_LLAMA_70B)
             aiRemoveHearingImpaired = prefs[aiRemoveHearingImpairedKey] ?: true
-            translationManager.updateService(apiKey = aiApiKey, model = aiModel)
+            translationManager.updateService(
+                apiKey = aiApiKey,
+                model = aiModel,
+                customConfigProvider = customAiProvider,
+            )
             translationManager.removeHearingImpaired = aiRemoveHearingImpaired
             translationManager.isEnabled = false
             untranslatableSourceKeys.clear()

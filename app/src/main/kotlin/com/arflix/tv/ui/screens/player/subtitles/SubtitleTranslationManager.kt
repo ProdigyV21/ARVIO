@@ -59,10 +59,15 @@ class SubtitleTranslationManager(
         }
     }
 
-    fun updateService(apiKey: String, model: SubtitleAiModel) {
+    fun updateService(
+        apiKey: String,
+        model: SubtitleAiModel,
+        customConfigProvider: () -> com.arflix.tv.ui.screens.player.subtitles.ai.CustomAiConfig? = { null },
+    ) {
         service = SubtitleTranslationService(
             apiKeyProvider = { apiKey },
-            modelProvider = { model }
+            modelProvider = { model },
+            customConfigProvider = customConfigProvider,
         )
     }
 

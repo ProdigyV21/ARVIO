@@ -5487,6 +5487,9 @@ private fun MobileSettingsSubPage(
                 }
             }
             "Audio & Subtitles" -> {
+                // Custom translation endpoints (OpenAI-compatible chat/responses, Anthropic
+                // Messages). When one is enabled it replaces the built-in Gemini/Groq models.
+                com.arflix.tv.ui.screens.player.subtitles.bilingual.CustomAiSection(targetLanguageName = "")
                 MobileSettingsCategory(title = stringResource(R.string.settings_section_subtitles)) {
                     MobileSettingsRow(
                         icon = Icons.Default.Subtitles,

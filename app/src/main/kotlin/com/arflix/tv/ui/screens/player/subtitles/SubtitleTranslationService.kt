@@ -116,8 +116,16 @@ internal fun repairTruncatedArray(text: String): JSONArray? {
 
 class SubtitleTranslationService(
     private val apiKeyProvider: () -> String,
-    private val modelProvider: () -> SubtitleAiModel = { SubtitleAiModel.GROQ_LLAMA_70B }
+    private val modelProvider: () -> SubtitleAiModel = { SubtitleAiModel.GROQ_LLAMA_70B },
+    /** Active custom endpoint, when the user configured one. Replaces the built-in models. */
+    private val customConfigProvider: () -> com.arflix.tv.ui.screens.player.subtitles.ai.CustomAiConfig? = { null },
 ) {
+
+    private fun activeCustom(): com.arflix.tv.ui.screens.player.subtitles.ai.CustomAiConfig? =
+        runCatching { customConfigProvider() }.getOrNull()?.takeIf { it.isActive }
+
+    /** True when either a custom endpoint or a built-in key can translate. */
+    fun isConfigured(): Boolean = activeCustom() != null || apiKeyProvider().isNotBlank()
 
     private val client = OkHttpClient.Builder()
         .connectTimeout(10, TimeUnit.SECONDS)
@@ -334,16 +342,21 @@ class SubtitleTranslationService(
         depth: Int
     ): TranslationResult {
         if (lines.isEmpty()) return TranslationResult(lines, true)
+        val custom = activeCustom()
         val apiKey = apiKeyProvider()
-        if (apiKey.isBlank()) {
+        if (custom == null && apiKey.isBlank()) {
             Log.e(TAG, "API key is blank — translation skipped")
             return TranslationResult(lines, false, "API key missing")
         }
 
-        val result = when (modelProvider()) {
-            SubtitleAiModel.GROQ_LLAMA_70B -> translateGroq(lines, targetLanguage, apiKey)
-            SubtitleAiModel.GEMINI_FLASH_25 -> translateGemini(lines, targetLanguage, apiKey)
-            SubtitleAiModel.CLAUDE_HAIKU -> translateClaude(lines, targetLanguage, apiKey)
+        val result = if (custom != null) {
+            translateCustom(custom, lines, targetLanguage)
+        } else {
+            when (modelProvider()) {
+                SubtitleAiModel.GROQ_LLAMA_70B -> translateGroq(lines, targetLanguage, apiKey)
+                SubtitleAiModel.GEMINI_FLASH_25 -> translateGemini(lines, targetLanguage, apiKey)
+                SubtitleAiModel.CLAUDE_HAIKU -> translateClaude(lines, targetLanguage, apiKey)
+            }
         }
 
         // A content-policy block poisons the whole window because of (usually) one line.
@@ -365,6 +378,79 @@ class SubtitleTranslationService(
             return TranslationResult(left.lines + right.lines, true, untranslated = untranslated)
         }
         return result
+    }
+
+    /** One-line smoke test used by the settings editor's "Test connection" button. */
+    suspend fun testCustom(
+        c: com.arflix.tv.ui.screens.player.subtitles.ai.CustomAiConfig,
+        targetLanguage: String,
+    ): TranslationResult =
+        translateCustom(c.copy(enabled = true), listOf("Winter is coming."), targetLanguage, attempt = 1)
+
+    private val customClient = OkHttpClient.Builder()
+        .connectTimeout(15, TimeUnit.SECONDS)
+        .readTimeout(90, TimeUnit.SECONDS)
+        .build()
+
+    /**
+     * One round trip to the user's own endpoint (OpenAI-compatible chat/responses or Anthropic
+     * Messages). Returns the same [TranslationResult] shape as the built-in providers, so the
+     * bisect/repair logic above keeps working unchanged. A server that rejects the "thinking off"
+     * switch gets one retry without it — some providers answer HTTP 400 to unknown fields.
+     */
+    private suspend fun translateCustom(
+        config: com.arflix.tv.ui.screens.player.subtitles.ai.CustomAiConfig,
+        lines: List<String>,
+        targetLanguage: String,
+        attempt: Int = 0,
+        withThinkingControl: Boolean = true,
+    ): TranslationResult {
+        val NL = "⏎"
+        val system = buildSystemPrompt(targetLanguage, NL)
+        val user = "Translate to $targetLanguage:\n${encodeIndexed(lines, NL)}"
+        val body = com.arflix.tv.ui.screens.player.subtitles.ai.CustomAiWire.buildBody(
+            config, system, user, jsonMode = false, withThinkingControl = withThinkingControl,
+        )
+        val request = Request.Builder()
+            .url(config.endpointUrl())
+            .post(body.toString().toRequestBody("application/json".toMediaType()))
+            .apply {
+                com.arflix.tv.ui.screens.player.subtitles.ai.CustomAiWire.headers(config)
+                    .forEach { (key, value) -> addHeader(key, value) }
+            }
+            .build()
+        return try {
+            val response = withContext(Dispatchers.IO) { customClient.newCall(request).execute() }
+            response.use { resp ->
+                val text = resp.body?.string()
+                if (!resp.isSuccessful) {
+                    if (resp.code == 400 && withThinkingControl) {
+                        Log.w(TAG, "custom model rejected the thinking switch — retrying without it")
+                        return translateCustom(config, lines, targetLanguage, attempt, withThinkingControl = false)
+                    }
+                    return TranslationResult(
+                        lines, false,
+                        com.arflix.tv.ui.screens.player.subtitles.ai.CustomAiWire.errorMessage(text)
+                            ?: "HTTP ${resp.code}",
+                    )
+                }
+                val raw = com.arflix.tv.ui.screens.player.subtitles.ai.CustomAiWire
+                    .extractText(config.protocol, text.orEmpty())
+                    ?: return TranslationResult(lines, false, "Empty reply")
+                val parsed = parseTranslationResult(lines, targetLanguage, raw, NL)
+                if (!parsed.success && attempt == 0) {
+                    Log.w(TAG, "custom model parse failed (${parsed.errorMessage}) — retrying batch once")
+                    translateCustom(config, lines, targetLanguage, attempt = 1, withThinkingControl)
+                } else {
+                    parsed
+                }
+            }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w(TAG, "custom model failed: ${e.message}")
+            TranslationResult(lines, false, e.message ?: "Custom model error")
+        }
     }
 
     private suspend fun translateGroq(lines: List<String>, targetLanguage: String, apiKey: String): TranslationResult {
