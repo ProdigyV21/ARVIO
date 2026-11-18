@@ -182,7 +182,8 @@ class TvViewModel @Inject constructor(
     }.getOrDefault(com.arflix.tv.ui.screens.tv.live.aisubs.LiveSubtitleStyle())
 
     suspend fun cachedSportsMetadata() = sportsRepository.cachedMetadata()
-    internal var cachedSportsSchedule: com.arflix.tv.ui.screens.tv.live.SportsScheduleSnapshot? = null
+    internal var cachedSportsSchedule: com.arflix.tv.ui.screens.tv.live.SportsScanResult? = null
+    internal var cachedSportsCatalogue: com.arflix.tv.ui.screens.tv.live.SportsScheduleSnapshot? = null
     private var sportsBroadcasterIndexLoad: Pair<SportsBroadcasterIndexKey, Deferred<SportsBroadcasterIndex>>? = null
 
     @androidx.annotation.MainThread

@@ -4178,19 +4178,7 @@ class IptvRepository @Inject constructor(
             System.err.println("[EPG-Refresh] refreshEpgForChannels: requested=${requested.size} resolved=${channels.size}")
             if (channels.isEmpty()) return@withContext null
 
-            val activePlaylistById = activePlaylists(config).associateBy { it.id }
-            val fallbackCreds = resolveXtreamCredentials(config)
-            val channelsByCredentials = LinkedHashMap<XtreamCredentials, MutableList<IptvChannel>>()
-            for (channel in channels) {
-                val playlistId = channel.id.substringBefore(':', missingDelimiterValue = "")
-                    .takeIf { it.isNotBlank() }
-                val playlistCreds = playlistId
-                    ?.let { activePlaylistById[it] }
-                    ?.let { resolveXtreamCredentials(it) }
-                val creds = playlistCreds ?: fallbackCreds ?: continue
-                if (resolveXtreamStreamId(channel) == null) continue
-                channelsByCredentials.getOrPut(creds) { mutableListOf() }.add(channel)
-            }
+            val channelsByCredentials = groupXtreamChannelsByCredentials(config, channels)
             val allChannelsByCredentials = groupXtreamChannelsByCredentials(
                 config,
                 (cachedChannels + channels).distinctBy { it.id }
@@ -4331,27 +4319,17 @@ class IptvRepository @Inject constructor(
                 }
             }
 
-            val missingXmlChannels = channels.filter { channel ->
-                !hasProgramData(mergedNowNext[channel.id])
-            }
-            val hasXtreamRequestedChannels = channelsByCredentials.isNotEmpty()
-            var xmlFallback: Map<String, IptvNowNext> = emptyMap()
-            var isXmlCached = false
-            if (missingXmlChannels.isNotEmpty() && !preferFullCatchupHistory && !hasXtreamRequestedChannels) {
-                val result = fetchVisibleXmlEpgForChannels(config, missingXmlChannels)
-                xmlFallback = result.first
-                isXmlCached = result.second
-                if (xmlFallback.isNotEmpty()) {
-                    mergedNowNext.putAll(xmlFallback)
-                    System.err.println(
-                        "[EPG-Refresh] XMLTV visible fallback added ${xmlFallback.size} channels"
-                    )
+            var indexedXmlChannels = emptySet<String>()
+            if (!preferFullCatchupHistory) {
+                val xtreamIds = channelsByCredentials.values.flatten().mapTo(HashSet()) { it.id }
+                val missingXmlChannels = channels.filter { !hasProgramData(mergedNowNext[it.id]) }
+                if (missingXmlChannels.isNotEmpty()) {
+                    val result = fetchVisibleXmlEpgForChannels(config, missingXmlChannels, xtreamIds)
+                    indexedXmlChannels = result.alreadyIndexed.filterTo(HashSet()) { !hasProgramData(mergedNowNext[it]) }
+                    result.guide.forEach { (id, guide) ->
+                        if (!hasProgramData(mergedNowNext[id])) mergedNowNext[id] = guide
+                    }
                 }
-            } else if (missingXmlChannels.isNotEmpty() && hasXtreamRequestedChannels) {
-                System.err.println(
-                    "[EPG-Refresh] Skipping XMLTV visible fallback for Xtream channels; " +
-                        "missing=${missingXmlChannels.size}"
-                )
             }
             if (mergedNowNext.isEmpty()) return@withContext null
 
@@ -4364,11 +4342,7 @@ class IptvRepository @Inject constructor(
             cachedNowNext.putAll(mergedForCache)
             cachedEpgAt = System.currentTimeMillis()
 
-            val toPersist = if (isXmlCached && xmlFallback.isNotEmpty()) {
-                mergedForCache.filterKeys { it !in xmlFallback.keys }
-            } else {
-                mergedForCache
-            }
+            val toPersist = if (indexedXmlChannels.isEmpty()) mergedForCache else mergedForCache.filterKeys { it !in indexedXmlChannels }
             if (toPersist.isNotEmpty()) {
                 persistEpgIndexChannels(config, toPersist, cachedEpgAt)
             }
@@ -4394,19 +4368,25 @@ class IptvRepository @Inject constructor(
             }
     }
 
+    private data class VisibleXmlGuide(val guide: Map<String, IptvNowNext>, val alreadyIndexed: Set<String>)
+
     private suspend fun fetchVisibleXmlEpgForChannels(
         config: IptvConfig,
-        channels: List<IptvChannel>
-    ): Pair<Map<String, IptvNowNext>, Boolean> {
-        if (channels.isEmpty()) return Pair(emptyMap(), false)
+        channels: List<IptvChannel>,
+        xtreamIds: Set<String>,
+    ): VisibleXmlGuide {
+        if (channels.isEmpty()) return VisibleXmlGuide(emptyMap(), emptySet())
         var candidates = resolveScopedEpgCandidates(config)
-        if (candidates.isEmpty()) {
+        if (candidates.none { candidate ->
+                channelsForScopedEpgCandidate(candidate, channels, config).any { !candidate.providerFallback || it.id !in xtreamIds }
+            }) {
             // No guide known yet: the playlist may name one in its #EXTM3U line, which is
             // never read when the channels come from the store instead of a playlist parse.
-            discoverEmbeddedEpgSourcesIfNeeded(activePlaylists(config))
+            val missingPlaylists = channels.mapTo(HashSet()) { it.id.substringBefore(':', missingDelimiterValue = "") }
+            discoverEmbeddedEpgSourcesIfNeeded(activePlaylists(config).filter { it.id in missingPlaylists })
             candidates = resolveScopedEpgCandidates(config)
         }
-        if (candidates.isEmpty()) return Pair(emptyMap(), false)
+        if (candidates.isEmpty()) return VisibleXmlGuide(emptyMap(), emptySet())
 
         val playlistKey = channels
             .asSequence()
@@ -4429,7 +4409,7 @@ class IptvRepository @Inject constructor(
             System.err.println(
                 "[EPG-Refresh] Skipping XMLTV visible fallback for ${(cooldownUntil - nowMs) / 1000}s"
             )
-            return Pair(emptyMap(), false)
+            return VisibleXmlGuide(emptyMap(), emptySet())
         }
         visibleXmlEpgCooldownUntil[cooldownKey] = nowMs + 90_000L
 
@@ -4439,14 +4419,21 @@ class IptvRepository @Inject constructor(
         val guideChannels = smallListChannelsForGuide()
             ?.let { all -> (channels + all).distinctBy { it.id } }
             ?: channels
-        val visibleCandidates = candidates.take(2)
-        for ((index, candidate) in visibleCandidates.withIndex()) {
+        val pending = channels.associateByTo(LinkedHashMap()) { it.id }
+        val guide = LinkedHashMap<String, IptvNowNext>()
+        val indexed = HashSet<String>()
+        val attempts = HashMap<String?, Int>()
+        for (candidate in candidates) {
+            if (pending.isEmpty()) break
+            val count = attempts.getOrDefault(candidate.playlistId, 0)
+            if (count >= 2) continue
+            val requested = channelsForScopedEpgCandidate(candidate, pending.values.toList(), config)
+                .filter { !candidate.providerFallback || it.id !in xtreamIds }
+            if (requested.isEmpty()) continue
             val candidateChannels = channelsForScopedEpgCandidate(candidate, guideChannels, config)
-            if (candidateChannels.isEmpty()) continue
-            System.err.println(
-                "[EPG-Refresh] XMLTV visible fallback ${index + 1}/${visibleCandidates.size} " +
-                    "for ${candidateChannels.size} channels"
-            )
+                .filter { !candidate.providerFallback || it.id !in xtreamIds }
+            attempts[candidate.playlistId] = count + 1
+            System.err.println("[EPG-Refresh] XMLTV fallback for ${requested.size} missing channels")
             var isCached = false
             val parsed = runCatching {
                 guideRequestBudget.request(candidate.url) {
@@ -4456,7 +4443,7 @@ class IptvRepository @Inject constructor(
                             fetchAndParseEpg(
                                 candidate.url,
                                 candidateChannels,
-                                notModifiedCheckChannels = channelsForScopedEpgCandidate(candidate, channels, config),
+                                notModifiedCheckChannels = requested,
                             ) { jobContext.ensureActive() }
                         }
                     }
@@ -4479,14 +4466,16 @@ class IptvRepository @Inject constructor(
                 System.err.println("[EPG-Refresh] XMLTV visible fallback failed: ${error.message}")
             }.getOrDefault(emptyMap())
 
-            if (parsed.isNotEmpty() && hasAnyProgramData(parsed)) {
-                visibleXmlEpgCooldownUntil[cooldownKey] = System.currentTimeMillis() + 30_000L
-                return Pair(parsed, isCached)
+            parsed.forEach { (id, data) ->
+                if (hasProgramData(data) && guide.putIfAbsent(id, data) == null) {
+                    if (isCached) indexed.add(id)
+                    pending.remove(id)
+                }
             }
         }
 
-        visibleXmlEpgCooldownUntil[cooldownKey] = System.currentTimeMillis() + 5 * 60_000L
-        return Pair(emptyMap(), false)
+        visibleXmlEpgCooldownUntil[cooldownKey] = System.currentTimeMillis() + if (guide.isEmpty()) 5 * 60_000L else 30_000L
+        return VisibleXmlGuide(guide, indexed)
     }
 
     /** Every channel of the active list when it is at most [LargeIptvListChannelCount], else null. */
@@ -8861,17 +8850,21 @@ class IptvRepository @Inject constructor(
         channels: List<IptvChannel>
     ): LinkedHashMap<XtreamCredentials, MutableList<IptvChannel>> {
         val activePlaylistById = activePlaylists(config).associateBy { it.id }
-        val fallbackCreds = resolveXtreamCredentials(config)
+        val legacyCreds by lazy { resolveXtreamCredentials(config) }
+        val playlistCredentials = HashMap<String, XtreamCredentials?>()
         val result = LinkedHashMap<XtreamCredentials, MutableList<IptvChannel>>()
         channels.forEach { channel ->
             if (!isGuideAllowed(config, channel)) return@forEach
             if (resolveXtreamStreamId(channel) == null) return@forEach
             val playlistId = channel.id.substringBefore(':', missingDelimiterValue = "")
                 .takeIf { it.isNotBlank() }
-            val playlistCreds = playlistId
-                ?.let { activePlaylistById[it] }
-                ?.let { resolveXtreamCredentials(it) }
-            val creds = playlistCreds ?: fallbackCreds ?: return@forEach
+            val playlistCreds = playlistId?.let { id ->
+                if (id !in playlistCredentials) playlistCredentials[id] = activePlaylistById[id]?.let { resolveXtreamCredentials(it) }
+                playlistCredentials[id]
+            }
+            // Do not borrow credentials from an unrelated enabled playlist for a plain M3U row.
+            val creds = playlistCreds ?: resolveXtreamCredentials(channel.streamUrl)
+                ?: channel.id.takeIf { it.startsWith("xtream:") }?.let { legacyCreds } ?: return@forEach
             result.getOrPut(creds) { mutableListOf() }.add(channel)
         }
         return result

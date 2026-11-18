@@ -17,6 +17,33 @@ internal data class SportsScheduleKey(val profileId: String?, val providerId: St
     val sourceVersion: Long, val excludedGroups: Set<String>, val epgBackfill: Boolean, val window: Long,
     val guideCoverage: Int = 0)
 internal data class SportsScheduleSnapshot(val key: SportsScheduleKey, val events: List<SportsGuideEvent>)
+internal data class SportsScanRequest(
+    val key: SportsScheduleKey,
+    val guide: Map<String, IptvNowNext>,
+    val refresh: Int,
+    val retryOnOpen: Int,
+)
+internal data class SportsScanResult(val request: SportsScanRequest, val events: List<SportsGuideEvent>)
+
+internal fun SportsScheduleKey.sameCatalogueScope(other: SportsScheduleKey): Boolean =
+    profileId == other.profileId && providerId == other.providerId &&
+        sourceVersion == other.sourceVersion && excludedGroups == other.excludedGroups
+
+internal fun SportsGuideEvent.isVisibleSportsResult(now: Long): Boolean =
+    hasChannels(now) && (isOnAir(now) || isScheduledNow(now) || programme.startUtcMillis > now)
+
+internal fun displaySportsCatalogue(
+    previous: List<SportsGuideEvent>,
+    incoming: List<SportsGuideEvent>,
+    complete: Boolean,
+    now: Long,
+): List<SportsGuideEvent> =
+    if (!complete && previous.any { it.isVisibleSportsResult(now) }) previous else incoming
+
+internal fun List<SportsGuideEvent>.filterSportsInstallations(allowed: Set<String>): List<SportsGuideEvent> {
+    if (none { event -> event.addonSources.any { it.installation !in allowed } }) return this
+    return map { event -> event.copy(addonSources = event.addonSources.filter { it.installation in allowed }) }
+}
 
 /**
  * A large playlist is indexed in stages. An empty in-memory guide therefore does
@@ -265,16 +292,19 @@ internal fun accumulateSportsGuideEvents(
     channels: List<IptvChannel>, guide: Map<String, IptvNowNext>, now: Long,
     events: SportsEventIndex, zone: ZoneId = ZoneId.systemDefault(),
     resolver: SportsProgrammeResolver = SportsProgrammeResolver(),
+    indexedStarts: Map<String, Set<Long>> = emptyMap(),
 ) {
     val end = Instant.ofEpochMilli(now).atZone(zone).toLocalDate().plusDays(2)
         .atStartOfDay(zone).toInstant().toEpochMilli()
     for (channel in channels) {
         val slice = guide[channel.id] ?: continue
         val fallback = sportsChannelSport("${channel.group} ${channel.name}")
-        val programmes = (listOfNotNull(slice.now, slice.next, slice.later) + slice.upcoming)
+        val starts = indexedStarts[channel.id]
+        val programmes = sportsUpcomingProgrammes(slice)
             .distinctBy { Triple(it.title, it.startUtcMillis, it.endUtcMillis) }
         for (programme in programmes) {
-            if (programme.endUtcMillis <= now || programme.startUtcMillis >= end ||
+            if (starts?.contains(programme.startUtcMillis) == true ||
+                programme.endUtcMillis <= now || programme.startUtcMillis >= end ||
                 programme.endUtcMillis <= programme.startUtcMillis || programme.title.isBlank()) continue
             val meta = resolver.resolve(programme, fallback)
             if (meta != null) events.add(meta.sport, meta.identity, programme, channel, meta.competition)
@@ -288,6 +318,9 @@ internal fun accumulateSportsGuideEvents(
         }
     }
 }
+
+internal fun sportsUpcomingProgrammes(slice: IptvNowNext): List<IptvProgram> =
+    listOfNotNull(slice.now, slice.next, slice.later) + slice.upcoming
 
 @Immutable
 internal data class SportsGuideRow(val id: String, val title: String, val events: List<SportsGuideEvent>)
