@@ -271,6 +271,7 @@ import com.arflix.tv.ui.theme.appBackgroundDark
 import com.arflix.tv.ui.theme.BackgroundElevated
 import com.arflix.tv.ui.theme.ErrorRed
 import com.arflix.tv.ui.theme.contrastingContentColor
+import com.arflix.tv.ui.theme.DangerRed
 import com.arflix.tv.ui.theme.Pink
 import com.arflix.tv.ui.theme.SuccessGreen
 import com.arflix.tv.ui.theme.TextPrimary
@@ -3832,7 +3833,6 @@ private fun SettingsChip(
     isFocused: Boolean = false,
     modifier: Modifier = Modifier
 ) {
-    val chipFocusColor = resolveAccentColor(fallback = Pink)
     Box(
         modifier = modifier
             .clip(RoundedCornerShape(12.dp))
@@ -3842,11 +3842,7 @@ private fun SettingsChip(
                     else -> Color.White.copy(alpha = 0.12f)
                 }
             )
-            .border(
-                width = if (isFocused) 2.dp else 0.dp,
-                color = if (isFocused) chipFocusColor else Color.Transparent,
-                shape = RoundedCornerShape(12.dp)
-            )
+            .settingsFocusOutline(isFocused, cornerRadius = 12.dp)
             .clickable(enabled = enabled) { onClick() }
             .padding(vertical = 12.dp),
         contentAlignment = Alignment.Center
@@ -8407,7 +8403,7 @@ internal fun IptvSettings(
                                 } else onDeleteSelectedPlaylists(selected.ids)
                             }
                             selection = IptvSourceSelection()
-                        }.background(Color(0xFFDC2626), RoundedCornerShape(8.dp)), contentAlignment = Alignment.Center) {
+                        }.background(DangerRed, RoundedCornerShape(8.dp)), contentAlignment = Alignment.Center) {
                             Icon(Icons.Default.Delete, contentDescription = stringResource(R.string.delete), tint = Color.White, modifier = Modifier.size(20.dp))
                         }
                         Spacer(modifier = Modifier.width(12.dp))
@@ -9577,6 +9573,7 @@ private fun DiscoveryActionButton(
     modifier: Modifier = Modifier
 ) {
     var isFocused by remember { mutableStateOf(false) }
+    val focusAccent = resolveAccentColor(fallback = Pink)
     Box(
         modifier = modifier
             .widthIn(min = if (label.length <= 5) 112.dp else 132.dp)
@@ -9593,7 +9590,7 @@ private fun DiscoveryActionButton(
                 width = if (isFocused) 2.dp else 1.dp,
                 color = when {
                     !enabled -> Color.White.copy(alpha = 0.18f)
-                    isFocused -> resolveAccentColor(fallback = Pink)
+                    isFocused -> focusAccent
                     highlighted -> Color.White.copy(alpha = 0.74f)
                     else -> Color.White.copy(alpha = 0.55f)
                 },
@@ -9688,7 +9685,7 @@ private fun CatalogsSettings(
                     Text(stringResource(R.string.settings_n_selected, selectedIds.size), style = ArflixTypography.sectionTitle, color = TextPrimary)
                     Spacer(modifier = Modifier.weight(1f))
                     if (selectedIds.isNotEmpty()) {
-                        Box(modifier = Modifier.size(36.dp).clickable { selectedIds.forEach { id -> val cat = catalogs.find { it.id == id }; if (cat != null) onDeleteCatalog(cat) }; selectionMode = false; selectedIds = emptySet() }.background(Color(0xFFDC2626), RoundedCornerShape(8.dp)), contentAlignment = Alignment.Center) {
+                        Box(modifier = Modifier.size(36.dp).clickable { selectedIds.forEach { id -> val cat = catalogs.find { it.id == id }; if (cat != null) onDeleteCatalog(cat) }; selectionMode = false; selectedIds = emptySet() }.background(DangerRed, RoundedCornerShape(8.dp)), contentAlignment = Alignment.Center) {
                             Icon(Icons.Default.Delete, contentDescription = stringResource(R.string.delete), tint = Color.White, modifier = Modifier.size(20.dp))
                         }
                         Spacer(modifier = Modifier.width(12.dp))
@@ -9855,7 +9852,7 @@ private fun CatalogsSettings(
                 Row(modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text(stringResource(R.string.settings_n_selected, selectedIds.size), style = ArflixTypography.sectionTitle, color = TextPrimary)
                     Spacer(modifier = Modifier.weight(1f))
-                    if (selectedIds.isNotEmpty()) { Box(modifier = Modifier.size(36.dp).clickable { selectedIds.forEach { id -> val cat = catalogs.find { it.id == id }; if (cat != null) onDeleteCatalog(cat) }; selectionMode = false; selectedIds = emptySet() }.background(Color(0xFFDC2626), RoundedCornerShape(8.dp)), contentAlignment = Alignment.Center) { Icon(Icons.Default.Delete, contentDescription = stringResource(R.string.delete), tint = Color.White, modifier = Modifier.size(20.dp)) }; Spacer(modifier = Modifier.width(12.dp)) }
+                    if (selectedIds.isNotEmpty()) { Box(modifier = Modifier.size(36.dp).clickable { selectedIds.forEach { id -> val cat = catalogs.find { it.id == id }; if (cat != null) onDeleteCatalog(cat) }; selectionMode = false; selectedIds = emptySet() }.background(DangerRed, RoundedCornerShape(8.dp)), contentAlignment = Alignment.Center) { Icon(Icons.Default.Delete, contentDescription = stringResource(R.string.delete), tint = Color.White, modifier = Modifier.size(20.dp)) }; Spacer(modifier = Modifier.width(12.dp)) }
                     Box(modifier = Modifier.size(36.dp).clickable { selectionMode = false; selectedIds = emptySet() }.background(Color.White.copy(alpha = 0.15f), RoundedCornerShape(8.dp)), contentAlignment = Alignment.Center) { Icon(Icons.Default.Close, contentDescription = stringResource(R.string.close), tint = Color.White, modifier = Modifier.size(20.dp)) }
                 }
             }
@@ -10019,14 +10016,14 @@ private fun CatalogActionChip(
     val accent = resolveAccentColor(fallback = Pink)
     var isPressed by remember { mutableStateOf(false) }
     val visualActive = isFocused || isPressed
-    val borderAccent = if (isDestructive) Color(0xFFDC2626) else accent
+    val borderAccent = if (isDestructive) DangerRed else accent
     val bgColor = when {
         !enabled -> Color.Black.copy(alpha = 0.4f)
         else -> Color.White.copy(alpha = 0.08f)
     }
     val fgColor = when {
         !enabled -> Color.White.copy(alpha = 0.5f)
-        visualActive && isDestructive -> Color(0xFFDC2626)
+        visualActive && isDestructive -> DangerRed
         visualActive -> Color.White
         else -> Color.White.copy(alpha = 0.7f)
     }
@@ -13917,7 +13914,7 @@ private fun CatalogPackImportDialog(
                         Text(
                             text = stringResource(R.string.settings_catalog_pack_import_failed),
                             style = ArflixTypography.sectionTitle,
-                            color = Color(0xFFDC2626)
+                            color = DangerRed
                         )
                         Spacer(modifier = Modifier.height(12.dp))
                         Text(
@@ -14133,7 +14130,7 @@ private fun CatalogPackDeleteConfirmDialog(
                 Text(
                     text = stringResource(R.string.settings_catalog_pack_delete_title),
                     style = ArflixTypography.sectionTitle,
-                    color = Color(0xFFDC2626)
+                    color = DangerRed
                 )
                 Spacer(modifier = Modifier.height(12.dp))
                 Text(
@@ -14381,7 +14378,7 @@ private fun YouTubeModalRow(
     imageUrl: String? = null,
     actions: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit
 ) {
-    val accent = if (danger) Color(0xFFDC2626) else resolveAccentColor(fallback = Pink)
+    val accent = if (danger) DangerRed else resolveAccentColor(fallback = Pink)
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -14423,7 +14420,7 @@ private fun YouTubeActionChip(
             .size(40.dp)
             .background(
                 when {
-                    highlighted && danger -> Color(0xFFDC2626)
+                    highlighted && danger -> DangerRed
                     highlighted -> Color.White
                     else -> Color.White.copy(alpha = 0.08f)
                 },
