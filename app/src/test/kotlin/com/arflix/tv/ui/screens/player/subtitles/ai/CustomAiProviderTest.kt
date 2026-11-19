@@ -1,5 +1,7 @@
 package com.arflix.tv.ui.screens.player.subtitles.ai
 
+import com.arflix.tv.ui.screens.player.subtitles.CLAUDE_ERROR_MAX_TOKENS
+import com.arflix.tv.ui.screens.player.subtitles.TRANSLATION_ERROR_CONTENT_BLOCKED
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -62,7 +64,6 @@ class CustomAiProviderTest {
         assertEquals("hi", CustomAiWire.extractText(AiProtocol.ANTHROPIC,
             """{"content":[{"type":"thinking","thinking":"..."},{"type":"text","text":"hi"}]}"""))
         assertNull(CustomAiWire.extractText(AiProtocol.ANTHROPIC, """{"content":[]}"""))
-        assertEquals("bad key", CustomAiWire.errorMessage("""{"error":{"message":"bad key","type":"auth"}}"""))
     }
 
     @Test fun `config round-trips through storage encoding`() {
@@ -97,16 +98,25 @@ class CustomAiProviderTest {
         assertFalse(CustomAiWire.buildBody(chat.copy(extraBody = "{oops"), "S", "U", true).has("oops"))
     }
 
-    @Test fun `usage is read from all three APIs`() {
-        val c = CustomAiWire.extractUsage(AiProtocol.OPENAI_CHAT,
-            """{"usage":{"prompt_tokens":100,"completion_tokens":40,"prompt_cache_hit_tokens":64,"completion_tokens_details":{"reasoning_tokens":30}}}""")!!
-        assertEquals(AiUsage(100, 40, 64, 30), c)
-        val r = CustomAiWire.extractUsage(AiProtocol.OPENAI_RESPONSES,
-            """{"usage":{"input_tokens":10,"output_tokens":5,"input_tokens_details":{"cached_tokens":2},"output_tokens_details":{"reasoning_tokens":1}}}""")!!
-        assertEquals(AiUsage(10, 5, 2, 1), r)
-        val a = CustomAiWire.extractUsage(AiProtocol.ANTHROPIC, """{"usage":{"input_tokens":7,"output_tokens":3,"cache_read_input_tokens":5}}""")!!
-        assertEquals(AiUsage(12, 3, 5, 0), a)
-        assertNull(CustomAiWire.extractUsage(AiProtocol.OPENAI_CHAT, "{}"))
+    @Test fun `provider stop reasons map to the batch retry markers`() {
+        assertEquals(TRANSLATION_ERROR_CONTENT_BLOCKED, CustomAiWire.incompleteReason(
+            AiProtocol.OPENAI_CHAT, """{"choices":[{"finish_reason":"content_filter"}]}""",
+        ))
+        assertEquals(CLAUDE_ERROR_MAX_TOKENS, CustomAiWire.incompleteReason(
+            AiProtocol.OPENAI_RESPONSES, """{"status":"incomplete","incomplete_details":{"reason":"max_output_tokens"}}""",
+        ))
+        assertEquals(TRANSLATION_ERROR_CONTENT_BLOCKED, CustomAiWire.incompleteReason(
+            AiProtocol.OPENAI_RESPONSES, """{"status":"incomplete","incomplete_details":{"reason":"content_filter"}}""",
+        ))
+        assertEquals(CLAUDE_ERROR_MAX_TOKENS, CustomAiWire.incompleteReason(
+            AiProtocol.ANTHROPIC, """{"stop_reason":"max_tokens"}""",
+        ))
+        assertEquals(TRANSLATION_ERROR_CONTENT_BLOCKED, CustomAiWire.incompleteReason(
+            AiProtocol.ANTHROPIC, """{"stop_reason":"refusal"}""",
+        ))
+        assertNull(CustomAiWire.incompleteReason(
+            AiProtocol.OPENAI_CHAT, """{"choices":[{"finish_reason":"stop","message":{"refusal":null}}]}""",
+        ))
     }
 
     @Test fun `several services round-trip and the active one is flagged enabled`() {

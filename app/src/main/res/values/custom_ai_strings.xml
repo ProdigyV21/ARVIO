@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="custom_ai_title">Translation service</string>
+    <string name="custom_ai_builtin">Built-in translation</string>
+    <string name="custom_ai_builtin_desc">Uses the model and API key above.</string>
+    <string name="custom_ai_incomplete">Incomplete</string>
+    <string name="custom_ai_add">Add a service</string>
+    <string name="custom_ai_edit">Edit</string>
+    <string name="custom_ai_new">New service</string>
+    <string name="custom_ai_edit_service">Edit service</string>
+    <string name="custom_ai_preset">Preset</string>
+    <string name="custom_ai_name">Name</string>
+    <string name="custom_ai_protocol">Protocol</string>
+    <string name="custom_ai_endpoint">API URL</string>
+    <string name="custom_ai_key">API key</string>
+    <string name="custom_ai_hide">Hide</string>
+    <string name="custom_ai_show">Show</string>
+    <string name="custom_ai_model">Model</string>
+    <string name="custom_ai_temperature">Temperature (blank uses provider default)</string>
+    <string name="custom_ai_max_tokens">Max output tokens</string>
+    <string name="custom_ai_thinking">Turn off thinking where supported</string>
+    <string name="custom_ai_thinking_desc">The app asks supported models to limit reasoning, which can reduce latency and output token usage.</string>
+    <string name="custom_ai_headers">Extra headers (one \"Name: value\" per line)</string>
+    <string name="custom_ai_body">Extra request JSON (optional)</string>
+    <string name="custom_ai_invalid_json">Invalid JSON. The extra request fields will be ignored.</string>
+    <string name="custom_ai_testing">Testing…</string>
+    <string name="custom_ai_test">Test connection</string>
+    <string name="custom_ai_incomplete_input">Enter an HTTP or HTTPS URL, a model, and an API key for a remote service.</string>
+    <string name="custom_ai_unknown_error">Unknown error</string>
+    <string name="custom_ai_rate_limited">Rate limited (HTTP 429). Wait a moment or check your quota.</string>
+    <string name="custom_ai_using_service">Translating with %1$s. The built-in model is used for line matching.</string>
+    <string name="custom_ai_builtin_matching">Built-in model</string>
+    <string name="custom_ai_device_storage">API keys are stored on this device.</string>
+    <string name="custom_ai_request_url">Requests go to %1$s</string>
+    <string name="custom_ai_test_ok">Test translation: %1$s</string>
+    <string name="custom_ai_test_failed">Connection test failed: %1$s</string>
+    <string name="custom_ai_rejected_key">API key rejected (%1$s).</string>
+    <string name="custom_ai_not_found">Check the API URL and model name (%1$s).</string>
+</resources>

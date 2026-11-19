@@ -1,6 +1,9 @@
 package com.arflix.tv.ui.screens.player.subtitles
 
 import android.util.Log
+import com.arflix.tv.ui.screens.player.subtitles.ai.CustomAiConfig
+import com.arflix.tv.ui.screens.player.subtitles.ai.CustomAiWire
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
@@ -49,7 +52,7 @@ private const val GROQ_REASONING_FORMAT = "hidden"
 // gemini-2.5-flash was retired by Google (HTTP 404 "no longer available", July 2026).
 // gemini-3.5-flash-lite: ~2x throughput (350 vs 165 tok/s) and ~3.5x cheaper than 3.5-flash,
 // positioned by Google for high-volume translation. Same v1beta API + thinkingLevel field.
-private const val GEMINI_MODEL_ID = "gemini-3.5-flash-lite"
+internal const val GEMINI_MODEL_ID = "gemini-3.5-flash-lite"
 private const val GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models/$GEMINI_MODEL_ID:generateContent"
 
 // Transient-failure retry (server overload / flaky network). 503/500/502 and IOExceptions are
@@ -118,14 +121,15 @@ class SubtitleTranslationService(
     private val apiKeyProvider: () -> String,
     private val modelProvider: () -> SubtitleAiModel = { SubtitleAiModel.GROQ_LLAMA_70B },
     /** Active custom endpoint, when the user configured one. Replaces the built-in models. */
-    private val customConfigProvider: () -> com.arflix.tv.ui.screens.player.subtitles.ai.CustomAiConfig? = { null },
+    private val customConfigProvider: () -> CustomAiConfig? = { null },
 ) {
 
-    private fun activeCustom(): com.arflix.tv.ui.screens.player.subtitles.ai.CustomAiConfig? =
-        runCatching { customConfigProvider() }.getOrNull()?.takeIf { it.isActive }
+    private fun activeCustom(): CustomAiConfig? = customConfigProvider()?.takeIf { it.isActive }
 
     /** True when either a custom endpoint or a built-in key can translate. */
     fun isConfigured(): Boolean = activeCustom() != null || apiKeyProvider().isNotBlank()
+
+    fun canMatchSubtitleLines(): Boolean = apiKeyProvider().isNotBlank()
 
     private val client = OkHttpClient.Builder()
         .connectTimeout(10, TimeUnit.SECONDS)
@@ -382,15 +386,16 @@ class SubtitleTranslationService(
 
     /** One-line smoke test used by the settings editor's "Test connection" button. */
     suspend fun testCustom(
-        c: com.arflix.tv.ui.screens.player.subtitles.ai.CustomAiConfig,
+        config: CustomAiConfig,
         targetLanguage: String,
-    ): TranslationResult =
-        translateCustom(c.copy(enabled = true), listOf("Winter is coming."), targetLanguage, attempt = 1)
+    ): TranslationResult = translateCustom(config, listOf("Winter is coming."), targetLanguage, retryParse = false)
 
-    private val customClient = OkHttpClient.Builder()
-        .connectTimeout(15, TimeUnit.SECONDS)
-        .readTimeout(90, TimeUnit.SECONDS)
-        .build()
+    private val customClient by lazy {
+        client.newBuilder()
+            .connectTimeout(15, TimeUnit.SECONDS)
+            .readTimeout(90, TimeUnit.SECONDS)
+            .build()
+    }
 
     /**
      * One round trip to the user's own endpoint (OpenAI-compatible chat/responses or Anthropic
@@ -399,57 +404,54 @@ class SubtitleTranslationService(
      * switch gets one retry without it — some providers answer HTTP 400 to unknown fields.
      */
     private suspend fun translateCustom(
-        config: com.arflix.tv.ui.screens.player.subtitles.ai.CustomAiConfig,
+        config: CustomAiConfig,
         lines: List<String>,
         targetLanguage: String,
-        attempt: Int = 0,
+        retryParse: Boolean = true,
         withThinkingControl: Boolean = true,
-    ): TranslationResult {
-        val NL = "⏎"
-        val system = buildSystemPrompt(targetLanguage, NL)
-        val user = "Translate to $targetLanguage:\n${encodeIndexed(lines, NL)}"
-        val body = com.arflix.tv.ui.screens.player.subtitles.ai.CustomAiWire.buildBody(
-            config, system, user, jsonMode = false, withThinkingControl = withThinkingControl,
-        )
-        val request = Request.Builder()
-            .url(config.endpointUrl())
-            .post(body.toString().toRequestBody("application/json".toMediaType()))
-            .apply {
-                com.arflix.tv.ui.screens.player.subtitles.ai.CustomAiWire.headers(config)
-                    .forEach { (key, value) -> addHeader(key, value) }
+    ): TranslationResult = withContext(Dispatchers.IO) {
+        try {
+            val newlineMarker = "⏎"
+            val system = buildSystemPrompt(targetLanguage, newlineMarker)
+            val user = "Translate to $targetLanguage:\n${encodeIndexed(lines, newlineMarker)}"
+            val body = CustomAiWire.buildBody(config, system, user, jsonMode = false, withThinkingControl).toString()
+            val request = Request.Builder()
+                .url(config.endpointUrl())
+                .post(body.toRequestBody("application/json".toMediaType()))
+                .apply {
+                    CustomAiWire.headers(config).forEach { (key, value) -> addHeader(key, value) }
+                }
+                .build()
+            val (code, text) = customClient.newCall(request).execute().use { response ->
+                response.code to response.body?.string().orEmpty()
             }
-            .build()
-        return try {
-            val response = withContext(Dispatchers.IO) { customClient.newCall(request).execute() }
-            response.use { resp ->
-                val text = resp.body?.string()
-                if (!resp.isSuccessful) {
-                    if (resp.code == 400 && withThinkingControl) {
-                        Log.w(TAG, "custom model rejected the thinking switch — retrying without it")
-                        return translateCustom(config, lines, targetLanguage, attempt, withThinkingControl = false)
+            if (code !in 200..299) {
+                if (code == 400 && withThinkingControl && config.disableThinking &&
+                    CustomAiWire.thinkingOff(config).isNotEmpty()
+                ) {
+                    val fallbackBody = CustomAiWire.buildBody(config, system, user, jsonMode = false, withThinkingControl = false)
+                    if (fallbackBody.toString() != body) {
+                        return@withContext translateCustom(config, lines, targetLanguage, retryParse, withThinkingControl = false)
                     }
-                    return TranslationResult(
-                        lines, false,
-                        com.arflix.tv.ui.screens.player.subtitles.ai.CustomAiWire.errorMessage(text)
-                            ?: "HTTP ${resp.code}",
-                    )
                 }
-                val raw = com.arflix.tv.ui.screens.player.subtitles.ai.CustomAiWire
-                    .extractText(config.protocol, text.orEmpty())
-                    ?: return TranslationResult(lines, false, "Empty reply")
-                val parsed = parseTranslationResult(lines, targetLanguage, raw, NL)
-                if (!parsed.success && attempt == 0) {
-                    Log.w(TAG, "custom model parse failed (${parsed.errorMessage}) — retrying batch once")
-                    translateCustom(config, lines, targetLanguage, attempt = 1, withThinkingControl)
-                } else {
-                    parsed
-                }
+                val error = if (code == 429) "RATE_LIMITED" else "HTTP $code"
+                return@withContext TranslationResult(lines, false, error)
             }
-        } catch (e: kotlinx.coroutines.CancellationException) {
+            CustomAiWire.incompleteReason(config.protocol, text)?.let { reason ->
+                return@withContext TranslationResult(lines, false, reason)
+            }
+            val raw = CustomAiWire.extractText(config.protocol, text)
+                ?: return@withContext TranslationResult(lines, false, "Empty reply")
+            val parsed = parseTranslationResult(lines, targetLanguage, raw, newlineMarker)
+            if (parsed.success || !retryParse) parsed
+            else translateCustom(config, lines, targetLanguage, retryParse = false, withThinkingControl)
+        } catch (e: CancellationException) {
             throw e
+        } catch (_: IllegalArgumentException) {
+            TranslationResult(lines, false, "Invalid custom API URL, headers or request settings")
         } catch (e: Exception) {
-            Log.w(TAG, "custom model failed: ${e.message}")
-            TranslationResult(lines, false, e.message ?: "Custom model error")
+            Log.w(TAG, "Custom subtitle request failed (${e.javaClass.simpleName})")
+            TranslationResult(lines, false, "Custom subtitle request failed")
         }
     }
 

@@ -2,9 +2,14 @@ package com.arflix.tv.ui.screens.player.subtitles.ai
 
 import android.content.Context
 import android.content.SharedPreferences
+import com.arflix.tv.ui.screens.player.subtitles.CLAUDE_ERROR_MAX_TOKENS
+import com.arflix.tv.ui.screens.player.subtitles.CLAUDE_MODEL_ID
+import com.arflix.tv.ui.screens.player.subtitles.GEMINI_MODEL_ID
+import com.arflix.tv.ui.screens.player.subtitles.TRANSLATION_ERROR_CONTENT_BLOCKED
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -31,8 +36,8 @@ enum class AiProtocol(val id: String) {
 
 /**
  * A custom translation model: any endpoint speaking one of the three protocols. When [enabled]
- * and complete, it replaces the built-in Gemini/Groq models for subtitle translation and line
- * matching. (Gemini "sync by hearing" still needs a Gemini key — it streams audio.)
+ * and complete, it supplies subtitle translation. Line matching and sync by hearing use
+ * their built-in credentials.
  */
 data class CustomAiConfig(
     /** Stable id of this saved service. */
@@ -46,7 +51,7 @@ data class CustomAiConfig(
     val apiKey: String = "",
     val model: String = "",
     /** Blank = not sent (some reasoning models reject temperature). */
-    val temperature: String = "0.2",
+    val temperature: String = "",
     /** Optional extra request headers, one `Name: value` per line. */
     val extraHeaders: String = "",
     /** Max output tokens (Anthropic requires one; others only when > 0). */
@@ -63,7 +68,7 @@ data class CustomAiConfig(
     val displayName: String get() = name.ifBlank { model.ifBlank { "AI" } }
 
     val isComplete: Boolean
-        get() = baseUrl.isNotBlank() && model.isNotBlank() &&
+        get() = endpointUrl().isNotEmpty() && model.isNotBlank() &&
             (apiKey.isNotBlank() || isLocalUrl(baseUrl))
 
     val isActive: Boolean get() = enabled && isComplete
@@ -80,17 +85,23 @@ data class CustomAiConfig(
 
     companion object {
         fun resolveEndpoint(baseUrl: String, protocol: AiProtocol): String {
-            val base = baseUrl.trim().trimEnd('/')
-            if (base.isEmpty()) return ""
-            val known = listOf("/chat/completions", "/responses", "/messages")
-            if (known.any { base.endsWith(it) }) return base
-            return base + protocol.endpointSuffix
+            val url = baseUrl.toHttpUrlOrNull() ?: return ""
+            val path = url.encodedPath.trimEnd('/')
+            val endpoint = if (AiProtocol.entries.any { path.endsWith(it.endpointSuffix) }) {
+                path
+            } else {
+                path + protocol.endpointSuffix
+            }
+            return url.newBuilder().encodedPath(endpoint).build().toString()
         }
 
         fun isLocalUrl(url: String): Boolean {
-            val u = url.lowercase()
-            return u.contains("://localhost") || u.contains("://127.") || u.contains("://10.") ||
-                u.contains("://192.168.") || Regex("://172\\.(1[6-9]|2\\d|3[01])\\.").containsMatchIn(u)
+            val host = url.toHttpUrlOrNull()?.host ?: return false
+            if (host == "localhost" || host == "::1") return true
+            val octets = host.split('.')
+            if (octets.size != 4 || octets.any { (it.toIntOrNull() ?: -1) !in 0..255 }) return false
+            return octets[0] in setOf("10", "127") || host.startsWith("192.168.") ||
+                (octets[0] == "172" && octets[1].toInt() in 16..31)
         }
     }
 }
@@ -102,7 +113,7 @@ object AiPresets {
     val all = listOf(
         AiPreset("OpenAI (Chat)", AiProtocol.OPENAI_CHAT, "https://api.openai.com/v1", "gpt-4.1-mini"),
         AiPreset("OpenAI (Responses)", AiProtocol.OPENAI_RESPONSES, "https://api.openai.com/v1", "gpt-4.1-mini"),
-        AiPreset("Anthropic Claude", AiProtocol.ANTHROPIC, "https://api.anthropic.com/v1", "claude-3-5-haiku-latest"),
+        AiPreset("Anthropic Claude", AiProtocol.ANTHROPIC, "https://api.anthropic.com/v1", CLAUDE_MODEL_ID),
         AiPreset("DeepSeek", AiProtocol.OPENAI_CHAT, "https://api.deepseek.com", "deepseek-flash"),
         AiPreset("Qwen (DashScope)", AiProtocol.OPENAI_CHAT, "https://dashscope.aliyuncs.com/compatible-mode/v1", "qwen-plus"),
         AiPreset("SiliconFlow", AiProtocol.OPENAI_CHAT, "https://api.siliconflow.cn/v1", "Qwen/Qwen2.5-72B-Instruct"),
@@ -110,7 +121,7 @@ object AiPresets {
         AiPreset("Zhipu GLM", AiProtocol.OPENAI_CHAT, "https://open.bigmodel.cn/api/paas/v4", "glm-4-flash"),
         AiPreset("OpenRouter", AiProtocol.OPENAI_CHAT, "https://openrouter.ai/api/v1", "openai/gpt-4o-mini"),
         AiPreset("Groq", AiProtocol.OPENAI_CHAT, "https://api.groq.com/openai/v1", "llama-3.1-8b-instant"),
-        AiPreset("Gemini (OpenAI compatible)", AiProtocol.OPENAI_CHAT, "https://generativelanguage.googleapis.com/v1beta/openai", "gemini-2.5-flash"),
+        AiPreset("Gemini (OpenAI compatible)", AiProtocol.OPENAI_CHAT, "https://generativelanguage.googleapis.com/v1beta/openai", GEMINI_MODEL_ID),
         AiPreset("Ollama (local)", AiProtocol.OPENAI_CHAT, "http://192.168.1.100:11434/v1", "qwen2.5:7b"),
     )
 }
@@ -223,7 +234,7 @@ class CustomAiConfigStore private constructor(private val prefs: SharedPreferenc
             baseUrl = o.optString("baseUrl"),
             apiKey = o.optString("apiKey"),
             model = o.optString("model"),
-            temperature = o.optString("temperature", "0.2"),
+            temperature = o.optString("temperature"),
             extraHeaders = o.optString("extraHeaders"),
             maxTokens = o.optInt("maxTokens", 4096).coerceIn(256, 65536),
             disableThinking = o.optBoolean("disableThinking", true),
@@ -248,31 +259,6 @@ class CustomAiConfigStore private constructor(private val prefs: SharedPreferenc
             CustomAiProfiles(list, o.optString("activeId").takeIf { id -> id.isNotBlank() && list.any { it.id == id } })
         }.getOrDefault(CustomAiProfiles())
     }
-}
-
-/** Tokens a request used, as the API reported them. */
-data class AiUsage(val input: Int, val output: Int, val cachedInput: Int = 0, val reasoning: Int = 0)
-
-/** Running token count for the current app session (shown in settings so cost is never a surprise). */
-object AiUsageMeter {
-    private val _total = MutableStateFlow(Totals())
-    val total: StateFlow<Totals> = _total.asStateFlow()
-
-    data class Totals(val requests: Int = 0, val input: Long = 0, val output: Long = 0, val cachedInput: Long = 0, val reasoning: Long = 0)
-
-    @Synchronized
-    fun add(u: AiUsage?) {
-        val t = _total.value
-        _total.value = t.copy(
-            requests = t.requests + 1,
-            input = t.input + (u?.input ?: 0),
-            output = t.output + (u?.output ?: 0),
-            cachedInput = t.cachedInput + (u?.cachedInput ?: 0),
-            reasoning = t.reasoning + (u?.reasoning ?: 0),
-        )
-    }
-
-    fun reset() { _total.value = Totals() }
 }
 
 /** Request bodies and response parsing for the three protocols (pure, unit-tested). */
@@ -339,7 +325,7 @@ object CustomAiWire {
                 "openrouter.ai" in url -> listOf("reasoning" to JSONObject().put("enabled", false))
                 "api.openai.com" in url -> openAiEffort()?.let { listOf("reasoning_effort" to it) }.orEmpty()
                 "generativelanguage.googleapis.com" in url ->
-                    listOf("reasoning_effort" to if ("2.5" in model) "none" else "low")
+                    listOf("reasoning_effort" to if ("2.5" in model) "none" else "minimal")
                 "groq.com" in url -> when {
                     "qwen" in model -> listOf("reasoning_effort" to "none")
                     "gpt-oss" in model -> listOf("reasoning_effort" to "low")
@@ -358,32 +344,6 @@ object CustomAiWire {
         o.keys().forEach { k -> body.put(k, o.get(k)) }
     }
 
-    /** Token usage the response reports (null when it reports none). */
-    fun extractUsage(protocol: AiProtocol, body: String): AiUsage? {
-        val o = runCatching { JSONObject(body) }.getOrNull() ?: return null
-        val u = o.optJSONObject("usage") ?: return null
-        return when (protocol) {
-            AiProtocol.OPENAI_CHAT -> AiUsage(
-                input = u.optInt("prompt_tokens"),
-                output = u.optInt("completion_tokens"),
-                cachedInput = u.optJSONObject("prompt_tokens_details")?.optInt("cached_tokens")?.takeIf { it > 0 }
-                    ?: u.optInt("prompt_cache_hit_tokens"),
-                reasoning = u.optJSONObject("completion_tokens_details")?.optInt("reasoning_tokens") ?: 0,
-            )
-            AiProtocol.OPENAI_RESPONSES -> AiUsage(
-                input = u.optInt("input_tokens"),
-                output = u.optInt("output_tokens"),
-                cachedInput = u.optJSONObject("input_tokens_details")?.optInt("cached_tokens") ?: 0,
-                reasoning = u.optJSONObject("output_tokens_details")?.optInt("reasoning_tokens") ?: 0,
-            )
-            AiProtocol.ANTHROPIC -> AiUsage(
-                input = u.optInt("input_tokens") + u.optInt("cache_read_input_tokens") + u.optInt("cache_creation_input_tokens"),
-                output = u.optInt("output_tokens"),
-                cachedInput = u.optInt("cache_read_input_tokens"),
-            )
-        }
-    }
-
     fun headers(c: CustomAiConfig): List<Pair<String, String>> {
         val base = when (c.protocol) {
             AiProtocol.ANTHROPIC -> listOfNotNull(
@@ -394,6 +354,34 @@ object CustomAiWire {
         }
         val extra = c.headerPairs()
         return base.filter { b -> extra.none { it.first.equals(b.first, ignoreCase = true) } } + extra
+    }
+
+    /** Translate protocol-specific stop reasons into the player's batch error contract. */
+    fun incompleteReason(protocol: AiProtocol, body: String): String? {
+        val reply = runCatching { JSONObject(body) }.getOrNull() ?: return null
+        return when (protocol) {
+            AiProtocol.OPENAI_CHAT -> {
+                val choice = reply.optJSONArray("choices")?.optJSONObject(0) ?: return null
+                when (choice.optString("finish_reason")) {
+                    "length" -> CLAUDE_ERROR_MAX_TOKENS
+                    "content_filter" -> TRANSLATION_ERROR_CONTENT_BLOCKED
+                    else -> choice.optJSONObject("message")?.optString("refusal").orEmpty()
+                        .takeIf { it.isNotBlank() && it != "null" }
+                        ?.let { TRANSLATION_ERROR_CONTENT_BLOCKED }
+                }
+            }
+            AiProtocol.OPENAI_RESPONSES -> when {
+                reply.optString("status") != "incomplete" -> null
+                reply.optJSONObject("incomplete_details")?.optString("reason") == "content_filter" ->
+                    TRANSLATION_ERROR_CONTENT_BLOCKED
+                else -> CLAUDE_ERROR_MAX_TOKENS
+            }
+            AiProtocol.ANTHROPIC -> when (reply.optString("stop_reason")) {
+                "max_tokens" -> CLAUDE_ERROR_MAX_TOKENS
+                "refusal" -> TRANSLATION_ERROR_CONTENT_BLOCKED
+                else -> null
+            }
+        }
     }
 
     /** The model's text, or null when the response carries none. */
@@ -438,18 +426,6 @@ object CustomAiWire {
                 }.let(::stripThinking).takeIf { it.isNotBlank() }
             }
         }
-    }
-
-    /** A short reason from an error body (`{"error":{"message":…}}` in all three APIs). */
-    fun errorMessage(body: String?): String? {
-        if (body.isNullOrBlank()) return null
-        val o = runCatching { JSONObject(body) }.getOrNull() ?: return body.take(160)
-        val err = o.opt("error")
-        return when (err) {
-            is JSONObject -> err.optString("message").ifBlank { err.toString() }
-            is String -> err
-            else -> o.optString("message").ifBlank { body.take(160) }
-        }.take(200)
     }
 
     /** Reasoning models served through chat endpoints sometimes inline `<think>…</think>`. */

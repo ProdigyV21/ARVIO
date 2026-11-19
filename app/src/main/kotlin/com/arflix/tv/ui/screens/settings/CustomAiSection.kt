@@ -1,4 +1,4 @@
-package com.arflix.tv.ui.screens.player.subtitles.bilingual
+package com.arflix.tv.ui.screens.settings
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -18,7 +18,6 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -28,7 +27,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -40,15 +39,15 @@ import com.arflix.tv.ui.screens.player.subtitles.ai.AiPresets
 import com.arflix.tv.ui.screens.player.subtitles.ai.AiProtocol
 import com.arflix.tv.ui.screens.player.subtitles.ai.CustomAiConfigStore
 import com.arflix.tv.ui.screens.player.subtitles.ai.CustomAiConfig
-import com.arflix.tv.ui.screens.player.subtitles.ai.AiUsageMeter
+import com.arflix.tv.R
+import com.arflix.tv.ui.screens.player.subtitles.ai.CustomAiProfiles
+import com.arflix.tv.ui.theme.AccentWhite
+import com.arflix.tv.ui.theme.ErrorRed
+import com.arflix.tv.ui.theme.SuccessGreen
+import com.arflix.tv.ui.theme.TextPrimary
+import com.arflix.tv.ui.theme.TextSecondary
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
-
-private val CInk = Color(0xFFF2F2F2)
-private val CInkDim = Color(0xFFA8A8A8)
-private val CCard = Color(0x22FFFFFF)
-private val CAccent = Color(0xFFF4D979)
-private val COk = Color(0xFF8BE28B)
-private val CErr = Color(0xFFFF8A80)
 
 /**
  * Saved translation services: any OpenAI-compatible Chat Completions, OpenAI Responses or
@@ -56,37 +55,37 @@ private val CErr = Color(0xFFFF8A80)
  * Gemini/Groq). Edits happen on a draft and only "Save" writes them.
  */
 @Composable
-fun CustomAiSection(targetLanguageName: String) {
-    val context = LocalContext.current
-    val store = remember { CustomAiConfigStore.from(context) }
-    val profiles by store.profiles.collectAsState()
-    val usage by AiUsageMeter.total.collectAsState()
+internal fun CustomAiSection(
+    store: CustomAiConfigStore,
+    profiles: CustomAiProfiles,
+    targetLanguageName: String,
+) {
     var editing by remember { mutableStateOf<CustomAiConfig?>(null) }
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(bt("Translation service").uppercase(), color = CInkDim, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 0.8.sp)
+        Text(stringResource(R.string.custom_ai_title).uppercase(), color = TextSecondary, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 0.8.sp)
 
         ServiceRow(
-            title = bt("Built-in (Gemini / Groq)"),
-            subtitle = bt("Uses the key from Settings → AI Subtitles"),
-            selected = profiles.activeId == null,
+            title = stringResource(R.string.custom_ai_builtin),
+            subtitle = stringResource(R.string.custom_ai_builtin_desc),
+            selected = !profiles.active.isActive,
             onSelect = { store.activate(null) },
             onEdit = null,
         )
         profiles.profiles.forEach { p ->
             ServiceRow(
                 title = p.displayName,
-                subtitle = "${p.model} · ${protocolName(p.protocol)}" + if (p.isComplete) "" else " · " + bt("incomplete"),
-                selected = profiles.activeId == p.id,
+                subtitle = "${p.model} · ${protocolName(p.protocol)}" + if (p.isComplete) "" else " · " + stringResource(R.string.custom_ai_incomplete),
+                selected = profiles.activeId == p.id && p.isComplete,
                 onSelect = { if (p.isComplete) store.activate(p.id) else editing = p },
                 onEdit = { editing = p },
             )
         }
         if (editing == null) {
             Text(
-                "+ " + bt("Add a service"),
-                color = CAccent, fontSize = 13.sp, fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.clickable { editing = CustomAiConfig(temperature = "0.2") }.padding(vertical = 6.dp)
+                "+ " + stringResource(R.string.custom_ai_add),
+                color = AccentWhite, fontSize = 13.sp, fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.clickable { editing = CustomAiConfig() }.padding(vertical = 6.dp)
             )
         }
         editing?.let { start ->
@@ -94,26 +93,15 @@ fun CustomAiSection(targetLanguageName: String) {
                 initial = start,
                 isNew = profiles.profiles.none { it.id == start.id && start.id.isNotBlank() },
                 targetLanguageName = targetLanguageName,
-                onSave = { draft -> store.save(draft, activate = true); editing = null },
+                onSave = { draft -> store.save(draft, activate = false); editing = null },
                 onDelete = { store.delete(start.id); editing = null },
                 onCancel = { editing = null },
             )
         }
 
-        if (usage.requests > 0) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text(
-                    bt("Used since app start: %1\$s requests · input %2\$s (cached %3\$s) · output %4\$s (thinking %5\$s) tokens")
-                        .format(usage.requests, usage.input, usage.cachedInput, usage.output, usage.reasoning),
-                    color = if (usage.reasoning > usage.output / 2 && usage.reasoning > 0) CErr else CInkDim,
-                    fontSize = 11.sp, modifier = Modifier.weight(1f)
-                )
-                Text(bt("Reset"), color = CAccent, fontSize = 11.sp, modifier = Modifier.clickable { AiUsageMeter.reset() }.padding(4.dp))
-            }
-        }
         Text(
-            bt("Keys are stored only on this device. Translations are cached, so re-watching or seeking back costs nothing. Lines are translated in batches of ~50 with the previous lines as context."),
-            color = CInkDim, fontSize = 11.sp
+            stringResource(R.string.custom_ai_device_storage),
+            color = TextSecondary, fontSize = 11.sp
         )
     }
 }
@@ -124,18 +112,18 @@ private fun ServiceRow(title: String, subtitle: String, selected: Boolean, onSel
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(10.dp))
-            .background(if (selected) CAccent.copy(alpha = 0.16f) else CCard)
+            .background(if (selected) AccentWhite.copy(alpha = 0.16f) else TextPrimary.copy(alpha = 0.12f))
             .clickable { onSelect() }
             .padding(horizontal = 12.dp, vertical = 9.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(if (selected) "●" else "○", color = if (selected) CAccent else CInkDim, fontSize = 14.sp, modifier = Modifier.padding(end = 10.dp))
+        Text(if (selected) "●" else "○", color = if (selected) AccentWhite else TextSecondary, fontSize = 14.sp, modifier = Modifier.padding(end = 10.dp))
         Column(modifier = Modifier.weight(1f)) {
-            Text(title, color = CInk, fontSize = 13.sp, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal)
-            Text(subtitle, color = CInkDim, fontSize = 11.sp)
+            Text(title, color = TextPrimary, fontSize = 13.sp, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal)
+            Text(subtitle, color = TextSecondary, fontSize = 11.sp)
         }
         if (onEdit != null) {
-            Text(bt("Edit"), color = CAccent, fontSize = 12.5.sp, modifier = Modifier.clickable { onEdit() }.padding(6.dp))
+            Text(stringResource(R.string.custom_ai_edit), color = AccentWhite, fontSize = 12.5.sp, modifier = Modifier.clickable { onEdit() }.padding(6.dp))
         }
     }
 }
@@ -150,6 +138,7 @@ private fun ServiceEditor(
     onCancel: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
+    val service = remember { SubtitleTranslationService(apiKeyProvider = { "" }) }
     var draft by remember(initial) { mutableStateOf(initial) }
     var maxTokensText by remember(initial) { mutableStateOf(initial.maxTokens.toString()) }
     var showKey by remember { mutableStateOf(false) }
@@ -160,14 +149,15 @@ private fun ServiceEditor(
         name = draft.name.trim().ifBlank { draft.model },
         maxTokens = (maxTokensText.trim().toIntOrNull() ?: 4096).coerceIn(256, 65536),
     )
+    val endpoint = draft.endpointUrl()
     val bodyOk = draft.extraBody.isBlank() || runCatching { org.json.JSONObject(draft.extraBody) }.isSuccess
 
     Column(
-        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Color(0x14FFFFFF)).padding(12.dp),
+        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(TextPrimary.copy(alpha = 0.08f)).padding(12.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        Text(if (isNew) bt("New service") else bt("Edit service"), color = CInk, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-        Text(bt("Preset"), color = CInk, fontSize = 13.sp)
+        Text(if (isNew) stringResource(R.string.custom_ai_new) else stringResource(R.string.custom_ai_edit_service), color = TextPrimary, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+        Text(stringResource(R.string.custom_ai_preset), color = TextPrimary, fontSize = 13.sp)
         Row(modifier = Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             AiPresets.all.forEach { preset ->
                 Chip(text = preset.name, selected = false) {
@@ -175,29 +165,29 @@ private fun ServiceEditor(
                 }
             }
         }
-        Field(bt("Name"), draft.name, placeholder = "DeepSeek") { v -> edit { it.copy(name = v) } }
-        Text(bt("Protocol"), color = CInk, fontSize = 13.sp)
+        Field(stringResource(R.string.custom_ai_name), draft.name, placeholder = "DeepSeek") { v -> edit { it.copy(name = v) } }
+        Text(stringResource(R.string.custom_ai_protocol), color = TextPrimary, fontSize = 13.sp)
         Row(modifier = Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             AiProtocol.entries.forEach { p ->
                 Chip(text = protocolName(p), selected = draft.protocol == p) { edit { it.copy(protocol = p) } }
             }
         }
-        Field(bt("API URL"), draft.baseUrl, placeholder = "https://api.openai.com/v1", keyboard = KeyboardType.Uri) { v -> edit { it.copy(baseUrl = v.trim()) } }
-        if (draft.baseUrl.isNotBlank()) {
-            Text(bt("Requests go to: %s").format(draft.endpointUrl()), color = CInkDim, fontSize = 10.5.sp)
+        Field(stringResource(R.string.custom_ai_endpoint), draft.baseUrl, placeholder = "https://api.openai.com/v1", keyboard = KeyboardType.Uri) { v -> edit { it.copy(baseUrl = v.trim()) } }
+        if (endpoint.isNotBlank()) {
+            Text(stringResource(R.string.custom_ai_request_url, endpoint), color = TextSecondary, fontSize = 10.5.sp)
         }
         Field(
-            bt("API key"), draft.apiKey, placeholder = "sk-…", keyboard = KeyboardType.Password,
+            stringResource(R.string.custom_ai_key), draft.apiKey, placeholder = "sk-…", keyboard = KeyboardType.Password,
             visual = if (showKey) VisualTransformation.None else PasswordVisualTransformation(),
-            trailing = { Text(if (showKey) bt("Hide") else bt("Show"), color = CAccent, fontSize = 12.sp, modifier = Modifier.clickable { showKey = !showKey }.padding(8.dp)) }
+            trailing = { Text(if (showKey) stringResource(R.string.custom_ai_hide) else stringResource(R.string.custom_ai_show), color = AccentWhite, fontSize = 12.sp, modifier = Modifier.clickable { showKey = !showKey }.padding(8.dp)) }
         ) { v -> edit { it.copy(apiKey = v.trim()) } }
-        Field(bt("Model"), draft.model, placeholder = "deepseek-flash / gpt-4.1-mini / claude-…") { v -> edit { it.copy(model = v.trim()) } }
+        Field(stringResource(R.string.custom_ai_model), draft.model, placeholder = "deepseek-flash / gpt-4.1-mini / claude-…") { v -> edit { it.copy(model = v.trim()) } }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Box(modifier = Modifier.weight(1f)) {
-                Field(bt("Temperature (blank = default)"), draft.temperature, placeholder = "0.2", keyboard = KeyboardType.Decimal) { v -> edit { it.copy(temperature = v.trim()) } }
+                Field(stringResource(R.string.custom_ai_temperature), draft.temperature, placeholder = "0.2", keyboard = KeyboardType.Decimal) { v -> edit { it.copy(temperature = v.trim()) } }
             }
             Box(modifier = Modifier.weight(1f)) {
-                Field(bt("Max output tokens"), maxTokensText, placeholder = "4096", keyboard = KeyboardType.Number) { v -> maxTokensText = v.filter { it.isDigit() } }
+                Field(stringResource(R.string.custom_ai_max_tokens), maxTokensText, placeholder = "4096", keyboard = KeyboardType.Number) { v -> maxTokensText = v.filter { it.isDigit() } }
             }
         }
         Row(
@@ -205,43 +195,50 @@ private fun ServiceEditor(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(modifier = Modifier.weight(1f)) {
-                Text(bt("Turn off thinking (recommended)"), color = CInk, fontSize = 13.sp)
-                Text(bt("Reasoning tokens are billed as output and don't improve subtitle translation. DeepSeek, Qwen, GLM, OpenAI, Gemini, OpenRouter and Anthropic are switched off automatically."), color = CInkDim, fontSize = 11.sp)
+                Text(stringResource(R.string.custom_ai_thinking), color = TextPrimary, fontSize = 13.sp)
+                Text(stringResource(R.string.custom_ai_thinking_desc), color = TextSecondary, fontSize = 11.sp)
             }
             Switch(
                 checked = draft.disableThinking,
                 onCheckedChange = { on -> edit { it.copy(disableThinking = on) } },
-                colors = SwitchDefaults.colors(checkedTrackColor = CAccent, checkedThumbColor = Color.Black)
+                colors = SwitchDefaults.colors(checkedTrackColor = AccentWhite, checkedThumbColor = Color.Black)
             )
         }
-        Field(bt("Extra headers (optional, one \"Name: value\" per line)"), draft.extraHeaders, placeholder = "HTTP-Referer: https://example.com", singleLine = false) { v -> edit { it.copy(extraHeaders = v) } }
-        Field(bt("Extra request JSON (optional, advanced)"), draft.extraBody, placeholder = "{\"top_p\": 0.9}", singleLine = false) { v -> edit { it.copy(extraBody = v) } }
-        if (!bodyOk) Text(bt("Not valid JSON — it will be ignored."), color = CErr, fontSize = 11.sp)
+        Field(stringResource(R.string.custom_ai_headers), draft.extraHeaders, placeholder = "HTTP-Referer: https://example.com", singleLine = false) { v -> edit { it.copy(extraHeaders = v) } }
+        Field(stringResource(R.string.custom_ai_body), draft.extraBody, placeholder = "{\"top_p\": 0.9}", singleLine = false) { v -> edit { it.copy(extraBody = v) } }
+        if (!bodyOk) Text(stringResource(R.string.custom_ai_invalid_json), color = ErrorRed, fontSize = 11.sp)
 
         Row(modifier = Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
             val canSave = draft.isComplete
-            ActionButton(bt("Save and use"), enabled = canSave, primary = true) { onSave(finalDraft()) }
-            ActionButton(if (testing) bt("Testing…") else bt("Test connection"), enabled = canSave && !testing) {
+            ActionButton(stringResource(R.string.save), enabled = canSave, primary = true) { onSave(finalDraft()) }
+            ActionButton(if (testing) stringResource(R.string.custom_ai_testing) else stringResource(R.string.custom_ai_test), enabled = canSave && !testing) {
                 testing = true
                 testState = null
                 scope.launch {
-                    val service = SubtitleTranslationService(apiKeyProvider = { "" })
-                    val result = service.testCustom(finalDraft(), targetLanguageName.ifBlank { "Simplified Chinese" })
-                    testing = false
-                    testState = if (result.success) true to (result.lines.firstOrNull() ?: "")
-                    else false to friendlyError(result.errorMessage)
+                    try {
+                        val result = service.testCustom(finalDraft(), targetLanguageName.ifBlank { "English" })
+                        testState = if (result.success) true to result.lines.firstOrNull().orEmpty()
+                        else false to result.errorMessage.orEmpty()
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (_: Exception) {
+                        testState = false to ""
+                    } finally {
+                        testing = false
+                    }
                 }
             }
-            if (!isNew) ActionButton(bt("Delete"), enabled = true, danger = true) { onDelete() }
-            Text(bt("Cancel"), color = CInkDim, fontSize = 12.5.sp, modifier = Modifier.clickable { onCancel() }.padding(6.dp))
+            if (!isNew) ActionButton(stringResource(R.string.delete), enabled = true, danger = true) { onDelete() }
+            Text(stringResource(R.string.cancel), color = TextSecondary, fontSize = 12.5.sp, modifier = Modifier.clickable { onCancel() }.padding(6.dp))
         }
         if (!draft.isComplete) {
-            Text(bt("Fill in the API URL, model and key to save."), color = CInkDim, fontSize = 11.sp)
+            Text(stringResource(R.string.custom_ai_incomplete_input), color = TextSecondary, fontSize = 11.sp)
         }
         testState?.let { (ok, msg) ->
             Text(
-                if (ok) bt("Works: \"Winter is coming.\" → %s").format(msg) else bt("Failed: %s").format(msg),
-                color = if (ok) COk else CErr, fontSize = 12.sp
+                if (ok) stringResource(R.string.custom_ai_test_ok, msg)
+                else stringResource(R.string.custom_ai_test_failed, friendlyError(msg)),
+                color = if (ok) SuccessGreen else ErrorRed, fontSize = 12.sp
             )
         }
     }
@@ -249,7 +246,7 @@ private fun ServiceEditor(
 
 @Composable
 private fun ActionButton(text: String, enabled: Boolean, primary: Boolean = false, danger: Boolean = false, onClick: () -> Unit) {
-    val tint = if (danger) CErr else CAccent
+    val tint = if (danger) ErrorRed else AccentWhite
     Box(
         modifier = Modifier
             .clip(RoundedCornerShape(10.dp))
@@ -273,11 +270,12 @@ private fun protocolName(p: AiProtocol): String = when (p) {
     AiProtocol.ANTHROPIC -> "Anthropic Messages"
 }
 
-private fun friendlyError(raw: String?): String = when {
-    raw == null -> bt("Unknown error")
-    raw == "RATE_LIMITED" -> bt("Rate limited (HTTP 429) — wait a moment or check your quota")
-    raw.startsWith("HTTP 401") || raw.startsWith("HTTP 403") -> bt("Key rejected (%s)").format(raw.take(120))
-    raw.startsWith("HTTP 404") -> bt("Not found — check the API URL and model name (%s)").format(raw.take(120))
+@Composable
+private fun friendlyError(raw: String): String = when {
+    raw.isBlank() -> stringResource(R.string.custom_ai_unknown_error)
+    raw == "RATE_LIMITED" -> stringResource(R.string.custom_ai_rate_limited)
+    raw.startsWith("HTTP 401") || raw.startsWith("HTTP 403") -> stringResource(R.string.custom_ai_rejected_key, raw.take(120))
+    raw.startsWith("HTTP 404") -> stringResource(R.string.custom_ai_not_found, raw.take(120))
     else -> raw.take(200)
 }
 
@@ -286,11 +284,11 @@ private fun Chip(text: String, selected: Boolean, onClick: () -> Unit) {
     Box(
         modifier = Modifier
             .clip(RoundedCornerShape(16.dp))
-            .background(if (selected) CAccent else CCard)
+            .background(if (selected) AccentWhite else TextPrimary.copy(alpha = 0.12f))
             .clickable { onClick() }
             .padding(horizontal = 12.dp, vertical = 7.dp)
     ) {
-        Text(text, color = if (selected) Color.Black else CInk, fontSize = 12.5.sp, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal)
+        Text(text, color = if (selected) Color.Black else TextPrimary, fontSize = 12.5.sp, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal)
     }
 }
 
@@ -309,20 +307,20 @@ private fun Field(
         value = value,
         onValueChange = onChange,
         label = { Text(label, fontSize = 12.sp) },
-        placeholder = { Text(placeholder, fontSize = 12.sp, color = CInkDim) },
+        placeholder = { Text(placeholder, fontSize = 12.sp, color = TextSecondary) },
         singleLine = singleLine,
         minLines = if (singleLine) 1 else 2,
         visualTransformation = visual,
         keyboardOptions = KeyboardOptions(keyboardType = keyboard, autoCorrect = false),
         trailingIcon = trailing,
         colors = OutlinedTextFieldDefaults.colors(
-            focusedTextColor = CInk,
-            unfocusedTextColor = CInk,
-            focusedBorderColor = CAccent,
+            focusedTextColor = TextPrimary,
+            unfocusedTextColor = TextPrimary,
+            focusedBorderColor = AccentWhite,
             unfocusedBorderColor = Color.White.copy(alpha = 0.25f),
-            focusedLabelColor = CAccent,
-            unfocusedLabelColor = CInkDim,
-            cursorColor = CAccent,
+            focusedLabelColor = AccentWhite,
+            unfocusedLabelColor = TextSecondary,
+            cursorColor = AccentWhite,
         ),
         modifier = Modifier.fillMaxWidth()
     )

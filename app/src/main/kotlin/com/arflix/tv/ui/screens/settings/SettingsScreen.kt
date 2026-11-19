@@ -16,6 +16,7 @@ import androidx.activity.compose.PredictiveBackHandler
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.ui.graphics.graphicsLayer
 import kotlin.coroutines.cancellation.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.collectLatest
@@ -177,6 +178,9 @@ import androidx.compose.runtime.key
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.produceState
+import com.arflix.tv.ui.screens.player.subtitles.ai.CustomAiConfigStore
+import com.arflix.tv.ui.screens.player.subtitles.ai.CustomAiProfiles
 import androidx.compose.runtime.compositionLocalOf
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
@@ -5487,9 +5491,6 @@ private fun MobileSettingsSubPage(
                 }
             }
             "Audio & Subtitles" -> {
-                // Custom translation endpoints (OpenAI-compatible chat/responses, Anthropic
-                // Messages). When one is enabled it replaces the built-in Gemini/Groq models.
-                com.arflix.tv.ui.screens.player.subtitles.bilingual.CustomAiSection(targetLanguageName = "")
                 MobileSettingsCategory(title = stringResource(R.string.settings_section_subtitles)) {
                     MobileSettingsRow(
                         icon = Icons.Default.Subtitles,
@@ -5596,6 +5597,18 @@ private fun MobileSettingsSubPage(
                     )
                 }
                 MobileSettingsCategory(title = stringResource(R.string.ai_subtitles_section)) {
+                    val context = LocalContext.current
+                    val customAiStore by produceState<CustomAiConfigStore?>(null, context) {
+                        value = withContext(Dispatchers.IO) { CustomAiConfigStore.from(context) }
+                    }
+                    val store = customAiStore
+                    val customProfiles = if (store != null) {
+                        val profiles by store.profiles.collectAsState()
+                        profiles
+                    } else {
+                        CustomAiProfiles()
+                    }
+                    val activeCustomService = customProfiles.active.takeIf { it.isActive }
                     MobileSettingsRow(
                         icon = Icons.Default.AutoAwesome,
                         title = stringResource(R.string.ai_subtitle_translation_title),
@@ -5607,8 +5620,11 @@ private fun MobileSettingsSubPage(
                     )
                     MobileSettingsRow(
                         icon = Icons.Default.AutoAwesome,
-                        title = stringResource(R.string.ai_model_title),
-                        subtitle = stringResource(R.string.ai_model_desc),
+                        title = stringResource(
+                            if (activeCustomService == null) R.string.ai_model_title else R.string.custom_ai_builtin_matching
+                        ),
+                        subtitle = if (activeCustomService == null) stringResource(R.string.ai_model_desc)
+                        else stringResource(R.string.custom_ai_using_service, activeCustomService.displayName),
                         value = when (uiState.subtitleAiModel) {
                             com.arflix.tv.ui.screens.player.subtitles.SubtitleAiModel.GROQ_LLAMA_70B -> "Groq - GPT-OSS 120B"
                             com.arflix.tv.ui.screens.player.subtitles.SubtitleAiModel.GEMINI_FLASH_25 -> "Google - Gemini 3.5 Flash Lite"
@@ -5652,8 +5668,17 @@ private fun MobileSettingsSubPage(
                         showDivider = false,
                         onClick = onSubtitleAiQrClick
                     )
+                    if (store != null) {
+                        CustomAiSection(
+                            store = store,
+                            profiles = customProfiles,
+                            targetLanguageName = uiState.defaultSubtitle.takeUnless {
+                                it.equals("Off", ignoreCase = true)
+                            }.orEmpty(),
+                        )
+                    }
                     LiveAiSubsMobileRows()
-                    if (uiState.subtitleAiEnabled) {
+                    if (uiState.subtitleAiEnabled && activeCustomService == null) {
                         Text(
                             text = when (uiState.subtitleAiModel) {
                                 com.arflix.tv.ui.screens.player.subtitles.SubtitleAiModel.GROQ_LLAMA_70B ->
