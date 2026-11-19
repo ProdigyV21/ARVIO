@@ -52,6 +52,11 @@ import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.emitAll
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.transformWhile
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -2302,6 +2307,7 @@ class StreamRepository @Inject constructor(
                 streams
             }
         } catch (timeout: TimeoutCancellationException) {
+            markAddonSearchFailed()
             Log.w(
                 TAG,
                 "[StreamFetch][Movie] timeout addon=${addon.name} addonId=${addon.id} timeoutMs=$addonTimeoutMs elapsedMs=${System.currentTimeMillis() - startedAt}"
@@ -2318,6 +2324,7 @@ class StreamRepository @Inject constructor(
             )
             emptyList()
         } catch (error: Exception) {
+            markAddonSearchFailed()
             Log.w(
                 TAG,
                 "[StreamFetch][Movie] failure addon=${addon.name} addonId=${addon.id} elapsedMs=${System.currentTimeMillis() - startedAt} error=${error.toShortLogMessage()}"
@@ -2487,6 +2494,7 @@ class StreamRepository @Inject constructor(
                                 streamApi.getAddonStreams(requestUrl)
                             }
                             if (response == null) {
+                                markAddonSearchFailed()
                                 Log.w(
                                     TAG,
                                     "[StreamFetch][Episode] $label request timeout addon=${addon.name} addonId=${addon.id} type=$requestType timeoutMs=$singleRequestTimeoutMs"
@@ -2503,6 +2511,7 @@ class StreamRepository @Inject constructor(
                         } catch (timeout: TimeoutCancellationException) {
                             throw timeout
                         } catch (error: Exception) {
+                            markAddonSearchFailed()
                             lastError = error
                             if (AddonRateLimitTracker.isRateLimitError(error)) {
                                 AddonRateLimitTracker.recordRateLimit(addon.id)
@@ -2657,6 +2666,7 @@ class StreamRepository @Inject constructor(
                 addonStreams
             }
         } catch (timeout: TimeoutCancellationException) {
+            markAddonSearchFailed()
             Log.w(
                 TAG,
                 "[StreamFetch][Episode] timeout addon=${addon.name} addonId=${addon.id} timeoutMs=$addonTimeoutMs elapsedMs=${System.currentTimeMillis() - startedAt}"
@@ -2673,6 +2683,7 @@ class StreamRepository @Inject constructor(
             )
             emptyList()
         } catch (error: Exception) {
+            markAddonSearchFailed()
             Log.w(
                 TAG,
                 "[StreamFetch][Episode] failure addon=${addon.name} addonId=${addon.id} elapsedMs=${System.currentTimeMillis() - startedAt} error=${error.toShortLogMessage()}"
@@ -2784,7 +2795,126 @@ class StreamRepository @Inject constructor(
         result
     }
 
+    // ── Shared in-flight source searches ─────────────────────────────────────────
+    // The details page starts a prefetch; pressing Play then used to cancel it and start a second,
+    // cold search from zero. Searches are now shared by key: the player joins the prefetch that is
+    // already running and gets its progress so far. A search nobody listens to any more lingers
+    // briefly (the details screen is torn down just before the player subscribes) and is then
+    // stopped, so back-navigation still does not leak a scrape.
+    private class SharedStreamSearch {
+        val latest = MutableStateFlow<SharedSearchSnapshot?>(null)
+        @Volatile var job: Job? = null
+        var subscribers = 0
+        var lingerJob: Job? = null
+    }
+
+    private data class SharedSearchSnapshot(val result: ProgressiveStreamResult?, val finished: Boolean)
+
+    private val sharedSearches = HashMap<String, SharedStreamSearch>()
+    private val sharedSearchLock = Any()
+    private val SHARED_SEARCH_LINGER_MS = 8_000L
+
+    private fun sharedProgressiveSearch(
+        key: String,
+        start: () -> Flow<ProgressiveStreamResult>
+    ): Flow<ProgressiveStreamResult> = flow {
+        val entry = synchronized(sharedSearchLock) {
+            val e = sharedSearches.getOrPut(key) {
+                val created = SharedStreamSearch()
+                created.job = repositoryScope.launch {
+                    try {
+                        start().collect { result ->
+                            created.latest.value = SharedSearchSnapshot(result, result.isFinal)
+                        }
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        Log.w(TAG, "[StreamFetch] shared search failed key=$key", e)
+                    } finally {
+                        // Whatever ended it, listeners must stop waiting; the cache holds any final result.
+                        created.latest.value = SharedSearchSnapshot(created.latest.value?.result, true)
+                        synchronized(sharedSearchLock) {
+                            if (sharedSearches[key] === created) sharedSearches.remove(key)
+                        }
+                    }
+                }
+                created
+            }
+            e.subscribers++
+            e.lingerJob?.cancel()
+            e.lingerJob = null
+            e
+        }
+        try {
+            emitAll(
+                entry.latest.transformWhile<SharedSearchSnapshot?, ProgressiveStreamResult> { snapshot ->
+                    if (snapshot == null) return@transformWhile true
+                    snapshot.result?.let { emit(it) }
+                    !snapshot.finished
+                }
+            )
+        } finally {
+            synchronized(sharedSearchLock) {
+                entry.subscribers--
+                if (entry.subscribers == 0) {
+                    entry.lingerJob = repositoryScope.launch {
+                        delay(SHARED_SEARCH_LINGER_MS)
+                        synchronized(sharedSearchLock) {
+                            if (entry.subscribers == 0) {
+                                entry.job?.cancel()
+                                if (sharedSearches[key] === entry) sharedSearches.remove(key)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     fun resolveMovieStreamsProgressive(
+        imdbId: String,
+        title: String = "",
+        year: Int? = null,
+        forceRefresh: Boolean = false,
+        sequential: Boolean = false,
+        nativeType: String? = null
+    ): Flow<ProgressiveStreamResult> {
+        val search = { searchMovieStreamsProgressive(imdbId, title, year, forceRefresh, sequential, nativeType) }
+        // A forced refresh or sequential search is a deliberate fresh run: never merge it into another.
+        if (forceRefresh || sequential) return search()
+        return sharedProgressiveSearch("${profileManager.getProfileIdSync()}|movie|$imdbId|${nativeType.orEmpty()}", search)
+    }
+
+    fun resolveEpisodeStreamsProgressive(
+        imdbId: String,
+        season: Int,
+        episode: Int,
+        tmdbId: Int? = null,
+        tvdbId: Int? = null,
+        genreIds: List<Int> = emptyList(),
+        originalLanguage: String? = null,
+        title: String = "",
+        forceRefresh: Boolean = false,
+        animeQueryOverride: String? = null,
+        airDate: String? = null,
+        sequential: Boolean = false,
+        // A native addon item's own type ("Podcasts"), for addon selection and /meta, /stream.
+        nativeType: String? = null
+    ): Flow<ProgressiveStreamResult> {
+        val search = {
+            searchEpisodeStreamsProgressive(
+                imdbId, season, episode, tmdbId, tvdbId, genreIds, originalLanguage, title,
+                forceRefresh, animeQueryOverride, airDate, sequential, nativeType
+            )
+        }
+        if (forceRefresh || sequential) return search()
+        return sharedProgressiveSearch(
+            "${profileManager.getProfileIdSync()}|tv|$imdbId|$season|$episode|${tvdbId ?: ""}|${animeQueryOverride.orEmpty()}|${nativeType.orEmpty()}",
+            search
+        )
+    }
+
+    private fun searchMovieStreamsProgressive(
         imdbId: String,
         title: String = "",
         year: Int? = null,
@@ -2802,7 +2932,8 @@ class StreamRepository @Inject constructor(
         // Retained so cancelling the collector (back-nav, superseded prefetch)
         // also stops the scrape instead of leaking it in repositoryScope.
         val noticeSink = AddonNoticeSink()
-        val workerJob = repositoryScope.launch(noticeSink) {
+        val searchHealth = AddonSearchHealth()
+        val workerJob = repositoryScope.launch(noticeSink + searchHealth) {
             ensureAddonHealthLoaded()
             val allAddons = installedAddonsForSourceResolution()
             val streamAddons = getStreamAddons(allAddons, nativeType ?: "movie", imdbId)
@@ -2919,7 +3050,7 @@ class StreamRepository @Inject constructor(
                 if (completed == totalAddons) {
                     val createdAtMs = System.currentTimeMillis()
                     val finalResult = StreamResult(filtered, emptyList())
-                    if (!telegramIncomplete) {
+                    if (!telegramIncomplete && !(filtered.isEmpty() && searchHealth.failed)) {
                         synchronized(streamResultCache) {
                             streamResultCache[cacheKey] = CachedStreamResult(finalResult, createdAtMs, noticeSink.snapshot())
                         }
@@ -3516,7 +3647,7 @@ class StreamRepository @Inject constructor(
         result
     }
 
-    fun resolveEpisodeStreamsProgressive(
+    private fun searchEpisodeStreamsProgressive(
         imdbId: String,
         season: Int,
         episode: Int,
@@ -3537,7 +3668,8 @@ class StreamRepository @Inject constructor(
         // Retained so cancelling the collector (back-nav, superseded prefetch)
         // also stops the scrape instead of leaking it in repositoryScope.
         val noticeSink = AddonNoticeSink()
-        val workerJob = repositoryScope.launch(noticeSink) {
+        val searchHealth = AddonSearchHealth()
+        val workerJob = repositoryScope.launch(noticeSink + searchHealth) {
             ensureAddonHealthLoaded()
             val allAddons = installedAddonsForSourceResolution()
             val isAnime = animeMapper.isAnimeContent(tmdbId, genreIds, originalLanguage)
@@ -3646,7 +3778,7 @@ class StreamRepository @Inject constructor(
                 if (completed == totalAddons) {
                     val createdAtMs = System.currentTimeMillis()
                     val finalResult = StreamResult(filtered, emptyList())
-                    if (!telegramIncomplete) {
+                    if (!telegramIncomplete && !(filtered.isEmpty() && searchHealth.failed)) {
                         synchronized(streamResultCache) {
                             streamResultCache[cacheKey] = CachedStreamResult(finalResult, createdAtMs, noticeSink.snapshot())
                         }
@@ -5165,6 +5297,11 @@ class StreamRepository @Inject constructor(
             stats.consecutiveFailures += 1
         }
         persistAddonHealthAsync()
+    }
+
+    /** Flags the current source search as having lost an addon to a timeout or error (see [AddonSearchHealth]). */
+    private suspend fun markAddonSearchFailed() {
+        currentCoroutineContext()[AddonSearchHealth]?.markFailed()
     }
 
     private fun recordAddonFetchOutcome(addonId: String, success: Boolean, latencyMs: Long) {
