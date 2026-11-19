@@ -2,51 +2,98 @@
 <html lang="en">
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>ARVIO Premium — Your browser. Your ARVIO.</title>
-  <meta name="description" content="ARVIO on iPhone, iPad, Mac and Windows. Hosting handled for you, with your profiles, libraries and progress connected. Support free, open-source ARVIO.">
+  <title>ARVIO Premium — ARVIO on your iPhone, iPad and laptop.</title>
+  <meta name="description" content="Hosted ARVIO Web for iPhone, iPad, Mac and Windows. Synced profiles, live TV and downloads. Preview the interface; Premium is required for playback: $2.99/month or $20 for 12 months.">
   <link rel="canonical" href="https://arvio.tv/premium/">
+  <!-- hreflang:start -->
+  <link rel="alternate" hreflang="en" href="https://arvio.tv/premium/">
+  <link rel="alternate" hreflang="de" href="https://arvio.tv/de/premium/">
+  <link rel="alternate" hreflang="fr" href="https://arvio.tv/fr/premium/">
+  <link rel="alternate" hreflang="nl" href="https://arvio.tv/nl/premium/">
+  <link rel="alternate" hreflang="it" href="https://arvio.tv/it/premium/">
+  <link rel="alternate" hreflang="es" href="https://arvio.tv/es/premium/">
+  <link rel="alternate" hreflang="pt-BR" href="https://arvio.tv/pt-br/premium/">
+  <link rel="alternate" hreflang="sv" href="https://arvio.tv/sv/premium/">
+  <link rel="alternate" hreflang="da" href="https://arvio.tv/da/premium/">
+  <link rel="alternate" hreflang="nb" href="https://arvio.tv/no/premium/">
+  <link rel="alternate" hreflang="fi" href="https://arvio.tv/fi/premium/">
+  <link rel="alternate" hreflang="hi" href="https://arvio.tv/hi/premium/">
+  <link rel="alternate" hreflang="he" href="https://arvio.tv/he/premium/">
+  <link rel="alternate" hreflang="x-default" href="https://arvio.tv/premium/">
+  <!-- hreflang:end -->
   <link rel="icon" href="/assets/arvio-icon-512.png">
-  <meta property="og:title" content="ARVIO Premium — Your browser. Your ARVIO.">
-  <meta property="og:description" content="We handle the hosting. You help keep ARVIO growing. Explore the web app and Premium in your language.">
+  <meta property="og:title" content="ARVIO Premium — ARVIO on your iPhone, iPad and laptop.">
+  <meta property="og:description" content="Hosted ARVIO Web. No server to run. Preview the interface; Premium is required for playback.">
   <meta property="og:image" content="https://arvio.tv/premium/images/home.png">
   <meta name="twitter:card" content="summary_large_image">
-  <link rel="stylesheet" href="./premium.css?v=5">
-  <script defer src="./premium.js?v=3"></script>
-<script defer src="/assets/premium-journey.js?v=1"></script>
+  <link rel="stylesheet" href="./premium.css?v=9">
+  <script defer src="/assets/premium-pricing.js?v=1"></script>
+  <script defer src="./premium.js?v=6"></script>
+<script defer src="/assets/premium-journey.js?v=2"></script>
+<script defer src="/assets/promo-video.js?v=2"></script>
 </head>
 <body>
-  <header><a class="brand" href="/" aria-label="ARVIO">A R V I O</a><label class="language"><span data-copy="language">App Language</span><select id="language" aria-label="Language"><option value="en-US">English</option></select></label></header>
+  <header><a class="brand" href="/" aria-label="ARVIO"><img src="/assets/arvio-wordmark.svg" alt="ARVIO" width="112" height="24"></a><label class="language"><span data-copy="language">App Language</span><select id="language" aria-label="Language"><option value="en-US">English</option></select></label></header>
   <main>
     <section class="hero">
-      <div class="copy"><p class="eyebrow">ARVIO 2.0 · WEB</p><h1>ARVIO<br><span>Premium.</span></h1>
-        <p class="lead" data-copy="hosting">Live TV. Your favourite sources. Your ARVIO, in a browser. We handle the hosting — you enjoy the setup you already love.</p>
-        <div class="price"><strong>$2.99</strong><span data-copy="period">/ month</span><span class="hosting-badge">24/7 · ARVIO Web</span></div>
-        <p class="support-copy" data-copy="coffee">Buy the developer a monthly coffee. Get ARVIO Web hosted 24/7 in return — no server to set up or maintain. Your support keeps ARVIO growing.</p>
+      <div class="copy"><p class="eyebrow">ARVIO PREMIUM · ARVIO WEB</p><h1><span class="headline" data-copy="headline">ARVIO on your iPhone, iPad and laptop.</span> <span class="headline-accent" data-copy="headlineSub">No server to run.</span></h1>
+        <p class="lead" data-copy="lead">Hosted ARVIO Web. Sign in with your ARVIO account and pick up where you left off.</p>
+        <ul class="hero-benefits">
+          <li data-copy="benefitSync">Profiles, watchlist and progress synced through ARVIO Cloud</li>
+          <li data-copy="benefitLive">Live TV with the programme guide</li>
+          <li data-copy="benefitDownloads">Downloads on desktop</li>
+          <li data-copy="benefitExplore">Preview ARVIO Web for free. Premium is required for playback.</li>
+        </ul>
         <div class="membership-actions">
-          <a class="button membership-button" href="https://ko-fi.com/arvio/tiers" data-premium-placement="hero-membership"><svg class="coffee-icon" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 8h12v7a5 5 0 0 1-5 5h-2a5 5 0 0 1-5-5V8Z"/><path d="M17 9h1a3 3 0 0 1 0 6h-1M8 3v2m4-2v2m4-2v2"/></svg><span data-copy="join">Get Premium on Ko-fi</span><span aria-hidden="true">↗</span></a>
-          <p class="membership-note" data-copy="membershipTerms">Monthly membership. Cancel anytime through Ko-fi.</p>
-          <a class="button preview-button" href="https://web.arvio.tv/" data-copy="explore" data-premium-placement="hero-preview">Explore ARVIO Web</a>
+          <a class="button membership-button" href="#plans" data-copy="viewPlans">See Premium plans</a>
+          <a class="button preview-button" href="https://web.arvio.tv/" data-premium-placement="hero-membership" data-copy="preview">Preview ARVIO Web</a>
         </div>
-        <p class="intro" data-copy="intro">Take your existing ARVIO setup to Windows, Mac, iPhone, iPad and smart-TV browsers. Your profiles, libraries, addons and progress stay connected through ARVIO Cloud.</p>
-        <p class="free-note"><span data-copy="free">Android &amp; TV stay free. Self-hosting stays free.</span> <a href="https://github.com/ProdigyV21/ARVIO/blob/main/web/README.md" data-copy="selfHost">Self-host ARVIO Web for free.</a></p>
+        <p class="membership-note" data-copy="fromPrice" data-plan-price-summary>$2.99/month, or $20 for 12 months.</p>
       </div>
-      <a class="hero-image" href="./images/home.png"><img src="./images/home.png" width="1920" height="1080" alt="ARVIO Web — Home" fetchpriority="high"></a>
+      <figure class="hero-video">
+        <video id="promo-video" class="promo-video" width="1280" height="720" controls muted playsinline preload="none" poster="/assets/promo/arvio-premium-poster.webp" src="/assets/promo/arvio-tour-web.mp4" data-src="/assets/promo/arvio-tour-web.mp4" aria-label="ARVIO app tour"></video>
+        <figcaption>TV · Phone · Tablet · Web · 1:25</figcaption>
+      </figure>
+    </section>
+    <section class="plans-section" id="plans" aria-labelledby="plans-title">
+      <h2 id="plans-title" data-copy="plansTitle">Two plans. The same ARVIO Web.</h2>
+      <p class="plan-intro" data-copy="planIntro">Both plans include hosted ARVIO Web. Connect your own sources; no media is included.</p>
+      <div class="plans">
+        <article class="plan">
+          <h3 data-copy="monthly">Monthly</h3>
+          <p class="plan-price"><strong>$2.99</strong> <span data-copy="period">/ month</span></p>
+          <p class="plan-note" data-copy="membershipTerms">Monthly membership. Cancel anytime through Ko-fi.</p>
+          <a class="button plan-button" href="https://web.arvio.tv/?premium_plan=monthly" data-premium-placement="plan-monthly" data-copy="chooseMonthly">Choose monthly</a>
+        </article>
+        <article class="plan plan-best">
+          <p class="plan-badge" data-copy="yearlyBadge" data-yearly-badge>Best value · save 44%</p>
+          <h3 data-copy="yearly">12-month pass</h3>
+          <p class="plan-price"><s data-yearly-was hidden>$20</s> <strong data-yearly-price>$20</strong> <span data-copy="once">once</span></p>
+          <p class="plan-note" data-copy="yearlyNote">One payment, no automatic renewal</p>
+          <a class="button membership-button plan-button" href="https://web.arvio.tv/?premium_plan=yearly" data-premium-placement="plan-yearly" data-copy="chooseYearly">Get 12 months</a>
+        </article>
+      </div>
+      <p class="plan-saving" data-copy="yearlySaving" data-yearly-saving>Save 44% compared with 12 monthly payments ($35.88).</p>
+      <p class="checkout-next" data-copy="nextStep">Next: sign in to ARVIO, then pay on Ko-fi using the same email.</p>
+      <p class="checkout-note" data-copy="checkoutNote">Payment runs through Ko-fi in US dollars; your bank converts it automatically. Use the same email as your ARVIO account.</p>
+      <p class="refund"><span data-copy="refund">Doesn't work on your device? Message us within 7 days for a full refund.</span> <a href="https://discord.gg/UavuEYMfQ4" data-copy="refundLink">Message us on Discord</a></p>
+      <p class="manage"><a href="https://ko-fi.com/arvio/tiers" data-premium-placement="manage-membership" data-copy="manage">Manage membership on Ko-fi</a></p>
+      <p class="free-note"><span data-copy="free">Android &amp; TV stay free. Self-hosting stays free.</span> <a href="https://github.com/ProdigyV21/ARVIO/blob/main/web/README.md" data-copy="selfHost">Self-host ARVIO Web for free.</a></p>
+      <p class="supports" data-copy="supports">Your membership supports development.</p>
     </section>
     <section class="feature-strip" aria-label="Premium features">
       <article><span class="feature-icon" aria-hidden="true">▷</span><h2 data-copy="tv">Live TV in your browser</h2><p data-copy="tvBody">Bring your own IPTV service. Browse the programme guide and play supported channels right in ARVIO Web.</p><a href="#live-tv" class="feature-link" data-copy="tv">Live TV in your browser</a></article>
       <article><span class="feature-icon" aria-hidden="true">↓</span><h2 data-copy="download">Your sources. Ready to download.</h2><p data-copy="downloadBody">Save supported sources from the source picker. Download on desktop, or hand off to VLC on iPhone and iPad.</p><a href="https://web.arvio.tv" class="feature-link">ARVIO Web ↗</a></article>
       <article><span class="feature-icon" aria-hidden="true">∞</span><h2>ARVIO Cloud</h2><p data-copy="sync">Same profiles, libraries and watch progress</p><a href="#your-library" class="feature-link" data-copy="library">Library</a></article>
     </section>
-    <ul class="benefits"><li data-copy="sync">Same profiles, libraries and watch progress</li><li data-copy="play">Browser playback and one-click VLC</li><li data-copy="free">Android and TV app remains completely free</li></ul>
     <section class="gallery" aria-label="ARVIO Web">
       <figure id="live-tv"><a href="./images/tv.png"><img loading="lazy" src="./images/tv.png" width="1920" height="1080" alt="ARVIO Web — Live TV"></a><figcaption><h2 data-copy="tv">Live TV</h2><p data-copy="tvBody">Bring your own IPTV service. Browse the programme guide and play supported channels right in ARVIO Web.</p></figcaption></figure>
       <figure id="your-library"><a href="./images/library.png"><img loading="lazy" src="./images/library.png" width="1920" height="1080" alt="ARVIO Web — Library"></a><figcaption><h2 data-copy="library">Library</h2><p data-copy="libraryBody">Your watchlists, personal lists and watch progress — connected through ARVIO Cloud.</p></figcaption></figure>
       <figure><a href="./images/homeserver.png"><img loading="lazy" src="./images/homeserver.png" width="1920" height="1080" alt="ARVIO Web — Homeserver"></a><figcaption><h2 data-copy="server">Homeserver</h2><p data-copy="serverBody">Bring your Jellyfin, Plex, Emby or Silo library into the same familiar interface.</p></figcaption></figure>
-
       <figure><a href="./images/sports.png"><img loading="lazy" src="./images/sports.png" width="1920" height="1080" alt="ARVIO Web — Sports"></a><figcaption><h2 data-copy="sports">Sports</h2><p data-copy="sportsBody">Explore sports events and find sources from your connected services.</p></figcaption></figure>
     </section>
-    <section class="support-panel"><div><p class="eyebrow">ARVIO PREMIUM · 24/7</p><h2><span>$2.99</span> <small data-copy="period">/ month</small></h2><p data-copy="coffee">Buy the developer a monthly coffee. Get ARVIO Web hosted 24/7 in return — no server to set up or maintain. Your support keeps ARVIO growing.</p><p class="free-note" data-copy="free">Android &amp; TV stay free. Self-hosting stays free.</p></div><div class="support-action"><a class="button membership-button" href="https://ko-fi.com/arvio/tiers" data-copy="join" data-premium-placement="support-membership">Get Premium on Ko-fi</a><p class="membership-note" data-copy="membershipTerms">Monthly membership. Cancel anytime through Ko-fi.</p></div></section>
-    <footer><p data-copy="notice">ARVIO is a media hub for sources you configure. A catalog entry does not grant viewing rights. Connect only services and media you are authorized to use.</p><nav><a href="https://github.com/ProdigyV21/ARVIO/blob/main/web/README.md">GitHub · Self-hosting</a><a href="https://discord.gg/UavuEYMfQ4">Discord</a><a href="https://ko-fi.com/arvio/tiers">Ko-fi</a><a href="https://web.arvio.tv">ARVIO Web</a></nav></footer>
+    <section class="support-panel"><div><p class="eyebrow">ARVIO PREMIUM</p><h2 data-copy="benefitExplore">Preview ARVIO Web for free. Premium is required for playback.</h2><p data-copy="fromPrice" data-plan-price-summary>$2.99/month, or $20 for 12 months.</p><p class="supports" data-copy="supports">Your membership supports development.</p></div><div class="support-action"><a class="button membership-button" href="#plans" data-copy="viewPlans">See Premium plans</a><a class="secondary" href="https://web.arvio.tv/" data-copy="preview" data-premium-placement="support-membership">Preview ARVIO Web</a></div></section>
+    <footer><p data-copy="notice">ARVIO is a media hub for sources you configure. A catalog entry does not grant viewing rights. Connect only services and media you are authorized to use.</p><nav><a href="/arvio-iphone-ipad/">iPhone &amp; iPad guide</a><a href="https://github.com/ProdigyV21/ARVIO/blob/main/web/README.md">GitHub · Self-hosting</a><a href="https://discord.gg/UavuEYMfQ4">Discord</a><a href="https://web.arvio.tv">ARVIO Web</a></nav></footer>
   </main>
 </body>
 </html>

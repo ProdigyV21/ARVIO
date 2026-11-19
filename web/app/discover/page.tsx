@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
+import { LanguageProvider, useTranslation } from "@/lib/i18n";
 import { Copy, Check, Download, HelpCircle, Code, ListVideo, Loader2, Plus, X, Globe, User, BookOpen, AlertCircle } from "lucide-react";
 import { config } from "@/lib/config";
 
@@ -62,7 +63,33 @@ const STATIC_FALLBACK_PACKS: CatalogPack[] = [
   }
 ];
 
+/** The ARVIO app's catalog-pack link (Android app link; the web app has no pack import yet). */
+function packInstallLink(absolutePackUrl: string) {
+  return `arvio://install-pack?url=${encodeURIComponent(absolutePackUrl)}`;
+}
+
+/** Only the Android app can install a pack from a link; other devices copy it. */
+function canOpenPackInApp(userAgent: string) {
+  return /Android/i.test(userAgent);
+}
+
+// Outside the app shell: follow the browser language for the interface.
 export default function DiscoverPage() {
+  const [language, setLanguage] = useState("en");
+  useEffect(() => setLanguage(navigator.language || "en"), []);
+  return <LanguageProvider language={language}><DiscoverContent /></LanguageProvider>;
+}
+
+function DiscoverContent() {
+  const translateUi = useTranslation();
+  const [origin, setOrigin] = useState("");
+  const [android, setAndroid] = useState(false);
+  const firstField = useRef<HTMLInputElement>(null);
+  const modalTrigger = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    setOrigin(window.location.origin);
+    setAndroid(canOpenPackInApp(navigator.userAgent));
+  }, []);
   const [packs, setPacks] = useState<CatalogPack[]>(STATIC_FALLBACK_PACKS);
   const [loading, setLoading] = useState(true);
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -115,37 +142,41 @@ export default function DiscoverPage() {
     void loadPacks();
   }, []);
 
+  // Pack files live next to this page; resolve them against where it is served.
   const getAbsoluteUrl = (url: string) => {
     if (!url) return "";
-    if (url.startsWith("/")) {
-      if (typeof window !== "undefined") {
-        return `${window.location.origin}${url}`;
-      }
-      return `https://arvio.app${url}`;
-    }
-    return url;
+    return url.startsWith("/") ? `${origin}${url}` : url;
   };
 
+  const [copyFailed, setCopyFailed] = useState<string | null>(null);
   const copyToClipboard = (id: string, text: string) => {
-    navigator.clipboard.writeText(text).then(() => {
+    setCopyFailed(null);
+    void navigator.clipboard?.writeText(text).then(() => {
       setCopiedId(id);
       setTimeout(() => setCopiedId(null), 2000);
-    });
+    }).catch(() => setCopyFailed(id));
   };
 
-  const getDeepLink = (packUrl: string) => {
-    return `arvio://install-pack?url=${encodeURIComponent(getAbsoluteUrl(packUrl))}`;
-  };
+  const getDeepLink = (packUrl: string) => packInstallLink(getAbsoluteUrl(packUrl));
+
+  useEffect(() => {
+    if (!showSubmitModal) return undefined;
+    firstField.current?.focus();
+    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") setShowSubmitModal(false); };
+    window.addEventListener("keydown", onKey);
+    const trigger = modalTrigger.current;
+    return () => { window.removeEventListener("keydown", onKey); trigger?.focus(); };
+  }, [showSubmitModal]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formName.trim() || !formUrl.trim() || !formDesc.trim()) {
-      setSubmitError("Please fill out all required fields.");
+      setSubmitError(translateUi("Please fill out all required fields."));
       return;
     }
 
     if (!formUrl.startsWith("https://")) {
-      setSubmitError("Manifest URL must start with https://");
+      setSubmitError(translateUi("The pack link must start with https://"));
       return;
     }
 
@@ -181,7 +212,7 @@ export default function DiscoverPage() {
         setShowSubmitModal(false);
       }, 3000);
     } catch (err: any) {
-      setSubmitError(err.message || "An unexpected error occurred during submission.");
+      setSubmitError(err.message || translateUi("An unexpected error occurred during submission."));
     } finally {
       setSubmitLoading(false);
     }
@@ -193,9 +224,10 @@ export default function DiscoverPage() {
         <div className="header-top">
           <div className="logo-section">
             <img src="/arvio-logo.svg" alt="ARVIO Logo" className="logo" />
-            <span className="logo-text">ARVIO</span>
+            <img src="/arvio-wordmark.svg" alt="ARVIO" className="wordmark-logo" />
           </div>
           <button
+            ref={modalTrigger}
             type="button"
             className="submit-trigger-button"
             onClick={() => {
@@ -204,20 +236,20 @@ export default function DiscoverPage() {
               setShowSubmitModal(true);
             }}
           >
-            <Plus size={16} /> Submit A Pack
+            <Plus size={16} /> {translateUi("Submit a pack")}
           </button>
         </div>
 
-        <h1 className="hero-title">Catalog Pack Discovery</h1>
+        <h1 className="hero-title">{translateUi("Catalog packs")}</h1>
         <p className="hero-subtitle">
-          Enhance your streaming layout. Browse community-curated catalog packs and install multiple rows of content with a single click.
+          {translateUi("Community-curated sets of Home rows. Add a pack in the ARVIO app to get several rows at once.")}
         </p>
       </header>
 
       {loading ? (
         <div className="loading-container">
           <Loader2 size={32} className="animate-spin text-muted" />
-          <span>Fetching latest catalog packs...</span>
+          <span>{translateUi("Loading catalog packs…")}</span>
         </div>
       ) : (
         <main className="discover-grid">
@@ -226,7 +258,7 @@ export default function DiscoverPage() {
               <div className="pack-card-header">
                 <h2 className="pack-title">{pack.name}</h2>
                 <div className="pack-meta">
-                  <span className="pack-author">by {pack.author || "Anonymous"}</span>
+                  <span className="pack-author">{translateUi("by {value0}", { value0: pack.author || translateUi("Anonymous") })}</span>
                   <span className="pack-version">v{pack.version || "1.0.0"}</span>
                 </div>
               </div>
@@ -234,7 +266,7 @@ export default function DiscoverPage() {
 
               <div className="catalogs-section">
                 <h3 className="section-label">
-                  <ListVideo size={14} className="icon-inline" /> Included Rows ({pack.catalogs?.length || 0})
+                  <ListVideo size={14} className="icon-inline" /> {translateUi("Included rows ({value0})", { value0: pack.catalogs?.length || 0 })}
                 </h3>
                 <ul className="catalogs-list">
                   {pack.catalogs?.map((catalog, idx) => (
@@ -244,22 +276,25 @@ export default function DiscoverPage() {
               </div>
 
               <div className="pack-actions">
-                <a
+                {/* The arvio:// link does nothing on iPhone, Mac or Windows: only Android gets it. */}
+                {android && origin && <a
                   href={getDeepLink(pack.url)}
                   className="install-button"
-                  title="Install this pack on your Android TV or local app"
+                  title={translateUi("Open this pack in the ARVIO app")}
                 >
-                  <Download size={16} /> Install Pack
-                </a>
+                  <Download size={16} /> {translateUi("Open in ARVIO app")}
+                </a>}
                 <button
                   type="button"
                   onClick={() => copyToClipboard(pack.id || pack.url, getAbsoluteUrl(pack.url))}
-                  className="copy-button"
-                  title="Copy manifest JSON URL to clipboard"
+                  className={android ? "copy-button" : "install-button"}
+                  disabled={!origin}
+                  aria-label={translateUi("Copy the link of {value0}", { value0: pack.name })}
                 >
                   {copiedId === (pack.id || pack.url) ? <Check size={16} className="text-green" /> : <Copy size={16} />}
-                  {copiedId === (pack.id || pack.url) ? "Copied!" : "Copy URL"}
+                  {copiedId === (pack.id || pack.url) ? translateUi("Copied") : copyFailed === (pack.id || pack.url) ? translateUi("Copy failed — select the link below") : translateUi("Copy pack link")}
                 </button>
+                {copyFailed === (pack.id || pack.url) && <input className="pack-link-fallback" readOnly value={getAbsoluteUrl(pack.url)} aria-label={translateUi("Pack link")} onFocus={(event) => event.currentTarget.select()} autoFocus />}
               </div>
             </article>
           ))}
@@ -268,11 +303,12 @@ export default function DiscoverPage() {
 
       {/* Submission Modal Overlay */}
       {showSubmitModal && (
-        <div className="modal-backdrop">
-          <div className="modal-content">
+        <div className="modal-backdrop" onClick={(event) => { if (event.target === event.currentTarget) setShowSubmitModal(false); }}>
+          <div className="modal-content" role="dialog" aria-modal="true" aria-labelledby="submit-pack-title">
             <button
               type="button"
               className="modal-close"
+              aria-label={translateUi("Close")}
               onClick={() => setShowSubmitModal(false)}
             >
               <X size={20} />
@@ -281,16 +317,16 @@ export default function DiscoverPage() {
             {submitSuccess ? (
               <div className="submit-feedback success">
                 <Check size={48} className="text-green feedback-icon animate-bounce" />
-                <h2>Submission Successful!</h2>
+                <h2 id="submit-pack-title">{translateUi("Pack submitted")}</h2>
                 <p>
-                  Thank you! Your catalog pack has been submitted for review. It will become visible on the Discovery page once approved by a moderator.
+                  {translateUi("Thank you! Your catalog pack will appear here once a moderator approves it.")}
                 </p>
               </div>
             ) : (
               <form onSubmit={handleSubmit} className="submission-form">
-                <h2>Submit a Catalog Pack</h2>
+                <h2 id="submit-pack-title">{translateUi("Submit a catalog pack")}</h2>
                 <p className="form-intro">
-                  Packs are moderated to ensure safety, formatting correctness, and server reliability.
+                  {translateUi("Packs are reviewed before they appear here.")}
                 </p>
 
                 {submitError && (
@@ -301,8 +337,9 @@ export default function DiscoverPage() {
                 )}
 
                 <div className="form-field">
-                  <label htmlFor="pack-name"><BookOpen size={14} /> Pack Name *</label>
+                  <label htmlFor="pack-name"><BookOpen size={14} /> {translateUi("Pack name")} *</label>
                   <input
+                    ref={firstField}
                     type="text"
                     id="pack-name"
                     required
@@ -313,21 +350,22 @@ export default function DiscoverPage() {
                 </div>
 
                 <div className="form-field">
-                  <label htmlFor="pack-url"><Globe size={14} /> Manifest JSON URL *</label>
+                  <label htmlFor="pack-url"><Globe size={14} /> {translateUi("Pack link (JSON)")} *</label>
                   <input
-                    type="text"
+                    type="url"
+                    inputMode="url"
                     id="pack-url"
                     required
                     placeholder="e.g. https://raw.githubusercontent.com/.../pack.json"
                     value={formUrl}
                     onChange={(e) => setFormUrl(e.target.value)}
                   />
-                  <span className="field-hint">Must be a public HTTPS URL that serves valid JSON.</span>
+                  <span className="field-hint">{translateUi("A public https:// link to the pack's JSON file.")}</span>
                 </div>
 
                 <div className="form-field-row">
                   <div className="form-field">
-                    <label htmlFor="pack-author"><User size={14} /> Author / Creator</label>
+                    <label htmlFor="pack-author"><User size={14} /> {translateUi("Author")}</label>
                     <input
                       type="text"
                       id="pack-author"
@@ -339,7 +377,7 @@ export default function DiscoverPage() {
                 </div>
 
                 <div className="form-field">
-                  <label htmlFor="pack-desc">Description *</label>
+                  <label htmlFor="pack-desc">{translateUi("Description")} *</label>
                   <textarea
                     id="pack-desc"
                     required
@@ -357,10 +395,10 @@ export default function DiscoverPage() {
                 >
                   {submitLoading ? (
                     <>
-                      <Loader2 size={16} className="animate-spin" /> Submitting...
+                      <Loader2 size={16} className="animate-spin" /> {translateUi("Submitting…")}
                     </>
                   ) : (
-                    "Submit for Review"
+                    translateUi("Submit for review")
                   )}
                 </button>
               </form>
@@ -370,25 +408,25 @@ export default function DiscoverPage() {
       )}
 
       <section className="faq-section">
-        <h2 className="faq-heading"><HelpCircle size={22} className="icon-inline" /> Frequently Asked Questions</h2>
+        <h2 className="faq-heading"><HelpCircle size={22} className="icon-inline" /> {translateUi("Questions")}</h2>
         <div className="faq-grid">
           <div className="faq-item">
-            <h3>How do I install a pack?</h3>
+            <h3>{translateUi("How do I install a pack?")}</h3>
             <p>
-              Clicking <strong>Install Pack</strong> will trigger a deep link (<code>arvio://install-pack</code>) to launch the ARVIO app on your device and open the import dialog. If you are browsing on another device, copy the URL and paste it under <strong>Settings &gt; Catalogs &gt; Import Catalog Pack</strong> in your app.
+              {translateUi("On Android, Open in ARVIO app adds the pack in the app. On other devices, copy the pack link and paste it in the ARVIO Android or TV app under Settings → Catalogs → Import Catalog Pack. Rows you add there sync to ARVIO Web.")}
             </p>
           </div>
           <div className="faq-item">
-            <h3>How do I host my own Catalog Pack?</h3>
+            <h3>{translateUi("How do I host my own pack?")}</h3>
             <p>
-              Create a JSON file matching the manifest structure below, host it on a public server (like GitHub Gist, Netlify, or other public hosting), and share your raw link or deep link code!
+              {translateUi("Create a JSON file like the example below, host it on a public server (for example a GitHub Gist) and share its raw link.")}
             </p>
           </div>
         </div>
       </section>
 
       <section className="manifest-example-section">
-        <h2 className="manifest-heading"><Code size={22} className="icon-inline" /> Manifest JSON Structure</h2>
+        <h2 className="manifest-heading"><Code size={22} className="icon-inline" /> {translateUi("Pack file format")}</h2>
         <pre className="code-block">
           <code>{`{
   "id": "my-custom-pack",
@@ -411,10 +449,11 @@ export default function DiscoverPage() {
       </section>
 
       <footer className="discover-footer">
-        <p>ARVIO TV &copy; {new Date().getFullYear()}. Built with premium aesthetics.</p>
+        <p>ARVIO &copy; {new Date().getFullYear()}</p>
       </footer>
 
       <style jsx>{`
+        .discover-container :global(.pack-link-fallback) { flex-basis: 100%; min-height: 40px; padding: 6px 10px; border-radius: 8px; border: 1px solid #333; background: #111; color: #ddd; font-size: 12px; }
         .discover-container {
           max-width: 1200px;
           margin: 0 auto;
@@ -450,11 +489,10 @@ export default function DiscoverPage() {
           height: 48px;
         }
 
-        .logo-text {
-          font-size: 28px;
-          font-weight: 800;
-          letter-spacing: 1px;
-          color: #fff;
+        .wordmark-logo {
+          height: 28px;
+          width: auto;
+          display: block;
         }
 
         .submit-trigger-button {

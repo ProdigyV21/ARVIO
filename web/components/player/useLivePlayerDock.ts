@@ -1,12 +1,14 @@
 "use client";
 
 import { useEffect, useState, type CSSProperties } from "react";
+import { consumeKeepLivePlayerExpanded } from "@/lib/liveZap";
 
 /** Reposition the existing player, never mount a second video/connection for preview. */
 export function useLivePlayerDock(enabled: boolean, identity: string, onClose: () => void) {
   const [bounds, setBounds] = useState<CSSProperties>();
   const [expanded, setExpanded] = useState(false);
-  useEffect(() => setExpanded(false), [identity]);
+  // A Live TV zap changes the stream but stays fullscreen (lib/liveZap.ts).
+  useEffect(() => { if (!consumeKeepLivePlayerExpanded()) setExpanded(false); }, [identity]);
   useEffect(() => {
     if (!enabled) return;
     const expand = () => setExpanded(true);

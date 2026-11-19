@@ -386,6 +386,7 @@ function render(localeKey) {
   const translations = new Map([...copy, ...newCopy].map((entry) => [entry[0], entry[valueIndex]]));
   const attributeTranslations = new Map([...attributes, ...newCopy].map((entry) => [entry[0], entry[valueIndex]]));
   let html = replaceTextNodes(source, translations);
+  html = html.replace('data-release-label="LATEST RELEASE"', `data-release-label="${localeKey === 'pt' ? 'ÚLTIMA VERSÃO' : 'ÚLTIMA VERSIÓN'}"`);
 
   html = html.replace('<html lang="en">', `<html lang="${locale.lang}">`);
   html = html.replace(/<title>[^<]+<\/title>/u, `<title>${locale.title}</title>`);
@@ -432,7 +433,8 @@ function render(localeKey) {
 
   const clientCopy = JSON.stringify(Object.fromEntries(translations)).replaceAll("<", "\\u003c");
   html = html.replace(/(<script type="application\/json" id="home-copy">)[\s\S]*?(<\/script>)/u, (_, start, end) => start + clientCopy + end);
-  html = html.replaceAll('href="/premium/"', `href="/premium/?lang=${locale.lang === "es" ? "es-ES" : locale.lang}"`);
+  // The Premium page in the same language (scripts/build-localized-premium.mjs).
+  html = html.replaceAll('href="/premium/"', `href="/${locale.directory}/premium/"`);
   return html.replace(/[ \t]+$/gmu, "");
 }
 

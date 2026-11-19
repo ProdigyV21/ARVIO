@@ -1,0 +1,35 @@
+.premium-purchase { position: fixed; inset: 0; margin: auto; width: min(460px, calc(100vw - 24px)); max-height: calc(100dvh - 24px); overflow-y: auto; padding: 30px; border: 1px solid #343b3f; border-radius: 20px; background: #111517; color: #f5f6f7; text-align: start; box-shadow: 0 24px 100px #0009; }
+.premium-purchase::backdrop { background: #050708de; backdrop-filter: blur(5px); }
+.premium-purchase-brand { display: flex; align-items: center; gap: 10px; margin-bottom: 26px; font-size: 18px; letter-spacing: .03em; }
+.premium-purchase-brand strong { font-size: 12px; font-weight: 500; color: #a4dabf; margin-inline-start: 5px; }
+.premium-purchase-close { position: absolute; inset-block-start: 14px; inset-inline-end: 14px; width: 36px; height: 36px; display: grid; place-items: center; border: 0; border-radius: 10px; background: transparent; color: #aab5bb; }
+.premium-purchase h2 { margin: 0 0 10px; font-size: clamp(23px, 5vw, 28px); line-height: 1.2; font-weight: 650; letter-spacing: -.035em; }
+.premium-purchase-lead { margin: 0 0 22px; color: #a5b0b7; font-size: 14px; line-height: 1.6; }
+.premium-purchase-steps { display: flex; align-items: center; gap: 18px; list-style: none; margin: 0 0 22px; padding: 0; color: #76848c; font-size: 11px; }
+.premium-purchase-steps li { display: flex; align-items: center; gap: 6px; }
+.premium-purchase-steps li > span, .premium-purchase-steps li > svg { display: grid; place-items: center; width: 18px; height: 18px; padding: 2px; border: 1px solid #3d4a52; border-radius: 50%; font-size: 10px; }
+.premium-purchase-steps [aria-current] { color: #d4eade; }
+.premium-purchase-steps [aria-current] > span { border-color: #87bb9f; background: #203b2e; }
+.premium-purchase-plan { padding: 18px; margin-bottom: 18px; border: 1px solid #3c5a4c; border-radius: 13px; background: #16201b; }
+.premium-purchase-plan-name { font-size: 12px; font-weight: 600; color: #bed8c9; }
+.premium-purchase-total { display: flex; flex-wrap: wrap; align-items: baseline; gap: 7px; margin: 8px 0; }
+.premium-purchase-total strong { font-size: 38px; font-weight: 650; line-height: 1.1; letter-spacing: -.055em; }
+.premium-purchase-total span, .premium-purchase-total small { color: #a0b0a7; font-size: 12px; }
+.premium-purchase-total small { margin-inline-start: auto; font-size: 10px; }
+.premium-purchase-terms, .premium-purchase-saving, .premium-purchase-benefits { margin: 7px 0 0; color: #a9b8b0; font-size: 12px; line-height: 1.55; }
+.premium-purchase-saving { color: #9ed5b8; }
+.premium-purchase-benefits { border-top: 1px solid #2f4337; padding-top: 11px; margin-top: 13px; }
+.premium-purchase-account { display: grid; gap: 5px; margin-bottom: 17px; padding: 0 1px; overflow-wrap: anywhere; }
+.premium-purchase-account span { color: #88969f; font-size: 11px; }
+.premium-purchase-account strong { font-size: 13px; font-weight: 500; }
+.premium-purchase .paywall-primary { width: 100%; min-height: 48px; display: flex; align-items: center; justify-content: center; gap: 9px; padding: 12px; font-size: 14px; border-radius: 10px; }
+.premium-purchase-checking { display: flex; align-items: center; gap: 8px; color: #a8b4bc; font-size: 13px; }
+.premium-purchase-error { color: #edc19b; font-size: 13px; line-height: 1.5; }
+.premium-purchase-refund { display: flex; align-items: flex-start; gap: 7px; margin: 17px 0 0; color: #8e9da6; font-size: 11px; line-height: 1.6; }
+.premium-purchase-refund svg { flex-shrink: 0; margin-top: 2px; }
+.premium-purchase-refund a { color: #b9d6c7; text-decoration: underline; }
+.premium-purchase-later { display: block; padding: 10px; margin: 8px auto -10px; border: 0; background: transparent; color: #9aa9b2; font: inherit; font-size: 12px; }
+.premium-purchase .membership-inline-hint { margin-top: 10px; font-size: 11px; }
+.premium-purchase-success { margin-bottom: 14px; color: #9ad8b8; }
+.premium-purchase :is(button,a):focus-visible { outline: 2px solid #d7eddf; outline-offset: 4px; }
+@media (max-width: 480px) { .premium-purchase { padding: 24px 20px; } .premium-purchase-brand { margin-bottom: 22px; } }

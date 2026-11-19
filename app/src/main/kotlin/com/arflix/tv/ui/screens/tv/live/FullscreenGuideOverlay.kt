@@ -201,7 +201,7 @@ internal fun FullscreenGuideOverlay(
         val panelShape = if (isTouchDevice) {
             RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp, bottomStart = 14.dp, bottomEnd = 14.dp)
         } else {
-            RoundedCornerShape(18.dp)
+            RoundedCornerShape(16.dp)
         }
         Box(modifier = Modifier.fillMaxSize()) {
             Box(
@@ -420,7 +420,7 @@ private fun GuideSheetHandle() {
             modifier = Modifier
                 .width(42.dp)
                 .height(4.dp)
-                .clip(RoundedCornerShape(999.dp))
+                .clip(CircleShape)
                 .background(Color.White.copy(alpha = 0.24f))
         )
     }
@@ -438,9 +438,9 @@ private fun GuideTimelineSummary(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
+            .clip(RoundedCornerShape(16.dp))
             .background(Color.White.copy(alpha = if (isTouchDevice) 0.055f else 0.045f))
-            .border(BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)), RoundedCornerShape(14.dp))
+            .border(BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)), RoundedCornerShape(16.dp))
             .padding(5.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(if (isTouchDevice) 5.dp else 7.dp),
@@ -476,7 +476,7 @@ private fun GuideTimelinePill(
 ) {
     Row(
         modifier = modifier
-            .clip(RoundedCornerShape(10.dp))
+            .clip(RoundedCornerShape(12.dp))
             .background(accent.copy(alpha = 0.13f))
             .padding(horizontal = 8.dp, vertical = 7.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -661,7 +661,7 @@ private fun GuideProgramRow(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(3.dp)
-                            .clip(RoundedCornerShape(2.dp)),
+                            .clip(RoundedCornerShape(8.dp)),
                         color = liveAccent(),
                         trackColor = LiveColors.Panel,
                     )
@@ -687,9 +687,9 @@ private fun GuideEmptyState(
         modifier = Modifier
             .fillMaxWidth()
             .height(if (isTouchDevice) 118.dp else 150.dp)
-            .clip(RoundedCornerShape(14.dp))
+            .clip(RoundedCornerShape(16.dp))
             .background(Color.White.copy(alpha = 0.055f))
-            .border(BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)), RoundedCornerShape(14.dp))
+            .border(BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)), RoundedCornerShape(16.dp))
             .padding(if (isTouchDevice) 14.dp else 18.dp),
         contentAlignment = Alignment.Center,
     ) {
@@ -707,7 +707,7 @@ private fun GuideEmptyState(
 private fun GuideChip(label: String, fg: Color, bg: Color) {
     Box(
         modifier = Modifier
-            .clip(RoundedCornerShape(5.dp))
+            .clip(RoundedCornerShape(8.dp))
             .background(bg)
             .padding(horizontal = 6.dp, vertical = 2.dp),
     ) {

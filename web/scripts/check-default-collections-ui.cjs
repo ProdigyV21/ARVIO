@@ -1,5 +1,6 @@
 /* Render the real rails/details with the exported APK defaults and offline title data. */
 const fs = require('node:fs');
+const { appCss } = require('./app-styles.cjs');
 const path = require('node:path');
 const http = require('node:http');
 const assert = require('node:assert/strict');
@@ -28,6 +29,7 @@ const { chromium } = require('@playwright/test');
       res.end('<html><head><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/globals.css"></head><body><div id="root"></div><script src="/app.js"></script></body></html>');
       return;
     }
+    if (url === '/globals.css') { res.setHeader('content-type', 'text/css'); return res.end(appCss(root)); }
     const file = url === '/app.js' ? path.join(output, 'app.js') : url === '/globals.css' ? path.join(root, 'app/globals.css')
       : url.startsWith('/fixtures/') ? path.join(fixture, path.basename(url)) : path.join(root, 'public', url);
     if (!fs.existsSync(file)) { res.writeHead(404).end(); return; }

@@ -284,6 +284,7 @@ function seasonAction(globals) {
   vm.runInNewContext(output, {
     module, item: { id: 42, mediaType: 'tv' },
     getSeasonEpisodes: async () => [{ episodeNumber: 1 }, { episodeNumber: 2 }],
+    loadSeasonEpisodes: async () => [{ episodeNumber: 1 }, { episodeNumber: 2 }],
     priorityConfig: {}, metadataContext: {}, isWatched: () => false, ...globals
   });
   return module.exports;

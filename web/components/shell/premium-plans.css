@@ -1,0 +1,40 @@
+/* Shared two-plan card (landing page + Premium offer), pay-on-phone QR, Android note. */
+.premium-plans { min-width: 0; }
+.premium-plans.is-compact { margin: 22px 0 20px; }
+.premium-plans.is-compact .premium-offer-plans { grid-template-columns: minmax(0, 1fr); gap: 10px; }
+.premium-plans.is-compact .premium-offer-plan { padding: 14px; }
+.premium-plans.is-compact .premium-offer-price strong { font-size: 34px; }
+.premium-plans.is-compact .premium-offer-refund { margin-top: 12px; }
+
+.premium-pay-on-phone { display: flex; gap: 18px; align-items: center; margin: 0 0 16px; padding: 16px; border: 1px solid #5fbf9c; border-radius: 12px; background: #14201b; }
+.premium-qr { flex: none; width: 168px; height: 168px; display: grid; place-items: center; border-radius: 8px; background: #fff; color: #111; overflow: hidden; }
+.premium-qr img { width: 100%; height: 100%; image-rendering: pixelated; }
+.premium-qr span { padding: 8px; font-size: 11px; overflow-wrap: anywhere; text-align: center; }
+.premium-pay-on-phone > div:last-child { min-width: 0; display: grid; gap: 8px; }
+.premium-pay-on-phone p { margin: 0; color: #c9d1d6; font-size: 14px; line-height: 1.5; }
+.premium-pay-title { display: flex; align-items: center; gap: 8px; color: #f4f5f6 !important; font-size: 17px !important; font-weight: 650; }
+.premium-pay-email strong { display: block; color: #fff; font-weight: 500; overflow-wrap: anywhere; }
+.premium-pay-plans { display: flex; flex-wrap: wrap; gap: 8px; }
+.premium-pay-plans button { min-height: 44px; padding: 8px 14px; border: 1px solid #3a3f43; border-radius: 999px; background: transparent; color: #d3d9dd; font: inherit; font-size: 14px; }
+.premium-pay-plans button[aria-pressed="true"] { border-color: #f4f5f6; background: #f4f5f6; color: #111416; }
+.premium-pay-plans button:focus-visible { outline: 2px solid #fff; outline-offset: 3px; }
+
+.premium-android-note { display: flex; gap: 8px; align-items: flex-start; margin: 14px 0 0; color: #c3cbd1; font-size: 13px; line-height: 1.55; }
+.premium-android-note svg { flex-shrink: 0; margin-top: 2px; color: #9adebf; }
+.premium-android-note a { color: #9adebf; }
+
+.membership-support { margin: 8px 0 0; color: #b9c0c6; font-size: 13px; }
+.membership-support a { color: #9adebf; }
+
+/* Landing page: the main action in the hero on phones. */
+.web-preview-hero-cta { display: none; }
+@media (max-width: 760px) {
+  .web-preview-hero-cta { display: grid; gap: 8px; margin: 0 0 22px; }
+  .web-preview-hero-cta .paywall-primary { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 50px; padding: 12px; border: 1px solid #f5f6f7; border-radius: 8px; background: #f5f6f7; color: #111416; font: inherit; font-size: 14px; font-weight: 650; }
+  .web-preview-hero-cta p { margin: 0; color: #9ca5ad; font-size: 12px; text-align: center; }
+  .web-preview-hero-cta .membership-inline-hint { display: none; }
+  .premium-pay-on-phone { flex-direction: column; align-items: flex-start; }
+}
+.web-preview-hero .premium-android-note { margin: 0 0 22px; }
+.premium-pay-currency { margin-top: 6px; color: rgba(255, 255, 255, 0.62); font-size: 12px; line-height: 1.45; }
+.premium-offer-was { color: color-mix(in srgb, currentColor 55%, transparent); font-size: 0.6em; margin-inline-end: 6px; }

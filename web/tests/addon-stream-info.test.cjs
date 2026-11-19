@@ -45,11 +45,19 @@ test('real media and torrent results survive informational-looking titles', () =
   ]) assert.equal(info.isInformationalAddonStream(entry), false, JSON.stringify(entry));
 });
 
-function addonClient({ resolver = false, raw = [], remote = [] } = {}) {
+function addonClient({ resolver = false, raw = [], remote = [], cached = false } = {}) {
+  const final = { type: 'final', streams: remote };
+  const batch = { type: 'batch', streams: remote, batch: remote };
+  const relay = load('lib/resolver.ts', { './config': { config: { resolverUrl: 'https://relay.example.test' } } }, {
+    fetch: async () => cached ? Response.json(final) : new Response(
+      [batch, final].map(event => JSON.stringify(event)).join('\n'),
+      { headers: { 'content-type': 'application/x-ndjson' } }
+    )
+  });
   return load('lib/addons.ts', {
     './http': { proxiedUrl: url => url, jsonRequest: async url => url.includes('/subtitles/') ? { subtitles: [] } : { streams: raw } },
     './config': { hasResolverConfig: () => resolver },
-    './resolver': { getResolverStreamsProgressive: async (_addons, _item, _season, _episode, update) => { update?.(remote, remote); return remote; } },
+    './resolver': relay,
     './storage': { loadStored: (_key, fallback) => fallback, saveStored() {} },
     './streamCompatibility': { isBrowserPlayableStream: stream => !!stream.url, isIosPlayableStream: stream => !!stream.url },
     './addonStreamInfo': info
@@ -87,4 +95,52 @@ test('resolver notices are filtered from every progressive batch and final merge
   assert.equal(sources[0].source, 'Movie');
   assert.ok(batches.length > 0);
   assert.ok(batches.every(stream => stream.source === 'Movie'));
+});
+
+test('browser addon results keep playable URLs when release metadata is not text', async () => {
+  const url = 'https://cdn.example.test/movie.mp4';
+  const headers = { request: { Referer: 'https://addon.example.test/' } };
+  const client = addonClient({ raw: [{
+    url, name: 42, title: 'Movie.2026.1080p', description: { toString: null },
+    size: ['5 GB'], behaviorHints: { filename: 123, proxyHeaders: headers }
+  }] });
+  const [stream] = await client.getStreams([addon], item);
+  assert.equal(stream.url, url);
+  assert.equal(stream.source, 'Movie.2026.1080p');
+  assert.equal(stream.description, 'Movie.2026.1080p');
+  assert.equal(stream.behaviorHints.filename, null);
+  assert.equal(stream.behaviorHints.proxyHeaders, headers);
+  assert.equal(stream.quality, '1080p');
+});
+
+test('resolver results normalize malformed labels before batches and final sources reach the player', async () => {
+  const headers = { request: { Referer: 'https://addon.example.test/' } };
+  const valid = { url: 'https://cdn.example.test/valid.mp4', source: 'Valid', addonName: 'Library', description: 'Movie.2026', behaviorHints: { filename: 'Movie.2026.mp4' } };
+  const malformed = {
+    url: 'https://cdn.example.test/movie.mp4', addonId: 'fixture', source: ['movie'], addonName: { label: 'Invalid' },
+    description: { toString: null }, behaviorHints: { filename: 123, proxyHeaders: headers }
+  };
+  for (const cached of [true, false]) {
+    const client = addonClient({ resolver: true, remote: [valid, malformed], cached });
+    const updates = [];
+    const final = await client.getStreamsProgressive([], item, undefined, undefined, (all, batch) => updates.push(...all, ...batch));
+    assert.ok(updates.some(stream => stream.url === malformed.url));
+    assert.equal(final.length, 2);
+    for (const stream of [...updates, ...final]) {
+      if (stream.url === valid.url) {
+        assert.equal(stream.source, valid.source);
+        assert.equal(stream.addonName, valid.addonName);
+        assert.equal(stream.description, valid.description);
+        assert.equal(stream.behaviorHints.filename, valid.behaviorHints.filename);
+      } else {
+        assert.equal(stream.url, malformed.url);
+        assert.equal(stream.addonId, malformed.addonId);
+        assert.equal(stream.addonName, 'Source');
+        assert.equal(stream.source, '');
+        assert.equal(stream.description, null);
+        assert.equal(stream.behaviorHints.filename, null);
+        assert.equal(stream.behaviorHints.proxyHeaders.request.Referer, headers.request.Referer);
+      }
+    }
+  }
 });

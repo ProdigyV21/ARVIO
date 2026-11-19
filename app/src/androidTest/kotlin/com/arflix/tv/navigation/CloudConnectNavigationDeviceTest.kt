@@ -15,7 +15,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
-import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.performClick
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
@@ -62,7 +62,7 @@ class CloudConnectNavigationDeviceTest(private val deviceType: DeviceType) {
         }
         compose.onNodeWithTag("bottomBar").assertIsDisplayed()
         bottomBarItems.forEach { item ->
-            compose.onNodeWithText(compose.activity.getString(item.labelRes)).performClick()
+            compose.onNodeWithContentDescription(compose.activity.getString(item.labelRes)).performClick()
             compose.runOnIdle {
                 assertEquals(item.route, nav.currentDestination!!.route!!.substringBefore('?'))
             }

@@ -21,13 +21,11 @@ internal class SportsCatalogueDiskCache(file: File) {
         runCatching {
             val snapshot = GZIPInputStream(atomic.openRead()).bufferedReader().use { gson.fromJson(it, SportsScheduleSnapshot::class.java) }
             val key = snapshot.key
-            if (key.profileId == expected.profileId && key.providerId == expected.providerId &&
-                key.sourceVersion == expected.sourceVersion && key.excludedGroups == expected.excludedGroups) snapshot.events else emptyList()
+            if (key.sameCatalogueScope(expected)) snapshot.events else emptyList()
         }.onFailure { System.err.println("[Sports-Cache] read failed: ${it.javaClass.simpleName}") }.getOrDefault(emptyList())
     }
 
     fun write(snapshot: SportsScheduleSnapshot) = synchronized(lock) {
-        if (snapshot.events.isEmpty()) return@synchronized
         val output = atomic.startWrite()
         try {
             val compressed = object : GZIPOutputStream(output) {

@@ -1,4 +1,5 @@
 const path = require('node:path');
+const { appCss } = require('./app-styles.cjs');
 const fs = require('node:fs');
 const http = require('node:http');
 const assert = require('node:assert/strict');
@@ -22,7 +23,7 @@ const { chromium } = require('@playwright/test');
         ? `export const useTranslation=()=>s=>s;`
         : args.path.endsWith('tmdb') ? `export const getLogoUrl=async()=>'/clearlogo.svg';export const getCardProviders=async()=>['Netflix'];export const getCardMeta=async()=>({});export const resolveTmdbId=async()=>1;export const prefetchDetails=()=>{};export const getCollectionPreview=async(item)=>({...item,overview:'A journey through unfamiliar worlds and extraordinary discoveries. Explore the stories, characters and ideas that made these films and series memorable.',year:'2024',duration:'2h 10m',budget:150000000,imdbId:'tt123',backdrop:'/cover.jpg'});`
         : args.path.endsWith('imdbRatings') ? `export const getImdbRating=async()=> '8.2';`
-        : `import React,{createContext,useContext,useState} from 'react';const Context=createContext(null);const settings={language:'en',homeServers:[],cardLayoutMode:'landscape'};export const useApp=()=>useContext(Context);export function FixtureProvider({children}){const[selected,setSelected]=useState(null);return <Context.Provider value={{settings,addons:[],selected,isWatched:()=>false,openContextMenu:()=>{}}}>{children(setSelected)}{selected&&<button onClick={()=>setSelected(null)}>Back to collection</button>}</Context.Provider>}` }));
+        : `import React,{createContext,useContext,useState} from 'react';const Context=createContext(null);const settings={language:'en',homeServers:[],cardLayoutMode:'landscape'};export const useApp=()=>useContext(Context);export const useAppPick=()=>useApp();export const useAppSelector=(select)=>select(useApp());export function FixtureProvider({children}){const[selected,setSelected]=useState(null);return <Context.Provider value={{settings,addons:[],selected,isWatched:()=>false,openContextMenu:()=>{}}}>{children(setSelected)}{selected&&<button onClick={()=>setSelected(null)}>Back to collection</button>}</Context.Provider>}` }));
       build.onResolve({ filter: /^@\// }, args => ({ path: ['.tsx', '.ts', '/index.tsx', '/index.ts'].map(ext => path.join(root, args.path.slice(2) + ext)).find(fs.existsSync) }));
     } }]
   });
@@ -32,7 +33,7 @@ const { chromium } = require('@playwright/test');
       catch { res.writeHead(502); return res.end('{}'); }
     }
     if (req.url === '/app.js') { res.setHeader('content-type', 'application/javascript'); return res.end(fs.readFileSync(path.join(out, 'app.js'))); }
-    if (req.url === '/globals.css') { res.setHeader('content-type', 'text/css'); return res.end(fs.readFileSync(path.join(root, 'app/globals.css'))); }
+    if (req.url === '/globals.css') { res.setHeader('content-type', 'text/css'); return res.end(appCss(root)); }
     if (req.url.startsWith('/api/tmdb/')) {
       const url = new URL(req.url, 'http://localhost'); const page = Number(url.searchParams.get('page') || 1); const tv = url.pathname.includes('/tv');
       res.setHeader('content-type', 'application/json');

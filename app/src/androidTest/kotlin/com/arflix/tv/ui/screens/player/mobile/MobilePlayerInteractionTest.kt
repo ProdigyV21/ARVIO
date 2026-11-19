@@ -136,7 +136,9 @@ class MobilePlayerInteractionTest {
                 ),
             )
         }
-        compose.onNodeWithText("Cancel").performClick()
+        compose.onNodeWithText(
+            ApplicationProvider.getApplicationContext<android.content.Context>().getString(com.arflix.tv.R.string.cancel)
+        ).performClick()
         compose.runOnIdle {
             assertEquals(0, next)
             assertEquals(false, gate.tryOpen(episode, true, NextEpisodeAirDateResolution.Allowed))

@@ -1,7 +1,8 @@
 "use client";
 
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { localeUrl, resolveLocale, translate, type Dictionary } from './core';
+import { directionOf, localeUrl, resolveLocale, translate, type Dictionary } from './core';
+export { directionOf } from './core';
 
 const empty: Dictionary = {};
 const LanguageContext = createContext<{ language: string; dictionary: Dictionary }>({language:'en', dictionary:empty});
@@ -26,11 +27,15 @@ export function LanguageProvider({language, children}: {language:string; childre
   }, [locale]);
   useEffect(() => {
     document.documentElement.lang = language;
-    document.documentElement.dir = /^(ar|he|iw|fa|ur)(-|$)/i.test(language) ? 'rtl' : 'ltr';
+    document.documentElement.dir = directionOf(language);
   }, [language]);
   const dictionary = loaded.locale === locale ? loaded.dictionary : cache.get(locale) ?? empty;
   const value = useMemo(() => ({language, dictionary}), [language, dictionary]);
   return <LanguageContext.Provider value={value}>{children}</LanguageContext.Provider>;
+}
+
+export function useDirection(): 'rtl' | 'ltr' {
+  return directionOf(useContext(LanguageContext).language);
 }
 
 export function useTranslation() {

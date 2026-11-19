@@ -34,7 +34,12 @@ import androidx.compose.ui.unit.sp
 import com.arflix.tv.MainActivity
 import com.arflix.tv.R
 import com.arflix.tv.ui.components.QrCodeImage
+import com.arflix.tv.ui.theme.AccentGreen
 import com.arflix.tv.ui.theme.ArflixTvTheme
+import com.arflix.tv.ui.theme.BackgroundCard
+import com.arflix.tv.ui.theme.BackgroundDark
+import com.arflix.tv.ui.theme.TextPrimary
+import com.arflix.tv.ui.theme.TextSecondary
 import com.arflix.tv.util.DeviceType
 import com.arflix.tv.util.detectDeviceType
 import com.arflix.tv.util.deviceHasTouchScreen
@@ -77,7 +82,9 @@ class CrashReportActivity : ComponentActivity() {
                     hasReportedCrashMsg = reportedCrashMsg != null,
                     crashTime = crashTime,
                     crashVersion = crashVersion,
-                    crashProvider = prefs.getString("last_crash_provider", "sentry") ?: "sentry",
+                    crashProvider = intent.getStringExtra(EXTRA_CRASH_PROVIDER)
+                        ?: prefs.getString("last_crash_provider", "firebase")
+                        ?: "firebase",
                     onRestartApp = {
                         val restartIntent = Intent(this@CrashReportActivity, MainActivity::class.java).apply {
                             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
@@ -95,6 +102,7 @@ class CrashReportActivity : ComponentActivity() {
         const val EXTRA_CRASH_ID = "extra_crash_id"
         const val EXTRA_CRASH_MSG = "extra_crash_msg"
         const val EXTRA_CRASH_TIME = "extra_crash_time"
+        const val EXTRA_CRASH_PROVIDER = "extra_crash_provider"
         const val DISCORD_BUG_CHANNEL_URL = "https://discord.gg/UavuEYMfQ4"
     }
 }
@@ -131,7 +139,7 @@ fun CrashReportScreen(
         sdf.format(Date(crashTime))
     }
 
-    val firebase = crashProvider == "firebase"
+    val firebase = crashProvider != "sentry"
     val dashboardLink = if (firebase) "https://console.firebase.google.com/project/arvio-15c5a/crashlytics"
         else "https://sentry.io/issues/?query=id%3A${Uri.encode(crashId)}"
 
@@ -156,7 +164,7 @@ fun CrashReportScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFF0F1115))
+            .background(BackgroundDark)
             .padding(24.dp),
         contentAlignment = Alignment.Center
     ) {
@@ -181,7 +189,7 @@ fun CrashReportScreen(
                 } else {
                     stringResource(R.string.crash_desc_mobile)
                 },
-                color = Color(0xFFA0A6B2),
+                color = TextSecondary,
                 fontSize = 14.sp,
                 textAlign = TextAlign.Center
             )
@@ -204,7 +212,7 @@ fun CrashReportScreen(
 
                 Text(
                     text = stringResource(R.string.crash_qr_hint),
-                    color = Color(0xFF00F0D0),
+                    color = AccentGreen,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.SemiBold,
                     textAlign = TextAlign.Center
@@ -214,7 +222,7 @@ fun CrashReportScreen(
             // Crash Details Card
             Surface(
                 shape = RoundedCornerShape(12.dp),
-                color = Color(0xFF181C24),
+                color = BackgroundCard,
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Column(
@@ -235,7 +243,7 @@ fun CrashReportScreen(
                             crashVersion,
                             displayCrashMsg
                         ),
-                        color = Color(0xFFD0D5DD),
+                        color = TextPrimary,
                         fontSize = 12.sp,
                         fontFamily = FontFamily.Monospace
                     )
@@ -273,7 +281,7 @@ fun CrashReportScreen(
                 Button(
                     onClick = onRestartApp,
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = if (isRestartFocused) Color.White else Color(0xFF00F0D0)
+                        containerColor = if (isRestartFocused) Color.White else AccentGreen
                     ),
                     shape = RoundedCornerShape(8.dp),
                     modifier = Modifier
@@ -282,7 +290,7 @@ fun CrashReportScreen(
                         .onFocusChanged { isRestartFocused = it.isFocused }
                         .then(
                             if (isRestartFocused) {
-                                Modifier.border(2.dp, Color(0xFF00F0D0), RoundedCornerShape(8.dp))
+                                Modifier.border(2.dp, AccentGreen, RoundedCornerShape(8.dp))
                             } else {
                                 Modifier
                             }

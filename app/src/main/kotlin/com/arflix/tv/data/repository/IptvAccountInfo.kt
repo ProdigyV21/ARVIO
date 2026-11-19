@@ -3,6 +3,7 @@ package com.arflix.tv.data.repository
 import com.google.gson.JsonElement
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
+import com.arflix.tv.network.IptvAccountUsage
 import java.security.MessageDigest
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -17,7 +18,8 @@ import java.util.Locale
  *
  * Stored per source id, locally only (never in the cloud snapshot): the values
  * describe one provider account at one moment, and are asked for only when a
- * source is added or edited, or when the user taps "Refresh now".
+ * source is added or edited, when the user taps "Refresh now", or once per process
+ * when a user-started Xtream play finds none stored for these credentials.
  *
  * Every field is nullable on purpose - the map is stored as Gson JSON, and Gson
  * skips Kotlin default values (see [StalkerPortalEntry]).
@@ -105,6 +107,22 @@ object IptvAccountInfoParser {
             unlimited = unlimited && !expired,
             maxConnections = maxConnections,
         )
+    }
+
+    /**
+     * Reads the live slot count from the same answer as [parseXtream]. Never
+     * stored, because it ages within seconds. Null means unknown: not an account
+     * answer, a rejected or inactive login, or counts a panel did not report.
+     */
+    internal fun parseXtreamAvailability(body: String?): IptvAccountUsage? {
+        val root = parseObject(body) ?: return null
+        val userInfo = root.get("user_info")?.takeIf { it.isJsonObject }?.asJsonObject ?: return null
+        if (userInfo.text("auth") == "0") return null
+        val status = userInfo.text("status")?.lowercase(Locale.ROOT)
+        if (status != null && status != "active") return null
+        val active = userInfo.text("active_cons")?.toIntOrNull()?.takeIf { it >= 0 } ?: return null
+        val max = userInfo.text("max_connections")?.toIntOrNull()?.takeIf { it > 0 } ?: return null
+        return IptvAccountUsage(active, max)
     }
 
     /**

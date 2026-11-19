@@ -35,8 +35,8 @@ async function main() {
         return image.decode();
       })));
       const membership = page.locator('[data-premium-placement="hero-membership"]');
-      const preview = page.locator('[data-premium-placement="hero-preview"]');
-      assert.equal(await membership.getAttribute('href'), 'https://ko-fi.com/arvio/tiers');
+      const preview = page.locator('[data-premium-placement="plan-yearly"]');
+      assert.equal(await membership.getAttribute('href'), 'https://web.arvio.tv/');
       assert.equal(await preview.getAttribute('href'), 'https://web.arvio.tv/');
       assert.equal(await page.locator('a[href*="intent=trial"]').count(), 0);
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, name + ': no horizontal overflow');

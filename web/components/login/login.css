@@ -1,0 +1,247 @@
+/* Login / account access screen. Imported by LoginScreen.tsx. */
+
+/* ---- Login ---- */
+.login-shell {
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at 76% 20%, rgba(0, 213, 136, 0.16), transparent 30%),
+    radial-gradient(circle at 18% 78%, rgba(103, 183, 255, 0.12), transparent 28%),
+    linear-gradient(135deg, #050505 0%, #0b1018 54%, #020202 100%);
+  position: relative;
+  display: grid;
+  place-items: center;
+  padding: clamp(22px, 4vw, 56px);
+  overflow: hidden;
+}
+[dir="rtl"] .login-shell {
+  background-image: radial-gradient(circle at 76% 20%, rgba(0, 213, 136, 0.16), transparent 30%), radial-gradient(circle at 18% 78%, rgba(103, 183, 255, 0.12), transparent 28%), linear-gradient(225deg, #050505 0%, #0b1018 54%, #020202 100%);
+}
+.login-shell::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(90deg, rgba(255, 255, 255, 0.045) 1px, transparent 1px),
+    linear-gradient(0deg, rgba(255, 255, 255, 0.032) 1px, transparent 1px);
+  background-size: 72px 72px;
+  mask-image: radial-gradient(circle at center, black, transparent 72%);
+  pointer-events: none;
+}
+[dir="rtl"] .login-shell::before {
+  background-image: linear-gradient(270deg, rgba(255, 255, 255, 0.045) 1px, transparent 1px), linear-gradient(0deg, rgba(255, 255, 255, 0.032) 1px, transparent 1px);
+}
+.login-back {
+  position: absolute;
+  top: 32px;
+  left: 32px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: transparent;
+  border: 0;
+  color: var(--muted);
+  font-size: 15px;
+  cursor: pointer;
+}
+[dir="rtl"] .login-back {
+  left: auto;
+  right: 32px;
+}
+@media (hover: hover) and (pointer: fine) {
+  .login-back:hover {
+    color: #fff;
+  }
+}
+.login-hero {
+  position: relative;
+  width: min(1180px, 100%);
+  min-height: min(640px, calc(100vh - 88px));
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(360px, 430px);
+  align-items: center;
+  gap: clamp(28px, 5vw, 78px);
+}
+.login-copy { min-width: 0; }
+.login-brand-lockup {
+  display: flex;
+  align-items: center;
+  gap: clamp(16px, 2vw, 28px);
+  margin-bottom: clamp(24px, 4vh, 42px);
+  /* Keep the lockup inside its grid column — the wide wordmark SVG (width:auto)
+     was overflowing right and sliding under the sign-in card. */
+  max-width: 100%;
+  min-width: 0;
+}
+.login-brand-logo {
+  flex: 0 0 auto;
+  width: clamp(68px, 7vw, 112px) !important;
+  height: clamp(68px, 7vw, 112px) !important;
+  object-fit: contain;
+  filter: drop-shadow(0 0 28px rgba(0, 213, 136, 0.24));
+}
+.login-wordmark {
+  height: clamp(34px, 4.4vw, 68px) !important;
+  /* Cap width to the remaining column space; the SVG keeps its aspect ratio via
+     object-fit and simply scales down instead of overflowing. */
+  width: auto !important;
+  max-width: 100%;
+  min-width: 0;
+  object-fit: contain;
+  filter: drop-shadow(0 0 28px rgba(0, 213, 136, 0.24));
+}
+.login-tag {
+  font-size: clamp(26px, 2.8vw, 46px);
+  line-height: 1.05;
+  font-weight: 760;
+  color: #fff;
+  margin: 0 0 16px;
+}
+.login-sub {
+  font-size: clamp(16px, 1.35vw, 22px);
+  line-height: 1.55;
+  color: rgba(255, 255, 255, 0.72);
+  max-width: 610px;
+}
+.login-proof {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: clamp(22px, 3vh, 34px);
+}
+.login-proof span {
+  padding: 10px 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.76);
+  font-size: 13px;
+  font-weight: 650;
+}
+.login-card {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: clamp(24px, 3vw, 34px);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.13), rgba(255, 255, 255, 0.07));
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  box-shadow: 0 30px 90px rgba(0, 0, 0, 0.56);
+}
+.login-error {
+  margin: 0;
+  padding: 12px;
+  border-radius: 8px;
+  background: #3d1515;
+  color: #ef4444;
+  font-size: 13px;
+}
+.login-submit { width: 100%; }
+
+/* Sign-up variant: the submit is an <a> to the auth site. Keep it identical to
+   the .primary button and centre its label. */
+a.login-submit {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+  box-sizing: border-box;
+}
+@media (max-width: 860px) {
+  .login-shell {
+    overflow-y: auto;
+  }
+  .login-hero {
+    min-height: auto;
+    grid-template-columns: 1fr;
+    gap: 26px;
+    align-content: center;
+  }
+  .login-brand-lockup {
+    margin-bottom: 18px;
+  }
+  .login-sub {
+    max-width: none;
+  }
+}
+.login-card {
+  border-radius: 26px;
+  backdrop-filter: blur(22px);
+}
+@media (max-width: 640px) {
+
+  .login-hero {
+    min-height: auto;
+  }
+}
+@media (max-width: 680px) {
+
+  .login-hero {
+    grid-template-columns: 1fr;
+    gap: 20px;
+    min-height: auto;
+  }
+
+  .login-brand-lockup .login-brand-logo {
+    width: 62px !important;
+    height: 62px !important;
+  }
+  .login-brand-lockup .login-wordmark {
+    height: 28px !important;
+    width: auto !important;
+  }
+
+  .login-tag {
+    font-size: 28px;
+  }
+
+  .login-sub {
+    font-size: 15px;
+  }
+
+  .login-proof {
+    gap: 7px;
+  }
+
+  .login-proof span {
+    padding: 8px 10px;
+    font-size: 11px;
+  }
+
+  .login-card {
+    padding: 20px;
+    border-radius: 22px;
+  }
+}
+
+/* Surfaces and phone sizing that used to override the base rules above from
+   globals.css. They must stay after them (and before the rules below). */
+.login-proof span {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(0, 0, 0, 0.42);
+  backdrop-filter: blur(12px);
+}
+.login-card {
+  border-color: rgba(255, 255, 255, 0.095);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.075), rgba(255, 255, 255, 0.035)),
+    rgba(8, 9, 11, 0.72);
+  box-shadow: 0 20px 58px rgba(0, 0, 0, 0.26);
+}
+.login-shell {
+  background:
+    radial-gradient(circle at 50% 0%, rgba(0, 213, 136, 0.13), transparent 28%),
+    radial-gradient(circle at 20% 72%, rgba(117, 161, 255, 0.12), transparent 30%),
+    linear-gradient(180deg, #06080a, #000 68%);
+}
+@media (max-width: 680px) {
+  .login-shell {
+    min-height: 100dvh;
+    padding: 20px var(--phone-gutter);
+    overflow-y: auto;
+  }
+}
+
+/* Handing over to the ARVIO auth portal: a calm centred card, no Back button flash. */
+.login-shell.login-redirecting { display: grid; place-items: center; min-height: 100dvh; padding: 24px; }
+.login-redirecting .login-card { display: grid; justify-items: center; gap: 14px; text-align: center; max-width: 360px; }
+.login-redirecting .login-brand-logo { width: 48px; height: 48px; }

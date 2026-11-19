@@ -317,3 +317,40 @@ test('Fetch headers and stalled range bodies both have 15-second deadlines', asy
     assert.equal(worker.timers.size, 0);
   }
 });
+
+test('IPTV files read one range at a time and reuse the panel redirect within one playback (#849)', async (t) => {
+  const panel = 'https://panel.invalid/movie/u/p/7.mkv';
+  const server = 'https://edge.invalid/stream/token/7.mkv';
+  const requests = [];
+  let edgeDown = false;
+  const ranged = (url, redirected) => {
+    const response = new Response(new ReadableStream({ start(controller) { controller.close(); } }), { status: 206, headers: { 'Content-Range': 'bytes 0-0/1000' } });
+    return redirected ? Object.defineProperties(response, { redirected: { value: true }, url: { value: url } }) : response;
+  };
+  const fetch = async (url) => {
+    requests.push(String(url));
+    if (String(url) === panel) return ranged(server, true);
+    if (edgeDown) return new Response('', { status: 403 });
+    return ranged(server, false);
+  };
+  const read = (options) => options.fetchFn(panel, { headers: { Range: 'bytes=0-' } }).then((response) => response.body?.cancel());
+  const h = workerHarness(t, [], fetch);
+  h.send({ type: 'probe', url: panel, audioCodecs: ['mp4a.40.2'], iptv: true });
+  await h.waitFor(({ type }) => type === 'probe');
+  assert.equal(h.options().parallelism, 1);
+  for (let i = 0; i < 3; i++) await read(h.options());
+  assert.deepEqual(requests, [panel, server, server], 'the panel is asked once');
+  edgeDown = true;
+  await read(h.options());
+  assert.deepEqual(requests.slice(3), [server, panel], 'a refused target is forgotten and the panel asked again');
+
+  // Other sources keep mediabunny's defaults and always request their own URL.
+  requests.length = 0;
+  edgeDown = false;
+  const other = workerHarness(t, [], fetch);
+  other.send({ type: 'probe', url: panel, audioCodecs: ['mp4a.40.2'] });
+  await other.waitFor(({ type }) => type === 'probe');
+  assert.equal(other.options().parallelism, undefined);
+  for (let i = 0; i < 2; i++) await read(other.options());
+  assert.deepEqual(requests, [panel, panel]);
+});

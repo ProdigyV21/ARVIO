@@ -5,6 +5,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 const ts = require('typescript');
 const { load } = require('./load.cjs');
+const { sourceOf, storeSource } = require('./sources.cjs');
 const links = load('lib/partnerLinks.ts');
 const target = search => {
   const parsed = links.parsePartnerLink(search);
@@ -61,6 +62,21 @@ test('login redirects preserve valid pending titles and attribution, not arbitra
     'https://web.arvio.tv/?open=1&imdb=tt0137523&utm_source=simkl');
   assert.equal(links.partnerLoginRedirect('https://web.arvio.tv', '?open=1&url=https://evil.invalid'), 'https://web.arvio.tv/');
   assert.equal(links.partnerLoginRedirect('https://web.arvio.tv', '?return_url=https://evil.invalid'), 'https://web.arvio.tv/');
+});
+
+test('login preserves a bounded Premium plan with or without a title, never arbitrary destinations', () => {
+  const selected = new URL(links.partnerLoginRedirect('https://web.arvio.tv', '?premium_plan=yearly&utm_source=discord&return_url=https://evil.invalid'));
+  assert.equal(selected.searchParams.get('premium_plan'), 'yearly');
+  assert.match(selected.searchParams.get('premium_intent_at'), /^\d+$/);
+  assert.equal(selected.searchParams.get('utm_source'), 'discord');
+  assert.equal(selected.searchParams.has('return_url'), false);
+  const title = new URL(links.partnerLoginRedirect('https://web.arvio.tv', '?open=1&imdb=tt0137523&premium_plan=monthly'));
+  assert.equal(title.searchParams.get('imdb'), 'tt0137523');
+  assert.equal(title.searchParams.get('premium_plan'), 'monthly');
+  assert.match(title.searchParams.get('premium_intent_at'), /^\d+$/);
+  const malformed = new URL(links.partnerLoginRedirect('https://web.arvio.tv', '?open=1&imdb=tt0137523&premium_plan=yearly&premium_plan=monthly'));
+  assert.equal(malformed.searchParams.has('premium_plan'), false);
+  assert.equal(links.partnerLoginRedirect('https://web.arvio.tv', '?premium_plan=annual'), 'https://web.arvio.tv/');
 });
 
 test('IMDb find resolves films and shows with explicit type hints and excludes adult records', async () => {
@@ -220,7 +236,7 @@ test('network/provider diagnostics cannot expose credentials in the visible erro
 
 test('production episode boundary helper advances specials without treating season zero as missing', () => {
   const filename = path.resolve(__dirname, '../lib/store.tsx');
-  const source = ts.createSourceFile(filename, fs.readFileSync(filename, 'utf8'), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const source = ts.createSourceFile(filename, storeSource(), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
   let declaration;
   const visit = node => {
     if (ts.isFunctionDeclaration(node) && node.name?.text === 'nextLocalEpisode') declaration = node;
@@ -228,7 +244,7 @@ test('production episode boundary helper advances specials without treating seas
   };
   visit(source);
   assert.ok(declaration);
-  const code = ts.transpileModule(`module.exports = (${declaration.getText(source)});`, {
+  const code = ts.transpileModule(`module.exports = (${declaration.getText(source).replace(/^export /, '')});`, {
     compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS }
   }).outputText;
   const module = { exports: {} };
@@ -304,7 +320,7 @@ function handlerFixture(options = {}) {
     '@/lib/i18n': { useTranslation: () => value => value },
     '@/lib/partnerLinks': links,
     '@/lib/partnerMedia': { resolvePartnerMedia: async (...args) => { state.requests++; return options.resolve ? options.resolve(...args) : { id: 550, mediaType: 'movie', title: 'Film' }; } },
-    '@/lib/store': { useApp: () => app, getPriorityConfig: () => ({}) },
+    '@/lib/store': { useApp: () => app, useAppPick: () => app, useAppSelector: (select) => select(app), getPriorityConfig: () => ({}) },
     './PartnerLinkHandler.module.css': { default: {} }
   };
   const filename = path.resolve(__dirname, '../components/shell/PartnerLinkHandler.tsx');

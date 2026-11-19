@@ -113,7 +113,14 @@ internal class AddonNativeCatalog(
         val type = registry[item.id]?.type
             ?: item.addonNativeType?.trim()?.takeIf { it.isNotBlank() }
             ?: if (item.mediaType == MediaType.TV) "series" else "movie"
-        val restored = Entry(addonId, metaId, type, item.title, item.image, item.backdrop, item.overview)
+        // A history card can lack artwork; keep what this device's catalog recorded.
+        val known = registry[item.id]
+        val restored = Entry(
+            addonId, metaId, type, item.title,
+            item.image.takeIf { it.isNotBlank() } ?: known?.poster,
+            item.backdrop?.takeIf { it.isNotBlank() } ?: known?.background,
+            item.overview.takeIf { it.isNotBlank() } ?: known?.description
+        )
         if (registry.put(item.id, restored) != restored) registryDirty = true
     }
 

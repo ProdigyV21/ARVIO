@@ -489,11 +489,11 @@ object OkHttpProvider {
         // Keep the image cache modest: TV boxes cap the heap at ~384MB and the Live
         // TV page (player buffers + channel data) needs the headroom. Disk cache
         // still holds 48MB, so posters reload quickly without pinning Java heap.
-        val imageCacheBytes = if (activityManager?.isLowRamDevice == true) {
+        val imageCacheBytes = minOf(com.arflix.tv.util.playbackMemoryBudget(context).artworkBytes, if (activityManager?.isLowRamDevice == true) {
             24 * 1024 * 1024
         } else {
             32 * 1024 * 1024
-        }
+        })
         return ImageLoader.Builder(context)
             .okHttpClient(coilClient)
             .memoryCache {

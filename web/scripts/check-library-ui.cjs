@@ -12,8 +12,8 @@ const {chromium}=require('@playwright/test');
  const fixture=path.resolve(root,'../app/src/androidTest/assets/library');
  const server=http.createServer((req,res)=>{
   let file=req.url.split('?')[0];
-  if(file==='/') {res.setHeader('content-type','text/html');res.end(`<html><head><meta name="viewport" content="width=device-width,initial-scale=1"/><link rel="stylesheet" href="/globals.css"/><style>.library-test-header{z-index:100;height:84px;position:absolute;top:0;left:0;right:0;display:flex;align-items:center;justify-content:space-between;padding:0 3vw;background:#000;color:#fff}.library-test-header nav,.library-test-header span{display:flex;gap:12px;align-items:center}.library-test-header nav{gap:32px}.library-test-header .active{background:#242426;border-radius:10px;padding:14px}.library-test-avatar{background:#242426;border-radius:50%;padding:12px}.library-test-header svg{width:22px}@media(max-width:650px){.library-test-header{display:none}}</style></head><body><div id="root"></div><script src="/app.js"></script></body></html>`);return;}
-  const location=file==='/app.js'?path.join(out,'app.js'):file==='/globals.css'?path.join(root,'app/globals.css'):file.startsWith('/fixtures/')?path.join(fixture,path.basename(file)):path.join(root,'public',file);
+  if(file==='/') {res.setHeader('content-type','text/html');res.end(`<html><head><meta name="viewport" content="width=device-width,initial-scale=1"/><link rel="stylesheet" href="/globals.css"/><link rel="stylesheet" href="/app.css"/><style>.library-test-header{z-index:100;height:84px;position:absolute;top:0;left:0;right:0;display:flex;align-items:center;justify-content:space-between;padding:0 3vw;background:#000;color:#fff}.library-test-header nav,.library-test-header span{display:flex;gap:12px;align-items:center}.library-test-header nav{gap:32px}.library-test-header .active{background:#242426;border-radius:10px;padding:14px}.library-test-avatar{background:#242426;border-radius:50%;padding:12px}.library-test-header svg{width:22px}@media(max-width:650px){.library-test-header{display:none}}</style></head><body><div id="root"></div><script src="/app.js"></script></body></html>`);return;}
+  const location=file==='/app.js'?path.join(out,'app.js'):file==='/app.css'?path.join(out,'app.css'):file==='/globals.css'?path.join(root,'app/globals.css'):file.startsWith('/fixtures/')?path.join(fixture,path.basename(file)):path.join(root,'public',file);
   if(!fs.existsSync(location)){res.statusCode=404;res.end();return;}
   res.setHeader('content-type',file.endsWith('.css')?'text/css':file.endsWith('.js')?'application/javascript':file.endsWith('.png')?'image/png':file.endsWith('.jpg')?'image/jpeg':'application/octet-stream');fs.createReadStream(location).pipe(res);
  });
@@ -55,10 +55,10 @@ const {chromium}=require('@playwright/test');
    await page.waitForTimeout(100);
    if(width<=650) assert.notEqual(await page.locator('.collection-spotlight').getAttribute('data-preview-key'),initialPreview,'Touch scrolling updates the first-visible title preview');
    const savedOffset=await page.locator('.oled-grid-viewport').evaluate(node=>node.scrollTop);
-   if(width<=650) await page.getByLabel('Library source',{exact:true}).selectOption('trakt:watchlist');
+   if(width<=650) await page.locator('.oled-source-chips').getByRole('button',{name:'Trakt / Watchlist',exact:true}).click();
    else await page.locator('.oled-source-nav').getByRole('button',{name:'Watchlist',exact:true}).click();
    await page.locator('.media-card').first().waitFor();
-   if(width<=650) await page.getByLabel('Library source',{exact:true}).selectOption('saved');
+   if(width<=650) await page.locator('.oled-source-chips').getByRole('button',{name:'My watchlist',exact:true}).click();
    else await page.locator('.oled-source-nav').getByRole('button',{name:'My watchlist',exact:true}).click();
    await page.waitForTimeout(100);
    assert(Math.abs(await page.locator('.oled-grid-viewport').evaluate(node=>node.scrollTop)-savedOffset)<3,'Switching sources restores scroll');
@@ -69,7 +69,7 @@ const {chromium}=require('@playwright/test');
    await page.getByRole('button',{name:'My lists',exact:true}).click();await page.locator('.oled-collection img').first().waitFor();await page.waitForTimeout(300);
    if(width>650) await page.locator('.oled-collection').first().focus();
    await page.screenshot({path:path.join(evidence,`${name}-lists.png`)});
-   await page.getByRole('button',{name:'Homeserver',exact:true}).click();await page.locator('.media-card').first().waitFor();await page.waitForTimeout(300);
+   await page.getByRole('button',{name:'Home servers',exact:true}).click();await page.locator('.media-card').first().waitFor();await page.waitForTimeout(300);
    await page.screenshot({path:path.join(evidence,`${name}-servers.png`)});
    await page.goto(url+'/?poster=1');await page.locator('.media-card.is-poster').first().waitFor();await page.waitForTimeout(400);
    assert.equal(await page.locator('.card-logo').count(),0,'Poster layout does not overlay clearlogos');

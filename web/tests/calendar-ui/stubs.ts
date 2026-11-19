@@ -15,6 +15,8 @@ const timesReady = params.has("slowtime") ? new Promise<void>(resolve => { (wind
 const fixtureItems = fixtures.map(row => ({ id: row.id, title: row.title, mediaType: row.mediaType === "MOVIE" ? "movie" : "tv", image: `/fixtures/${row.poster}`, backdrop: `/fixtures/${row.backdrop}` }));
 export const app = { ...libraryApp, watchlist: fixtureItems.slice(0, 3), traktConnected: !onlyArvio, simklConnected: !onlyArvio && !watchingOnly, mdblistConnected: !onlyArvio && !watchingOnly };
 export const useApp = () => app;
+export const useAppPick = (..._keys: string[]) => app;
+export const useAppSelector = (select: (store: typeof app) => unknown) => select(app);
 export const authClient = {};
 const rows = (items: typeof fixtureItems) => items.map(item => ({ type: item.mediaType === "tv" ? "show" : "movie", [item.mediaType === "tv" ? "show" : "movie"]: { title: item.title, ids: { tmdb: item.id } } }));
 export const pullCloudWatchlist = async () => { calls.cloud = (calls.cloud || 0) + 1; return params.has("empty") || watchingOnly ? [] : fixtureItems.slice(0, 3); };

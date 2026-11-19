@@ -9,10 +9,10 @@ const { chromium } = require('@playwright/test');
 
 const root = path.resolve(__dirname, '..');
 const evidence = path.resolve(root, '../artifacts/ui-refinement-web');
-const styles = ['globals.css', 'premium.css', 'tv-guide.css', 'source-setup.css', 'calendar.css', 'ui-refinements.css'];
+const { APP_SHEETS: styles } = require('./app-styles.cjs');
 
 function extract(file, predicate) {
-  const source = ts.createSourceFile(file, fs.readFileSync(path.join(root, file), 'utf8'), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const source = ts.createSourceFile(file, require('../tests/sources.cjs').sourceOf(file), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
   const matches = [];
   function visit(node) {
     if (predicate(node)) matches.push(node);
@@ -29,9 +29,9 @@ const withClass = className => node => ts.isJsxElement(node) && node.openingElem
 async function main() {
   const playerTop = extract('components/player/PlayerOverlay.tsx', withClass('player-top'));
   const seasonTabs = extract('components/details/DetailsDrawer.tsx', withClass('season-tabs'));
-  const select = extract('components/settings/SettingsScreen.tsx', node => ts.isFunctionDeclaration(node) && node.name?.text === 'Select');
+  const select = extract('components/settings/ui.tsx', node => ts.isFunctionDeclaration(node) && node.name?.text === 'Select').replace(/^export /, '');
   const stubs = {
-    '@/lib/store': `export const useApp = () => ({ activeContextMenu: {
+    '@/lib/store': `export const useAppPick = () => useApp(); export const useAppSelector = (select) => select(useApp()); export const useApp = () => ({ activeContextMenu: {
       title: 'Episode options', position: { x: 32, y: 32 }, actions: [
         { id: 'play', label: 'Play Episode', action: () => window.actions.push('menu-play') },
         { id: 'watched', label: 'Mark as Watched', action: () => window.actions.push('watched') }
@@ -106,7 +106,7 @@ async function main() {
   const server = http.createServer((req, res) => {
     const route = new URL(req.url, 'http://localhost').pathname;
     if (route === '/app.js') {res.setHeader('Content-Type','text/javascript'); return res.end(bundle.outputFiles[0].contents);}
-    if (styles.some(name => route === '/'+name)) {res.setHeader('Content-Type','text/css'); return res.end(fs.readFileSync(path.join(root,'app',route.slice(1))));}
+    if (styles.some(name => route === '/'+name)) {res.setHeader('Content-Type','text/css'); return res.end(fs.readFileSync(path.join(root,route.slice(1))));}
     if (route === '/still.jpg') {res.setHeader('Content-Type','image/jpeg'); return res.end(fs.readFileSync(path.join(root,'../app/src/androidTest/assets/library/157336-backdrop.jpg')));}
     if (route === '/white.svg') {res.setHeader('Content-Type','image/svg+xml'); return res.end('<svg xmlns="http://www.w3.org/2000/svg" width="800" height="450"><path fill="white" d="M0 0h800v450H0z"/></svg>');}
     const publicFile = path.resolve(root,'public',route.replace(/^\//,''));

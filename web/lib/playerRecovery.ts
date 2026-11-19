@@ -183,6 +183,40 @@ export function isAudioOnlySource(url: string | undefined | null) {
   }
 }
 
+type DecodeCounters = { webkitAudioDecodedByteCount?: number; webkitVideoDecodedByteCount?: number };
+
+/**
+ * Chromium plays a file's video while silently dropping an audio track it
+ * cannot decode (E-AC-3/DTS/TrueHD in an MKV with no telling extension). Its
+ * decode counters show it: video bytes climb, audio stays at 0. Calls
+ * `onSilent` after ~5 s of real playback like that. Browsers without the
+ * counters, and files that already decoded audio, are left alone.
+ */
+export function monitorAudioDecode(video: HTMLVideoElement, onSilent: () => void, graceMs = 5000): () => void {
+  const counters = video as HTMLVideoElement & DecodeCounters;
+  if (typeof counters.webkitAudioDecodedByteCount !== "number" || typeof counters.webkitVideoDecodedByteCount !== "number") return () => {};
+  let stopped = false;
+  let lastTime = video.currentTime;
+  let lastCheck = Date.now();
+  let silentPlayingMs = 0;
+  const timer = setInterval(() => {
+    if (stopped) return;
+    if ((counters.webkitAudioDecodedByteCount ?? 0) > 0) { stop(); return; }
+    const now = Date.now();
+    const advancing = video.currentTime > lastTime;
+    const elapsed = Math.min(2000, Math.max(0, now - lastCheck));
+    lastCheck = now;
+    lastTime = video.currentTime;
+    // Muted playback still decodes audio; pauses, seeks and buffering do not count.
+    if (document.visibilityState === "hidden" || video.paused || video.seeking || video.ended || !advancing
+      || (counters.webkitVideoDecodedByteCount ?? 0) <= 0) return;
+    silentPlayingMs += elapsed;
+    if (silentPlayingMs >= graceMs) { stop(); onSilent(); }
+  }, 1000);
+  function stop() { stopped = true; clearInterval(timer); }
+  return stop;
+}
+
 export function monitorVideoFrames(video: HTMLVideoElement, onMissing: () => void): () => void {
   let stopped = false;
   let frame: number | undefined;
@@ -275,4 +309,44 @@ export function bufferedEndAt(ranges: TimeRanges | null, currentTime: number): n
     }
   }
   return 0;
+}
+
+/**
+ * What an HTTP status from the media host means for the viewer. A <video>
+ * element reports every refused request as "format not supported" (code 4),
+ * which used to send people hunting for a codec problem when the host was
+ * simply down (503) or the link had expired (403/410).
+ */
+export function describeHttpStatus(status: number): string | null {
+  if (status === 401 || status === 403) return `The host refused this link (HTTP ${status}). It may have expired; pick the source again or choose another one.`;
+  if (status === 404 || status === 410) return `The file is no longer on the host (HTTP ${status}). Choose another source.`;
+  if (status === 429) return "The host is rate-limiting requests (HTTP 429). Wait a moment or choose another source.";
+  if (status >= 500) return `The source's server is unavailable (HTTP ${status}). Try again later or choose another source.`;
+  if (status >= 400) return `The host rejected the request (HTTP ${status}). Choose another source.`;
+  return null;
+}
+
+/**
+ * After a startup failure, ask the host for one byte to find out why. Returns a
+ * readable cause, or null when the answer is unavailable (CORS, network) or
+ * the host looks healthy (then the format really is the problem).
+ */
+export async function diagnoseSourceFailure(url: string | null | undefined, options: { signal?: AbortSignal; fetchImpl?: typeof fetch; timeoutMs?: number } = {}): Promise<string | null> {
+  if (!url || !/^https?:\/\//i.test(url)) return null;
+  const fetcher = options.fetchImpl ?? (typeof fetch === "function" ? fetch : undefined);
+  if (!fetcher) return null;
+  const controller = new AbortController();
+  const abort = () => controller.abort();
+  options.signal?.addEventListener("abort", abort, { once: true });
+  const timer = setTimeout(abort, options.timeoutMs ?? 5000);
+  try {
+    const response = await fetcher(url, { headers: { Range: "bytes=0-0" }, signal: controller.signal, credentials: "omit", cache: "no-store" });
+    await response.body?.cancel().catch(() => undefined);
+    return describeHttpStatus(response.status);
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+    options.signal?.removeEventListener("abort", abort);
+  }
 }

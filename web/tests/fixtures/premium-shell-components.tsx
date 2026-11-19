@@ -26,3 +26,4 @@ export const PremiumUsage = marker('usage');
 export const PartnerLinkHandler = marker('partner-link');
 export function installTvNav() {}
 export function installGamepadNav() {}
+export function focusAfterViewChange() { return () => {}; }

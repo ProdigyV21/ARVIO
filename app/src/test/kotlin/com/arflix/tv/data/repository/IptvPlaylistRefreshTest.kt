@@ -34,10 +34,10 @@ class IptvPlaylistRefreshTest {
             mockk<ProfileManager>(relaxed = true), mockk<CloudSyncInvalidationBus>(relaxed = true),
         )
         val method = IptvRepository::class.java.getDeclaredMethod(
-            "fetchAndParseM3uOnce", String::class.java, Function1::class.java, OkHttpClient::class.java,
+            "fetchAndParseM3uOnce", String::class.java, Function1::class.java, OkHttpClient::class.java, Boolean::class.javaPrimitiveType,
         ).apply { isAccessible = true }
         try {
-            method.invoke(repository, "https://example.test/playlist.m3u", { _: Any -> Unit }, client)
+            method.invoke(repository, "https://example.test/playlist.m3u", { _: Any -> Unit }, client, true)
             fail("An unexpected 304 must not become an empty successful playlist")
         } catch (error: InvocationTargetException) {
             assertTrue(error.targetException is IOException)

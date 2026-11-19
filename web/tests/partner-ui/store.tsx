@@ -13,6 +13,8 @@ type FixtureStore = Pick<AppStore, "view" | "partnerLinkReady" | "auth" | "activ
   "toggleWatchlist" | "mdblistConnected" | "openContextMenu" | "toggleWatched">;
 const Context = createContext<FixtureStore | null>(null);
 export function useApp() { const value = useContext(Context); if (!value) throw new Error("Missing fixture store"); return value; }
+export function useAppPick(..._keys: string[]) { return useApp(); }
+export function useAppSelector<T>(select: (store: FixtureStore) => T) { return select(useApp()); }
 export const authClient = { session: null };
 export const traktClient = { isConnected: false };
 export const getPriorityConfig = () => ({ movieProviders: ["tmdb"], tvProviders: ["tmdb"], animeProviders: ["tmdb"] });
@@ -24,7 +26,9 @@ const settings: AppSettings = {
   secondarySubtitle: "", audioLanguage: "", subtitleSize: 100, subtitleColor: "#fff", subtitleColorName: "White",
   subtitleOffsetMs: 0, subtitleOffset: "bottom", subtitleStyle: "outline", subtitleStylized: false,
   filterSubtitlesByLanguage: false, removeHearingImpaired: false, aiSubtitlesEnabled: false, aiSubtitleModel: "off",
-  aiAutoSelect: false, aiApiKey: "", defaultPlayer: "browser", cardLayoutMode: "landscape", deviceModeOverride: "auto",
+  aiAutoSelect: false, aiApiKey: "", aiFindBestMatch: false, dolbyVisionCompat: true, telegramSearchOnClickOnly: true,
+  streamSearchMode: "parallel", subtitleFont: "System", useForcedSubtitles: false, subtitlePreload: true, showEpisodeRatings: false, animeEpisodeStructuring: "broadcast",
+  defaultPlayer: "browser", cardLayoutMode: "landscape", deviceModeOverride: "auto",
   oledBlack: true, clockFormat: "24h", showBudget: false, iptvFavoritesOnHome: false, smoothScrolling: false, spoilerBlur: false, accentColor: "arctic",
   dnsProvider: "system", showLoadingStats: false, customUserAgent: "", torrServerBaseUrl: "", skipProfileSelection: false,
   cardDensity: "comfortable", catalogs: [], hiddenCatalogIds: [], hiddenAddonCatalogIds: [], hiddenHomeServerCatalogIds: [], disabledAddonIds: [],

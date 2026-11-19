@@ -5,7 +5,18 @@
 // account's email. Auth: the account's ARVIO access token (so a user can only
 // attach an entitlement TO their own account). We only copy if the Ko-fi email
 // actually has a live paid entitlement — no way to fabricate access.
-const { randomBytes, timingSafeEqual } = require("node:crypto");
+const { randomInt, timingSafeEqual } = require("node:crypto");
+
+// An 8-digit code is easy to type on a phone or TV remote. Each emailed code
+// allows MAX_ATTEMPTS guesses, counted with atomic slots so parallel requests
+// cannot exceed it; codes are mailed at most once per five minutes per account
+// and per billing email. Codes from emails sent before the switch (16 hex
+// characters) keep working until they expire.
+const MAX_ATTEMPTS = 5;
+function normalizeCode(value) {
+  const raw = String(value || "").trim().toLowerCase().replace(/[\s-]/g, "");
+  return /^\d{8}$/.test(raw) || /^[a-f0-9]{16}$/.test(raw) ? raw : null;
+}
 const { json, options, parseBody, resolveIdentity, normalizeEmail, sha256, privacyHash, sendTransactionalEmail } = require("./_backend");
 const { recordPremiumEvent } = require("./_premium-funnel");
 const {
@@ -49,8 +60,8 @@ exports.handler = async (event) => {
     const kofiHash = sha256(kofiEmail);
     const proofKey = `link-proof/${accountHash}/${kofiHash}`;
     const proof = await store.get(proofKey, { type: "json", consistency: "strong" });
-    const code = String(body.code || "").trim().toLowerCase();
-    if (!code) {
+    const code = normalizeCode(body.code);
+    if (!String(body.code || "").trim()) {
       const accountSlot = `link-mail-account/${accountHash}/${Math.floor(Date.now() / 300_000)}`;
       const accountClaim = await store.setJSON(accountSlot, { at: Date.now() }, { onlyIfNew: true });
       if (!accountClaim.modified) return json(429, { error: "Please wait five minutes before requesting another code." });
@@ -59,15 +70,28 @@ exports.handler = async (event) => {
       const slot = `link-mail/${kofiHash}/${Math.floor(Date.now() / 300_000)}`;
       const claimed = await store.setJSON(slot, { at: Date.now() }, { onlyIfNew: true });
       if (!claimed.modified) return json(429, { error: "Please wait five minutes before requesting another code." });
-      const generated = randomBytes(8).toString("hex");
-      await store.setJSON(proofKey, { digest: sha256(generated), expiresAt: Date.now() + 15 * 60_000 });
+      const generated = String(randomInt(0, 100_000_000)).padStart(8, "0");
+      const shown = `${generated.slice(0, 4)} ${generated.slice(4)}`;
+      await store.setJSON(proofKey, { digest: sha256(generated), expiresAt: Date.now() + 15 * 60_000, id: `${Date.now()}-${randomInt(0, 1e9)}` });
       await sendTransactionalEmail(kofiEmail, "Verify your ARVIO Premium email",
-        `Your verification code is ${generated}. It expires in 15 minutes. Only enter this in ARVIO if you requested to link this billing email. Do not share it.`,
-        `<p>Your ARVIO Premium verification code:</p><p><strong>${generated}</strong></p><p>Expires in 15 minutes. Only enter this in ARVIO if you requested it. Do not share it.</p>`);
+        `Your verification code is ${shown}. It expires in 15 minutes. Only enter this in ARVIO if you requested to link this billing email. Do not share it.`,
+        `<p>Your ARVIO Premium verification code:</p><p><strong style="font-size:22px;letter-spacing:2px">${shown}</strong></p><p>Expires in 15 minutes. Only enter this in ARVIO if you requested it. Do not share it.</p>`);
       return json(202, { verificationRequired: true });
     }
-    if (!/^[a-f0-9]{16}$/.test(code) || !proof?.digest || proof.expiresAt < Date.now() ||
-        !timingSafeEqual(Buffer.from(sha256(code)), Buffer.from(proof.digest))) {
+    if (!code || !proof?.digest || proof.expiresAt < Date.now()) {
+      return json(400, { error: "Invalid or expired verification code." });
+    }
+    // Claim one of this code's guesses before comparing it.
+    let attempt = -1;
+    for (let index = 0; index < MAX_ATTEMPTS && attempt < 0; index++) {
+      const slot = await store.setJSON(`link-try/${accountHash}/${kofiHash}/${proof.id ?? proof.digest}/${index}`, { at: Date.now() }, { onlyIfNew: true });
+      if (slot.modified) attempt = index;
+    }
+    if (attempt < 0) {
+      await store.delete(proofKey);
+      return json(429, { error: "Too many attempts. Request a new code." });
+    }
+    if (!timingSafeEqual(Buffer.from(sha256(code)), Buffer.from(proof.digest))) {
       return json(400, { error: "Invalid or expired verification code." });
     }
     const kofiRecord = await readEntitlement(store, kofiHash);

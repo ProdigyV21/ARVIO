@@ -9,6 +9,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.arflix.tv.ui.theme.AccentGreen
 import com.arflix.tv.ui.theme.InterFontFamily
 
 @Immutable
@@ -101,8 +102,8 @@ data class ArvioSkinTokens(
                     focusOutline = Color(0xFFFFFFFF),  // Glowing white focus
                     focusGradientStart = Color(0xFFFFFFFF),  // White
                     focusGradientEnd = Color(0xFFFFFFFF),    // White (no gradient)
-                    tealAccent = Color(0xFF00D9B5),  // Teal checkmark color
-                    watchedGreen = Color(0xFF4CAF50),  // Green checkmark (Arctic Fuse 2 style)
+                    tealAccent = AccentGreen,  // Unified with the single palette green (#00D588)
+                    watchedGreen = AccentGreen,  // Green checkmark for watched items — single palette green
                     inProgressGrey = Color(0xFF757575),  // Grey clock for in-progress
                 ),
                 spacing = ArvioSpacingTokens(

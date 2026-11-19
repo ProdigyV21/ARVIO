@@ -27,14 +27,23 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.FileUpload
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -82,6 +91,12 @@ import com.arflix.tv.ui.components.AvatarRegistry
 import com.arflix.tv.ui.components.avatarCategoryLabel
 import com.arflix.tv.util.LocalDeviceType
 import com.arflix.tv.util.ProfileAvatarFiles
+import com.arflix.tv.ui.theme.BackgroundCard
+import com.arflix.tv.ui.theme.BackgroundElevated
+import com.arflix.tv.ui.theme.ErrorRed
+import com.arflix.tv.ui.theme.SuccessGreen
+import com.arflix.tv.ui.theme.TextPrimary
+import com.arflix.tv.ui.theme.TextSecondary
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 
@@ -192,7 +207,7 @@ fun EditProfileDialog(
 // Shared dialog content — compact layout
 // ============================================================
 
-@OptIn(ExperimentalTvMaterial3Api::class)
+@OptIn(ExperimentalTvMaterial3Api::class, androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 private fun ProfileDialogContent(
     title: String,
@@ -223,9 +238,11 @@ private fun ProfileDialogContent(
     val profileNameHint = stringResource(R.string.profile_name_hint)
     val configuration = LocalConfiguration.current
     val isTouchDevice = LocalDeviceType.current.isTouchDevice()
-    val useMobileLayout = isTouchDevice && configuration.screenWidthDp < 700
+    val useMobileLayout = isTouchDevice
+    val nameBringIntoView = remember { BringIntoViewRequester() }
     var editTextRef by remember { mutableStateOf<EditText?>(null) }
     val confirmButtonFocusRequester = remember { FocusRequester() }
+
 
     fun showKeyboard(editText: EditText) {
         editText.post {
@@ -286,8 +303,19 @@ private fun ProfileDialogContent(
             hideKeyboard()
             onDismiss()
         },
-        properties = DialogProperties(usePlatformDefaultWidth = false)
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false,
+            decorFitsSystemWindows = !isTouchDevice,
+        )
     ) {
+        val imeBottom = WindowInsets.ime.getBottom(LocalDensity.current)
+        LaunchedEffect(useMobileLayout, imeBottom) {
+            if (useMobileLayout && imeBottom > 0) {
+                androidx.compose.runtime.withFrameNanos { }
+                androidx.compose.runtime.withFrameNanos { }
+                runCatching { nameBringIntoView.bringIntoView() }
+            }
+        }
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -298,173 +326,233 @@ private fun ProfileDialogContent(
                 Column(
                     modifier = Modifier
                         .padding(horizontal = 14.dp, vertical = 12.dp)
+                        .statusBarsPadding()
                         .navigationBarsPadding()
                         .imePadding()
+                        .widthIn(max = 560.dp)
                         .fillMaxWidth()
                         .heightIn(max = (configuration.screenHeightDp - 24).dp)
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(Color(0xFF141414))
-                        .verticalScroll(rememberScrollState())
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(BackgroundCard)
+                        .border(1.dp, Color.White.copy(alpha = 0.1f), RoundedCornerShape(16.dp))
                         .padding(20.dp),
                     horizontalAlignment = Alignment.Start
                 ) {
-                    Text(
-                        text = title,
-                        fontSize = 22.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = Color.White
-                    )
-
-                    Spacer(modifier = Modifier.height(14.dp))
-
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                        ProfileAvatarPreview(
-                            name = name,
-                            selectedColorIndex = selectedColorIndex,
-                            selectedAvatarId = selectedAvatarId,
-                            selectedAvatarImageUri = selectedAvatarImageUri,
-                            useCustomAvatarImage = useCustomAvatarImage,
-                            profile = profile,
-                            size = 80.dp,
-                            iconPadding = 8.dp,
-                            letterSize = 34.sp
+                    // Header Row with Title and Close (X) button
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = title,
+                            fontSize = 20.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
                         )
-                        Column(Modifier.weight(1f)) {
-                            AvatarImageButtons(
-                                hasCustomAvatar = hasCustomAvatar,
-                                onUpload = { launchAvatarPicker() },
-                                onRemove = onRemoveAvatarImage
+                        Box(
+                            modifier = Modifier
+                                .size(32.dp)
+                                .clip(CircleShape)
+                                .background(Color.White.copy(alpha = 0.08f))
+                                .clickable {
+                                    hideKeyboard()
+                                    onDismiss()
+                                },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = stringResource(R.string.close),
+                                tint = Color.White.copy(alpha = 0.8f),
+                                modifier = Modifier.size(18.dp)
                             )
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Text(text = profileNameHint, fontSize = 12.sp, color = Color.White.copy(alpha = 0.6f))
-                    Spacer(Modifier.height(6.dp))
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(Color(0xFF222222))
-                            .border(1.dp, Color.White.copy(alpha = 0.2f), RoundedCornerShape(8.dp))
-                            .clickable {
-                                editTextRef?.let { et ->
-                                    et.requestFocus()
-                                    et.postDelayed({ showKeyboard(et) }, 100)
-                                }
-                            }
-                    ) {
-                        AndroidView(
-                            factory = { ctx ->
-                                EditText(ctx).apply {
-                                    editTextRef = this
-                                    setText(name)
-                                    setTextColor(android.graphics.Color.WHITE)
-                                    setHintTextColor(android.graphics.Color.GRAY)
-                                    hint = profileNameHint
-                                    textSize = 16f
-                                    background = null
-                                    setPadding(36, 32, 36, 32)
-                                    isSingleLine = true
-                                    inputType = InputType.TYPE_CLASS_TEXT
-                                    imeOptions = EditorInfo.IME_ACTION_DONE
-                                    isFocusable = true
-                                    isFocusableInTouchMode = true
-                                    doAfterTextChanged { editable ->
-                                        onNameChange(editable?.toString() ?: "")
-                                    }
-                                    setOnEditorActionListener { _, actionId, event ->
-                                        val isDoneAction = actionId == EditorInfo.IME_ACTION_DONE
-                                        val isEnterKey =
-                                            event?.keyCode == KeyEvent.KEYCODE_ENTER &&
-                                                event.action == KeyEvent.ACTION_UP
-                                        if (isDoneAction || isEnterKey) {
-                                            hideKeyboard(this)
-                                            if (this.text?.toString()?.isNotBlank() == true) {
-                                                onConfirm()
-                                            } else {
-                                                runCatching { confirmButtonFocusRequester.requestFocus() }
-                                            }
-                                            true
-                                        } else false
-                                    }
-                                }
-                            },
-                            modifier = Modifier.fillMaxWidth(),
-                            update = { et ->
-                                if (et.text.toString() != name) {
-                                    et.setText(name)
-                                    et.setSelection(name.length)
-                                }
-                            }
-                        )
-                    }
-
                     Spacer(modifier = Modifier.height(14.dp))
 
-                    KidsProfileControls(
-                        isKidsProfile = isKidsProfile,
-                        onKidsProfileChange = {
-                            hideKeyboard()
-                            onKidsProfileChange(it)
-                        },
-                        kidsAgeLevel = kidsAgeLevel,
-                        onKidsAgeLevelChange = onKidsAgeLevelChange
-                    )
-                    Spacer(modifier = Modifier.height(10.dp))
-
-                    if (profile != null && onShowPinSetup != null && onRemovePin != null) {
+                    // Scrollable middle content: Avatar & Photo, Name, Choose Avatar, Kids, PIN
+                    Column(
+                        modifier = Modifier
+                            .weight(1f, fill = false)
+                            .verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(16.dp),
+                        horizontalAlignment = Alignment.Start
+                    ) {
+                        // 1. Avatar Preview & Upload Photo
                         Row(
-                            modifier = Modifier.fillMaxWidth(),
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            horizontalArrangement = Arrangement.spacedBy(16.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            ProfileAvatarPreview(
+                                name = name,
+                                selectedColorIndex = selectedColorIndex,
+                                selectedAvatarId = selectedAvatarId,
+                                selectedAvatarImageUri = selectedAvatarImageUri,
+                                useCustomAvatarImage = useCustomAvatarImage,
+                                profile = profile,
+                                size = 80.dp,
+                                iconPadding = 8.dp,
+                                letterSize = 34.sp
+                            )
+                            Column(Modifier.weight(1f)) {
+                                AvatarImageButtons(
+                                    hasCustomAvatar = hasCustomAvatar,
+                                    onUpload = { launchAvatarPicker() },
+                                    onRemove = onRemoveAvatarImage
+                                )
+                            }
+                        }
+
+                        // 2. Profile Name Input
+                        Column(modifier = Modifier.fillMaxWidth().bringIntoViewRequester(nameBringIntoView)) {
+                            Text(
+                                text = profileNameHint,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = TextSecondary
+                            )
+                            Spacer(Modifier.height(6.dp))
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(BackgroundElevated)
+                                    .border(1.dp, Color.White.copy(alpha = 0.15f), RoundedCornerShape(10.dp))
+                                    .clickable {
+                                        editTextRef?.let { et ->
+                                            et.requestFocus()
+                                            et.postDelayed({ showKeyboard(et) }, 100)
+                                        }
+                                    }
+                            ) {
+                                AndroidView(
+                                    factory = { ctx ->
+                                        EditText(ctx).apply {
+                                            editTextRef = this
+                                            setText(name)
+                                            setTextColor(android.graphics.Color.WHITE)
+                                            setHintTextColor(android.graphics.Color.GRAY)
+                                            hint = profileNameHint
+                                            textSize = 16f
+                                            background = null
+                                            setPadding(36, 32, 36, 32)
+                                            isSingleLine = true
+                                            inputType = InputType.TYPE_CLASS_TEXT
+                                            imeOptions = EditorInfo.IME_ACTION_DONE
+                                            isFocusable = true
+                                            isFocusableInTouchMode = true
+                                            doAfterTextChanged { editable ->
+                                                onNameChange(editable?.toString() ?: "")
+                                            }
+                                            setOnEditorActionListener { _, actionId, event ->
+                                                val isDoneAction = actionId == EditorInfo.IME_ACTION_DONE
+                                                val isEnterKey =
+                                                    event?.keyCode == KeyEvent.KEYCODE_ENTER &&
+                                                        event.action == KeyEvent.ACTION_UP
+                                                if (isDoneAction || isEnterKey) {
+                                                    hideKeyboard(this)
+                                                    if (this.text?.toString()?.isNotBlank() == true) {
+                                                        onConfirm()
+                                                    } else {
+                                                        runCatching { confirmButtonFocusRequester.requestFocus() }
+                                                    }
+                                                    true
+                                                } else false
+                                            }
+                                        }
+                                    },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    update = { et ->
+                                        if (et.text.toString() != name) {
+                                            et.setText(name)
+                                            et.setSelection(name.length)
+                                        }
+                                    }
+                                )
+                            }
+                        }
+
+                        // 3. Kids Profile Controls (Optimized Mobile Card)
+                        MobileKidsProfileControls(
+                            isKidsProfile = isKidsProfile,
+                            onKidsProfileChange = {
+                                hideKeyboard()
+                                onKidsProfileChange(it)
+                            },
+                            kidsAgeLevel = kidsAgeLevel,
+                            onKidsAgeLevelChange = onKidsAgeLevelChange
+                        )
+
+                        // 4. Profile Lock (Optimized Mobile Card)
+                        if (profile != null && onShowPinSetup != null && onRemovePin != null) {
+                            MobileProfileLockControls(
+                                hasPin = !profile.pin.isNullOrEmpty(),
+                                onSetPin = {
+                                    hideKeyboard()
+                                    onShowPinSetup()
+                                },
+                                onRemovePin = {
+                                    hideKeyboard()
+                                    onRemovePin()
+                                }
+                            )
+                        }
+
+                        // 5. Choose Avatar Section (Categories)
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             Text(
-                                text = stringResource(R.string.profile_lock),
-                                fontSize = 12.sp,
+                                text = stringResource(R.string.profile_choose_avatar),
+                                fontSize = 13.sp,
                                 fontWeight = FontWeight.SemiBold,
-                                color = Color(0xFFB0B0B0),
-                                modifier = Modifier.weight(1f)
+                                color = TextPrimary
                             )
-                            Row(
-                                modifier = Modifier.weight(1.4f),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                if (profile.pin.isNullOrEmpty()) {
-                                    DialogButton(
-                                        text = stringResource(R.string.profile_set_pin),
-                                        isPrimary = false,
-                                        onClick = {
-                                            hideKeyboard()
-                                            onShowPinSetup()
-                                        },
-                                        modifier = Modifier.weight(1f)
-                                    )
-                                } else {
-                                    DialogButton(
-                                        text = stringResource(R.string.profile_change_pin),
-                                        isPrimary = false,
-                                        onClick = {
-                                            hideKeyboard()
-                                            onShowPinSetup()
-                                        },
-                                        modifier = Modifier.weight(1f)
-                                    )
-                                    DialogButton(
-                                        text = stringResource(R.string.profile_remove_pin),
-                                        isPrimary = false,
-                                        onClick = {
-                                            hideKeyboard()
-                                            onRemovePin()
-                                        },
-                                        modifier = Modifier.weight(1f)
-                                    )
+
+                            AvatarRegistry.categories.forEachIndexed { rowIdx, (label, ids) ->
+                                Text(
+                                    text = avatarCategoryLabel(label),
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = TextSecondary,
+                                    modifier = Modifier.padding(start = 2.dp, top = if (rowIdx > 0) 4.dp else 0.dp)
+                                )
+
+                                LazyRow(
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    contentPadding = PaddingValues(horizontal = 2.dp, vertical = 2.dp)
+                                ) {
+                                    // "None" option only in first row
+                                    if (rowIdx == 0) {
+                                        item {
+                                            AvatarGridItem(
+                                                avatarId = 0,
+                                                isSelected = selectedAvatarId == 0,
+                                                onClick = { onAvatarSelected(0) },
+                                                isNone = true
+                                            )
+                                        }
+                                    }
+                                    items(ids.size) { col ->
+                                        val id = ids[col]
+                                        AvatarGridItem(
+                                            avatarId = id,
+                                            isSelected = selectedAvatarId == id,
+                                            onClick = { onAvatarSelected(id) }
+                                        )
+                                    }
                                 }
                             }
                         }
-                        Spacer(modifier = Modifier.height(10.dp))
                     }
 
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    // Fixed Action Buttons at the bottom of the card
                     Column(
                         modifier = Modifier.fillMaxWidth(),
                         verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -510,52 +598,13 @@ private fun ProfileDialogContent(
                             }
                         }
                     }
-
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    AvatarRegistry.categories.forEachIndexed { rowIdx, (label, ids) ->
-                        Text(
-                            text = avatarCategoryLabel(label),
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = Color.White.copy(alpha = 0.5f),
-                            modifier = Modifier.padding(start = 8.dp, bottom = 6.dp)
-                        )
-
-                        LazyRow(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            contentPadding = PaddingValues(horizontal = 6.dp, vertical = 4.dp)
-                        ) {
-                            // "None" option only in first row
-                            if (rowIdx == 0) {
-                                item {
-                                    AvatarGridItem(
-                                        avatarId = 0,
-                                        isSelected = selectedAvatarId == 0,
-                                        onClick = { onAvatarSelected(0) },
-                                        isNone = true
-                                    )
-                                }
-                            }
-                            items(ids.size) { col ->
-                                val id = ids[col]
-                                AvatarGridItem(
-                                    avatarId = id,
-                                    isSelected = selectedAvatarId == id,
-                                    onClick = { onAvatarSelected(id) }
-                                )
-                            }
-                        }
-
-                        if (rowIdx < AvatarRegistry.categories.size - 1) Spacer(modifier = Modifier.height(10.dp))
-                    }
                 }
             } else {
                 Row(
                     modifier = Modifier
                         .padding(horizontal = 48.dp)
                         .clip(RoundedCornerShape(16.dp))
-                        .background(Color(0xFF141414))
+                        .background(BackgroundCard)
                         .padding(start = 28.dp, top = 28.dp, bottom = 28.dp, end = 12.dp),
                     verticalAlignment = Alignment.Top,
                     horizontalArrangement = Arrangement.spacedBy(28.dp)
@@ -606,7 +655,7 @@ private fun ProfileDialogContent(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clip(RoundedCornerShape(8.dp))
-                                .background(Color(0xFF222222))
+                                .background(BackgroundElevated)
                                 .border(1.dp, Color.White.copy(alpha = 0.2f), RoundedCornerShape(8.dp))
                                 .clickable {
                                     editTextRef?.let { et ->
@@ -684,7 +733,7 @@ private fun ProfileDialogContent(
                                     text = stringResource(R.string.profile_lock),
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.SemiBold,
-                                    color = Color(0xFFB0B0B0),
+                                    color = TextSecondary,
                                     modifier = Modifier.padding(start = 4.dp)
                                 )
                                 Row(
@@ -860,7 +909,7 @@ private fun ProfileAvatarPreview(
             modifier = Modifier
                 .size(size)
                 .clip(RoundedCornerShape(12.dp))
-                .background(Color(0xFF222222))
+                .background(BackgroundElevated)
         )
         return
     }
@@ -891,6 +940,178 @@ private fun ProfileAvatarPreview(
                 fontWeight = FontWeight.Bold,
                 color = Color.White
             )
+        }
+    }
+}
+
+/**
+ * Modern card controls for Kids profile on mobile.
+ */
+@Composable
+private fun MobileKidsProfileControls(
+    isKidsProfile: Boolean,
+    onKidsProfileChange: (Boolean) -> Unit,
+    kidsAgeLevel: KidsAgeLevel,
+    onKidsAgeLevelChange: (KidsAgeLevel) -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(BackgroundElevated)
+            .border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(12.dp))
+            .padding(14.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { onKidsProfileChange(!isKidsProfile) },
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = stringResource(R.string.profile_kids),
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color.White
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = stringResource(R.string.profile_kids_hint),
+                    fontSize = 11.sp,
+                    color = TextSecondary,
+                    lineHeight = 15.sp
+                )
+            }
+            Spacer(modifier = Modifier.width(12.dp))
+            Box(
+                modifier = Modifier
+                    .width(44.dp)
+                    .height(24.dp)
+                    .background(
+                        color = if (isKidsProfile) SuccessGreen else Color.White.copy(alpha = 0.2f),
+                        shape = RoundedCornerShape(16.dp)
+                    )
+                    .padding(3.dp),
+                contentAlignment = if (isKidsProfile) Alignment.CenterEnd else Alignment.CenterStart
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(18.dp)
+                        .background(color = Color.White, shape = RoundedCornerShape(12.dp))
+                )
+            }
+        }
+
+        if (isKidsProfile) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(1.dp)
+                    .background(Color.White.copy(alpha = 0.08f))
+            )
+
+            Text(
+                text = stringResource(R.string.profile_kids_max_age),
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Medium,
+                color = TextSecondary
+            )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                KidsAgeLevel.entries.forEach { level ->
+                    val isSelected = level == kidsAgeLevel
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(if (isSelected) Color.White else Color.White.copy(alpha = 0.08f))
+                            .border(
+                                width = 1.dp,
+                                color = if (isSelected) Color.White else Color.White.copy(alpha = 0.12f),
+                                shape = RoundedCornerShape(8.dp)
+                            )
+                            .clickable { onKidsAgeLevelChange(level) }
+                            .padding(vertical = 8.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = stringResource(kidsAgeLevelLabel(level)),
+                            fontSize = 12.sp,
+                            fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
+                            color = if (isSelected) Color.Black else Color.White
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Modern card controls for Profile PIN Lock on mobile.
+ */
+@Composable
+private fun MobileProfileLockControls(
+    hasPin: Boolean,
+    onSetPin: () -> Unit,
+    onRemovePin: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(BackgroundElevated)
+            .border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(12.dp))
+            .padding(14.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
+                Text(
+                    text = stringResource(R.string.profile_lock),
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color.White
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = if (hasPin) stringResource(R.string.profile_pin_active) else stringResource(R.string.profile_lock_desc),
+                    fontSize = 11.sp,
+                    color = if (hasPin) SuccessGreen else TextSecondary,
+                    lineHeight = 15.sp
+                )
+            }
+            if (!hasPin) {
+                DialogButton(
+                    text = stringResource(R.string.profile_set_pin),
+                    isPrimary = false,
+                    onClick = onSetPin
+                )
+            } else {
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    DialogButton(
+                        text = stringResource(R.string.profile_change_pin),
+                        isPrimary = false,
+                        onClick = onSetPin
+                    )
+                    DialogButton(
+                        text = stringResource(R.string.profile_remove_pin),
+                        isPrimary = false,
+                        isDestructive = true,
+                        onClick = onRemovePin
+                    )
+                }
+            }
         }
     }
 }
@@ -1046,7 +1267,7 @@ private fun AvatarGridItem(
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .clip(RoundedCornerShape(10.dp))
+                        .clip(RoundedCornerShape(12.dp))
                         .background(Color.Black.copy(alpha = 0.35f)),
                     contentAlignment = Alignment.Center
                 ) {
@@ -1065,11 +1286,11 @@ private fun AvatarGridItem(
         Box(
             modifier = Modifier
                 .size(48.dp)
-                .clip(RoundedCornerShape(8.dp))
+                .clip(RoundedCornerShape(10.dp))
                 .border(
                     width = if (isSelected || isFocused > 0) 2.dp else 1.dp,
-                    color = if (isSelected || isFocused > 0) Color.White else Color.White.copy(alpha = 0.08f),
-                    shape = RoundedCornerShape(8.dp)
+                    color = if (isSelected || isFocused > 0) Color.White else Color.White.copy(alpha = 0.12f),
+                    shape = RoundedCornerShape(10.dp)
                 )
                 .clickable { onClick() }
                 .onFocusChanged { isFocused = if (it.isFocused) 1 else 0 }
@@ -1083,7 +1304,7 @@ private fun AvatarGridItem(
                 .size(54.dp)
                 .scale(scale)
                 .onFocusChanged { isFocused = if (it.isFocused) 1 else 0 },
-            shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(10.dp)),
+            shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(12.dp)),
             colors = ClickableSurfaceDefaults.colors(
                 containerColor = Color.Transparent,
                 focusedContainerColor = Color.Transparent
@@ -1092,17 +1313,17 @@ private fun AvatarGridItem(
                 border = if (isSelected) {
                     androidx.tv.material3.Border(
                         border = androidx.compose.foundation.BorderStroke(2.dp, Color.White),
-                        shape = RoundedCornerShape(10.dp)
+                        shape = RoundedCornerShape(12.dp)
                     )
                 } else {
                     androidx.tv.material3.Border(
                         border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)),
-                        shape = RoundedCornerShape(10.dp)
+                        shape = RoundedCornerShape(12.dp)
                     )
                 },
                 focusedBorder = androidx.tv.material3.Border(
                     border = androidx.compose.foundation.BorderStroke(2.dp, Color.White),
-                    shape = RoundedCornerShape(10.dp)
+                    shape = RoundedCornerShape(12.dp)
                 )
             )
         ) {
@@ -1135,14 +1356,14 @@ private fun DialogButton(
     }
     val focusedContainerColor = Color.White
     val contentColor = when {
-        isDestructive -> if (isFocused > 0) Color(0xFFB21E32) else Color(0xFFFF6B75)
+        isDestructive -> if (isFocused > 0) ErrorRed else ErrorRed
         isPrimary || isFocused > 0 -> Color.Black
         else -> Color.White
     }.copy(alpha = if (enabled) 1f else 0.4f)
 
     val buttonContent: @Composable () -> Unit = {
         Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.Center
         ) {
@@ -1152,9 +1373,10 @@ private fun DialogButton(
             }
             Text(
                 text = text,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Medium,
-                color = contentColor
+                fontSize = if (isPrimary && isTouchDevice) 15.sp else 13.sp,
+                fontWeight = if (isPrimary && isTouchDevice) FontWeight.SemiBold else FontWeight.Medium,
+                color = contentColor,
+                maxLines = 1
             )
         }
     }
@@ -1162,21 +1384,22 @@ private fun DialogButton(
     if (isTouchDevice) {
         Box(
             modifier = modifier
-                .clip(RoundedCornerShape(6.dp))
+                .clip(RoundedCornerShape(10.dp))
                 .background(containerColor)
                 .then(
                     if (!isPrimary) {
                         Modifier.border(
                             width = 1.dp,
-                            color = Color.White.copy(alpha = 0.3f),
-                            shape = RoundedCornerShape(6.dp)
+                            color = if (isDestructive) ErrorRed.copy(alpha = 0.5f) else Color.White.copy(alpha = 0.25f),
+                            shape = RoundedCornerShape(10.dp)
                         )
                     } else {
                         Modifier
                     }
                 )
                 .clickable(enabled = enabled, onClick = onClick)
-                .heightIn(min = 48.dp)
+                .heightIn(min = 44.dp),
+            contentAlignment = Alignment.Center
         ) {
             buttonContent()
         }
@@ -1185,7 +1408,7 @@ private fun DialogButton(
             onClick = { if (enabled) onClick() },
             enabled = enabled,
             modifier = modifier.onFocusChanged { isFocused = if (it.isFocused) 1 else 0 },
-            shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(6.dp)),
+            shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(8.dp)),
             colors = ClickableSurfaceDefaults.colors(
                 containerColor = containerColor,
                 focusedContainerColor = focusedContainerColor
@@ -1194,18 +1417,18 @@ private fun DialogButton(
                 ClickableSurfaceDefaults.border(
                     border = androidx.tv.material3.Border(
                         border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.3f)),
-                        shape = RoundedCornerShape(6.dp)
+                        shape = RoundedCornerShape(8.dp)
                     ),
                     focusedBorder = androidx.tv.material3.Border(
                         border = androidx.compose.foundation.BorderStroke(2.dp, Color.White),
-                        shape = RoundedCornerShape(6.dp)
+                        shape = RoundedCornerShape(8.dp)
                     )
                 )
             } else {
                 ClickableSurfaceDefaults.border(
                     focusedBorder = androidx.tv.material3.Border(
                         border = androidx.compose.foundation.BorderStroke(2.dp, Color.White),
-                        shape = RoundedCornerShape(6.dp)
+                        shape = RoundedCornerShape(8.dp)
                     )
                 )
             }

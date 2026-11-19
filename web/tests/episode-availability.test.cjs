@@ -1,6 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { load } = require('./load.cjs');
+const { sourceOf, storeSource } = require('./sources.cjs');
 const episode = (number, extra = {}) => ({
   id: 123, title: 'Chad Powers', mediaType: 'tv', seasonNumber: 1,
   episodeNumber: number, badge: 'Up Next', ...extra,
@@ -70,7 +71,7 @@ test('cached metadata rechecks airing time and validates beyond the artwork limi
 });
 
 test('store validates playback before it can suppress a genuine next episode and expires old rails', () => {
-  const source = require('node:fs').readFileSync(require('node:path').join(__dirname, '../lib/store.tsx'), 'utf8');
+  const source = storeSource();
   assert.match(source, /traktPlaybackCw = await validateEpisodes/);
   assert.match(source, /upNextRows = await validateEpisodes/);
   assert.match(source, /arvio\.web\.cw\.v4/);

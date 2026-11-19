@@ -2,6 +2,7 @@ package com.arflix.tv.data.repository
 
 import android.content.Context
 import com.arflix.tv.R
+import com.arflix.tv.data.api.YouTubeSearchVideo
 import com.arflix.tv.data.api.TmdbApi
 import com.arflix.tv.data.api.TmdbCastMember
 import com.arflix.tv.data.api.TmdbCrewMember
@@ -19,6 +20,7 @@ import com.arflix.tv.data.api.TraktApi
 import com.arflix.tv.data.api.TraktPublicListItem
 import com.arflix.tv.data.api.StremioMetaPreview
 import com.arflix.tv.data.model.Addon
+import com.arflix.tv.data.model.AddonCatalog
 import com.arflix.tv.data.model.CastMember
 import com.arflix.tv.data.model.CatalogConfig
 import com.arflix.tv.data.model.CatalogKind
@@ -113,14 +115,18 @@ class MediaRepository @Inject constructor(
     private val okHttpClient: OkHttpClient,
     private val streamRepository: StreamRepository,
     private val homeServerRepository: HomeServerRepository,
-    private val simklListsRepository: com.arflix.tv.data.repository.simkl.SimklListsRepository? = null
+    private val simklListsRepository: com.arflix.tv.data.repository.simkl.SimklListsRepository? = null,
+    private val simklSyncService: com.arflix.tv.data.repository.simkl.SimklSyncService? = null,
+    private val catalogRepository: CatalogRepository? = null,
+    private val iptvRepository: IptvRepository? = null
 ) {
 
     data class CategoryPageResult(
         val items: List<MediaItem>,
         val hasMore: Boolean,
         val nextOffset: Int? = null,
-        val totalCount: Int? = null
+        val totalCount: Int? = null,
+        val sourceLoadFailed: Boolean = false
     )
 
     private val apiKey = Constants.TMDB_API_KEY
@@ -161,6 +167,7 @@ class MediaRepository @Inject constructor(
         synchronized(seasonEpisodesCache) { seasonEpisodesCache.clear() }
         collectionRefsCache.clear()
         tmdbCatalogRefsCache.clear()
+        mdblistCollectionRefsCache.clear()
     }
 
     private data class MediaCacheEntry(val item: MediaItem, val timestamp: Long, val complete: Boolean)
@@ -182,6 +189,7 @@ class MediaRepository @Inject constructor(
     private val homeServerLogoRefCache = ConcurrentHashMap<String, CacheEntry<Pair<MediaType, Int>?>>()
     private val collectionRefsCache = ConcurrentHashMap<String, CacheEntry<CollectionRefs>>()
     private val tmdbCatalogRefsCache = ConcurrentHashMap<String, CacheEntry<List<Pair<MediaType, Int>>>>()
+    private val mdblistCollectionRefsCache = ConcurrentHashMap<String, CacheEntry<List<Pair<MediaType, Int>>>>()
     private val _episodeRatingsUpdated = MutableSharedFlow<Pair<Int, Int>>(extraBufferCapacity = 64)
     val episodeRatingsUpdated = _episodeRatingsUpdated.asSharedFlow()
 
@@ -230,7 +238,11 @@ class MediaRepository @Inject constructor(
      * Resolved refs of a collection. [complete] is true when no source would return more for a
      * larger request (it ran out, or hit its budget ceiling).
      */
-    private data class CollectionRefs(val refs: List<Pair<MediaType, Int>>, val complete: Boolean)
+    private data class CollectionRefs(
+        val refs: List<Pair<MediaType, Int>>,
+        val complete: Boolean,
+        val sourceLoadFailed: Boolean = false
+    )
 
     private data class CollectionSourceRefs(
         val refs: List<Pair<MediaType, Int>>,
@@ -311,7 +323,16 @@ class MediaRepository @Inject constructor(
         fun countOf(refs: List<Pair<MediaType, Int>>): Int =
             if (mediaType == null) refs.size else refs.count { it.first == mediaType }
 
-        val cacheKey = "${collectionRefsCacheKey(catalog)}|${catalog.collectionGroup}|${catalog.collectionRailKey}|${mediaType?.name ?: "ALL"}"
+        // An approved addon catalog's titles are trusted only once a load records them, so refs
+        // cached before an approval (made here, revoked or restored from the cloud) must not stand
+        // in for that load: the kids profile's approvals are part of what was cached.
+        val kidsApprovals = if (catalog.collectionSources.any { it.kind == CollectionSourceKind.ADDON_CATALOG }) {
+            activeKidsCatalogApprovals()
+        } else {
+            emptySet()
+        }
+        val cacheKey = "${collectionRefsCacheKey(catalog)}|${catalog.collectionGroup}|${catalog.collectionRailKey}|${mediaType?.name ?: "ALL"}" +
+            "|kids:${kidsApprovals.sorted().joinToString(",")}"
         val cached = getCollectionRefsCache(cacheKey)
         if (cached != null && (cached.complete || countOf(cached.refs) >= requiredCount.coerceAtLeast(1))) {
             return cached
@@ -331,7 +352,9 @@ class MediaRepository @Inject constructor(
                 null
             } else when (source.kind) {
                 CollectionSourceKind.ADDON_CATALOG -> 120
-                CollectionSourceKind.MDBLIST_PUBLIC -> 96
+                // Public lists can contain thousands of titles. Only the requested
+                // page is hydrated; a preview budget must not end View All.
+                CollectionSourceKind.MDBLIST_PUBLIC -> null
                 else -> 72
             }
         }
@@ -392,9 +415,9 @@ class MediaRepository @Inject constructor(
             !sourceResults[index].failed && (perSourceRefs[index].size < sourceBudgets[index] ||
                 (ceiling != null && sourceBudgets[index] >= ceiling))
         }
-        val resolved = CollectionRefs(refs.toList(), complete)
+        val resolved = CollectionRefs(refs.toList(), complete, sourceResults.any { it.failed })
         // Empty is a valid result. A failed page is not, even if earlier pages delivered items.
-        if (sourceResults.none { it.failed }) {
+        if (!resolved.sourceLoadFailed) {
             collectionRefsCache[cacheKey] = CacheEntry(resolved, System.currentTimeMillis())
         } else {
             collectionRefsCache.remove(cacheKey)
@@ -479,6 +502,10 @@ class MediaRepository @Inject constructor(
 
     /** True for a native addon item (see [AddonNativeCatalog]). */
     fun isAddonNative(mediaId: Int): Boolean = mediaId < 0 && addonNative.isNative(mediaId)
+
+    /** A native addon item's own catalog card (with its artwork), never a copy cached from elsewhere. */
+    fun addonNativeCard(type: MediaType, mediaId: Int): MediaItem? =
+        if (mediaId < 0) addonNative.card(type, mediaId) else null
 
     /** A native addon item's own type, for stream lookup; null for TMDB items. */
     fun addonNativeType(mediaId: Int): String? = if (mediaId < 0) addonNative.addonType(mediaId) else null
@@ -791,7 +818,10 @@ class MediaRepository @Inject constructor(
                 CatalogConfig("just_added", "Just Added", CatalogSourceType.MDBLIST, isPreinstalled = true, sourceUrl = "https://mdblist.com/lists/snoak/latest-movies-digital-release", sourceRef = "mdblist:https://mdblist.com/lists/snoak/latest-movies-digital-release"),
                 CatalogConfig("top_movies_week", "Top Movies This Week", CatalogSourceType.MDBLIST, isPreinstalled = true, sourceUrl = "https://mdblist.com/lists/linaspurinis/top-watched-movies-of-the-week", sourceRef = "mdblist:https://mdblist.com/lists/linaspurinis/top-watched-movies-of-the-week"),
                 CatalogConfig("new_kdramas", "New in K-Dramas", CatalogSourceType.MDBLIST, isPreinstalled = true, sourceUrl = "https://mdblist.com/lists/snoak/latest-kdrama-shows", sourceRef = "mdblist:https://mdblist.com/lists/snoak/latest-kdrama-shows"),
-                CatalogConfig("coming_soon", "Coming Soon", CatalogSourceType.MDBLIST, isPreinstalled = true, sourceUrl = "https://mdblist.com/lists/snoak/upcoming-movies", sourceRef = "mdblist:https://mdblist.com/lists/snoak/upcoming-movies")
+                CatalogConfig("coming_soon", "Coming Soon", CatalogSourceType.MDBLIST, isPreinstalled = true, sourceUrl = "https://mdblist.com/lists/snoak/upcoming-movies", sourceRef = "mdblist:https://mdblist.com/lists/snoak/upcoming-movies"),
+                // WeTrakr's personal recommendations; empty (so not shown) until WeTrakr is connected.
+                CatalogConfig(com.arflix.tv.data.repository.wetrakr.WeTrakrLists.RECS_SHOWS_ID, "Recommended Shows (WeTrakr)", CatalogSourceType.PREINSTALLED, isPreinstalled = true),
+                CatalogConfig(com.arflix.tv.data.repository.wetrakr.WeTrakrLists.RECS_MOVIES_ID, "Recommended Movies (WeTrakr)", CatalogSourceType.PREINSTALLED, isPreinstalled = true)
             )
 
             val collectionRails = CollectionTemplateManifest.railOrder.map { group ->
@@ -939,10 +969,40 @@ class MediaRepository @Inject constructor(
         nonEmpty
     }
 
+    private val weTrakrLists by lazy {
+        com.arflix.tv.data.repository.wetrakr.WeTrakrLists(
+            dagger.hilt.android.EntryPointAccessors.fromApplication(
+                context, com.arflix.tv.di.RepositoryAccessEntryPoint::class.java
+            ).weTrakrRepository()
+        )
+    }
+
+    /** One page (the only one) of WeTrakr's recommendations; empty when WeTrakr isn't connected. */
+    private suspend fun loadWeTrakrRecommendations(type: MediaType, page: Int): CategoryPageResult = coroutineScope {
+        if (page != 1 || !weTrakrLists.isConnected()) return@coroutineScope CategoryPageResult(emptyList(), hasMore = false)
+        val ids = runCatching { weTrakrLists.recommended(type) }
+            .onFailure { if (it is CancellationException) throw it }
+            .getOrDefault(emptyList())
+        val semaphore = Semaphore(6)
+        val items = ids.map { id ->
+            async {
+                semaphore.withPermit {
+                    runCatching { catalogItemFor(type, id) }
+                        .onFailure { if (it is CancellationException) throw it }
+                        .getOrNull()
+                }
+            }
+        }.mapNotNull { it.await() }
+        CategoryPageResult(items, hasMore = false)
+    }
+
     suspend fun loadHomeCategoryPage(
         categoryId: String,
         page: Int
     ): CategoryPageResult {
+        com.arflix.tv.data.repository.wetrakr.WeTrakrLists.recommendationType(categoryId)?.let { type ->
+            return loadWeTrakrRecommendations(type, page)
+        }
         if (page < 1) return CategoryPageResult(emptyList(), hasMore = false)
 
         val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.US)
@@ -991,6 +1051,12 @@ class MediaRepository @Inject constructor(
     }
 
     suspend fun loadCustomCatalog(catalog: CatalogConfig, maxItems: Int = 40): Category? = coroutineScope {
+        if (maxItems <= 0) return@coroutineScope null
+        if (catalog.sourceType == CatalogSourceType.PREINSTALLED && catalog.kind == CatalogKind.STANDARD &&
+            PartnerCatalogs.isManaged(catalog.id)) {
+            val page = loadManagedBuiltInPage(catalog, 0, maxItems)
+            return@coroutineScope page.items.takeIf { it.isNotEmpty() }?.let { Category(catalog.id, catalog.title, it) }
+        }
         if (catalog.kind == CatalogKind.COLLECTION) {
             val page = loadCollectionCatalogPage(catalog = catalog, offset = 0, limit = maxItems)
             return@coroutineScope if (page.items.isEmpty()) null else Category(catalog.id, catalog.title, page.items)
@@ -1000,14 +1066,28 @@ class MediaRepository @Inject constructor(
             val page = loadHomeServerCatalogPage(catalog, offset = 0, limit = effectiveMaxItems)
             return@coroutineScope if (page.items.isEmpty()) null else Category(catalog.id, catalog.title, page.items)
         }
+        if (catalog.sourceType == CatalogSourceType.YOUTUBE) {
+            val items = youTubeCatalogItems(catalog).take(effectiveMaxItems)
+            return@coroutineScope if (items.isEmpty()) null else Category(catalog.id, catalog.title, items)
+        }
+        if (catalog.sourceType == CatalogSourceType.ADDON) {
+            resolveAddonClientCatalog(catalog)?.let { delegated ->
+                val page = loadDelegatedCatalogPage(delegated, 0, effectiveMaxItems)
+                return@coroutineScope page.items.takeIf { it.isNotEmpty() }?.let { Category(catalog.id, catalog.title, it) }
+            }
+            resolveAddonClientFilter(catalog)?.let { filterJson ->
+                val page = loadFilteredAddonHttpPage(catalog, filterJson, 0, effectiveMaxItems)
+                return@coroutineScope page.items.takeIf { it.isNotEmpty() }?.let { Category(catalog.id, catalog.title, it) }
+            }
+        }
         val mediaRefs = when (catalog.sourceType) {
-            CatalogSourceType.TRAKT -> loadTraktCatalogRefs(catalog.sourceUrl, catalog.sourceRef)
+            CatalogSourceType.TRAKT, CatalogSourceType.MDBLIST -> loadListCatalogRefs(catalog)
             CatalogSourceType.SIMKL -> loadSimklCatalogRefs(catalog, effectiveMaxItems)
-            CatalogSourceType.MDBLIST -> loadMdblistCatalogRefs(catalog.sourceUrl, catalog.sourceRef)
             CatalogSourceType.TMDB -> loadTmdbCatalogRefs(catalog.sourceUrl, catalog.sourceRef)
             CatalogSourceType.ADDON -> loadAddonCatalogRefsPage(catalog, offset = 0, limit = effectiveMaxItems).refs
             CatalogSourceType.PREINSTALLED -> emptyList()
             CatalogSourceType.HOME_SERVER -> emptyList()
+            CatalogSourceType.YOUTUBE -> emptyList()
         }
         if (mediaRefs.isEmpty()) return@coroutineScope null
 
@@ -1037,6 +1117,9 @@ class MediaRepository @Inject constructor(
             return@coroutineScope loadCollectionCatalogPage(catalog, offset, limit)
         }
         if (limit <= 0 || offset < 0) return@coroutineScope CategoryPageResult(emptyList(), hasMore = false)
+        if (catalog.sourceType == CatalogSourceType.PREINSTALLED && PartnerCatalogs.isManaged(catalog.id)) {
+            return@coroutineScope loadManagedBuiltInPage(catalog, offset, limit)
+        }
         val rankedCatalogLimit = if (catalog.isTop10Catalog()) 10 else Int.MAX_VALUE
         if (offset >= rankedCatalogLimit) {
             return@coroutineScope CategoryPageResult(emptyList(), hasMore = false)
@@ -1048,20 +1131,34 @@ class MediaRepository @Inject constructor(
         var sourceNextOffset: Int? = null
         if (catalog.sourceType == CatalogSourceType.HOME_SERVER) {
             return@coroutineScope loadHomeServerCatalogPage(catalog, offset, effectiveLimit)
+        } else if (catalog.sourceType == CatalogSourceType.YOUTUBE) {
+            val all = youTubeCatalogItems(catalog)
+            val items = all.drop(offset).take(effectiveLimit)
+            return@coroutineScope CategoryPageResult(
+                items = items,
+                hasMore = offset + items.size < all.size,
+                nextOffset = offset + items.size
+            )
         } else if (catalog.sourceType == CatalogSourceType.ADDON) {
+            resolveAddonClientCatalog(catalog)?.let { delegated ->
+                return@coroutineScope loadDelegatedCatalogPage(delegated, offset, effectiveLimit)
+            }
+            resolveAddonClientFilter(catalog)?.let { filterJson ->
+                return@coroutineScope loadFilteredAddonHttpPage(catalog, filterJson, offset, effectiveLimit)
+            }
             val page = loadAddonCatalogRefsPage(catalog, offset, effectiveLimit)
             pageRefs = page.refs
             sourceNextOffset = page.nextOffset
             hasMore = page.hasMore && page.nextOffset < rankedCatalogLimit
         } else {
             val mediaRefs = when (catalog.sourceType) {
-                CatalogSourceType.TRAKT -> loadTraktCatalogRefs(catalog.sourceUrl, catalog.sourceRef)
+                CatalogSourceType.TRAKT, CatalogSourceType.MDBLIST -> loadListCatalogRefs(catalog)
                 CatalogSourceType.SIMKL -> loadSimklCatalogRefs(catalog, offset + effectiveLimit + 1)
-                CatalogSourceType.MDBLIST -> loadMdblistCatalogRefs(catalog.sourceUrl, catalog.sourceRef)
                 CatalogSourceType.TMDB -> loadTmdbCatalogRefs(catalog.sourceUrl, catalog.sourceRef)
                 CatalogSourceType.ADDON -> emptyList()
                 CatalogSourceType.PREINSTALLED -> emptyList()
                 CatalogSourceType.HOME_SERVER -> emptyList()
+                CatalogSourceType.YOUTUBE -> emptyList()
             }.distinct()
 
             if (mediaRefs.isEmpty()) return@coroutineScope CategoryPageResult(emptyList(), hasMore = false)
@@ -1091,6 +1188,72 @@ class MediaRepository @Inject constructor(
             hasMore = hasMore,
             nextOffset = sourceNextOffset ?: (offset + pageRefs.size)
         )
+    }
+
+    private suspend fun loadManagedBuiltInPage(catalog: CatalogConfig, offset: Int, limit: Int): CategoryPageResult {
+        val source = catalog.sourceRef ?: return CategoryPageResult(emptyList(), false)
+        if (source !in setOf("trending_movies", "trending_tv", "trending_anime") || offset < 0 || limit <= 0) {
+            return CategoryPageResult(emptyList(), false)
+        }
+        val items = mutableListOf<MediaItem>()
+        var position = offset
+        var more = true
+        while (items.size < limit.coerceAtMost(200) && more) {
+            val page = loadHomeCategoryPage(source, position / 20 + 1)
+            val skip = position % 20
+            val selected = page.items.drop(skip).take(limit.coerceAtMost(200) - items.size)
+            items += selected
+            position += selected.size
+            more = skip + selected.size < page.items.size || page.hasMore
+            if (selected.isEmpty()) break
+        }
+        return CategoryPageResult(items, more, nextOffset = position)
+    }
+
+    /** The videos of the user's YouTube row (see [YouTubeCollection]), as native addon items, in the user's order. */
+    private suspend fun youTubeCatalogItems(catalog: CatalogConfig): List<MediaItem> {
+        val items = YouTubeCollection.decode(catalog.sourceRef).mapNotNull { video ->
+            addonNative.register(
+                addonId = YouTubeCollection.ADDON_ID,
+                preview = StremioMetaPreview(
+                    id = YouTubeCollection.metaId(video.id),
+                    name = video.title,
+                    poster = YouTubeCollection.posterUrl(video.id),
+                    background = YouTubeCollection.backdropUrl(video.id)
+                ),
+                mediaType = MediaType.MOVIE,
+                addonType = "movie"
+            )
+        }
+        addonNative.flush()
+        if (items.isNotEmpty()) cacheItems(items)
+        return items
+    }
+
+    /**
+     * YouTube search answers as cards of the same native addon as the YouTube row, so Details,
+     * playback, resume and the hover preview treat a found video exactly like a collection one.
+     * [MediaItem.subtitle] carries the channel and length for the card.
+     */
+    suspend fun youTubeSearchItems(videos: List<YouTubeSearchVideo>): List<MediaItem> {
+        val items = videos.mapNotNull { video ->
+            val facts = listOfNotNull(video.channel, video.duration, video.views)
+            addonNative.register(
+                addonId = YouTubeCollection.ADDON_ID,
+                preview = StremioMetaPreview(
+                    id = YouTubeCollection.metaId(video.id),
+                    name = video.title,
+                    poster = YouTubeCollection.posterUrl(video.id),
+                    background = video.thumbnailUrl,
+                    description = facts.joinToString(" · ").takeIf { it.isNotBlank() }
+                ),
+                mediaType = MediaType.MOVIE,
+                addonType = "movie"
+            )?.copy(subtitle = listOfNotNull(video.channel, video.duration).joinToString(" · "))
+        }
+        addonNative.flush()
+        if (items.isNotEmpty()) cacheItems(items)
+        return items
     }
 
     private suspend fun loadHomeServerCatalogPage(
@@ -1282,7 +1445,9 @@ class MediaRepository @Inject constructor(
         )
         if (requestLanguage != contentLanguage) throw CancellationException("Collection language changed")
         val refs = if (mediaType == null) resolved.refs else resolved.refs.filter { it.first == mediaType }
-        if (refs.isEmpty()) return@coroutineScope CategoryPageResult(emptyList(), hasMore = false)
+        if (refs.isEmpty()) {
+            return@coroutineScope CategoryPageResult(emptyList(), hasMore = false, sourceLoadFailed = resolved.sourceLoadFailed)
+        }
 
         val pageRefs = refs.drop(offset).take(limit)
         val itemsByRef = LinkedHashMap<Pair<MediaType, Int>, MediaItem>()
@@ -1353,7 +1518,8 @@ class MediaRepository @Inject constructor(
         CategoryPageResult(
             items = items,
             hasMore = hasMore,
-            nextOffset = offset + pageRefs.size
+            nextOffset = offset + pageRefs.size,
+            sourceLoadFailed = resolved.sourceLoadFailed || items.size < pageRefs.size
         )
     }
 
@@ -1439,6 +1605,12 @@ class MediaRepository @Inject constructor(
     ): List<Pair<MediaType, Int>> {
         val slug = source.mdblistSlug?.trim()?.trim('/').orEmpty()
         if (slug.isBlank()) return emptyList()
+        val cached = mdblistCollectionRefsCache[slug]
+        if (cached != null && System.currentTimeMillis() - cached.timestamp < CACHE_TTL_MS) {
+            return cached.data.asSequence().filter { mediaType == null || it.first == mediaType }.take(limit).toList()
+        }
+        // The anonymous endpoint returns a complete ID list. Keep these small
+        // references across pages and tabs, never hydrate the whole list at once.
         val body = withContext(Dispatchers.IO) {
             fetchUrl(withListFreshness("https://mdblist.com/lists/$slug/json"))
         } ?: throw java.io.IOException("Collection list could not be loaded")
@@ -1452,11 +1624,12 @@ class MediaRepository @Inject constructor(
                 "show", "series", "tv" -> MediaType.TV
                 else -> continue
             }
-            if (mediaType != null && type != mediaType) continue
             refs.add(type to id)
-            if (refs.size >= limit) break
         }
-        return refs
+        val unique = refs.distinct()
+        mdblistCollectionRefsCache.entries.removeIf { System.currentTimeMillis() - it.value.timestamp >= CACHE_TTL_MS }
+        mdblistCollectionRefsCache[slug] = CacheEntry(unique, System.currentTimeMillis())
+        return unique.asSequence().filter { mediaType == null || it.first == mediaType }.take(limit).toList()
     }
 
     /**
@@ -1646,7 +1819,8 @@ class MediaRepository @Inject constructor(
      * Streaming-service trending via `with_watch_providers`. Used for services
      * that don't have a dedicated addon catalog (Apple TV+, Paramount+, Hulu,
      * Peacock). Region defaults to US if not provided — TMDB requires a region
-     * for watch-provider queries.
+     * for watch-provider queries. [CollectionSourceConfig.tmdbGenreId], set by
+     * a service page's genre filter, narrows it to one genre of that media type.
      */
     private suspend fun loadCollectionWatchProviderRefs(
         source: CollectionSourceConfig,
@@ -1655,6 +1829,8 @@ class MediaRepository @Inject constructor(
         val providerId = source.tmdbWatchProviderId ?: return emptyList()
         val region = source.watchRegion?.takeIf { it.isNotBlank() } ?: "US"
         val sortBy = source.sortBy ?: "popularity.desc"
+        val genres = source.tmdbGenreId?.toString()
+        val window = WatchProviderSort.window(sortBy, java.time.LocalDate.now())
         return when (source.mediaType?.lowercase(Locale.US)) {
             "movie" -> loadPagedTmdbDiscoverRefs(
                 mediaType = MediaType.MOVIE,
@@ -1662,9 +1838,12 @@ class MediaRepository @Inject constructor(
             ) { page ->
                 tmdbApi.discoverMovies(
                     apiKey,
+                    genres = genres,
                     watchProviders = providerId,
                     watchRegion = region,
                     sortBy = sortBy,
+                    minVoteCount = window.minVoteCount,
+                    primaryReleaseDateLte = window.releasedOnOrBefore,
                     language = contentLanguage,
                     page = page
                 )
@@ -1677,7 +1856,10 @@ class MediaRepository @Inject constructor(
                     apiKey,
                     watchProviders = providerId,
                     watchRegion = region,
+                    genres = genres,
                     sortBy = sortBy,
+                    minVoteCount = window.minVoteCount,
+                    firstAirDateLte = window.releasedOnOrBefore,
                     language = contentLanguage,
                     page = page
                 )
@@ -1891,6 +2073,185 @@ class MediaRepository @Inject constructor(
         val nextOffset: Int
     )
 
+    private suspend fun resolveAddonCatalogDeclaration(catalog: CatalogConfig): AddonCatalog? {
+        val descriptor = resolveAddonCatalogDescriptor(catalog) ?: return null
+        return installedAddonsSnapshot().firstOrNull { it.id == descriptor.addonId && it.isEnabled }
+            ?.manifest?.catalogs?.firstOrNull {
+                it.id == descriptor.catalogId && it.type.equals(descriptor.catalogType, ignoreCase = true)
+            }
+    }
+
+    private suspend fun resolveAddonClientCatalog(catalog: CatalogConfig): CatalogConfig? {
+        val declaration = resolveAddonCatalogDeclaration(catalog)
+        val delegate = catalog.clientDelegate ?: declaration?.clientDelegate ?: return null
+        return catalog.copy(clientDelegate = delegate, clientFilter = catalog.clientFilter ?: declaration?.clientFilter)
+    }
+
+    private suspend fun resolveAddonClientFilter(catalog: CatalogConfig): String? {
+        return catalog.clientFilter?.takeIf { it.isNotBlank() }
+            ?: resolveAddonCatalogDeclaration(catalog)?.clientFilter?.takeIf { it.isNotBlank() }
+    }
+
+    private suspend fun passesAvailabilityFilter(item: MediaItem, availableOn: String?): Boolean {
+        return when (availableOn) {
+            null -> true
+            "vod" -> iptvRepository?.hasVodMatch(
+                mediaType = item.mediaType,
+                tmdbId = item.id.takeIf { it > 0 },
+                imdbId = item.homeServerImdbId,
+                title = item.title,
+                year = item.year.take(4).toIntOrNull()
+            ) == true
+            "homeserver" -> homeServerRepository.hasTitleMatch(
+                mediaType = item.mediaType,
+                imdbId = item.homeServerImdbId,
+                title = item.title,
+                year = item.year.take(4).toIntOrNull(),
+                tmdbId = item.id.takeIf { it > 0 }
+            )
+            else -> false
+        }
+    }
+
+    private suspend fun loadFilteredAddonHttpPage(
+        catalog: CatalogConfig,
+        filterJson: String,
+        offset: Int,
+        limit: Int
+    ): CategoryPageResult = coroutineScope {
+        val filter = ClientCatalogFilter.parse(filterJson)
+        val mediaTypeHint = addonCatalogTypeToMediaType(catalog.addonCatalogType)
+        clientCatalogPage(
+            offset = offset,
+            limit = limit,
+            mediaType = mediaTypeHint,
+            filter = filter,
+            extraPredicate = { item -> passesAvailabilityFilter(item, filter.availableOn) }
+        ) { start, size ->
+            val page = loadAddonCatalogRefsPage(catalog, start, size)
+            val permits = Semaphore(6)
+            val items = page.refs.map { (type, tmdbId) ->
+                async {
+                    permits.withPermit {
+                        runCatching { catalogItemFor(type, tmdbId) }.getOrNull()
+                    }
+                }
+            }.awaitAll().filterNotNull()
+            CategoryPageResult(items, page.hasMore, page.nextOffset)
+        }
+    }
+
+    private suspend fun resolveVodSeedToItem(seed: IptvRepository.VodCatalogSeed): MediaItem? {
+        val tmdbId = seed.tmdbId?.takeIf { it > 0 }
+            ?: seed.imdbId?.let { resolveImdbToTmdbRef(it, seed.mediaType)?.second }
+            ?: IptvTitleNormalizer.normalize(seed.title).takeIf { it.isNotBlank() }
+                ?.let { normalized -> resolveTitleToTmdbRef(normalized, seed.mediaType)?.second }
+            ?: return null
+        return catalogItemFor(seed.mediaType, tmdbId)
+    }
+
+    private suspend fun delegatedHomeSource(request: ClientCatalogRequest, catalog: CatalogConfig): String? {
+        val source = request.source ?: listOfNotNull(catalog.sourceRef, catalog.sourceUrl).firstOrNull {
+            it.startsWith("hslib:") || it.startsWith(HomeServerRepository.CATALOG_SOURCE_REF_PREFIX)
+        } ?: throw IllegalArgumentException("Home-server delegation requires an explicit library source")
+        if (source.startsWith(HomeServerRepository.CATALOG_SOURCE_REF_PREFIX)) {
+            require(HomeServerRepository.parseCatalogSourceRef(source) != null) { "Invalid home-server library source" }
+            return source
+        }
+        val parts = source.removePrefix("hslib:").split(":", limit = 2)
+        require(source.startsWith("hslib:") && parts.size == 2) { "Invalid home-server library source" }
+        val server = URLDecoder.decode(parts[0], "UTF-8")
+        val library = URLDecoder.decode(parts[1], "UTF-8")
+        require(server.isNotBlank() && library.isNotBlank())
+        val connection = homeServerRepository.currentConnections().firstOrNull {
+            it.serverId == server || it.connectionId == server
+        } ?: return null
+        return HomeServerRepository.CATALOG_SOURCE_REF_PREFIX +
+            listOf(HomeServerRepository.catalogServerKey(connection), library, "").joinToString("|") {
+                java.net.URLEncoder.encode(it, "UTF-8")
+            }
+    }
+
+    private suspend fun loadDelegatedCatalogPage(
+        catalog: CatalogConfig,
+        offset: Int,
+        limit: Int
+    ): CategoryPageResult = coroutineScope {
+        val request = ClientCatalogRequest.parse(requireNotNull(catalog.clientDelegate), catalog.addonCatalogType)
+        val filter = ClientCatalogFilter.parse(catalog.clientFilter)
+        val extraPredicate: suspend (MediaItem) -> Boolean = { item -> passesAvailabilityFilter(item, filter.availableOn) }
+
+        if (request.provider == "homeserver") {
+            val source = delegatedHomeSource(request, catalog)
+                ?: return@coroutineScope CategoryPageResult(emptyList(), false)
+            return@coroutineScope clientCatalogPage(offset, limit, request.mediaType, filter, extraPredicate) { start, size ->
+                loadHomeServerCatalogPage(catalog.copy(sourceRef = source), start, size)
+            }
+        }
+
+        if (request.provider == "vod") {
+            val vodSeeds = iptvRepository?.getDelegatedVodCatalogSeeds(
+                mediaType = request.mediaType,
+                categoryFilter = request.category
+            ).orEmpty().take(500)
+            if (vodSeeds.isEmpty()) return@coroutineScope CategoryPageResult(emptyList(), false)
+            return@coroutineScope clientCatalogPage(offset, limit, request.mediaType, filter, extraPredicate) { start, size ->
+                val selected = vodSeeds.drop(start).take(size)
+                val permits = Semaphore(6)
+                val items = selected.map { seed ->
+                    async {
+                        permits.withPermit {
+                            try {
+                                resolveVodSeedToItem(seed)
+                            } catch (e: CancellationException) {
+                                throw e
+                            } catch (_: Exception) {
+                                null
+                            }
+                        }
+                    }
+                }.awaitAll().filterNotNull()
+                CategoryPageResult(items, start + selected.size < vodSeeds.size, start + selected.size)
+            }
+        }
+
+        val seeds = when (request.provider) {
+            "trakt" -> when (request.action) {
+                "watchlist" -> traktRepository.getWatchlist()
+                else -> {
+                    val movies = if (request.mediaType != MediaType.TV) traktRepository.getWatchedMovies()
+                        .filter { it > 0 }.map { MediaItem(it, "", mediaType = MediaType.MOVIE) } else emptyList()
+                    val shows = if (request.mediaType != MediaType.MOVIE) traktRepository.getWatchedEpisodes()
+                        .mapNotNull { key ->
+                            key.takeIf { it.startsWith("show_tmdb:") }?.split(":")?.getOrNull(1)
+                                ?.toIntOrNull()?.takeIf { it > 0 }?.let { MediaItem(it, "", mediaType = MediaType.TV) }
+                        } else emptyList()
+                    movies + shows
+                }
+            }
+            "simkl" -> requireNotNull(simklSyncService) { "Simkl is unavailable" }.getLibraryItems(request.action)
+            else -> error("Unsupported client delegate")
+        }.filter { it.id > 0 && (request.mediaType == null || it.mediaType == request.mediaType) }
+            .distinctBy { it.mediaType to it.id }
+
+        clientCatalogPage(offset, limit, request.mediaType, filter, extraPredicate) { start, size ->
+            val selected = seeds.drop(start).take(size)
+            val permits = Semaphore(6)
+            val items = selected.map { seed -> async {
+                permits.withPermit {
+                    try {
+                        catalogItemFor(seed.mediaType, seed.id)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (_: Exception) {
+                        null
+                    }
+                }
+            } }.awaitAll().filterNotNull()
+            CategoryPageResult(items, start + selected.size < seeds.size, start + selected.size)
+        }
+    }
+
     private suspend fun loadAddonCatalogRefsPage(
         catalog: CatalogConfig,
         offset: Int,
@@ -2064,7 +2425,60 @@ class MediaRepository @Inject constructor(
             }
         }.mapNotNull { it.await() }
 
+        // A kids profile whose parent approved this catalog trusts what it lists — only titles
+        // it names exactly, never a TMDB match guessed from a title (see KidsTrustedCatalogs).
+        catalogRepository?.let { catalogs ->
+            val exact = (nativeRefs + directRefs + resolvedFromMeta + resolvedImdbRefs).distinct()
+            try {
+                catalogs.recordKidsCatalogMembers(kidsCatalogKey(descriptor), exact)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                // Trust is only ever added here; a failed write leaves the titles hidden.
+            }
+        }
+
         (nativeRefs + directRefs + resolvedFromMeta + resolvedImdbRefs + resolvedTitleRefs).distinct()
+    }
+
+    private suspend fun activeKidsCatalogApprovals(): Set<String> = try {
+        catalogRepository?.activeKidsCatalogApprovals().orEmpty()
+    } catch (e: CancellationException) {
+        throw e
+    } catch (_: Exception) {
+        emptySet()
+    }
+
+    /** The key a parent's kids approval of [descriptor] is stored under (see KidsTrustedCatalogs). */
+    private fun kidsCatalogKey(descriptor: AddonCatalogDescriptor): String =
+        KidsTrustedCatalogs.catalogKey(
+            descriptor.addonId,
+            normalizeAddonCatalogType(descriptor.catalogType) ?: descriptor.catalogType,
+            descriptor.catalogId
+        )
+
+    /**
+     * The addon catalogs [catalog] draws from, as kids-approval keys: an addon row's own catalog,
+     * or each addon source of a collection tile, resolved to its installed addon the way loading
+     * does. Empty when none of them is installed on this profile.
+     */
+    suspend fun kidsCatalogKeys(catalog: CatalogConfig): List<String> {
+        val descriptors = if (catalog.kind == CatalogKind.COLLECTION) {
+            catalog.collectionSources.filter { it.kind == CollectionSourceKind.ADDON_CATALOG }.mapNotNull { source ->
+                val catalogType = source.addonCatalogType?.trim().orEmpty()
+                val catalogId = source.addonCatalogId?.trim().orEmpty()
+                if (catalogType.isBlank() || catalogId.isBlank()) return@mapNotNull null
+                val addonId = streamRepository.findInstalledAddonIdForCatalog(
+                    catalogType = catalogType,
+                    catalogId = catalogId,
+                    preferredAddonId = source.addonId
+                ) ?: return@mapNotNull null
+                AddonCatalogDescriptor(addonId, catalogType, catalogId)
+            }
+        } else {
+            listOfNotNull(resolveAddonCatalogDescriptor(catalog))
+        }
+        return descriptors.map(::kidsCatalogKey).distinct()
     }
 
     private suspend fun installedAddonsSnapshot(): List<Addon> = try {
@@ -2804,6 +3218,13 @@ class MediaRepository @Inject constructor(
      * Get trailer key (YouTube)
      */
     suspend fun getTrailerKey(mediaType: MediaType, mediaId: Int): String? {
+        // A YouTube collection video previews as itself; other native items have no TMDB trailer.
+        if (mediaId < 0) {
+            val card = addonNative.card(mediaType, mediaId) ?: return null
+            return if (card.addonNativeAddonId == YouTubeCollection.ADDON_ID) {
+                YouTubeCollection.videoIdFromMetaId(card.addonNativeId)
+            } else null
+        }
         val type = if (mediaType == MediaType.TV) "tv" else "movie"
         return try {
             val videos = tmdbApi.getVideos(type, mediaId, apiKey, language = contentLanguage)
@@ -3429,25 +3850,38 @@ class MediaRepository @Inject constructor(
         (direct + resolved).distinct()
     }
 
-    private suspend fun loadMdblistCatalogRefs(sourceUrl: String?, sourceRef: String? = null): List<Pair<MediaType, Int>> {
-        if (!sourceRef.isNullOrBlank() && sourceRef.startsWith("mdblist_trakt:")) {
-            val traktUrl = sourceRef.removePrefix("mdblist_trakt:").trim()
-            if (traktUrl.isNotBlank()) {
-                val fromTraktRef = loadTraktCatalogRefs(traktUrl, null)
-                if (fromTraktRef.isNotEmpty()) return fromTraktRef
-            }
+    private suspend fun loadListCatalogRefs(catalog: CatalogConfig): List<Pair<MediaType, Int>> {
+        val refresh = catalogRepository?.beginKidsListRefresh(catalog)
+        val refs = loadExternalListRefs(catalog) ?: return emptyList()
+        if (refresh != null) catalogRepository?.finishKidsListRefresh(refresh, catalog, refs)
+        return refs
+    }
+
+    internal suspend fun loadExternalListRefs(catalog: CatalogConfig): List<Pair<MediaType, Int>>? = withContext(Dispatchers.IO) {
+        when (catalog.sourceType) {
+            CatalogSourceType.TRAKT -> loadTraktCatalogRefs(catalog.sourceUrl, catalog.sourceRef)
+            CatalogSourceType.MDBLIST -> loadMdblistCatalogRefs(catalog.sourceUrl, catalog.sourceRef)
+            else -> null
         }
-        val url = sourceUrl ?: return emptyList()
+    }
+
+    private suspend fun loadMdblistCatalogRefs(sourceUrl: String?, sourceRef: String? = null): List<Pair<MediaType, Int>>? {
+        val linkedTrakt = sourceRef?.takeIf { it.startsWith("mdblist_trakt:") }
+            ?.removePrefix("mdblist_trakt:")?.trim()?.takeIf { CatalogUrlParser.parseTrakt(it) != null }
+        val linkedRefs = linkedTrakt?.let { loadTraktCatalogRefs(it) }
+        if (!linkedRefs.isNullOrEmpty()) return linkedRefs
+        val url = sourceUrl ?: return linkedRefs
 
         val jsonUrl = withListFreshness("${url.removeSuffix("/")}/json")
         val fromJson = fetchUrl(jsonUrl)?.let { payload ->
             parseMdblistJson(payload)
-        } ?: emptyList()
-        if (fromJson.isNotEmpty()) return fromJson
+        }
+        // A valid empty array is authoritative; malformed/unavailable data is not.
+        if (fromJson != null) return fromJson
 
-        val html = fetchUrl(url) ?: return emptyList()
+        val html = fetchUrl(url) ?: return linkedRefs
         val traktLink = MediaRegexes.TRAKT_URL_REGEX.find(html)?.value
-        return if (traktLink != null) loadTraktCatalogRefs(traktLink) else emptyList()
+        return traktLink?.takeIf { it != linkedTrakt }?.let { loadTraktCatalogRefs(it) } ?: linkedRefs
     }
 
     private fun parseTraktRef(sourceRef: String?): ParsedCatalogUrl? {
@@ -3473,13 +3907,13 @@ class MediaRepository @Inject constructor(
         }
     }
 
-    private fun parseMdblistJson(payload: String): List<Pair<MediaType, Int>> {
+    private fun parseMdblistJson(payload: String): List<Pair<MediaType, Int>>? {
         val type = TypeToken.getParameterized(List::class.java, TypeToken.getParameterized(Map::class.java, String::class.java, Any::class.java).type).type
         val rows = try {
             gson.fromJson<List<Map<String, Any?>>>(payload, type)
         } catch (_: Exception) {
             null
-        } ?: return emptyList()
+        } ?: return null
 
         return rows.mapNotNull { row ->
             val tmdbId = sequenceOf("tmdb_id", "tmdb", "tmdbId", "id")

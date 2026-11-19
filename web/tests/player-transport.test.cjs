@@ -526,3 +526,94 @@ test('terminal callbacks are deferred until a handle exists and cancelled with t
   returnedHandle = e.attachPlayback(video, '/a.mpd', { onError: () => { assert.equal(typeof returnedHandle, 'function'); calls++; } });
   await flush(); assert.equal(calls, 1); returnedHandle();
 });
+
+// ---- Live TV engine choices and diagnostics (lib/liveTvPlayback.ts plans them) ----
+
+test('an HLS engine hint overrides the platform preference in both directions', async () => {
+  // Safari: AVFoundation refused the stream, so the plan asks for hls.js on the same URL.
+  const safari = environment({ ua: 'Macintosh AppleWebKit Version/18.0 Safari/605.1', managed: true });
+  const video = new Video(); video.nativeHls = true;
+  let handle = safari.attachPlayback(video, '/live.m3u8', { live: true, hlsEngine: 'mse' }); await flush();
+  assert.equal(safari.hls.length, 1);
+  assert.equal(video.src, '');
+  handle();
+  handle = safari.attachPlayback(video, '/live.m3u8', { live: true }); await flush();
+  assert.equal(safari.hls.length, 1, 'without a hint Safari still prefers its own player');
+  assert.equal(video.src, '/live.m3u8');
+  handle();
+  // A TV browser with both engines can be asked for its native player.
+  const tv = environment();
+  const tvVideo = new Video(); tvVideo.nativeHls = true;
+  handle = tv.attachPlayback(tvVideo, '/live.m3u8', { live: true, hlsEngine: 'native' }); await flush();
+  assert.equal(tv.hls.length, 0);
+  assert.equal(tvVideo.src, '/live.m3u8');
+  handle();
+});
+
+test('HLS errors carry the HTTP status the provider answered and the codec a SourceBuffer refused', async () => {
+  const e = environment(); const errors = [];
+  let handle = e.attachPlayback(new Video(), '/a.m3u8', { onError: (error) => errors.push(error) }); await flush();
+  e.hls[0].fatal('network', 'manifestLoadError', 404);
+  await flush();
+  assert.equal(errors[0].httpStatus, 404);
+  handle();
+  handle = e.attachPlayback(new Video(), '/b.m3u8', { onError: (error) => errors.push(error) }); await flush();
+  const hls = e.hls[1];
+  for (let i = 0; i < 3; i++) hls.emit('ERROR', 'ERROR', { fatal: true, type: 'media', details: 'bufferAddCodecError', mimeType: 'audio/mp4;codecs="ac-3"' });
+  await flush();
+  assert.equal(errors[1].kind, 'media');
+  assert.equal(errors[1].mediaInfo.audioCodec, 'ac-3');
+  assert.equal(errors[1].httpStatus, undefined);
+  handle();
+});
+
+test('MPEG-TS errors carry the provider status, tell "not TS at all" apart, and report the stream\'s tracks', async () => {
+  const e = environment(); const errors = []; const infos = [];
+  e.mpegts.ErrorDetails = { NETWORK_STATUS_CODE_INVALID: 'HttpStatusCodeInvalid', MEDIA_FORMAT_UNSUPPORTED: 'FormatUnsupported', MEDIA_FORMAT_ERROR: 'FormatError', MEDIA_MSE_ERROR: 'MediaMSEError' };
+  e.mpegts.Events.MEDIA_INFO = 'media_info';
+  let handle = e.attachPlayback(new Video(), '/live/u/p/1.ts', { live: true, onError: (error) => errors.push(error), onMediaInfo: (info) => infos.push(info) }); await flush();
+  e.ts[0].emit('ERROR', 'network', 'HttpStatusCodeInvalid', { code: 403, msg: 'Forbidden' });
+  await flush();
+  assert.equal(errors[0].kind, 'network');
+  assert.equal(errors[0].httpStatus, 403);
+  handle();
+  handle = e.attachPlayback(new Video(), '/opaque', { live: true, transport: 'mpegts', onError: (error) => errors.push(error), onMediaInfo: (info) => infos.push(info) }); await flush();
+  e.ts[1].emit('ERROR', 'media', 'FormatUnsupported', { code: -1, msg: 'Non MPEG-TS/FLV, Unsupported media type!' });
+  await flush();
+  assert.equal(errors[1].kind, 'unsupported', 'a playlist or an HTML page: another engine may play it');
+  handle();
+  handle = e.attachPlayback(new Video(), '/live/u/p/3.ts', { live: true, onError: (error) => errors.push(error), onMediaInfo: (info) => infos.push(info) }); await flush();
+  e.ts[2].emit('media_info', { hasAudio: true, hasVideo: true, audioCodec: 'mp4a.40.2', videoCodec: 'avc1.42c00c' });
+  assert.equal(infos.at(-1).audioCodec, 'mp4a.40.2');
+  e.ts[2].emit('ERROR', 'media', 'MediaMSEError', { code: 9, msg: "Failed to execute 'addSourceBuffer' on 'MediaSource': The type provided ('audio/mp4;codecs=ac-3') is unsupported." });
+  await flush();
+  assert.equal(errors[2].kind, 'media');
+  assert.equal(errors[2].mediaInfo.audioCodec, 'ac-3', 'the refused codec wins over the earlier report');
+  assert.equal(errors[2].mediaInfo.videoCodec, 'avc1.42c00c');
+  handle();
+});
+
+test('a live MPEG-TS stream that ends is a dropped connection, not a frozen picture; a VOD TS file may end', async () => {
+  for (const signal of ['loading_complete', 'ended']) {
+    const e = environment(); const errors = [];
+    e.mpegts.Events.LOADING_COMPLETE = 'loading_complete';
+    const video = new Video();
+    const handle = e.attachPlayback(video, '/live/u/p/1.ts', { live: true, onError: (error) => errors.push(error) }); await flush();
+    if (signal === 'ended') { video.ended = true; video.emit('ended'); } else e.ts[0].emit('loading_complete');
+    e.ts[0].emit('loading_complete'); // reported once
+    await flush();
+    assert.equal(errors.length, 1, signal);
+    assert.equal(errors[0].kind, 'network');
+    assert.equal(errors[0].retryable, true);
+    assert.equal(errors[0].code, 'LIVE_STREAM_ENDED');
+    handle();
+  }
+  const e = environment(); const errors = [];
+  e.mpegts.Events.LOADING_COMPLETE = 'loading_complete';
+  const video = new Video();
+  const handle = e.attachPlayback(video, '/movie/u/p/1.ts', { onError: (error) => errors.push(error) }); await flush();
+  e.ts[0].emit('loading_complete'); video.emit('ended');
+  await flush();
+  assert.deepEqual(errors, []);
+  handle();
+});

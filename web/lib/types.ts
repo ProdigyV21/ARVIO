@@ -126,6 +126,8 @@ export interface Category {
   sourceLabel?: string;
   layout?: "landscape" | "poster";
   sourceUrl?: string;
+  /** The source has more titles than the row shows (Home rows stop at HOME_ROW_LIMIT). */
+  hasMore?: boolean;
 }
 
 export type CatalogSourceType =
@@ -136,7 +138,9 @@ export type CatalogSourceType =
   | "simkl"
   | "addon"
   | "home-server"
-  | "template";
+  | "template"
+  // The profile's own YouTube row (see youtubeCollection.ts).
+  | "youtube";
 
 export interface CatalogConfig {
   id: string;
@@ -168,6 +172,8 @@ export interface CatalogConfig {
   collectionHideTitle?: boolean;
   collectionSources?: CollectionSourceConfig[];
   requiredAddonUrls?: string[];
+  clientDelegate?: string | null;
+  clientFilter?: string | null;
 }
 
 export interface CollectionSourceConfig {
@@ -251,9 +257,13 @@ export interface StreamSource {
   remux?: boolean;
   // Preserve an explicit audio choice while preparing/remounting this source.
   remuxAudioIndex?: number;
+  /** Remux was chosen because this browser cannot play the file's audio (shown while it starts). */
+  convertAudio?: boolean;
 }
 
 export interface InstalledAddon {
+  /** Runtime-only managed assignment. Never copied to the personal addon list. */
+  managedOrganizationId?: string;
   id: string;
   name: string;
   version: string;
@@ -266,6 +276,8 @@ export interface InstalledAddon {
   logo?: string | null;
   background?: string | null;
   enabled?: boolean;
+  setupUpdatedAt?: number;
+  metadataUpdatedAt?: number;
 }
 
 export interface AddonResource {
@@ -279,6 +291,8 @@ export interface AddonCatalog {
   id: string;
   name: string;
   extra?: Array<{ name: string; isRequired?: boolean; options?: string[] }>;
+  clientDelegate?: string;
+  clientFilter?: string;
 }
 
 export interface AuthSession {
@@ -303,6 +317,12 @@ export interface Profile {
   avatarImageVersion?: number; // 0 = no custom uploaded photo
   avatarImageStoragePath?: string | null;
   isKidsProfile?: boolean;
+  // KidsAgeLevel name (LITTLE_KIDS | OLDER_KIDS | TEENS); missing reads as the default.
+  kidsAgeLevel?: string | null;
+  // The kids starter rows were added once; a row the parent removed must not come back.
+  kidsStarterRowsAdded?: boolean;
+  // Hashed parent PIN of a kids profile: needed to edit or delete it, never to watch.
+  parentPin?: string | null;
   pin?: string | null;
   isLocked?: boolean;
   createdAt?: number;
@@ -320,6 +340,8 @@ export interface UserProfile {
 }
 
 export interface WatchHistoryEntry {
+  addon_native_id?: string | null;
+  addon_native_addon_id?: string | null;
   id?: string | null;
   user_id: string;
   profile_id?: string | null;
@@ -342,6 +364,10 @@ export interface WatchHistoryEntry {
   stream_key?: string | null;
   stream_addon_id?: string | null;
   stream_title?: string | null;
+  /** Android "up next" pointer: the episode after a finished one (progress 0). */
+  is_up_next?: boolean | null;
+  /** Air date of an up-next episode (YYYY-MM-DD); unaired pointers stay hidden. */
+  release_date?: string | null;
 }
 
 export interface IptvPlaylistEntry {
@@ -351,6 +377,32 @@ export interface IptvPlaylistEntry {
   epgUrl?: string;
   epgUrls?: string[];
   enabled: boolean;
+  /** Android/TV: what the app imports from this playlist. Undefined = on (Android's default). */
+  importLiveTv?: boolean;
+  importVod?: boolean;
+  importSeries?: boolean;
+  /** Managed IPTV options. Undefined preserves the provider's default behavior. */
+  enableEpg?: boolean;
+  enableCatchup?: boolean;
+}
+
+/**
+ * One Stalker/Ministra portal, in the Android app's shape
+ * (iptvByProfile.<id>.stalkerPortals[], IptvRepository.StalkerPortalEntry).
+ * Fields ARVIO Web does not know are kept when the list is written back.
+ */
+export interface StalkerPortalEntry {
+  /** "stalker1", "stalker2", … Channel ids are `stalker:<id>:<channel>`, category keys `<id>|<group>`. */
+  id: string;
+  name: string;
+  portalUrl: string;
+  macAddress: string;
+  enabled: boolean;
+  /** Android/TV: what the app imports from this portal. Undefined = on. */
+  importLiveTv?: boolean;
+  importVod?: boolean;
+  importSeries?: boolean;
+  [field: string]: unknown;
 }
 
 export interface IptvTvSession {
@@ -413,6 +465,8 @@ export interface IptvSnapshot {
   hiddenGroups: string[];
   groupOrder: string[];
   playlistWarnings?: string[];
+  /** One entry per playlist (or the Stalker portal, id "stalker") that failed to load. */
+  playlistErrors?: Array<{ playlistId: string; name: string; message: string }>;
   epgWarning?: string;
   loadedAt: number;
   /**
@@ -467,6 +521,11 @@ export interface AppSettings {
   trailerSound: boolean;
   trailerDelaySeconds: number;
   trailerInCards: boolean;
+  /** Android/TV: highest quality and largest file Auto-Play may pick. Undefined = keep the app's value. */
+  autoPlayMaxQuality?: "Unlimited" | "720p" | "1080p" | "4K";
+  autoPlayMaxSizeGb?: number;
+  /** Android/TV: search sources from all integrations at once or one after another. */
+  streamSearchMode: "parallel" | "sequential";
   volumeBoostDb: number;
   includeSpecials: boolean;
   qualityFilterPreset: "off" | "1080p-plus" | "1080p-only" | "720p-plus" | "custom";
@@ -486,11 +545,23 @@ export interface AppSettings {
   subtitleStylized: boolean;
   filterSubtitlesByLanguage: boolean;
   removeHearingImpaired: boolean;
+  /** Android/TV subtitle font (System, Noto Sans, …). */
+  subtitleFont: string;
+  useForcedSubtitles: boolean;
+  /** Android/TV: wait for subtitles before the video starts. */
+  subtitlePreload: boolean;
   // AI subtitles
   aiSubtitlesEnabled: boolean;
+  /** "off" is a legacy value from older web builds; it reads as Groq. */
   aiSubtitleModel: "off" | "groq" | "gemini";
   aiAutoSelect: boolean;
   aiApiKey: string;
+  /** Android/TV: let AI pick the best-synced subtitle from your addons. */
+  aiFindBestMatch: boolean;
+  /** Android/TV: play Dolby Vision releases as HDR10 where the device can't decode them. */
+  dolbyVisionCompat: boolean;
+  /** Android/TV: only search Telegram when its source row is selected. */
+  telegramSearchOnClickOnly: boolean;
   // Playback target: "browser" plays in the built-in player; "vlc"/"infuse"
   // hand the top source straight to that external player on Play (Trakt still
   // syncs via the return-to-app prompt).
@@ -501,6 +572,15 @@ export interface AppSettings {
   oledBlack: boolean;
   clockFormat: "12h" | "24h";
   showBudget: boolean;
+  /** Android/TV home layout. Undefined = keep the app's value. */
+  netflixHomeStyle?: boolean;
+  watchlistOnHome?: boolean;
+  /** Profile-scoped optional navigation tabs; absent in older cloud snapshots. */
+  hiddenNavigationSections?: string[];
+  /** Android/TV guide rows: 0 = automatic, 6–10. Undefined = keep the app's value. */
+  guideRowCount?: number;
+  showEpisodeRatings: boolean;
+  animeEpisodeStructuring: "broadcast" | "standard";
   /** Settings > IPTV "Favorite channels on Home" (Android `iptvFavoritesOnHome`). */
   iptvFavoritesOnHome: boolean;
   smoothScrolling: boolean;
@@ -524,8 +604,11 @@ export interface AppSettings {
   homeServers: HomeServerConfig[];
   // IPTV
   iptvPlaylists: IptvPlaylistEntry[];
+  /** Legacy single-portal fields; kept equal to the first enabled portal for older apps. */
   iptvStalkerUrl: string;
   iptvStalkerMac: string;
+  /** Every Stalker portal (iptvByProfile.stalkerPortals). Undefined = never read: use the legacy fields. */
+  iptvStalkerPortals?: StalkerPortalEntry[];
   favoriteChannelIds: string[];
   iptvTvSession?: IptvTvSession;
   favoriteGroupIds: string[];
@@ -533,6 +616,19 @@ export interface AppSettings {
   /** Read from cloud; locked IPTV groups are not exposed without a PIN flow. */
   lockedIptvGroupIds?: string[];
   groupOrder: string[];
+  /** Manual channel order per category: { "<playlistId>|<group>": [channel ids…] } (iptvByProfile.channelOrder). */
+  iptvChannelOrder?: Record<string, string[]>;
+  /** Category display names: { "<playlistId>|<group>": "<name>" } (iptvByProfile.groupNames). Keys keep the playlist's name. */
+  iptvGroupNames?: Record<string, string>;
+  /** Android/TV source priority (profileSettingsById). Undefined = keep the app's value. */
+  streamProvidersCustomOrder?: string;
+  streamIntegrationsMacroOrder?: string;
+  streamMacroEnabledMap?: Record<string, boolean>;
+  streamProviderEnabledMap?: Record<string, boolean>;
+  /** Per-row card style the Android app keeps ({ "home:<catalogId>": "Poster" | "Landscape" }). */
+  catalogueRowLayoutModes?: Record<string, string>;
+  /** Read only: plugin repositories installed on the Android app (names for the source list). */
+  androidPluginRepositories?: Array<{ id: string; name: string; enabled: boolean }>;
   // Metadata & API Keys
   customTmdbApiKey: string;
   customTvdbApiKey: string;

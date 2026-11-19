@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="mobile_home_hero_style">Estilo del banner principal de Inicio</string>
+    <string name="mobile_hero_poster">Carrusel de pósteres completos</string>
+    <string name="mobile_hero_immersive">Imagen de borde a borde</string>
+    <string name="mobile_server_disconnected">Ningún servidor conectado</string>
+    <string name="mobile_server_disconnected_hint">Conecta un servidor local para explorar sus bibliotecas.</string>
+    <string name="mobile_connect_server">Conectar servidor</string>
+    <string name="mobile_connection_help">Ayuda de conexión</string>
+    <string name="mobile_expand_preview">Ampliar vista previa</string>
+    <string name="mobile_collapse_preview">Contraer vista previa</string>
+</resources>

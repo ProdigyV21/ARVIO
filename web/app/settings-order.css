@@ -1,0 +1,178 @@
+/* Reorderable lists and layout editors in Settings (SortableList and the
+   Live TV / addons / Home rows / home server editors). Uses the .st-* tokens
+   from settings.css. */
+
+.st-sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+
+.st-sort { position: relative; min-width: 0; }
+.st-sort-list { list-style: none; margin: 0; padding: 0; }
+.st-sort-viewport { overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; border-top: 1px solid var(--st-line); }
+.st-sort-row {
+  display: flex; align-items: center; gap: 10px; min-height: 56px; padding-top: 8px; padding-inline-end: 16px; padding-bottom: 8px; padding-inline-start: 8px;
+  background: var(--st-card); transition: background 0.12s;
+}
+.st-sort-list:not(.is-virtual) > .st-sort-row + .st-sort-row { border-top: 1px solid var(--st-line); }
+.st-sort-list.is-virtual > .st-sort-row { border-bottom: 1px solid var(--st-line); }
+.st-sort-row.is-off .st-sort-main { opacity: 0.5; }
+.st-sort-row.is-moving { background: #1b1e21; box-shadow: inset 3px 0 0 var(--st-accent); z-index: 1; }
+.st-sort-row.is-dragging { background: #202428; box-shadow: inset 3px 0 0 var(--st-accent), 0 10px 26px rgba(0, 0, 0, 0.45); }
+.st-sort.is-sorting { user-select: none; }
+
+.st-sort-handle {
+  width: 36px; height: 40px; flex: 0 0 auto; display: grid; place-items: center; padding: 0;
+  border: 0; border-radius: 9px; background: transparent; color: var(--st-soft);
+  cursor: grab; touch-action: none;
+}
+@media (hover: hover) and (pointer: fine) {
+  .st-sort-handle:hover {
+    color: var(--st-text);
+    background: rgba(255, 255, 255, 0.05);
+  }
+}
+.st-sort-handle[aria-pressed="true"] { color: var(--st-text); background: rgba(255, 255, 255, 0.1); }
+.st-sort-row.is-dragging .st-sort-handle { cursor: grabbing; }
+
+.st-sort-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.st-sort-actions { flex: 0 0 auto; display: flex; align-items: center; gap: 6px; }
+.st-sort-move { display: inline-flex; gap: 4px; }
+.st-shell .st-sort-btn, .st-sort-btn { width: 36px; height: 36px; border-radius: 9px; }
+.st-sort-empty { padding: 14px 20px; color: var(--st-muted); font-size: 13.5px; }
+
+/* row content */
+.st-sort-title { display: flex; align-items: center; gap: 8px; min-width: 0; font-weight: 640; font-size: 14.5px; }
+.st-sort-title > .st-sort-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.st-sort-sub { color: var(--st-soft); font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.st-sort-title > .st-tag { flex: 0 0 auto; }
+.st-sort-name-btn { all: unset; flex: 0 1 auto; min-width: 3em; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.st-sort-name-btn:focus-visible { outline: 2px solid var(--st-accent); outline-offset: 2px; border-radius: 4px; }
+.st-pos {
+  flex: 0 0 auto; min-width: 34px; height: 26px; padding: 0 6px; border-radius: 7px;
+  border: 1px solid var(--st-line-strong); background: #070808; color: var(--st-muted);
+  font: inherit; font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; cursor: pointer;
+}
+@media (hover: hover) and (pointer: fine) {
+  .st-pos:hover {
+    color: var(--st-text);
+    border-color: var(--st-accent);
+  }
+}
+.st-shell input.st-pos-input { width: 64px; height: 28px; padding: 0 6px; font-size: 12.5px; }
+.st-icon-btn.is-on { color: #ffd166; border-color: rgba(255, 209, 102, 0.35); }
+.st-icon-btn.is-on svg { fill: currentColor; }
+.st-logo { width: 32px; height: 22px; object-fit: contain; flex: 0 0 auto; border-radius: 4px; background: rgba(255, 255, 255, 0.04); }
+
+/* editor chrome */
+.st-toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 8px 20px 12px; }
+.st-toolbar .st-input { flex: 1 1 220px; width: auto; }
+.st-toolbar-spacer { flex: 1 1 auto; }
+.st-shell input[type="search"].st-input { min-height: 0; height: 40px; padding: 0 12px; border-radius: 10px; border: 1px solid var(--st-line-strong); background: #070808; color: var(--st-text); font: inherit; font-size: 14px; box-shadow: none; -webkit-appearance: none; appearance: none; }
+.st-sort-main > .st-input { min-width: 140px; }
+/* Home rows: the list needs the width (name, card style, actions); the preview sits below it. */
+.st-layout.is-rows { grid-template-columns: minmax(0, 1fr); }
+.st-layout.is-rows .st-preview { border-inline-start: 0; border-top: 1px solid var(--st-line); }
+.st-layout.is-rows .st-preview ol { grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); }
+.st-chips { display: flex; flex-wrap: wrap; gap: 6px; padding: 4px 20px 10px; }
+.st-chip {
+  display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px; border-radius: 999px;
+  border: 1px solid var(--st-line-strong); background: transparent; color: var(--st-muted);
+  font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap;
+}
+.st-chip small { color: var(--st-soft); font-weight: 600; }
+.st-chip[aria-pressed="true"] { background: rgba(255, 255, 255, 0.12); color: var(--st-text); border-color: rgba(255, 255, 255, 0.24); }
+.st-hint { margin: 0; padding: 0 20px 12px; color: var(--st-muted); font-size: 13px; line-height: 1.5; }
+.st-hint strong { color: var(--st-text); font-weight: 640; }
+
+.st-layout { display: grid; grid-template-columns: minmax(0, 1fr) 260px; gap: 0; border-top: 1px solid var(--st-line); }
+.st-layout > .st-layout-main { min-width: 0; }
+.st-preview { border-inline-start: 1px solid var(--st-line); padding: 14px 16px 16px; background: #0c0d0e; min-width: 0; }
+.st-preview h4 { margin: 0 0 4px; font-size: 12px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--st-soft); }
+.st-preview p { margin: 0 0 10px; color: var(--st-soft); font-size: 12px; line-height: 1.45; }
+.st-preview ol { margin: 0; padding: 0; list-style: none; display: grid; gap: 2px; counter-reset: st-preview; }
+.st-preview li { display: flex; align-items: center; gap: 8px; min-width: 0; padding: 5px 8px; border-radius: 8px; font-size: 13px; color: var(--st-muted); }
+.st-preview li.is-fixed { color: var(--st-soft); }
+.st-preview li.is-focus { background: rgba(255, 255, 255, 0.08); color: var(--st-text); }
+.st-preview li span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; flex: 1 1 auto; }
+.st-preview li svg { flex: 0 0 auto; }
+.st-preview .st-preview-more { color: var(--st-soft); font-size: 12px; padding: 4px 8px; }
+
+.st-picker { border-top: 1px solid var(--st-line); }
+.st-picker-results { list-style: none; margin: 0; padding: 0; max-height: 320px; overflow-y: auto; }
+.st-picker-results li { display: flex; align-items: center; gap: 10px; padding: 8px 20px; min-height: 48px; }
+.st-picker-results li + li { border-top: 1px solid var(--st-line); }
+
+.st-edit-panel { padding: 4px 20px 16px; border-top: 1px dashed var(--st-line-strong); background: #0c0d0e; }
+.st-edit-panel .st-form { padding: 12px 0 0; }
+.st-libraries { list-style: none; margin: 0; padding: 4px 0 0; display: grid; gap: 2px; }
+.st-libraries li { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 6px 0; font-size: 13.5px; }
+.st-libraries li span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.st-libraries small { color: var(--st-soft); text-transform: capitalize; }
+
+.st-subhead { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 14px 20px 6px; }
+.st-subhead h4 { margin: 0; font-size: 14px; font-weight: 700; }
+.st-subhead .st-toolbar-spacer { min-width: 8px; }
+
+/* playlist import switches */
+.st-import-flags { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; padding-top: 2px; }
+.st-check { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--st-muted); cursor: pointer; }
+.st-shell .st-check input[type="checkbox"] { width: 16px; height: 16px; margin: 0; accent-color: var(--st-accent); }
+
+@media (max-width: 1080px) {
+  .st-layout { grid-template-columns: minmax(0, 1fr); }
+  .st-preview { border-inline-start: 0; border-top: 1px solid var(--st-line); }
+  .st-preview ol { grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); }
+}
+
+@media (max-width: 760px) {
+  .st-sort-row { gap: 6px; padding-top: 8px; padding-inline-end: 10px; padding-bottom: 8px; padding-inline-start: 4px; }
+  .st-sort-list:not(.is-virtual) > .st-sort-row { flex-wrap: wrap; }
+  .st-sort-list:not(.is-virtual) > .st-sort-row > .st-sort-main { flex-basis: calc(100% - 48px); }
+  .st-sort-list:not(.is-virtual) > .st-sort-row > .st-sort-actions { margin-inline-start: auto; flex-wrap: wrap; justify-content: flex-end; }
+  .st-shell .st-sort-btn, .st-sort-btn { width: 32px; height: 32px; }
+  .st-sort-list.is-virtual .st-sort-actions .st-icon-btn { width: 32px; height: 32px; }
+  .st-sort-handle { width: 30px; }
+  /* Phones drag; top/bottom stay available with Home/End and on bigger screens. */
+  .st-sort-list.is-virtual .st-sort-btn.is-edge { display: none; }
+  .st-toolbar, .st-chips, .st-subhead { padding-inline-start: 16px; padding-inline-end: 16px; }
+  .st-hint { padding-inline-start: 16px; padding-inline-end: 16px; }
+  .st-picker-results li { padding-inline-start: 16px; padding-inline-end: 16px; }
+  .st-edit-panel { padding-inline-start: 16px; padding-inline-end: 16px; }
+}
+
+/* Large screens and TVs: bigger targets for a remote. */
+@media (min-width: 1600px) {
+  .st-sort-row { min-height: 60px; }
+  .st-shell .st-sort-btn, .st-sort-btn, .st-sort-handle { width: 40px; height: 40px; }
+}
+
+/* Settings → Addons reuses the Addons screen installer. */
+.st-addon-installer { padding: 4px 20px 16px; }
+.st-confirm { display: inline-flex; gap: 6px; flex-wrap: wrap; }
+.st-sort-main .addon-url { max-width: 100%; }
+@media (max-width: 760px) { .st-addon-installer { padding-inline-start: 16px; padding-inline-end: 16px; } }
+
+/* Nested collection folders inside a COLLECTION_RAIL row */
+.st-sort-row.has-footer { flex-wrap: wrap; }
+.st-sort-footer {
+  flex: 1 0 100%;
+  min-width: 0;
+  margin-top: 6px;
+  padding: 12px 4px 4px;
+  padding-inline-start: 46px;
+  border-top: 1px dashed var(--st-line-strong);
+}
+.st-rail-folders { display: grid; gap: 10px; }
+.st-rail-folders-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.st-rail-folders-note { color: var(--st-soft); font-size: 12.5px; margin-inline-end: auto; }
+.st-folder-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.st-folder-chip {
+  display: inline-flex; align-items: center; gap: 6px; min-height: 30px; padding: 0 10px;
+  border-radius: 999px; border: 1px solid var(--st-line-strong); background: rgba(255, 255, 255, 0.05);
+  color: var(--st-text); font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer;
+}
+.st-folder-chip.is-off { background: transparent; color: var(--st-soft); opacity: 0.72; }
+@media (hover: hover) and (pointer: fine) {
+  .st-folder-chip:hover { border-color: var(--st-accent); color: var(--st-text); opacity: 1; }
+}
+@media (max-width: 760px) {
+  .st-sort-footer { padding-inline-start: 8px; }
+}

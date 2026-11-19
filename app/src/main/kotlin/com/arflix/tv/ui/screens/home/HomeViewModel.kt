@@ -2,7 +2,7 @@ package com.arflix.tv.ui.screens.home
 
 import android.app.ActivityManager
 import android.content.Context
-import com.arflix.tv.util.settingsDataStore
+import com.arflix.tv.data.repository.effectiveSettingsDataStore as settingsDataStore
 import com.arflix.tv.util.traktDataStore
 import com.arflix.tv.util.IPTV_FAVORITES_ON_HOME
 import com.arflix.tv.util.WATCHLIST_ON_HOME
@@ -147,6 +147,9 @@ data class HomeCollectionRow(
     val title: String,
     val items: List<CatalogConfig>
 )
+
+// Quiet update notifications show their notice once per process, i.e. once per cold start.
+private var quietUpdateNoticeShown = false
 
 internal fun compactHomeCategoriesForCache(
     categories: List<Category>,
@@ -388,6 +391,7 @@ class HomeViewModel @Inject constructor(
     private val launcherContinueWatchingRepository: LauncherContinueWatchingRepository,
     private val continueWatchingUpdates: ContinueWatchingUpdates,
     private val appForegroundSignals: com.arflix.tv.data.repository.AppForegroundSignals,
+    private val idleReturnCoordinator: com.arflix.tv.data.repository.IdleReturnCoordinator,
     private val realtimeSyncManager: com.arflix.tv.data.repository.RealtimeSyncManager,
     private val profileManager: ProfileManager,
     private val appUpdateRepository: com.arflix.tv.updater.AppUpdateRepository,
@@ -547,6 +551,9 @@ class HomeViewModel @Inject constructor(
     private var selectedSportsCategoryId: String? = null
 
     companion object {
+        /** Profiles already told this app run that Trakt needs reconnecting. */
+        private val traktReconnectNoticeShown: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
+        private val mdbListReconnectNoticeShown: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
         const val FAVORITE_TV_CATEGORY_ID = "favorite_tv"
         /** Unfiltered titles a kids top-up may load for one grid before it gives up. */
         private const val MAX_KIDS_TOP_UP_ITEMS = 600
@@ -733,6 +740,16 @@ class HomeViewModel @Inject constructor(
             try {
                 val prefs = context.settingsDataStore.data.first()
                 val profileId = profileManager.getProfileIdSync().ifBlank { "default" }
+
+                // In Netflix-style TV Home, regular catalog rows are always posters.
+                val netflixHomeStyleKey = profileManager.profileBooleanKeyFor(
+                    profileId,
+                    NETFLIX_HOME_STYLE_KEY
+                )
+                val netflixHomeStyle = prefs[netflixHomeStyleKey] ?: true
+                if (isTvDevice && netflixHomeStyle) {
+                    return@withContext true
+                }
 
                 // 1. Check specific row layout mode
                 val rowKey = "home:$catalogId"
@@ -1088,12 +1105,16 @@ class HomeViewModel @Inject constructor(
     /** Get the stream URL for an IPTV MediaItem. */
     fun getIptvStreamUrl(itemId: Int): String? = iptvChannelMap[itemId]?.streamUrl
 
+    /** The playlist's request headers for an IPTV MediaItem's channel (Referer, User-Agent...). */
+    fun getIptvRequestHeaders(itemId: Int): Map<String, String> = iptvChannelMap[itemId]?.requestHeaders.orEmpty()
+
     // The same resolver and client limits as the Live TV screen, so a channel previews on Home
     // exactly when it plays there.
     private val iptvPlaybackUrlResolver by lazy {
         IptvPlaybackUrlResolver(
             OkHttpProvider.playbackClient.newBuilder()
                 .withIptvProviderRequestGuard()
+                .addInterceptor(com.arflix.tv.network.IptvPlaybackConnections())
                 .connectTimeout(3, java.util.concurrent.TimeUnit.SECONDS)
                 .readTimeout(4, java.util.concurrent.TimeUnit.SECONDS)
                 .writeTimeout(3, java.util.concurrent.TimeUnit.SECONDS)
@@ -1107,12 +1128,31 @@ class HomeViewModel @Inject constructor(
      * (`.../play/channel`) says nothing about its format; the resolver asks the server once and
      * caches the answer, while addresses that already show their type are returned as they are.
      */
-    internal suspend fun resolveIptvPreviewTarget(itemId: Int): IptvPlaybackTarget? {
+    internal suspend fun resolveIptvPreviewTarget(
+        itemId: Int,
+        session: com.arflix.tv.network.IptvStreamSession?,
+    ): IptvPlaybackTarget? {
         val channel = iptvChannelMap[itemId] ?: return null
-        return runCatching { iptvPlaybackUrlResolver.resolve(channel.streamUrl, channel.requestHeaders) }
+        return runCatching { iptvPlaybackUrlResolver.resolve(channel.streamUrl, channel.requestHeaders, session = session) }
             .onFailure { if (it is CancellationException) throw it }
             .getOrNull()
     }
+
+    /** Null until the card's channel is known; the hero opens nothing until it has an answer. */
+    internal suspend fun iptvPreviewGate(itemId: Int): HomeIptvPreviewGate? {
+        val channel = iptvChannelMap[itemId] ?: return null
+        return readHomeIptvPreviewGate(itemId) { iptvRepository.resolveChannelStreamPolicy(channel) }
+    }
+
+    /** A preview must resolve to a known owner, even when that owner explicitly allows unlimited playback. */
+    internal suspend fun iptvPreviewPolicy(itemId: Int): com.arflix.tv.data.repository.ResolvedIptvChannelPolicy? {
+        val channel = iptvChannelMap[itemId] ?: return null
+        return iptvRepository.resolveChannelStreamPolicy(channel)
+    }
+
+    /** The panel's live slot count for preview admission, never stored on disk. */
+    internal suspend fun iptvAccountUsage(account: com.arflix.tv.network.IptvProviderAccount) =
+        iptvRepository.fetchAccountUsage(account)
 
     /** The profile's "Default subtitle" setting for channel previews (off when it cannot be read). */
     internal suspend fun previewSubtitleDefault(): com.arflix.tv.ui.screens.tv.live.LiveSubtitleDefault = runCatching {
@@ -1645,6 +1685,15 @@ class HomeViewModel @Inject constructor(
 
     private val _uiState = MutableStateFlow(HomeUiState())
     val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
+
+    // Kept out of uiState: Home rewrites that state from many coroutines, which would cut the
+    // notice short. Null when nothing is shown.
+    private val _quietUpdateNotice = MutableStateFlow<String?>(null)
+    val quietUpdateNotice: StateFlow<String?> = _quietUpdateNotice.asStateFlow()
+
+    fun dismissQuietUpdateNotice() {
+        _quietUpdateNotice.value = null
+    }
     val cardLogoUrls = mutableStateMapOf<String, String>()
     val cardImdbRatings = mutableStateMapOf<String, String>()
 
@@ -1753,6 +1802,32 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch {
             personalListsRepository.changes.collect { list -> reloadRowsFor(list.provider) }
         }
+        // Continue Watching silently stops syncing when the Trakt session is lost; say so once
+        // per app run and profile instead of leaving the user to find it in Settings.
+        viewModelScope.launch {
+            traktRepository.connection
+                .filter { it.reconnectRequired }
+                .collect { connection ->
+                    if (traktReconnectNoticeShown.add(connection.profileId)) {
+                        _uiState.value = _uiState.value.copy(
+                            toastMessage = context.getString(R.string.trakt_reconnect_required),
+                            toastType = ToastType.ERROR
+                        )
+                    }
+                }
+        }
+        viewModelScope.launch {
+            personalListsRepository.mdbListConnection
+                .filter { it.connected && it.reconnectRequired }
+                .collect { connection ->
+                    if (mdbListReconnectNoticeShown.add(connection.profileId)) {
+                        _uiState.value = _uiState.value.copy(
+                            toastMessage = context.getString(R.string.mdblist_reconnect_required),
+                            toastType = ToastType.ERROR
+                        )
+                    }
+                }
+        }
     }
 
     /**
@@ -1764,6 +1839,8 @@ class HomeViewModel @Inject constructor(
         val sourceType = when (provider) {
             PersonalListsRepository.Provider.TRAKT -> CatalogSourceType.TRAKT
             PersonalListsRepository.Provider.MDBLIST -> CatalogSourceType.MDBLIST
+            // WeTrakr lists are not Home rows; nothing to reload.
+            PersonalListsRepository.Provider.WETRAKR -> return
         }
         // The rows belong to the profile and Home load they started on. A profile switch or a
         // new Home load while they are fetched makes them stale: they are dropped, not merged
@@ -2302,6 +2379,14 @@ class HomeViewModel @Inject constructor(
         }
 
         viewModelScope.launch {
+            // After a long idle this device pulls the other devices' progress first;
+            // rebuild the row from it once that lands.
+            idleReturnCoordinator.syncCompleted.collect { revision ->
+                if (revision > 0L) refreshContinueWatchingOnly(force = true)
+            }
+        }
+
+        viewModelScope.launch {
             continueWatchingUpdates.updates.collect { update ->
                 val activeProfileId = profileManager.getProfileIdSync().ifBlank { "default" }
                 if (update.profileId != activeProfileId) return@collect
@@ -2565,6 +2650,21 @@ class HomeViewModel @Inject constructor(
                     loadHomeData()
                 }
         }
+        viewModelScope.launch {
+            // A kids profile's approved addon catalogs (KidsTrustedCatalogs) only trust what they
+            // list once loaded after the approval: reload when this profile's approvals change —
+            // here or from another device's sync — so an approved row shows without a restart.
+            var last: Pair<String, Set<String>>? = null
+            profileManager.activeProfileId.combine(context.settingsDataStore.data) { profileId, prefs ->
+                profileId to prefs[com.arflix.tv.data.repository.KidsTrustedCatalogs.approvalsKey(profileId)].orEmpty()
+            }.distinctUntilChanged().collect { current ->
+                val previous = last
+                last = current
+                if (previous != null && previous.first == current.first && previous.second != current.second) {
+                    loadHomeData()
+                }
+            }
+        }
 
         viewModelScope.launch {
             var previousStatus: com.arflix.tv.updater.UpdateStatus = com.arflix.tv.updater.UpdateStatus.Idle
@@ -2580,10 +2680,23 @@ class HomeViewModel @Inject constructor(
                     }
                 }
 
-                // Auto-open only when we first discover a new unignored update
+                // Auto-open only when we first discover a new unignored update. In quiet mode a
+                // small notice replaces the popup; the update stays available in Settings.
+                var quietNotice: String? = null
                 if (status is com.arflix.tv.updater.UpdateStatus.UpdateAvailable && previousStatus !is com.arflix.tv.updater.UpdateStatus.UpdateAvailable && !isIgnored) {
-                    shouldAutoOpen = true
+                    if (updatePreferences.quietNotifications.first()) {
+                        if (!quietUpdateNoticeShown) {
+                            quietUpdateNoticeShown = true
+                            quietNotice = context.getString(
+                                R.string.home_update_available_quiet,
+                                status.update.title.ifBlank { status.update.tag }
+                            )
+                        }
+                    } else {
+                        shouldAutoOpen = true
+                    }
                 }
+                if (quietNotice != null) _quietUpdateNotice.value = quietNotice
 
                 _uiState.value = _uiState.value.copy(
                     updateStatus = status,
@@ -2976,6 +3089,19 @@ class HomeViewModel @Inject constructor(
                             CollectionTemplateManifest.autoInstalledAddonUrls() +
                                 listOf(MediaRepository.STREAMING_COLLECTION_ADDON_URL)
                         )
+                        // Keep Home usable during upgrades. Each manifest has its own timeout;
+                        // a slow addon must not cancel the whole refresh or starve healthy ones.
+                        viewModelScope.launch(Dispatchers.IO) {
+                            val report = runCatching { streamRepository.refreshInstalledAddonsIfNeeded() }.getOrNull()
+                            if (report != null && report.refreshed > 0) {
+                                val changed = runCatching {
+                                    catalogRepository.syncAddonCatalogs(streamRepository.installedAddons.first())
+                                }.getOrDefault(false)
+                                if (changed) {
+                                    loadHomeData()
+                                }
+                            }
+                        }
                         val addons = streamRepository.installedAddons.first()
                         catalogRepository.syncAddonCatalogs(addons)
                         catalogRepository.syncHomeServerCatalogs(homeServerRepository.getCatalogCandidates())
@@ -3106,6 +3232,7 @@ class HomeViewModel @Inject constructor(
                         .filter {
                             it.isPreinstalled &&
                                 it.sourceUrl.isNullOrBlank() &&
+                                !isWeTrakrRecommendationRow(it.id) &&
                                 !isCollectionRailConfig(it) &&
                                 !isCollectionTileConfig(it)
                         }
@@ -3154,6 +3281,10 @@ class HomeViewModel @Inject constructor(
                             }
                         }
                     }
+                    // Start account recommendations after publishing the fast built-in rows.
+                    val weTrakrRecommendations = async {
+                        loadWeTrakrRecommendationRows(savedCatalogs, mediaRepository::loadHomeCategoryPage)
+                    }
                     // Load MDBList preinstalled catalogs - first 8 immediately, rest lazily on scroll
                     val mdblistConfigs = savedCatalogs.filter {
                         it.isPreinstalled &&
@@ -3189,11 +3320,19 @@ class HomeViewModel @Inject constructor(
                         }
                     }
                     val mdblistCategories = mdblistInitial.awaitAll().filterNotNull()
-                    loadedFreshCatalogRows = loadedFreshCatalogRows || mdblistCategories.any { hasRealItems(it) }
+                    val recommendationCategories = weTrakrRecommendations.await()
+                    loadedFreshCatalogRows = loadedFreshCatalogRows || mdblistCategories.any { hasRealItems(it) } ||
+                        recommendationCategories.any { hasRealItems(it) }
+                    recommendationCategories.forEach { category ->
+                        categoryPaginationStates[category.id] = CategoryPaginationState(
+                            loadedCount = category.items.size, hasMore = false
+                        )
+                    }
                     // Create placeholder categories for deferred ones (will load on scroll)
                     val deferredCategories = deferredBatch.map { cfg -> Category(id = cfg.id, title = cfg.title, items = emptyList()) }
                     // Merge both lists maintaining the saved catalog order
-                    val allPreinstalledById = (tmdbPreinstalled + mdblistCategories + deferredCategories).associateBy { it.id }
+                    val allPreinstalledById = (tmdbPreinstalled + mdblistCategories + deferredCategories +
+                        recommendationCategories).associateBy { it.id }
 
                     // Load deferred catalogs in background in batches of 3
                     if (deferredBatch.isNotEmpty()) {
@@ -3241,10 +3380,14 @@ class HomeViewModel @Inject constructor(
                     loadedFreshCatalogRows = loadedFreshCatalogRows || freshCustomCategories.any { hasRealItems(it) }
 
                     // Fall back to previously cached data for any custom catalog
-                    // that failed to load in this round
+                    // that failed to load in this round. Not for the YouTube row: it is read
+                    // from the profile's own catalog list, so an empty answer means its last
+                    // video was removed, and the old copy would keep showing that video.
                     val stickyCustomById = currentBaseCategories
                         .filter { category ->
-                            customCatalogConfigs.any { it.id == category.id } && category.items.isNotEmpty()
+                            customCatalogConfigs.any {
+                                it.id == category.id && it.sourceType != CatalogSourceType.YOUTUBE
+                            } && category.items.isNotEmpty()
                         }
                         .associateBy { it.id }
                     val freshCustomById = freshCustomCategories.associateBy { it.id }
@@ -3268,7 +3411,8 @@ class HomeViewModel @Inject constructor(
                     // Fallback: if no preinstalled loaded at all, use base/cached
                     if (preinstalled.isEmpty()) {
                         val fallback = baseCategories.ifEmpty { currentBaseCategories.ifEmpty { lastResolvedBaseCategories } }
-                        fallback.forEach { allById.putIfAbsent(it.id, it) }
+                        fallback.filterNot { isWeTrakrRecommendationRow(it.id) }
+                            .forEach { allById.putIfAbsent(it.id, it) }
                     }
 
                     // Resolve in savedCatalogs order — this is the user's configured
@@ -3668,6 +3812,7 @@ class HomeViewModel @Inject constructor(
     }
 
     fun preloadImdbRatingsForHeroItems(items: List<MediaItem>) {
+        preloadLogosForCategoryItems(items)
         viewModelScope.launch(networkDispatcher) {
             items.filter { isActionableMediaItem(it) && !isIptvItem(it) }.forEach { item ->
                 val key = "${item.mediaType}_${item.id}"
@@ -3805,6 +3950,17 @@ class HomeViewModel @Inject constructor(
                             persistCategoriesCache(_uiState.value.categories)
                         }
                     }
+                } else if (isWeTrakrRecommendationRow(cfg.id)) {
+                    withContext(Dispatchers.Main.immediate) {
+                        if (requestId == loadHomeRequestId) {
+                            categoryPaginationStates.remove(cfg.id)
+                            _uiState.value = _uiState.value.copy(
+                                categories = removeEmptyWeTrakrRecommendationRow(_uiState.value.categories, cfg.id),
+                                categoryHasMoreMap = _uiState.value.categoryHasMoreMap - cfg.id
+                            )
+                            persistCategoriesCache(_uiState.value.categories)
+                        }
+                    }
                 }
             }
         }
@@ -3827,6 +3983,17 @@ class HomeViewModel @Inject constructor(
                                 if (requestId == loadHomeRequestId) {
                                     updateMobileCategoryRow(cfg.id, category, hasMore = result.hasMore && !isHardCappedTop10Catalog(cfg.id), nextOffset = result.nextOffset)
                                     markHomeDataLoadSuccessful(requestId)
+                                    persistCategoriesCache(_uiState.value.categories)
+                                }
+                            }
+                        } else if (cfg.sourceType == CatalogSourceType.YOUTUBE) {
+                            // Read from the profile's own catalog list: empty means its last video
+                            // was removed, so the row on screen is out of date (see loadHomeData).
+                            withContext(Dispatchers.Main.immediate) {
+                                if (requestId == loadHomeRequestId) {
+                                    _uiState.value = _uiState.value.copy(
+                                        categories = _uiState.value.categories.filterNot { it.id == cfg.id }
+                                    )
                                     persistCategoriesCache(_uiState.value.categories)
                                 }
                             }
@@ -4269,6 +4436,7 @@ class HomeViewModel @Inject constructor(
         }
 
         savedCatalogs.forEach { cfg ->
+            if (!homeCatalogHasSkeleton(cfg)) return@forEach
             if (isCollectionTileConfig(cfg)) return@forEach
             // Omit Favorite TV and Popular Live Sports from initial skeleton
             if (cfg.id == FAVORITE_TV_CATEGORY_ID) return@forEach

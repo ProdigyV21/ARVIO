@@ -1,215 +1,262 @@
 "use client";
+import { DEFAULT_COLLECTIONS_DISABLED, isDefaultCollection, mergeCatalogs, updateHiddenCatalogIds } from "@/lib/catalogs";
+import { createCollectionLoader } from "@/lib/collectionLoader";
+import {
+  collectionFolders,
+  collectionMediaTypes,
+  collectionParentRail,
+  orphanedEnabledFolders,
+  setCatalogsEnabledWithParentRails,
+  visibleHomeCatalogs
+} from "@/lib/collectionPresentation";
 import { useTranslation } from "@/lib/i18n";
-import { collectionFolders, collectionHomeCatalogs } from "@/lib/collectionPresentation";
+import { requestSourceSettings } from "@/lib/sourceSetup";
 
-
-import { Info, Play } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { IMDB_LOGO } from "@/lib/serviceLogos";
-import { genreNamesFromIds, getCardMeta, getLogoUrl } from "@/lib/tmdb";
-import { getImdbRating } from "@/lib/imdbRatings";
-import { useApp } from "@/lib/store";
-import { LazyRail } from "@/components/media/LazyRail";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createHeroController } from "@/lib/homeHero";
+import { HOME_WATCHLIST_ROW_ID, withHomeWatchlistRow } from "@/lib/homeRows";
+import { requestPlayOnOpen } from "@/lib/playIntent";
+import { useAppPick } from "@/lib/store";
+import { useKidsFilter } from "@/lib/useKids";
+import { LazyRail, type LazyRailOutcome } from "@/components/media/LazyRail";
 import { CustomCollectionRail } from "@/components/media/CustomCollectionRail";
 import { MediaRail } from "@/components/media/MediaRail";
+import { CategoryViewAll } from "@/components/media/CategoryViewAll";
 import { FavoriteTvRail } from "@/components/media/FavoriteTvRail";
 import { FAVORITE_TV_CATALOG_ID } from "@/lib/favoriteTv";
-import type { Category, MediaItem } from "@/lib/types";
+import { HOME_ROW_LIMIT } from "@/lib/tmdb";
+import type { CatalogConfig, Category, MediaItem } from "@/lib/types";
+import { RowBoundary } from "@/components/shell/ErrorBoundary";
+import { HomeHero } from "./HomeHero";
+import "@/app/home.css";
+
+type ViewAll = { catalog: CatalogConfig | null; category: Category };
 
 export function HomeScreen({ onCollectionOpenChange }: { onCollectionOpenChange?: (open: boolean) => void }) {
   const translateUi = useTranslation();
-  const { hero, categories, catalogConfigs, homeServerRows, continueWatching, openDetails, setHeroPreview, settings } = useApp();
+  const {
+    categories, catalogConfigs, homeServerRows, continueWatching, watchlist, openDetails,
+    settings, addons, favoriteTvChannels, setSection, updateSettings
+  } = useAppPick(
+    "categories", "catalogConfigs", "homeServerRows", "continueWatching", "watchlist",
+    "openDetails", "settings", "addons", "favoriteTvChannels", "setSection", "updateSettings"
+  );
   const posterMode = settings.cardLayoutMode === "poster";
+  const kids = useKidsFilter();
+  const kidsAllows = useRef(kids.allows);
+  kidsAllows.current = kids.allows;
+
+  // The billboard's state lives here, outside the app store: only HomeHero
+  // subscribes, so its 8 s rotation and card hovers don't re-render the app.
+  const [hero] = useState(() => createHeroController());
+  const hoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (hoverTimer.current) clearTimeout(hoverTimer.current); }, []);
 
   // The eager rails (trending/popular/provider lists) overlap heavily; keep each
   // title in the first rail it appears in and trim repeats from later rails,
   // unless doing so would hollow a rail out.
   const dedupedCategories = useMemo(() => {
     const seen = new Set<string>();
-    return categories.map((category) => {
+    return withHomeWatchlistRow(categories, watchlist, settings.watchlistOnHome === true).map((category) => {
+      if (category.id === HOME_WATCHLIST_ROW_ID) return category;
       const kept = category.items.filter((item) => !seen.has(`${item.mediaType}-${item.id}`));
       const items = kept.length >= Math.min(8, category.items.length) ? kept : category.items;
       items.forEach((item) => seen.add(`${item.mediaType}-${item.id}`));
       return items === category.items ? category : { ...category, items };
     });
-  }, [categories]);
-  const [heroLogo, setHeroLogo] = useState<string | null>(null);
-  const [displayHero, setDisplayHero] = useState<MediaItem | null>(null);
-  const hoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const seededHero = useRef(false);
-  const userInteractedHero = useRef(false);
+  }, [categories, watchlist, settings.watchlistOnHome]);
 
-  useEffect(() => () => {
+  const [heroSeeded, setHeroSeeded] = useState(false);
+  const [railOutcomes, setRailOutcomes] = useState<ReadonlyMap<string, LazyRailOutcome>>(() => new Map());
+  const homeCatalogs = useMemo(() => visibleHomeCatalogs(catalogConfigs), [catalogConfigs]);
+  const eagerLazyIds = useMemo(
+    () => homeCatalogs.slice(0, 8)
+      .filter((catalog) => catalog.id !== FAVORITE_TV_CATALOG_ID && String(catalog.kind).toUpperCase() !== "COLLECTION_RAIL")
+      .map((catalog) => catalog.id),
+    [homeCatalogs]
+  );
+  const heroFolders = useMemo(
+    () => homeCatalogs
+      .filter((catalog) => String(catalog.kind).toUpperCase() === "COLLECTION_RAIL")
+      .flatMap((rail) => collectionFolders(rail, catalogConfigs)),
+    [homeCatalogs, catalogConfigs]
+  );
+
+  // Stable callbacks: MediaCard is memoised on them.
+  const onCardFocus = useCallback((item: MediaItem) => {
     if (hoverTimer.current) clearTimeout(hoverTimer.current);
-  }, []);
-
-  // Showcase titles for the rotating hero, collected from the first rails as
-  // they load (trending rails arrive lazily, so we accumulate here).
-  const [heroPoolRows, setHeroPoolRows] = useState<MediaItem[]>([]);
-
-  const seedHeroFromRow = (row: Category) => {
-    // Feed the first couple of catalog rows into the hero rotation pool.
-    setHeroPoolRows((prev) => {
-      if (prev.length >= 12) return prev;
-      const seen = new Set(prev.map((i) => `${i.mediaType}-${i.id}`));
-      const additions = row.items
-        .filter((item) => item.backdrop && !seen.has(`${item.mediaType}-${item.id}`))
-        .slice(0, 8);
-      return additions.length ? [...prev, ...additions].slice(0, 12) : prev;
+    hoverTimer.current = setTimeout(() => hero.pin(item), 220);
+  }, [hero]);
+  const seedHeroFromRow = useCallback((row: Category) => {
+    hero.addToPool(row.items, (item) => kidsAllows.current(item));
+    if (hero.getState().pool.length > 0) setHeroSeeded(true);
+  }, [hero]);
+  const markRailSettled = useCallback((catalogId: string, outcome: LazyRailOutcome) => {
+    setRailOutcomes((prev) => {
+      if (prev.get(catalogId) === outcome) return prev;
+      const next = new Map(prev);
+      next.set(catalogId, outcome);
+      return next;
     });
-    if (seededHero.current || continueWatching.length) return;
-    const first = row.items[0];
-    if (first) {
-      seededHero.current = true;
-      setHeroPreview(first);
-    }
-  };
+  }, []);
+  const playFromHero = useCallback((item: MediaItem) => {
+    // Android billboard Play: open the title with play intent; details starts
+    // playback through its automatic source choice (see DetailsView).
+    if (item.id > 0) requestPlayOnOpen(item);
+    void openDetails(item);
+  }, [openDetails]);
 
-  const heroPool = heroPoolRows;
-
-  // Auto-advance the hero every 8s until the user hovers a card (which pins the
-  // hero to whatever they're pointing at and stops the carousel).
+  const fallbackHero = continueWatching[0] ?? categories[0]?.items[0] ?? null;
+  const hasHeroFallback = Boolean(fallbackHero && kids.allows(fallbackHero));
+  const heroFallbackKey = eagerLazyIds.length === 0 && heroFolders.length > 0
+    ? `${settings.language}:${heroFolders[0].id}:${heroFolders.length}`
+    : "";
+  const [collectionHeroLoading, setCollectionHeroLoading] = useState(() => Boolean(heroFallbackKey));
   useEffect(() => {
-    if (heroPool.length < 2) return undefined;
-    let index = 0;
-    if (!userInteractedHero.current) setHeroPreview(heroPool[0]);
-    const timer = window.setInterval(() => {
-      if (userInteractedHero.current) return;
-      index = (index + 1) % heroPool.length;
-      setHeroPreview(heroPool[index]);
-    }, 8000);
-    return () => window.clearInterval(timer);
-  }, [heroPool, setHeroPreview]);
-
-  // Synchronize hero changes so all content (logo, text, metadata, backdrop) updates together.
-  useEffect(() => {
-    if (!hero) {
-      setDisplayHero(null);
-      setHeroLogo(null);
-      return;
+    if (!heroFallbackKey || heroSeeded || hasHeroFallback) {
+      setCollectionHeroLoading(false);
+      return undefined;
     }
-
-    let active = true;
-
-    // Fast path: if no hero is currently displayed, show it immediately so there is no blank screen on first load
-    if (!displayHero) {
-      setDisplayHero(hero);
-      void getLogoUrl({ mediaType: hero.mediaType, id: hero.id })
-        .then((url) => {
-          if (active) setHeroLogo(url);
-        })
-        .catch(() => undefined);
-      return;
-    }
-
-    // Normal path: fetch the logo in the background first, then swap all content together
-    void getLogoUrl({ mediaType: hero.mediaType, id: hero.id })
-      .then((url) => {
-        if (!active) return;
-        setHeroLogo(url);
-        setDisplayHero(hero);
-      })
-      .catch(() => {
-        if (!active) return;
-        setHeroLogo(null);
-        setDisplayHero(hero);
-      });
-
-    return () => {
-      active = false;
-    };
-  }, [hero, displayHero]);
-
-  const onCardFocus = (item: MediaItem) => {
-    userInteractedHero.current = true;
-    if (hoverTimer.current) clearTimeout(hoverTimer.current);
-    hoverTimer.current = setTimeout(() => setHeroPreview(item), 220);
-  };
-
-  const heroGenres = (displayHero?.genres?.length ? displayHero.genres : genreNamesFromIds(displayHero?.genreIds)).slice(0, 3);
-
-  // Real IMDb rating for the hero (Cinemeta by imdb id) — TMDB's vote_average
-  // is a different score and must not sit under an IMDb badge. The imdb id
-  // rides along on the cached per-card TMDB call.
-  const [heroImdbRating, setHeroImdbRating] = useState<string | null>(null);
-  useEffect(() => {
-    setHeroImdbRating(null);
-    if (!displayHero || displayHero.id <= 0 || displayHero.isHomeServer) return undefined;
-    let active = true;
+    const folder = heroFolders[0];
+    if (!folder) { setCollectionHeroLoading(false); return undefined; }
+    let cancelled = false;
+    setCollectionHeroLoading(true);
+    const types = collectionMediaTypes(folder);
+    const primary = types[0] ?? "movie";
     void (async () => {
-      const imdbId = displayHero.imdbId
-        ?? (await getCardMeta({ mediaType: displayHero.mediaType, id: displayHero.id }).catch(() => null))?.imdbId;
-      if (!active || !imdbId) return;
-      const rating = await getImdbRating(displayHero.mediaType, imdbId).catch(() => null);
-      if (active && rating) setHeroImdbRating(rating);
+      try {
+        let result = await createCollectionLoader(folder, primary, settings.language, addons, settings.homeServers)();
+        if (!result.items.some((item) => item.backdrop && kidsAllows.current(item)) && types[1]) {
+          result = await createCollectionLoader(folder, types[1], settings.language, addons, settings.homeServers)();
+        }
+        if (!cancelled && result.items.length) seedHeroFromRow({ id: folder.id, title: folder.name, items: result.items });
+      } catch {
+        // Offline / TMDB failure: fall back cleanly without leaving a skeleton loop.
+      } finally {
+        if (!cancelled) setCollectionHeroLoading(false);
+      }
     })();
-    return () => { active = false; };
-  }, [displayHero?.id, displayHero?.mediaType, displayHero?.imdbId, displayHero?.isHomeServer]);
-  const metaBits = [
-    displayHero?.mediaType === "tv" ? "Series" : "Movie",
-    displayHero?.releaseDate?.slice(0, 4) || displayHero?.year || null,
-    displayHero?.duration || null,
-    ...heroGenres
-  ].filter(Boolean);
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [heroFallbackKey]);
+
+  const [viewAll, setViewAll] = useState<ViewAll | null>(null);
+  useEffect(() => {
+    if (!viewAll) return undefined;
+    // Keeps Home (and so this page) mounted while a title's details are open.
+    onCollectionOpenChange?.(true);
+    return () => onCollectionOpenChange?.(false);
+  }, [viewAll, onCollectionOpenChange]);
+  const openViewAll = useCallback((catalog: CatalogConfig | null, category: Category) => setViewAll({ catalog, category }), []);
+
+  const eagerLazyPending = eagerLazyIds.some((id) => {
+    const state = railOutcomes.get(id);
+    return !state || state === "loading";
+  });
+  const heroLoading = !heroSeeded && !hasHeroFallback && (eagerLazyIds.length > 0 ? eagerLazyPending : collectionHeroLoading);
+  const heroRendered = heroSeeded || hasHeroFallback || heroLoading;
+  const hasFavoriteTv = !kids.active && favoriteTvChannels.length > 0;
+  const hasMountedRows = dedupedCategories.length > 0 || homeServerRows.length > 0 || hasFavoriteTv
+    || homeCatalogs.some((catalog) =>
+      catalog.id !== FAVORITE_TV_CATALOG_ID &&
+      (String(catalog.kind).toUpperCase() === "COLLECTION_RAIL" || railOutcomes.get(catalog.id) !== "empty")
+    );
+
+  const mergedCatalogs = useMemo(
+    () => hasMountedRows ? [] : mergeCatalogs(settings.catalogs, settings.hiddenCatalogIds, settings.hiddenAddonCatalogIds),
+    [hasMountedRows, settings.catalogs, settings.hiddenCatalogIds, settings.hiddenAddonCatalogIds]
+  );
+  const orphanedFolders = useMemo(() => orphanedEnabledFolders(mergedCatalogs), [mergedCatalogs]);
+  const orphanedRails = useMemo(() => {
+    const rails = new Map<string, CatalogConfig>();
+    for (const folder of orphanedFolders) {
+      const parent = collectionParentRail(folder, mergedCatalogs);
+      if (parent) rails.set(parent.id, parent);
+    }
+    return [...rails.values()];
+  }, [orphanedFolders, mergedCatalogs]);
+
+  const openHomeRowsSettings = () => {
+    requestSourceSettings("catalogs");
+    setSection("settings");
+  };
+  const showOrphanedRails = () => {
+    if (!orphanedFolders.length) return;
+    const next = setCatalogsEnabledWithParentRails(mergedCatalogs, new Set(orphanedFolders.map((c) => c.id)), true);
+    const standard = next.filter((c) => c.sourceType !== "home-server");
+    const baseHidden = next.some((c) => isDefaultCollection(c) && c.enabled)
+      ? settings.hiddenCatalogIds.filter((id) => id !== DEFAULT_COLLECTIONS_DISABLED)
+      : settings.hiddenCatalogIds;
+    updateSettings({
+      catalogs: next,
+      hiddenCatalogIds: updateHiddenCatalogIds(standard, baseHidden),
+      hiddenAddonCatalogIds: updateHiddenCatalogIds(standard.filter((c) => c.sourceType === "addon"), settings.hiddenAddonCatalogIds),
+    });
+  };
+
+  const folderNames = orphanedFolders.slice(0, 3).map((c) => c.name).join(", ")
+    + (orphanedFolders.length > 3 ? ` +${orphanedFolders.length - 3}` : "");
+  const railNames = orphanedRails.map((c) => c.name).join(", ");
 
   return (
     // has-hero mirrors the CSS :has(.hero) padding rule for TV browsers whose
     // engines predate :has() support (Tizen/webOS).
-    <div className={displayHero ? "screen has-hero" : "screen"}>
-      {displayHero && (
-        <section className="hero home-hero" style={{ backgroundImage: displayHero.backdrop ? `url(${displayHero.backdrop})` : undefined }}>
-          <div className="hero-copy">
-            <div className="hero-title">
-              {heroLogo ? (
-                <img className="hero-logo" src={heroLogo} alt={displayHero.title} />
-              ) : (
-                <h2>{displayHero.title}</h2>
-              )}
-            </div>
-            <div className="hero-meta">
-              {heroImdbRating && (
-                <span className="hero-imdb">
-                  <img src={IMDB_LOGO} alt="IMDb" />
-                  <b>{heroImdbRating}</b>
-                </span>
-              )}
-              {metaBits.map((bit) => <span key={String(bit)}>{bit}</span>)}
-            </div>
-            <p>
-              {(() => {
-                const desc = displayHero.overview || displayHero.subtitle || translateUi("Continue from your ARVIO library.");
-                return desc.length > 150 ? desc.slice(0, 150) + "..." : desc;
-              })()}
-            </p>
-            <div className="hero-actions">
-              <button type="button" className="primary" onClick={() => openDetails(displayHero)}><Play size={20} fill="currentColor" /> {translateUi(" Play")}</button>
-              <button type="button" className="secondary" onClick={() => openDetails(displayHero)}><Info size={20} /> {translateUi(" More Info")}</button>
-            </div>
-          </div>
-        </section>
-      )}
-      {dedupedCategories.map((category) => (
-        <MediaRail key={category.id} category={category} onOpen={openDetails} onFocus={onCardFocus} posterMode={posterMode} />
-      ))}
-      {collectionHomeCatalogs(catalogConfigs).map((catalog, index) => (
-        catalog.id === FAVORITE_TV_CATALOG_ID ? <FavoriteTvRail key={catalog.id} title={catalog.name} /> :
+    <div className={`screen ${heroRendered ? "has-hero " : ""}home-screen`}>
+      <HomeHero controller={hero} fallback={hasHeroFallback ? fallbackHero : null}
+        loading={heroLoading} onOpen={openDetails} onPlay={playFromHero} />
+      {dedupedCategories.map((category) => {
+        // Presentation rows (Continue Watching, Watchlist) are complete lists;
+        // they show the first HOME_ROW_LIMIT titles and open the rest in the grid.
+        const capped = category.items.length > HOME_ROW_LIMIT;
+        const shown = capped ? { ...category, items: category.items.slice(0, HOME_ROW_LIMIT) } : category;
+        return <RowBoundary key={category.id} name={category.id} resetKey={category.items}>
+          <MediaRail category={shown} onOpen={openDetails} onFocus={onCardFocus} posterMode={posterMode}
+            onViewAll={capped ? () => openViewAll(null, category) : undefined} />
+        </RowBoundary>;
+      })}
+      {/* Each row is isolated: one that throws drops out instead of taking Home down. */}
+      {homeCatalogs.map((catalog, index) => <RowBoundary key={catalog.id} name={catalog.id} resetKey={catalog}>{
+        catalog.id === FAVORITE_TV_CATALOG_ID ? (kids.active ? null : <FavoriteTvRail title={catalog.name} />) :
         String(catalog.kind).toUpperCase() === "COLLECTION_RAIL" ?
-        <CustomCollectionRail key={catalog.id} catalog={catalog} onOpen={openDetails} onCollectionOpenChange={onCollectionOpenChange}
+        <CustomCollectionRail catalog={catalog} onOpen={openDetails} onCollectionOpenChange={onCollectionOpenChange}
           folders={collectionFolders(catalog, catalogConfigs)} /> :
         <LazyRail
-          key={catalog.id}
           catalog={catalog}
           eager={index < 8}
           onOpen={openDetails}
           onFocus={onCardFocus}
           onLoaded={seedHeroFromRow}
+          onSettled={markRailSettled}
+          onViewAll={openViewAll}
         />
-      ))}
+      }</RowBoundary>)}
       {/* Like Android, a catalog list without the row still shows it, after the others. */}
-      {!catalogConfigs.some((catalog) => catalog.id === FAVORITE_TV_CATALOG_ID) && <FavoriteTvRail />}
+      {!kids.active && !catalogConfigs.some((catalog) => catalog.id === FAVORITE_TV_CATALOG_ID) && <FavoriteTvRail />}
       {homeServerRows.map((category) => (
-        <MediaRail key={category.id} category={category} onOpen={openDetails} onFocus={onCardFocus} posterMode={posterMode} />
+        <RowBoundary key={category.id} name={category.id} resetKey={category.items}>
+          <MediaRail category={category} onOpen={openDetails} onFocus={onCardFocus} posterMode={posterMode} />
+        </RowBoundary>
       ))}
+      {!hasMountedRows && !heroLoading && (
+        <section className="home-empty-state" role="status">
+          {orphanedRails.length > 0 ? <>
+            <h2>{translateUi("Your selected collections are in a hidden rail")}</h2>
+            <p>{translateUi("You enabled {value0}, which lives inside the hidden {value1} rail.", { value0: folderNames, value1: railNames })}</p>
+            <div className="home-empty-actions">
+              <button type="button" className="primary" onClick={showOrphanedRails}>{translateUi("Show {value0} on Home", { value0: railNames })}</button>
+              <button type="button" className="secondary" onClick={openHomeRowsSettings}>{translateUi("Customize Home rows")}</button>
+            </div>
+          </> : <>
+            <h2>{translateUi("No Home rows are shown")}</h2>
+            <p>{translateUi("Turn rows back on in Settings to populate your Home screen.")}</p>
+            <div className="home-empty-actions">
+              <button type="button" className="primary" onClick={openHomeRowsSettings}>{translateUi("Customize Home rows")}</button>
+            </div>
+          </>}
+        </section>
+      )}
+      {viewAll && <CategoryViewAll key={viewAll.category.id} catalog={viewAll.catalog} preview={viewAll.category}
+        onBack={() => setViewAll(null)} onOpen={openDetails} />}
     </div>
   );
 }

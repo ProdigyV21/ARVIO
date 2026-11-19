@@ -9,6 +9,10 @@ import android.content.res.Configuration
 import android.os.SystemClock
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
@@ -49,6 +53,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedTextField
@@ -176,11 +181,19 @@ fun SearchScreen(
     val hasSearchResults = uiState.movieResults.isNotEmpty() || uiState.tvResults.isNotEmpty() || uiState.personResults.isNotEmpty()
     val hasAiResults = uiState.isAiSearch && uiState.aiResults.isNotEmpty()
     val searchTopResults = uiState.results
+    // The on-demand YouTube row goes first; it also shows when nothing else was found.
+    val youTubeRow = youTubeSearchCategory(
+        state = uiState,
+        available = viewModel.youTubeSearchAvailable,
+        isKidsProfile = kidsFilterState.isActive,
+        hasSearchResults = hasSearchResults
+    )
 
     // Determine which categories to show in rows (filter out empty ones)
     val activeCategories: List<Category> = when {
-        hasSearchResults -> {
+        hasSearchResults || youTubeRow != null -> {
             val list = mutableListOf<Category>()
+            youTubeRow?.let(list::add)
             if (searchTopResults.isNotEmpty()) list.add(Category("s_all", "${stringResource(R.string.search)} (${searchTopResults.size})", searchTopResults))
             if (uiState.movieResults.isNotEmpty()) list.add(Category("s_m", "${stringResource(R.string.movies)} (${uiState.movieResults.size})", uiState.movieResults))
             if (uiState.tvResults.isNotEmpty()) list.add(Category("s_t", "${stringResource(R.string.tv_shows)} (${uiState.tvResults.size})", uiState.tvResults))
@@ -199,7 +212,8 @@ fun SearchScreen(
     var focusZone by rememberSaveable { mutableStateOf(FocusZone.SEARCH_INPUT) }
     val hasProfile = currentProfile != null
     val maxSidebarIndex = topBarMaxIndex(hasProfile)
-    var sidebarFocusIndex by remember { mutableIntStateOf(if (hasProfile) 1 else 0) }
+    var sidebarFocusIndex by remember { mutableIntStateOf(com.arflix.tv.ui.components.topBarSelectedIndex(SidebarItem.SEARCH, hasProfile).coerceAtLeast(0)) }
+    com.arflix.tv.ui.components.ReconcileTopBarFocus(sidebarFocusIndex, hasProfile) { sidebarFocusIndex = it }
     var isSearchInputFocused by remember { mutableStateOf(false) }
     var suppressSelectUntilMs by remember { mutableLongStateOf(0L) }
     val fastScrollThresholdMs = 220L
@@ -215,6 +229,18 @@ fun SearchScreen(
     // The search bar's clear button: a second stop inside the search bar, reached with the
     // D-pad toward its end while there is a query to clear.
     var isClearQueryFocused by remember { mutableStateOf(false) }
+    // The mic button: the last stop inside the search bar, after the clear button. It is only
+    // there when the device has a speech recognizer (see VoiceSearch).
+    var isMicFocused by remember { mutableStateOf(false) }
+    val voiceSearch = rememberVoiceSearch(
+        // The words show in the bar while they are spoken; the final phrase is searched at once.
+        onPartial = { viewModel.updateQuery(it) },
+        onResult = { spoken ->
+            isMicFocused = false
+            viewModel.searchRecent(spoken)
+            enterResultsOnLoad = !isTouchDevice
+        }
+    )
     // The filtered grid is driven the same way the rows are: one remembered index, one white
     // focus ring, no second native focus target (see RowsLayer).
     var gridFocusIndex by rememberSaveable { mutableIntStateOf(0) }
@@ -398,7 +424,8 @@ fun SearchScreen(
     // Opening a title from the results keeps the query among the recent searches.
     val openSearchResult: (MediaItem) -> Unit = { item ->
         viewModel.rememberSearch()
-        onNavigateToDetails(item.mediaType, item.id)
+        if (item.isYouTubeSearchAction()) viewModel.searchYouTube()
+        else onNavigateToDetails(item.mediaType, item.id)
     }
     fun focusRecent() {
         focusZone = FocusZone.RECENT
@@ -425,6 +452,18 @@ fun SearchScreen(
     }
     LaunchedEffect(uiState.query.isEmpty(), focusZone, isSearchEditing) {
         if (uiState.query.isEmpty() || focusZone != FocusZone.SEARCH_INPUT || isSearchEditing) isClearQueryFocused = false
+        if (focusZone != FocusZone.SEARCH_INPUT || isSearchEditing) isMicFocused = false
+    }
+    // Text → clear → mic. The keys reaching here are already mirrored for RTL (effectiveKey).
+    fun moveSearchBarStop(towardEnd: Boolean): Boolean = if (towardEnd) when {
+        isMicFocused -> false
+        !isClearQueryFocused && uiState.query.isNotEmpty() -> { isClearQueryFocused = true; true }
+        voiceSearch.isAvailable -> { isClearQueryFocused = false; isMicFocused = true; true }
+        else -> false
+    } else when {
+        isMicFocused -> { isMicFocused = false; isClearQueryFocused = uiState.query.isNotEmpty(); true }
+        isClearQueryFocused -> { isClearQueryFocused = false; true }
+        else -> false
     }
     LaunchedEffect(recentSearches.size) {
         focusedRecentIndex = focusedRecentIndex.coerceIn(0, (recentSearchSlotCount(recentSearches) - 1).coerceAtLeast(0))
@@ -471,7 +510,9 @@ fun SearchScreen(
     }
 
     BackHandler {
-        if (isSearchEditing) {
+        if (voiceSearch.cancelIfListening()) {
+            Unit
+        } else if (isSearchEditing) {
             isSearchEditing = false
             keyboardController?.hide()
             try { searchFocusRequester.requestFocus() } catch (_: Exception) {}
@@ -519,6 +560,10 @@ fun SearchScreen(
                 return@onPreviewKeyEvent true
             }
             if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+            if ((event.key == Key.Back || event.key == Key.Escape) && voiceSearch.cancelIfListening()) {
+                consumedDpadKey = event.key
+                return@onPreviewKeyEvent true
+            }
             if (isSearchEditing && (event.key == Key.Back || event.key == Key.Escape)) {
                 isSearchEditing = false
                 keyboardController?.hide()
@@ -732,9 +777,7 @@ fun SearchScreen(
                         if (focusedRecentIndex > 0) focusedRecentIndex--
                         true
                     }
-                    FocusZone.SEARCH_INPUT -> {
-                        if (isClearQueryFocused) { isClearQueryFocused = false; true } else false
-                    }
+                    FocusZone.SEARCH_INPUT -> moveSearchBarStop(towardEnd = false)
                     else -> false
                 }
                 Key.DirectionRight -> when (focusZone) {
@@ -767,9 +810,7 @@ fun SearchScreen(
                         if (focusedRecentIndex < recentSearchSlotCount(recentSearches) - 1) focusedRecentIndex++
                         true
                     }
-                    FocusZone.SEARCH_INPUT -> {
-                        if (uiState.query.isNotEmpty() && !isClearQueryFocused) { isClearQueryFocused = true; true } else false
-                    }
+                    FocusZone.SEARCH_INPUT -> moveSearchBarStop(towardEnd = true)
                     else -> false
                 }
                 Key.Enter, Key.DirectionCenter -> {
@@ -782,7 +823,9 @@ fun SearchScreen(
                             true
                         }
                         FocusZone.SEARCH_INPUT -> {
-                            if (isClearQueryFocused) {
+                            if (isMicFocused) {
+                                voiceSearch.toggle()
+                            } else if (isClearQueryFocused) {
                                 isClearQueryFocused = false
                                 enterResultsOnLoad = false
                                 viewModel.updateQuery("")
@@ -870,6 +913,10 @@ fun SearchScreen(
                     isEditing = isSearchEditing,
                     isClearFocused = isClearQueryFocused && focusZone == FocusZone.SEARCH_INPUT,
                     onClear = { enterResultsOnLoad = false; viewModel.updateQuery("") },
+                    showMic = voiceSearch.isAvailable,
+                    isMicFocused = isMicFocused && focusZone == FocusZone.SEARCH_INPUT,
+                    isListening = voiceSearch.isListening,
+                    onMic = voiceSearch::toggle,
                     searchFocusRequester = searchFocusRequester,
                     textInputFocusRequester = textInputFocusRequester,
                     onQueryChange = { enterResultsOnLoad = false; viewModel.updateQuery(it) },
@@ -969,7 +1016,7 @@ fun SearchScreen(
                     ContentGrid(items = uiState.aiResults, usePosterCards = aiUsePosterCards, isLoading = false, isTouchDevice = isTouchDevice, onItemClick = openSearchResult, onLoadMore = {})
                 }
 
-                uiState.query.isNotEmpty() && !uiState.isAiSearch && !hasSearchResults -> {
+                uiState.query.isNotEmpty() && !uiState.isAiSearch && !hasSearchResults && youTubeRow == null -> {
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Text(if (uiState.error != null) stringResource(R.string.error_loading)
                             else "${stringResource(R.string.no_results_for)} \"${uiState.query}\"",
@@ -1082,6 +1129,10 @@ private fun SearchInputBar(
     isEditing: Boolean,
     isClearFocused: Boolean,
     onClear: () -> Unit,
+    showMic: Boolean,
+    isMicFocused: Boolean,
+    isListening: Boolean,
+    onMic: () -> Unit,
     searchFocusRequester: FocusRequester,
     textInputFocusRequester: FocusRequester,
     onQueryChange: (String) -> Unit,
@@ -1126,7 +1177,7 @@ private fun SearchInputBar(
                 focusedIndicatorColor = Color.White,
                 unfocusedIndicatorColor = Color.White.copy(alpha = 0.18f)
             ),
-            shape = RoundedCornerShape(10.dp),
+            shape = RoundedCornerShape(12.dp),
             modifier = Modifier
                 .fillMaxWidth()
                 .testTag("search-input")
@@ -1191,9 +1242,9 @@ private fun SearchInputBar(
                 decorationBox = { inner ->
                     if (query.isEmpty()) {
                         Text(
-                            stringResource(R.string.search),
+                            stringResource(if (isListening) R.string.search_voice_listening else R.string.search),
                             style = ArflixTypography.body.copy(fontSize = 17.sp),
-                            color = Color.White.copy(alpha = 0.32f)
+                            color = Color.White.copy(alpha = if (isListening) 0.7f else 0.32f)
                         )
                     }
                     inner()
@@ -1215,6 +1266,45 @@ private fun SearchInputBar(
                         Icons.Default.Close,
                         contentDescription = stringResource(R.string.search_clear_query),
                         tint = if (isClearFocused) Color.Black else TextSecondary,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
+            if (showMic) {
+                Spacer(Modifier.width(8.dp))
+                // Painted, not focusable, like the clear button (see isMicFocused). Pink while it
+                // listens, pulsing so it reads as live.
+                val pulse = if (isListening) {
+                    rememberInfiniteTransition(label = "voice").animateFloat(
+                        initialValue = 1f, targetValue = 1.18f,
+                        animationSpec = infiniteRepeatable(tween(600), RepeatMode.Reverse),
+                        label = "voicePulse"
+                    ).value
+                } else 1f
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier
+                        .size(34.dp)
+                        .graphicsLayer { scaleX = pulse; scaleY = pulse }
+                        .clip(CircleShape)
+                        .background(
+                            when {
+                                isListening -> Pink
+                                isMicFocused -> Color.White
+                                else -> Color.White.copy(alpha = 0.08f)
+                            }
+                        )
+                        .semantics { onClick { onMic(); true } }
+                        .testTag("search-voice")
+                ) {
+                    Icon(
+                        Icons.Default.Mic,
+                        contentDescription = stringResource(R.string.search_voice),
+                        tint = when {
+                            isListening -> Color.White
+                            isMicFocused -> Color.Black
+                            else -> TextSecondary
+                        },
                         modifier = Modifier.size(18.dp)
                     )
                 }
@@ -1286,9 +1376,10 @@ private fun RowsLayer(
                 val isCurrentRow = !isTouchDevice && isFocused && index == currentRowIndex
                 val rowKey = remember(category.id) { "search:${category.id}" }
                 val rowUsePosterCards = rememberCatalogueRowLayoutMode(rowKey) == CardLayoutMode.POSTER
-                val isPortrait = category.isPortrait(rowUsePosterCards)
+                // YouTube artwork is 16:9; a poster crop would cut most of it away.
+                val isPortrait = category.id != YOUTUBE_SEARCH_ROW_ID && category.isPortrait(rowUsePosterCards)
                 val itemWidth = if (isTouchDevice) {
-                    if (isPortrait) 120.dp else 200.dp
+                    if (isPortrait) 112.dp else 168.dp
                 } else {
                     if (isPortrait) 105.dp else 210.dp
                 }
@@ -1390,10 +1481,12 @@ private fun RowsLayer(
                                     isLandscape = !isPortrait,
                                     logoImageUrl = cardLogoUrls["${item.mediaType}_${item.id}"],
                                     showProgress = false,
-                                    titleMaxLines = 2,
+                                    // One line for YouTube, so the channel and length below it stay in view.
+                                    titleMaxLines = if (category.id == YOUTUBE_SEARCH_ROW_ID) 1 else 2,
                                     subtitleMaxLines = 1,
                                     isFocusedOverride = itemIsFocused,
                                     enableSystemFocus = false,
+                                    artworkPainter = youTubeSearchCardPainter(item),
                                     onFocused = {},
                                     onClick = { onItemClick(item) },
                                     modifier = Modifier.testTag("search-card-${category.id}-${item.mediaType}-${item.id}")
@@ -1562,6 +1655,8 @@ private fun buildCardTitle(item: MediaItem): String {
 
 @Composable
 private fun buildCardSubtitle(item: MediaItem): String {
+    // YouTube cards show their channel and length; "Movie" would only be the storage type.
+    if (item.isYouTubeVideo() || item.isYouTubeSearchAction()) return item.subtitle
     val mediaLabel = when (item.mediaType) {
         MediaType.TV -> stringResource(R.string.series)
         MediaType.MOVIE -> stringResource(R.string.movie)

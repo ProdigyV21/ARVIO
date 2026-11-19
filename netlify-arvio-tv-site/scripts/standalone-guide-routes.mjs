@@ -1,6 +1,10 @@
 // English guides and tools with no translated counterpart yet. Keep their real language
 // explicit in localized directories rather than adding inaccurate hreflang.
 export const standaloneGuideRoutes = [
+  { route: "/arvio-iphone-ipad/", updated: "2026-10-24", labels: {
+    pt: ["iPhone e iPad · Em inglês", "ARVIO no iPhone e iPad", "Abra o ARVIO Web no Safari, entre com sua conta ARVIO, adicione à Tela de Início e explore antes de pagar."],
+    es: ["iPhone y iPad · En inglés", "ARVIO en iPhone y iPad", "Abre ARVIO Web en Safari, inicia sesión con tu cuenta ARVIO, añádelo a la pantalla de inicio y explóralo antes de pagar."]
+  } },
   { route: "/stremio-addons-android-tv/", updated: "2026-10-08", labels: {
     pt: ["Configuração de addons · Em inglês", "Addons compatíveis com Stremio no ARVIO", "Instale uma URL de manifesto, configure pelo celular e confira os limites de compatibilidade na Android TV."],
     es: ["Configuración de addons · En inglés", "Addons compatibles con Stremio en ARVIO", "Instala una URL de manifiesto, configura desde el móvil y consulta los límites de compatibilidad en Android TV."]

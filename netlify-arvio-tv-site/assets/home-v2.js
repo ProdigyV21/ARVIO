@@ -88,3 +88,31 @@ function openLinkedGallery() {
 }
 window.addEventListener('hashchange',openLinkedGallery);
 openLinkedGallery();
+
+/* Show the latest GitHub release in the hero badge */
+(async function() {
+  const link = document.querySelector('.release');
+  if (!link) return;
+  try {
+    const res = await fetch('https://api.github.com/repos/ProdigyV21/ARVIO/releases/latest');
+    if (!res.ok) return;
+    const release = await res.json();
+    if (release && release.tag_name) {
+      if (release.html_url) link.href = release.html_url;
+      const tag = release.tag_name;
+      const label = link.dataset.releaseLabel || 'LATEST RELEASE';
+      const dot = link.querySelector('.dot') ? '<span class="dot"></span> ' : '';
+      link.replaceChildren();
+      if (dot) {
+        const indicator = document.createElement('span');
+        indicator.className = 'dot';
+        link.append(indicator, ' ');
+      }
+      link.append(label + ' · ' + tag + ' ');
+      const arrow = document.createElement('span');
+      arrow.setAttribute('aria-hidden', 'true');
+      arrow.textContent = '↗';
+      link.append(arrow);
+    }
+  } catch {}
+})();

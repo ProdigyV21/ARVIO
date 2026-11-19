@@ -4,7 +4,7 @@ import { useTranslation } from "@/lib/i18n";
 
 import { Bookmark, Check, EyeOff, Info, Trash2, X } from "lucide-react";
 import { useEffect, useState } from "react";
-import { useApp } from "@/lib/store";
+import { useAppPick } from "@/lib/store";
 
 export function MediaContextMenu() {
   const translateUi = useTranslation();
@@ -18,7 +18,7 @@ export function MediaContextMenu() {
     watchlist,
     isWatched,
     continueWatching
-  } = useApp();
+  } = useAppPick("activeContextMenu", "closeContextMenu", "openDetails", "toggleWatchlist", "toggleWatched", "removeFromContinueWatching", "watchlist", "isWatched", "continueWatching");
 
   const [mounted, setMounted] = useState(false);
 

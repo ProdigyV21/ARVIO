@@ -11,9 +11,9 @@ const { chromium } = require('@playwright/test');
 const root = path.resolve(__dirname, '..');
 const evidence = path.resolve(root, '../artifacts/player-loading-ui');
 const fixture = path.resolve(root, '../app/src/androidTest/assets/library');
-const styles = ['globals.css', 'premium.css', 'tv-guide.css', 'source-setup.css'];
+const { APP_SHEETS: styles } = require('./app-styles.cjs');
 const filename = path.join(root, 'components/player/PlayerOverlay.tsx');
-const source = ts.createSourceFile(filename, fs.readFileSync(filename, 'utf8'), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+const source = ts.createSourceFile(filename, require('../tests/sources.cjs').playerSource(), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
 const matches = [];
 function visit(node) {
   if (ts.isJsxElement(node) && node.openingElement.attributes.properties.some(attr =>
@@ -35,7 +35,7 @@ function markup(logo) {
 
 async function main() {
   fs.mkdirSync(evidence, { recursive: true });
-  const files = new Map(styles.map(name => ['/' + name, { type: 'text/css', data: fs.readFileSync(path.join(root, 'app', name)) }]));
+  const files = new Map(styles.map(name => ['/' + name, { type: 'text/css', data: fs.readFileSync(path.join(root, name)) }]));
   files.set('/logo.png', { type: 'image/png', data: fs.readFileSync(path.join(fixture, '157336-logo.png')) });
   files.set('/backdrop.jpg', { type: 'image/jpeg', data: fs.readFileSync(path.join(fixture, '157336-backdrop.jpg')) });
   const server = http.createServer((req, res) => {

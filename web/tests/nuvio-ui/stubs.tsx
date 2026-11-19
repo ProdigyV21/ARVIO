@@ -6,11 +6,15 @@ const snapshot = {
   profiles: [{ profileId: 1, name: "Main", addons: [], plugins: [], collectionsJson: null, homeCatalogSettings: null }]
 };
 
-export const authClient = { session: { email: "demo@arvio.example" } };
+export const authClient = { session: { email: "demo@arvio.example" } as { email: string } | null, signOut() { authClient.session = null; } };
+export const SESSION_KEY = "arvio.test.session";
+export const decodeJwtPayload = () => ({});
+export const getAuthPortalUrl = () => "https://auth.invalid";
 export const defaultSettings = {};
 export const CONTENT_LANGUAGE_OPTIONS = [["en-US", "English"]];
 export const LanguageProvider = ({ children }: { children: ReactNode }) => children;
-export const useTranslation = () => (value: string) => value;
+export const useTranslation = () => (value: string, values: Record<string, string | number> = {}) =>
+  value.replace(/\{(\w+)\}/g, (match, key: string) => key in values ? String(values[key]) : match);
 export const loadStored = (_key: string, fallback: unknown) => fallback;
 export const saveStored = () => {};
 export const installAddon = async () => { throw new Error("Unexpected addon installation"); };

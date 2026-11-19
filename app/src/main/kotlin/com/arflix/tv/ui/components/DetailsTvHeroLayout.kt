@@ -12,6 +12,7 @@ internal fun DetailsTvHeroLayout(
     restingRowsHeight: Dp,
     expandedRowsHeight: Dp,
     expansionProgress: Float,
+    heroGap: Dp = 12.dp,
     modifier: Modifier = Modifier,
     content: @Composable () -> Unit,
 ) {
@@ -23,7 +24,7 @@ internal fun DetailsTvHeroLayout(
             restingRowsHeightPx = restingRowsHeight.roundToPx(),
             expandedRowsHeightPx = expandedRowsHeight.roundToPx(),
             expansionProgress = expansionProgress,
-            gapPx = 12.dp.toPx(),
+            gapPx = heroGap.toPx(),
         )
         val rows = measurables[1].measure(
             constraints.copy(minHeight = bounds.rowsHeightPx, maxHeight = bounds.rowsHeightPx)

@@ -272,10 +272,10 @@ internal fun SegmentedTypeControl(
             val selected = index == chip.selectedSegment
             Box(
                 modifier = Modifier
-                    .clip(RoundedCornerShape(6.dp))
+                    .clip(RoundedCornerShape(8.dp))
                     .background(
                         if (selected) Color.White.copy(alpha = 0.92f) else Color.Transparent,
-                        RoundedCornerShape(6.dp)
+                        RoundedCornerShape(8.dp)
                     )
                     .then(
                         if (isTouchDevice) {

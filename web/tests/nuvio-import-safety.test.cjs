@@ -115,7 +115,8 @@ test('an import leaves every settings field it does not own untouched', async ()
   assert.equal(after.oledBlackBackground, true);
   assert.equal(after.subtitleAiEnabled, true);
   assert.equal(after.subtitleAiApiKey, 'the-users-saved-key');
-  assert.equal(after.subtitleAiModel, 'groq');
+  // A legacy web value may be rewritten as the same model in Android's vocabulary.
+  assert.ok(['groq', 'GROQ_LLAMA_70B'].includes(after.subtitleAiModel), after.subtitleAiModel);
   // …and so is the IPTV setup, which the same write used to clear.
   same(after.iptvByProfile.p1.playlists, before.iptvByProfile.p1.playlists);
   same(after.iptvByProfile.p1.favoriteChannels, before.iptvByProfile.p1.favoriteChannels);

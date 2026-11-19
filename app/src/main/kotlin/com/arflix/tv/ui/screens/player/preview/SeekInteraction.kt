@@ -19,9 +19,9 @@ internal data class SeekInteraction(
     val quickVisible: Boolean
         get() = surface == SeekSurface.Quick && (phase == SeekPhase.QuickSkip || phase == SeekPhase.Browsing)
 
-    fun autoCommitDelayMs(nowMs: Long): Long? =
+    fun autoCommitDelayMs(nowMs: Long, previewPending: Boolean = false): Long? =
         if (browsing && surface != SeekSurface.Touch) {
-            (2_000L - (nowMs - lastInputMs).coerceAtLeast(0L)).coerceAtLeast(0L)
+            ((if (previewPending) 10_000L else 2_000L) - (nowMs - lastInputMs).coerceAtLeast(0L)).coerceAtLeast(0L)
         } else null
 
     fun step(

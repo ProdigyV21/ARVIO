@@ -1,0 +1,113 @@
+/* Addons screen and addon manager. Imported by AddonsScreen.tsx and
+   AddonManager.tsx. */
+
+.section-heading .eyebrow {
+  margin-bottom: 6px;
+  color: var(--soft);
+  font-size: 20px;
+}
+@media (max-width: 680px) {
+
+  .section-heading {
+    padding: 16px var(--phone-gutter) 16px;
+  }
+
+  .section-heading .eyebrow {
+    font-size: 13px;
+    margin-bottom: 4px;
+    letter-spacing: 0.02em;
+  }
+}
+.source-setup-panel { margin: 0 64px 24px; padding: 20px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface, #111); }
+.addon-install-help { margin: 8px 64px 24px; color: var(--muted); font-size: 13px; }
+@media (max-width: 900px) {
+  .source-setup-panel, .addon-install-help { margin-inline: 24px; }
+}
+
+/* Addon manager (Addons screen; reusable from Settings). */
+.addon-manager { display: grid; gap: 22px; max-width: 920px; }
+.addons-intro { margin: 6px 0 0; color: #a8adb3; font-size: 14px; line-height: 1.5; max-width: 640px; }
+.addon-installer { display: grid; gap: 14px; }
+.addon-install-form { display: grid; gap: 8px; }
+.addon-install-form label { font-size: 14px; font-weight: 650; color: #e8e8e8; }
+.addon-install-row { display: flex; gap: 10px; flex-wrap: wrap; }
+.addon-install-row input { flex: 1 1 280px; min-width: 0; min-height: 46px; padding: 8px 14px; border-radius: 10px; border: 1px solid #2f3337; background: #121315; color: #fff; font-size: 15px; }
+.addon-install-row input:focus { outline: none; border-color: var(--accent, #2ec4b6); }
+.addon-install-row input[aria-invalid="true"] { border-color: #ff8a80; }
+.addon-install-row button { min-height: 46px; padding-inline: 18px; }
+.addon-install-form small { color: #a3a8ae; font-size: 12.5px; line-height: 1.45; }
+.addon-error { margin: 0; color: #ffb4ab; font-size: 13.5px; }
+
+.addon-preview { display: grid; gap: 12px; padding: 18px; border: 1px solid #2f3337; border-radius: 14px; background: #121416; }
+.addon-preview-head { display: flex; gap: 14px; align-items: center; }
+.addon-preview-head h3 { margin: 0; font-size: 19px; }
+.addon-preview-version { margin: 2px 0 0; color: #a3a8ae; font-size: 13px; }
+.addon-preview-description { margin: 0; color: #cfd3d8; font-size: 14px; line-height: 1.5; overflow-wrap: anywhere; }
+.addon-preview-provides { margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 13px; color: #a3a8ae; }
+.addon-preview-warning { margin: 0; display: flex; gap: 8px; align-items: flex-start; padding: 10px 12px; border-radius: 10px; background: #2a2210; color: #f3e1b5; font-size: 13px; line-height: 1.45; }
+.addon-preview-warning svg { flex-shrink: 0; margin-top: 1px; }
+.addon-preview-configure { margin: 0; font-size: 13px; color: #cfd3d8; }
+.addon-preview-configure a, .addon-icon[href] { color: inherit; }
+.addon-preview-configure a { display: inline-flex; align-items: center; gap: 5px; color: #9adebf; }
+.addon-duplicate { display: grid; gap: 10px; padding: 12px; border-radius: 10px; border: 1px solid #6b5a2c; background: #1d190e; }
+.addon-duplicate p { margin: 0; font-size: 14px; line-height: 1.5; color: #f3e6c2; }
+.addon-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.addon-actions button { min-height: 42px; padding-inline: 16px; }
+
+.addon-logo { flex: none; display: grid; place-items: center; overflow: hidden; border-radius: 10px; background: #1c1e21; color: #9fa5ab; }
+.addon-logo img { width: 100%; height: 100%; object-fit: contain; }
+.addon-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.addon-chips span { padding: 2px 8px; border-radius: 999px; background: #ffffff12; color: #d5d8dc; font-size: 12px; }
+
+.addon-empty { color: #a3a8ae; margin: 0; }
+.addon-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.addon-item { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; padding: 14px; border: 1px solid #25282c; border-radius: 12px; background: #0f1012; }
+.addon-item.is-off { opacity: 0.72; }
+.addon-item-main { flex: 1 1 240px; min-width: 0; display: grid; gap: 6px; }
+.addon-item-title { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; min-width: 0; }
+.addon-item-title strong { font-size: 15.5px; overflow-wrap: anywhere; }
+.addon-version { color: #a3a8ae; font-size: 12px; }
+.addon-off { padding: 1px 7px; border-radius: 999px; border: 1px solid #44484d; font-size: 11px; color: #c9cdd1; }
+.addon-url { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.addon-url code { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #9ea3a9; font-size: 12px; }
+.addon-url-toggle { flex: none; width: 30px; height: 30px; display: grid; place-items: center; padding: 0; border: 0; border-radius: 50%; background: transparent; color: #9ea3a9; }
+@media (hover: hover) and (pointer: fine) {
+  .addon-url-toggle:hover {
+    background: #ffffff14;
+    color: #fff;
+  }
+}
+.addon-item-actions { display: flex; align-items: center; gap: 6px; flex: none; }
+.addon-icon { width: 40px; height: 40px; display: grid; place-items: center; flex: none; padding: 0; border: 0; border-radius: 50%; background: #ffffff10; color: #e4e6e8; }
+@media (hover: hover) and (pointer: fine) {
+  .addon-icon:hover:not(:disabled) {
+    background: #ffffff22;
+  }
+}
+.addon-icon:disabled { opacity: 0.35; }
+@media (hover: hover) and (pointer: fine) {
+  .addon-icon.is-danger:hover {
+    background: #b3261e;
+    color: #fff;
+  }
+}
+.addon-icon:focus-visible, .addon-url-toggle:focus-visible, .addon-switch:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+.addon-switch { position: relative; width: 44px; height: 26px; flex: none; padding: 0; border: 0; border-radius: 13px; background: #3a3d42; margin-inline-end: 4px; }
+.addon-switch::after { content: ""; position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 50%; background: #fff; transition: transform 160ms ease; }
+[dir="rtl"] .addon-switch::after { left: auto; right: 3px; }
+.addon-switch.is-on { background: var(--accent, #2ec4b6); }
+.addon-switch.is-on::after { transform: translateX(18px); }
+[dir="rtl"] .addon-switch.is-on::after { transform: translateX(-18px); }
+.addon-confirm { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; flex: 1 1 100%; justify-content: flex-end; font-size: 13.5px; color: #f1d4d0; }
+.addon-confirm span { flex: 1 1 220px; }
+.addon-confirm button { min-height: 38px; padding-inline: 14px; }
+.addon-confirm .danger { border: 0; border-radius: 8px; background: #b3261e; color: #fff; }
+@media (max-width: 560px) {
+  .addon-item-actions { width: 100%; justify-content: flex-end; }
+}
+@media (prefers-reduced-motion: reduce) { .addon-switch::after { transition: none; } }
+/* Align with the section heading's gutter; text buttons (the global .secondary is a round icon button). */
+.addons-screen > .addon-manager { margin: 24px 3.35vw 48px; }
+@media (max-width: 760px) { .addons-screen > .addon-manager { margin-inline: 16px; } }
+.addon-manager :is(.primary, .secondary) { width: auto; min-width: max-content; min-height: 42px; padding: 0 16px; border-radius: 999px; font-size: 14px; gap: 6px; }
+.addon-switch.is-on::after { background: #0a0a0a; }

@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const postcss = require('postcss');
 
-const css = postcss.parse(fs.readFileSync(path.join(__dirname, '../app/globals.css'), 'utf8'));
+const css = postcss.parse(fs.readFileSync(path.join(__dirname, '../components/player/player.css'), 'utf8'));
 function declarations(selector) {
   const values = {};
   css.walkRules(rule => {

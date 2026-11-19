@@ -4,7 +4,8 @@ function premiumDestination(pathname) {
   if (!match) return null;
   const [, kind, placement] = match;
   if (kind === "membership" && !["nav", "spotlight", "details", "footer"].includes(placement)) return null;
-  const target = new URL(kind === "premium" ? "https://web.arvio.tv/" : "https://ko-fi.com/arvio/tiers");
+  // Checkout happens inside ARVIO Web, so legacy membership links open the web app too.
+  const target = new URL("https://web.arvio.tv/");
   target.searchParams.set("utm_source", "arvio.tv");
   target.searchParams.set("utm_medium", "website");
   target.searchParams.set("utm_campaign", "premium");

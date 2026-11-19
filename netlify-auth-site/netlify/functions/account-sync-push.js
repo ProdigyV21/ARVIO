@@ -11,6 +11,7 @@ const {
   appendSnapshotEvent
 } = require("./_backend");
 const { preserveWatchlistChanges } = require("./_watchlist-sync");
+const { mergeProfileList, mergeAccountFields } = require("./_sync-merge");
 
 const TRACKING_V2_FIELDS = [
   "provider",
@@ -18,7 +19,8 @@ const TRACKING_V2_FIELDS = [
   "continueWatchingReadMode",
   "watchedReadMode",
   "writeToTrakt",
-  "writeToSimkl"
+  "writeToSimkl",
+  "writeToWeTrakr"
 ];
 
 function timestampOf(value, field) {
@@ -122,7 +124,7 @@ function preserveIptvFields(existingSnapshot, incomingPayload) {
   if (!previous?.iptvByProfile || !previous?.fieldUpdatedAt) return incomingPayload;
   const fields = new Set(["m3uUrl", "epgUrl", "playlists", "stalkerPortals", "stalkerPortalUrl",
     "stalkerMacAddress", "favoriteGroups", "favoriteChannels", "hiddenGroups", "lockedGroups",
-    "groupOrder", "groupOrderSchema", "sortOrder"]);
+    "groupOrder", "groupOrderSchema", "sortOrder", "channelOrder", "groupNames"]);
   const profiles = { ...incomingPayload.iptvByProfile };
   const timestamps = { ...incomingPayload.fieldUpdatedAt };
   const activeIds = Array.isArray(incomingPayload.profiles)
@@ -147,7 +149,32 @@ function preserveIptvFields(existingSnapshot, incomingPayload) {
   return { ...incomingPayload, iptvByProfile: profiles, fieldUpdatedAt: timestamps };
 }
 
-exports._test = { preserveTrackingRouting, preserveTraktTokens, preserveIptvFields, preserveWatchlistChanges };
+function storedPayloadOf(snapshot) {
+  const payload = snapshot?.payload;
+  if (typeof payload !== "string") return payload && typeof payload === "object" ? payload : null;
+  try { return JSON.parse(payload); } catch { return null; }
+}
+
+// Field-level merges against the stored snapshot so a peer's edit made between
+// this client's read and its write survives (see _sync-merge.js). The profile
+// list merges first: the per-profile merges below keep data only for profiles
+// in the merged list. A merge bug must never block a sync, so an unexpected
+// failure falls back to the previous (domain-only) protections.
+function mergeWithStoredSnapshot(existing, payload, baseUpdatedAtMs) {
+  const stored = storedPayloadOf(existing);
+  const snapshot = stored ? { ...existing, payload: stored } : existing;
+  const domainMerges = (value) => preserveWatchlistChanges(snapshot,
+    preserveIptvFields(snapshot, preserveTraktTokens(snapshot, preserveTrackingRouting(snapshot, value))));
+  if (!stored) return domainMerges(payload);
+  try {
+    return mergeAccountFields(stored, domainMerges(mergeProfileList(stored, payload, baseUpdatedAtMs)), { baseUpdatedAtMs });
+  } catch (error) {
+    console.error("account-sync-push: field merge failed; using domain merges only", error);
+    return domainMerges(payload);
+  }
+}
+
+exports._test = { preserveTrackingRouting, preserveTraktTokens, preserveIptvFields, preserveWatchlistChanges, mergeWithStoredSnapshot };
 
 exports.handler = async (event) => {
   const cors = options(event);
@@ -173,12 +200,7 @@ exports.handler = async (event) => {
       // Server-side addon wipe guard: refuse pushes that catastrophically shrink
       // the addon list (recurring client bug); existing addons are merged back.
       const { payload: addonGuardedPayload, guarded } = applyAddonWipeGuard(existing, parsedPayload);
-      const guardedPayload = preserveWatchlistChanges(existing,
-        preserveIptvFields(existing, preserveTraktTokens(
-          existing,
-          preserveTrackingRouting(existing, addonGuardedPayload)
-        ))
-      );
+      const guardedPayload = mergeWithStoredSnapshot(existing, addonGuardedPayload, Number(body.baseUpdatedAtMs) || 0);
       if (guarded) {
         console.warn("account-sync-push: addon wipe guard engaged", {
           user: identity.supabaseUserId,

@@ -36,6 +36,7 @@ import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Icon
@@ -74,6 +75,9 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.core.widget.doAfterTextChanged
 import com.arflix.tv.R
+import com.arflix.tv.data.repository.IptvConnectionLimit
+import com.arflix.tv.data.repository.IptvConnectionLimitState
+import com.arflix.tv.server.PhoneInputServer
 import com.arflix.tv.ui.skin.resolveAccentColor
 import com.arflix.tv.ui.theme.ArflixTypography
 import com.arflix.tv.ui.theme.BackgroundElevated
@@ -133,8 +137,30 @@ fun IptvPlaylistModal(
     isAccountRefreshing: Boolean = false,
     /** Asks the provider again for the saved source; null (adding a new source) hides the button. */
     onRefreshAccount: (() -> Unit)? = null,
+    /** "Provider allowance: …" of the saved source; null hides the line. */
+    providerAllowanceLabel: String? = null,
+    connectionLimitLabel: String? = null,
+    /** Moves the saved source to its next connection limit; null (adding a new source) hides the row. */
+    onStepConnectionLimit: (() -> Unit)? = null,
+    /** Adding a new source: receives the row's choice just before the save callback; null hides the row. */
+    onNewSourceConnectionLimit: ((IptvConnectionLimit) -> Unit)? = null,
 ) {
-    val lastLeftIndex = if (onRefreshAccount != null) 6 else 5
+    // A new source has no id to store a limit under yet, so the row steps a choice kept here until the save.
+    var newSourceConnectionLimit by remember { mutableStateOf(IptvConnectionLimit.AUTO) }
+    val addsConnectionLimit = !isEditing && onStepConnectionLimit == null && onNewSourceConnectionLimit != null
+    val stepConnectionLimit: (() -> Unit)? = onStepConnectionLimit
+        ?: if (addsConnectionLimit) ({ newSourceConnectionLimit = newSourceConnectionLimit.next() }) else null
+    val shownConnectionLimitLabel = if (addsConnectionLimit) {
+        iptvConnectionLimitLabel(IptvConnectionLimitState(newSourceConnectionLimit, effectiveLimit = null))
+    } else connectionLimitLabel.orEmpty()
+    val connectionLimitLeftIndex = if (stepConnectionLimit != null) 6 else null
+    val refreshLeftIndex = when {
+        onRefreshAccount == null -> null
+        connectionLimitLeftIndex != null -> 7
+        else -> 6
+    }
+    val phoneLeftIndex = (refreshLeftIndex ?: connectionLimitLeftIndex ?: 5) + 1
+    val lastLeftIndex = phoneLeftIndex
     var sourceType by remember(initialSourceType, initialXtreamUser, initialXtreamPass) {
         mutableStateOf(
             when {
@@ -158,6 +184,7 @@ fun IptvPlaylistModal(
     var xtreamUser by remember(initialXtreamUser) { mutableStateOf(initialXtreamUser) }
     var xtreamPass by remember(initialXtreamPass) { mutableStateOf(initialXtreamPass) }
     var epgSources by remember(initialEpg) { mutableStateOf(initialEpg) }
+    var phoneRevealed by remember(sourceType) { mutableStateOf(false) }
 
     var stalkerName by remember(initialName, isEditing, initialSourceType) {
         mutableStateOf(
@@ -178,7 +205,8 @@ fun IptvPlaylistModal(
     var activePane by remember(isEditing) {
         mutableStateOf(if (isEditing) ActivePane.RIGHT else ActivePane.LEFT)
     }
-    // Left pane indices: 0 = M3U, 1 = Xtream, 2 = Stalker, 3 = Live, 4 = Movies, 5 = Series
+    // Left pane indices: 0 = M3U, 1 = Xtream, 2 = Stalker, 3 = Live, 4 = Movies, 5 = Series,
+    // then optional Connection limit / Refresh rows, followed by Use your phone.
     var leftFocusedIndex by remember(sourceType) {
         mutableIntStateOf(
             when (sourceType) {
@@ -206,6 +234,15 @@ fun IptvPlaylistModal(
     val view = LocalView.current
     val modalFocusRequester = remember { FocusRequester() }
     val formScrollState = rememberScrollState()
+    val leftPaneScrollState = rememberScrollState()
+    // Reveal the phone button and, when expanded, its QR panel at the end of the left pane.
+    val leftPaneEndFocused = activePane == ActivePane.LEFT && leftFocusedIndex == lastLeftIndex && !LocalDeviceType.current.isTouchDevice()
+    LaunchedEffect(leftPaneEndFocused, leftPaneScrollState.maxValue) {
+        if (leftPaneEndFocused) leftPaneScrollState.animateScrollTo(leftPaneScrollState.maxValue)
+    }
+    // The last row skips its own reveal: a second scroll could stop the one above short of the card.
+    fun revealsLeftRow(index: Int?): Boolean =
+        activePane == ActivePane.LEFT && leftFocusedIndex == index && !leftPaneEndFocused
 
     // 0: Name, 1: URL/Host, 2: EPG/User/MAC, 3: Pass, 4: EPG (Xtream)
     val editTextRefs = remember { MutableList<EditText?>(5) { null } }
@@ -247,6 +284,7 @@ fun IptvPlaylistModal(
 
     fun saveSource() {
         hideKeyboardAll()
+        if (addsConnectionLimit) onNewSourceConnectionLimit?.invoke(newSourceConnectionLimit)
         if (sourceType == IptvSourceType.STALKER) {
             onSaveStalker(stalkerName, stalkerPortalUrl, stalkerMac, importLiveTv, importVod, importSeries)
         } else {
@@ -374,8 +412,8 @@ fun IptvPlaylistModal(
                     .navigationBarsPadding()
                     .imePadding()
                     .heightIn(max = maxDialogHeight)
-                    .background(BackgroundElevated, RoundedCornerShape(14.dp))
-                    .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(14.dp))
+                    .background(BackgroundElevated, RoundedCornerShape(16.dp))
+                    .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(16.dp))
                     .padding(
                         horizontal = if (isTvLayout) 20.dp else 16.dp,
                         vertical = if (isTvLayout) 20.dp else 18.dp
@@ -408,10 +446,13 @@ fun IptvPlaylistModal(
                                         // Jump across to Left Pane
                                         activePane = ActivePane.LEFT
                                         leftFocusedIndex = when {
+                                            rightFocusedRow == actionsRow() -> phoneLeftIndex
                                             rightFocusedRow == 0 -> 2 // Land on Stalker tab, then Left -> Xtream -> M3U
                                             rightFocusedRow == 1 -> 3 // Live toggle
                                             rightFocusedRow == 2 -> 4 // Movies toggle
-                                            else -> 5 // Series toggle
+                                            rightFocusedRow == 3 -> 5 // Series toggle
+                                            rightFocusedRow == 4 -> connectionLimitLeftIndex ?: 5
+                                            else -> lastLeftIndex
                                         }
                                         true
                                     }
@@ -437,7 +478,9 @@ fun IptvPlaylistModal(
                                             0, 1, 2 -> 0 // Playlist/Portal Name
                                             3 -> 1 // URL
                                             4 -> 2 // EPG / User / MAC
-                                            else -> if (sourceType == IptvSourceType.XTREAM) 3 else 2 // Password / EPG
+                                            5 -> if (sourceType == IptvSourceType.XTREAM) 3 else 2 // Password / EPG
+                                            phoneLeftIndex -> actionsRow()
+                                            else -> if (sourceType == IptvSourceType.XTREAM) 4 else 2 // EPG
                                         }
                                         rightFocusedColumn = 0
                                         true
@@ -505,7 +548,10 @@ fun IptvPlaylistModal(
                                         3 -> importLiveTv = !importLiveTv
                                         4 -> importVod = !importVod
                                         5 -> importSeries = !importSeries
-                                        6 -> if (!isAccountRefreshing) onRefreshAccount?.invoke()
+                                        // A held OK repeats its key-down and must step only once.
+                                        connectionLimitLeftIndex -> if (event.nativeKeyEvent.repeatCount == 0) stepConnectionLimit?.invoke()
+                                        refreshLeftIndex -> if (!isAccountRefreshing) onRefreshAccount?.invoke()
+                                        phoneLeftIndex -> if (event.nativeKeyEvent.repeatCount == 0) phoneRevealed = !phoneRevealed
                                     }
                                     true
                                 } else {
@@ -538,8 +584,11 @@ fun IptvPlaylistModal(
                         horizontalArrangement = Arrangement.spacedBy(22.dp)
                     ) {
                         // Left Pane: Source Type & Content Selection
+                        // Scrolls because a saved source's rows can outgrow a 1080p TV's dialog.
                         Column(
-                            modifier = Modifier.width(240.dp)
+                            modifier = Modifier
+                                .width(240.dp)
+                                .verticalScroll(leftPaneScrollState)
                         ) {
                             Text(
                                 text = stringResource(
@@ -567,7 +616,9 @@ fun IptvPlaylistModal(
 
                             // 3 Source Type Tabs: M3U | Xtream | Stalker
                             Row(
-                                modifier = Modifier.fillMaxWidth(),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .revealFocusedField(activePane == ActivePane.LEFT && leftFocusedIndex in 0..2),
                                 horizontalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
                                 SourceTypeTab(
@@ -621,6 +672,7 @@ fun IptvPlaylistModal(
                             ToggleRow(
                                 label = stringResource(R.string.live),
                                 value = importLiveTv,
+                                modifier = Modifier.revealFocusedField(revealsLeftRow(3)),
                                 isFocused = activePane == ActivePane.LEFT && leftFocusedIndex == 3,
                                 onClick = {
                                     activePane = ActivePane.LEFT
@@ -634,6 +686,7 @@ fun IptvPlaylistModal(
                             ToggleRow(
                                 label = stringResource(R.string.movies),
                                 value = importVod,
+                                modifier = Modifier.revealFocusedField(revealsLeftRow(4)),
                                 isFocused = activePane == ActivePane.LEFT && leftFocusedIndex == 4,
                                 onClick = {
                                     activePane = ActivePane.LEFT
@@ -647,6 +700,7 @@ fun IptvPlaylistModal(
                             ToggleRow(
                                 label = stringResource(R.string.series),
                                 value = importSeries,
+                                modifier = Modifier.revealFocusedField(revealsLeftRow(5)),
                                 isFocused = activePane == ActivePane.LEFT && leftFocusedIndex == 5,
                                 onClick = {
                                     activePane = ActivePane.LEFT
@@ -655,15 +709,30 @@ fun IptvPlaylistModal(
                                 }
                             )
 
+                            if (stepConnectionLimit != null) {
+                                Spacer(modifier = Modifier.height(8.dp))
+                                ConnectionLimitRow(
+                                    value = shownConnectionLimitLabel,
+                                    modifier = Modifier.revealFocusedField(revealsLeftRow(connectionLimitLeftIndex)),
+                                    isFocused = activePane == ActivePane.LEFT && leftFocusedIndex == connectionLimitLeftIndex,
+                                    onClick = {
+                                        activePane = ActivePane.LEFT
+                                        leftFocusedIndex = connectionLimitLeftIndex ?: leftFocusedIndex
+                                        stepConnectionLimit()
+                                    }
+                                )
+                            }
+
                             if (onRefreshAccount != null) {
                                 Spacer(modifier = Modifier.height(16.dp))
                                 AccountRefreshBlock(
+                                    allowanceLabel = providerAllowanceLabel,
                                     checkedAtLabel = accountCheckedAtLabel,
                                     isRefreshing = isAccountRefreshing,
-                                    isFocused = activePane == ActivePane.LEFT && leftFocusedIndex == 6,
+                                    isFocused = activePane == ActivePane.LEFT && leftFocusedIndex == refreshLeftIndex,
                                     onClick = {
                                         activePane = ActivePane.LEFT
-                                        leftFocusedIndex = 6
+                                        leftFocusedIndex = refreshLeftIndex ?: leftFocusedIndex
                                         if (!isAccountRefreshing) onRefreshAccount()
                                     }
                                 )
@@ -676,9 +745,9 @@ fun IptvPlaylistModal(
                                 Column(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .clip(RoundedCornerShape(10.dp))
+                                        .clip(RoundedCornerShape(12.dp))
                                         .background(Color.White.copy(alpha = 0.05f))
-                                        .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(10.dp))
+                                        .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(12.dp))
                                         .padding(12.dp)
                                 ) {
                                     Text(
@@ -693,6 +762,62 @@ fun IptvPlaylistModal(
                                         color = TextSecondary
                                     )
                                 }
+                            }
+
+                            // On a TV, on demand: fill the form from the phone. An empty phone field leaves the TV's as it is.
+                            Spacer(modifier = Modifier.height(16.dp))
+                            val epgLabel = stringResource(R.string.settings_label_epg_sources)
+                            val phoneFields = when (sourceType) {
+                                IptvSourceType.M3U -> listOf(
+                                    PhoneInputServer.Field(stringResource(R.string.settings_label_playlist_name), playlistName),
+                                    PhoneInputServer.Field(stringResource(R.string.settings_label_m3u_url), playlistUrl),
+                                    PhoneInputServer.Field(epgLabel, epgSources, multiline = true),
+                                )
+                                IptvSourceType.XTREAM -> listOf(
+                                    PhoneInputServer.Field(stringResource(R.string.settings_label_playlist_name), playlistName),
+                                    PhoneInputServer.Field(stringResource(R.string.settings_label_server_url), playlistUrl),
+                                    PhoneInputServer.Field(stringResource(R.string.settings_label_username), xtreamUser),
+                                    PhoneInputServer.Field(stringResource(R.string.settings_label_password), xtreamPass, secret = true),
+                                    PhoneInputServer.Field(epgLabel, epgSources, multiline = true),
+                                )
+                                IptvSourceType.STALKER -> listOf(
+                                    PhoneInputServer.Field(stringResource(R.string.settings_stalker_portal_name_label), stalkerName),
+                                    PhoneInputServer.Field(stringResource(R.string.settings_stalker_label_portal_url), stalkerPortalUrl),
+                                    PhoneInputServer.Field(stringResource(R.string.settings_stalker_label_mac), stalkerMac),
+                                )
+                            }
+                            PhoneInputButton(
+                                revealed = phoneRevealed,
+                                focused = activePane == ActivePane.LEFT && leftFocusedIndex == phoneLeftIndex,
+                                modifier = Modifier.fillMaxWidth().revealFocusedField(revealsLeftRow(phoneLeftIndex)),
+                                onClick = {
+                                    activePane = ActivePane.LEFT
+                                    leftFocusedIndex = phoneLeftIndex
+                                    phoneRevealed = !phoneRevealed
+                                },
+                            )
+                            if (phoneRevealed) {
+                                Spacer(modifier = Modifier.height(10.dp))
+                                PhoneInputPanel(
+                                    title = "IPTV · ${sourceType.name}",
+                                    fields = phoneFields,
+                                    onValues = { values ->
+                                        fun v(i: Int) = values.getOrNull(i)?.takeIf { it.isNotEmpty() }
+                                        when (sourceType) {
+                                            IptvSourceType.M3U -> {
+                                                v(0)?.let { playlistName = it }; v(1)?.let { playlistUrl = it }; v(2)?.let { epgSources = it }
+                                            }
+                                            IptvSourceType.XTREAM -> {
+                                                v(0)?.let { playlistName = it }; v(1)?.let { playlistUrl = it }
+                                                v(2)?.let { xtreamUser = it }; v(3)?.let { xtreamPass = it }; v(4)?.let { epgSources = it }
+                                            }
+                                            IptvSourceType.STALKER -> {
+                                                v(0)?.let { stalkerName = it }; v(1)?.let { stalkerPortalUrl = it }; v(2)?.let { stalkerMac = it }
+                                            }
+                                        }
+                                    },
+                                    qrSize = 88.dp,
+                                )
                             }
                         }
 
@@ -1113,15 +1238,15 @@ fun IptvPlaylistModal(
                                 Box(
                                     modifier = Modifier
                                         .weight(1f)
-                                        .clip(RoundedCornerShape(10.dp))
+                                        .clip(RoundedCornerShape(12.dp))
                                         .background(
                                             if (isCancelFocused) Color.White else Color.Black.copy(alpha = 0.82f),
-                                            RoundedCornerShape(10.dp)
+                                            RoundedCornerShape(12.dp)
                                         )
                                         .border(
                                             width = 1.dp,
                                             color = if (isCancelFocused) Color.White else Color.White.copy(alpha = 0.14f),
-                                            shape = RoundedCornerShape(10.dp)
+                                            shape = RoundedCornerShape(12.dp)
                                         )
                                         .clickable {
                                             hideKeyboardAll()
@@ -1140,15 +1265,15 @@ fun IptvPlaylistModal(
                                 Box(
                                     modifier = Modifier
                                         .weight(1.3f)
-                                        .clip(RoundedCornerShape(10.dp))
+                                        .clip(RoundedCornerShape(12.dp))
                                         .background(
                                             if (isSaveFocused) Color.White else Color.Black.copy(alpha = 0.82f),
-                                            RoundedCornerShape(10.dp)
+                                            RoundedCornerShape(12.dp)
                                         )
                                         .border(
                                             width = 1.dp,
                                             color = if (isSaveFocused) Color.White else Color.White.copy(alpha = 0.14f),
-                                            shape = RoundedCornerShape(10.dp)
+                                            shape = RoundedCornerShape(12.dp)
                                         )
                                         .clickable { saveSource() }
                                         .padding(vertical = 12.dp),
@@ -1362,9 +1487,9 @@ fun IptvPlaylistModal(
                                     Column(
                                         modifier = Modifier
                                             .fillMaxWidth()
-                                            .clip(RoundedCornerShape(10.dp))
+                                            .clip(RoundedCornerShape(12.dp))
                                             .background(Color.White.copy(alpha = 0.05f))
-                                            .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(10.dp))
+                                            .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(12.dp))
                                             .padding(12.dp)
                                     ) {
                                         Text(
@@ -1436,9 +1561,18 @@ fun IptvPlaylistModal(
                                 isFocused = false,
                                 onClick = { importSeries = !importSeries }
                             )
+                            if (stepConnectionLimit != null) {
+                                Spacer(modifier = Modifier.height(8.dp))
+                                ConnectionLimitRow(
+                                    value = shownConnectionLimitLabel,
+                                    isFocused = false,
+                                    onClick = stepConnectionLimit
+                                )
+                            }
                             if (onRefreshAccount != null) {
                                 Spacer(modifier = Modifier.height(12.dp))
                                 AccountRefreshBlock(
+                                    allowanceLabel = providerAllowanceLabel,
                                     checkedAtLabel = accountCheckedAtLabel,
                                     isRefreshing = isAccountRefreshing,
                                     isFocused = false,
@@ -1452,9 +1586,9 @@ fun IptvPlaylistModal(
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clip(RoundedCornerShape(10.dp))
-                                .background(Color.Black.copy(alpha = 0.82f), RoundedCornerShape(10.dp))
-                                .border(1.dp, Color.White.copy(alpha = 0.14f), RoundedCornerShape(10.dp))
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(Color.Black.copy(alpha = 0.82f), RoundedCornerShape(12.dp))
+                                .border(1.dp, Color.White.copy(alpha = 0.14f), RoundedCornerShape(12.dp))
                                 .clickable {
                                     pasteClipboardIntoRow(mobilePasteTargetIndex())
                                 }
@@ -1487,9 +1621,9 @@ fun IptvPlaylistModal(
                             Box(
                                 modifier = Modifier
                                     .weight(1f)
-                                    .clip(RoundedCornerShape(10.dp))
-                                    .background(Color.Black.copy(alpha = 0.82f), RoundedCornerShape(10.dp))
-                                    .border(1.dp, Color.White.copy(alpha = 0.14f), RoundedCornerShape(10.dp))
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(Color.Black.copy(alpha = 0.82f), RoundedCornerShape(12.dp))
+                                    .border(1.dp, Color.White.copy(alpha = 0.14f), RoundedCornerShape(12.dp))
                                     .clickable {
                                         hideKeyboardAll()
                                         onDismiss()
@@ -1507,8 +1641,8 @@ fun IptvPlaylistModal(
                             Box(
                                 modifier = Modifier
                                     .weight(1f)
-                                    .clip(RoundedCornerShape(10.dp))
-                                    .background(Color.White, RoundedCornerShape(10.dp))
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(Color.White, RoundedCornerShape(12.dp))
                                     .clickable { saveSource() }
                                     .padding(vertical = 12.dp),
                                 contentAlignment = Alignment.Center
@@ -1607,12 +1741,12 @@ private fun StepBadge(stepNumber: Int, isFocused: Boolean) {
             .size(20.dp)
             .background(
                 if (isFocused) Pink.copy(alpha = 0.20f) else Color.White.copy(alpha = 0.08f),
-                RoundedCornerShape(10.dp)
+                RoundedCornerShape(12.dp)
             )
             .border(
                 1.dp,
                 if (isFocused) Pink else Color.White.copy(alpha = 0.12f),
-                RoundedCornerShape(10.dp)
+                RoundedCornerShape(12.dp)
             ),
         contentAlignment = Alignment.Center
     ) {
@@ -1627,12 +1761,21 @@ private fun StepBadge(stepNumber: Int, isFocused: Boolean) {
 /** "Last checked" line plus the "Refresh now" button for the saved source's account details. */
 @Composable
 private fun AccountRefreshBlock(
+    allowanceLabel: String?,
     checkedAtLabel: String?,
     isRefreshing: Boolean,
     isFocused: Boolean,
     onClick: () -> Unit
 ) {
-    Column(modifier = Modifier.fillMaxWidth()) {
+    Column(modifier = Modifier.fillMaxWidth().revealFocusedField(isFocused)) {
+        if (allowanceLabel != null) {
+            Text(
+                text = allowanceLabel,
+                style = ArflixTypography.caption.copy(fontSize = 11.sp),
+                color = TextSecondary
+            )
+            Spacer(modifier = Modifier.height(if (checkedAtLabel != null) 2.dp else 6.dp))
+        }
         if (checkedAtLabel != null) {
             Text(
                 text = checkedAtLabel,
@@ -1644,15 +1787,15 @@ private fun AccountRefreshBlock(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(10.dp))
+                .clip(RoundedCornerShape(12.dp))
                 .background(
                     Color.White.copy(alpha = if (isFocused) 0.14f else 0.05f),
-                    RoundedCornerShape(10.dp)
+                    RoundedCornerShape(12.dp)
                 )
                 .border(
                     width = if (isFocused) 2.dp else 1.dp,
                     color = if (isFocused) resolveAccentColor(fallback = Pink) else Color.White.copy(alpha = 0.14f),
-                    shape = RoundedCornerShape(10.dp)
+                    shape = RoundedCornerShape(12.dp)
                 )
                 .clickable(onClick = onClick)
                 .padding(horizontal = 14.dp, vertical = 10.dp),
@@ -1678,25 +1821,103 @@ private fun AccountRefreshBlock(
     }
 }
 
+/** Value text and chevron instead of a switch; the title and its value take two lines in the narrow TV pane. */
+@Composable
+private fun ConnectionLimitRow(
+    value: String,
+    isFocused: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(
+                Color.White.copy(alpha = if (isFocused) 0.14f else 0.05f),
+                RoundedCornerShape(12.dp)
+            )
+            .border(
+                width = if (isFocused) 2.dp else 1.dp,
+                color = if (isFocused) resolveAccentColor(fallback = Pink) else Color.White.copy(alpha = 0.14f),
+                shape = RoundedCornerShape(12.dp)
+            )
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = stringResource(R.string.iptv_connection_limit_title),
+                style = ArflixTypography.caption,
+                color = if (isFocused) resolveAccentColor(fallback = Pink) else TextPrimary
+            )
+            Text(
+                text = value,
+                style = ArflixTypography.caption.copy(fontSize = 11.sp),
+                color = TextSecondary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+        Icon(
+            imageVector = Icons.Default.ChevronRight,
+            contentDescription = null,
+            tint = if (isFocused) resolveAccentColor(fallback = Pink) else TextSecondary,
+            modifier = Modifier.size(18.dp)
+        )
+    }
+}
+
+/**
+ * The row's value, e.g. "3 (2 at a time)"; the bracket appears only when the allowance caps the choice.
+ * Auto shows no number, because it follows the free connections the panel reports at play time.
+ */
+@Composable
+internal fun iptvConnectionLimitLabel(state: IptvConnectionLimitState?): String {
+    val setting = state?.setting ?: IptvConnectionLimit.AUTO
+    val effective = state?.effectiveLimit
+    val chosen = setting.explicit
+    return when {
+        setting == IptvConnectionLimit.AUTO -> stringResource(R.string.iptv_connection_limit_auto)
+        chosen == null -> stringResource(R.string.iptv_connection_limit_no_limit)
+        // A source with no account behind it (a local file) still shows what was chosen.
+        effective == null || chosen == effective -> stringResource(R.string.iptv_connection_limit_at_a_time, chosen)
+        else -> stringResource(R.string.iptv_connection_limit_with_effective, chosen.toString(), effective)
+    }
+}
+
+/** Null [maxConnections] means the provider has not reported an allowance for this login. */
+@Composable
+internal fun iptvProviderAllowanceLabel(maxConnections: Int?): String = when (maxConnections) {
+    null -> stringResource(R.string.iptv_provider_allowance_not_reported)
+    1 -> stringResource(R.string.iptv_provider_allowance, stringResource(R.string.iptv_account_one_stream))
+    else -> stringResource(
+        R.string.iptv_provider_allowance,
+        stringResource(R.string.iptv_account_streams, maxConnections)
+    )
+}
+
 @Composable
 private fun ToggleRow(
     label: String,
     value: Boolean,
     isFocused: Boolean,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     Row(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(10.dp))
+            .clip(RoundedCornerShape(12.dp))
             .background(
                 Color.White.copy(alpha = if (isFocused) 0.14f else 0.05f),
-                RoundedCornerShape(10.dp)
+                RoundedCornerShape(12.dp)
             )
             .border(
                 width = if (isFocused) 2.dp else 1.dp,
                 color = if (isFocused) resolveAccentColor(fallback = Pink) else Color.White.copy(alpha = 0.14f),
-                shape = RoundedCornerShape(10.dp)
+                shape = RoundedCornerShape(12.dp)
             )
             .clickable(onClick = onClick)
             .padding(horizontal = 14.dp, vertical = 10.dp),
@@ -1714,7 +1935,7 @@ private fun ToggleRow(
                 .height(22.dp)
                 .background(
                     color = if (value) SuccessGreen else Color.White.copy(alpha = 0.2f),
-                    shape = RoundedCornerShape(11.dp)
+                    shape = RoundedCornerShape(12.dp)
                 )
                 .padding(2.dp),
             contentAlignment = if (value) Alignment.CenterEnd else Alignment.CenterStart
@@ -1722,7 +1943,7 @@ private fun ToggleRow(
             Box(
                 modifier = Modifier
                     .size(18.dp)
-                    .background(Color.White, RoundedCornerShape(9.dp))
+                    .background(Color.White, RoundedCornerShape(12.dp))
             )
         }
     }
@@ -1769,12 +1990,12 @@ private fun InputFieldWithPaste(
                 .height(if (singleLine) 46.dp else 84.dp)
                 .background(
                     Color.White.copy(alpha = if (isInputFocused || isPasteFocused) 0.12f else 0.05f),
-                    RoundedCornerShape(10.dp)
+                    RoundedCornerShape(12.dp)
                 )
                 .border(
                     width = if (isInputFocused || isPasteFocused) 2.dp else 1.dp,
                     color = if (isInputFocused || isPasteFocused) resolveAccentColor(fallback = Pink) else Color.White.copy(alpha = 0.2f),
-                    shape = RoundedCornerShape(10.dp)
+                    shape = RoundedCornerShape(12.dp)
                 )
                 .padding(start = 2.dp, top = buttonPadding, bottom = buttonPadding, end = buttonPadding),
             verticalAlignment = Alignment.CenterVertically
@@ -1885,7 +2106,7 @@ private fun InputFieldWithPaste(
                 modifier = Modifier
                     .fillMaxHeight()
                     .aspectRatio(1f)
-                    .clip(RoundedCornerShape(7.dp))
+                    .clip(RoundedCornerShape(8.dp))
                     .background(
                         if (isPasteFocused) Color.White
                         else Color.White.copy(alpha = 0.10f)
@@ -1893,7 +2114,7 @@ private fun InputFieldWithPaste(
                     .border(
                         1.dp,
                         if (isPasteFocused) Color.White else Color.White.copy(alpha = 0.15f),
-                        RoundedCornerShape(7.dp)
+                        RoundedCornerShape(8.dp)
                     )
                     .clickable(onClick = onPasteClick),
                 contentAlignment = Alignment.Center
@@ -1945,12 +2166,12 @@ private fun InputFieldBlock(
                 .height(if (singleLine) 46.dp else 84.dp)
                 .background(
                     Color.White.copy(alpha = if (isFocused) 0.12f else 0.05f),
-                    RoundedCornerShape(10.dp)
+                    RoundedCornerShape(12.dp)
                 )
                 .border(
                     width = if (isFocused) 2.dp else 1.dp,
                     color = if (isFocused) resolveAccentColor(fallback = Pink) else Color.White.copy(alpha = 0.2f),
-                    shape = RoundedCornerShape(10.dp)
+                    shape = RoundedCornerShape(12.dp)
                 )
                 .padding(horizontal = 2.dp),
             contentAlignment = Alignment.CenterStart

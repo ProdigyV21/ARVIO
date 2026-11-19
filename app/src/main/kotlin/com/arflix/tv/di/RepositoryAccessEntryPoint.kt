@@ -26,6 +26,7 @@ interface RepositoryAccessEntryPoint {
 
     /** The discover filter "hide watched" reads the watched lists from here. */
     fun traktRepository(): TraktRepository
+    fun weTrakrRepository(): com.arflix.tv.data.repository.wetrakr.WeTrakrRepository
 
     fun kidsContentFilter(): KidsContentFilter
 }

@@ -5,13 +5,13 @@ import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "@/lib/i18n";
 import { parsePartnerLink, partnerLinkSignature, runPartnerLink, stripPartnerLink } from "@/lib/partnerLinks";
 import { resolvePartnerMedia } from "@/lib/partnerMedia";
-import { getPriorityConfig, useApp } from "@/lib/store";
+import { getPriorityConfig, useAppPick } from "@/lib/store";
 import type { MediaItem, NavSection } from "@/lib/types";
 import styles from "./PartnerLinkHandler.module.css";
 
 /** Mount only INSIDE EntitlementGate: a partner link is not a membership/profile bypass. */
 export function PartnerLinkHandler() {
-  const { partnerLinkReady, activeProfile, auth, selected, section, settings, openDetails, closePlayer } = useApp();
+  const { partnerLinkReady, activeProfile, auth, selected, section, settings, openDetails, closePlayer } = useAppPick("partnerLinkReady", "activeProfile", "auth", "selected", "section", "settings", "openDetails", "closePlayer");
   const translateUi = useTranslation();
   const [search, setSearch] = useState(() => window.location.search);
   const [status, setStatus] = useState<"idle" | "loading" | "error">("idle");

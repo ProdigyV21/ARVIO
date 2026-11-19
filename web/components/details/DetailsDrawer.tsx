@@ -1,36 +1,38 @@
 "use client";
 import { useTranslation } from "@/lib/i18n";
+import "./details.css";
 
-
-import { BadgeCheck, Bookmark, CalendarDays, Check, Clapperboard, Copy, Download, ExternalLink, EyeOff, Filter, Folder, Info, MapPin, Play, Search, Star, Trash2, TriangleAlert, UserCircle, X } from "lucide-react";
-import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { ArrowLeft, BadgeCheck, Bookmark, CalendarDays, Check, ChevronDown, Clapperboard, EyeOff, Folder, Loader2, MapPin, MoreHorizontal, Play, RotateCcw, Star, Trash2, UserCircle, X } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { MediaCard } from "@/components/media/MediaCard";
 import { RailScroller } from "@/components/media/RailScroller";
-import { config, isDisabledTelegramSource, TELEGRAM_DISABLED_MESSAGE } from "@/lib/config";
-import { chooseDownloadFile, startManagedDownload, recordDownloadHandoff } from "@/lib/downloads";
-import { trackPremiumEvent } from "@/lib/premiumAnalytics";
-import { createPendingExternalPlayback } from "@/lib/externalPlayback";
-import { saveWatchedState } from "@/lib/cloud";
-import { copyStreamUrl, downloadStreamUrl, downloadToVlc, externalLaunchMode, isAppleMobile, isDesktop, isLinux, isWindows, openExternalPlayer, openInAnyPlayer, setVlcProtocolReady, triggerDownload, vlcProtocolReady, VLC_SETUP_SH_URL, VLC_SETUP_URL } from "@/lib/externalPlayers";
-import { fetchSubtitlesForItem } from "@/lib/addons";
-import { cachedDebridDirectUrl, isUncachedDebridStream, parseDebridStream, prefetchDebridDirectUrl, resolveDebridDirectUrl } from "@/lib/debrid";
+import { premiumAllows } from "@/lib/premiumGate";
+import { relaySupportsTraktLink, simklRedirectUrl, traktLinkUrl, traktPageViaSimkl } from "@/lib/externalLinks";
+import { getContinueWatching, saveWatchedState } from "@/lib/cloud";
+import { parseDebridStream } from "@/lib/debrid";
+import { clearPlayOnOpen, peekPlayOnOpen } from "@/lib/playIntent";
 import { canonicalServiceName, IMDB_LOGO, serviceClearLogo } from "@/lib/serviceLogos";
 import { getImdbRating } from "@/lib/imdbRatings";
 import { mdblistClient, type MdbExternalRating } from "@/lib/mdblist";
 import { browserAutoplayCandidates } from "@/lib/browserAutoplay";
-import { sourcePickerScore } from "@/lib/sourceRank";
-import { playbackCompatibilityRevision, playbackPlan, subscribePlaybackCompatibility } from "@/lib/streamCompatibility";
-import { authClient, getPriorityConfig, useApp } from "@/lib/store";
+import { chooseAutoplaySource, loadAutoplayPreference } from "@/lib/autoplaySelection";
+import { verifyAutoplayCandidates } from "@/lib/autoplayVerify";
+import { playbackPlan } from "@/lib/streamCompatibility";
+import { claimEscape, isTopmostLayer } from "@/lib/playerKeys";
+import { collectResumePoints, episodeKey, episodeProgressMap, firstUnwatchedEpisode, planPrimaryAction, type ResumePoint } from "@/lib/playerResume";
+import { authClient, getPriorityConfig, useAppPick } from "@/lib/store";
 import { simklClient, getSimklItemUrl } from "@/lib/simkl";
 import { syncClient, syncSeasonWatched } from "@/lib/sync";
-import { getDetails, getLogoUrl, getPersonDetails, getReviews, getSeasonEpisodes } from "@/lib/tmdb";
-import type { EpisodeInfo, InstalledAddon, MediaItem, PersonCredit, PersonDetails, ReviewInfo, StreamSource, SubtitleTrack } from "@/lib/types";
-import { sourcePlaybackPresentation } from "./sourcePlaybackPresentation";
+import { getLogoUrl, getPersonDetails } from "@/lib/tmdb";
+import type { EpisodeInfo, MediaItem, PersonCredit, PersonDetails, ReviewInfo, WatchHistoryEntry } from "@/lib/types";
 import { EpisodeCard } from "./EpisodeCard";
+import { loadDetails, loadReviews, loadSeasonEpisodes } from "./detailsLoaders";
+import { buildDetailMeta, cleanReviewText, formatDate } from "./detailsText";
+import { SourcePickerModal, useCompactSources } from "./SourcePicker";
 
 export function DetailsDrawer() {
-  const { selected: item } = useApp();
+  const { selected: item } = useAppPick("selected");
   if (!item) return null;
   return <DetailsView key={`${item.mediaType}-${item.id}`} item={item} />;
 }
@@ -45,9 +47,60 @@ function needsDetailsHydration(item: MediaItem) {
   return !item.cast?.length && !item.related?.length && !item.trailerUrl;
 }
 
+// ---------- Focus return ----------
+//
+// Details replaces the screen it was opened from, so the card that opened it
+// is unmounted while details are shown. Remember where it was (its rail and
+// position) and put focus back there once that screen has rendered again.
+type FocusReturn = { element: HTMLElement; railLabel: string | null; index: number; text: string };
+
+function describeOpener(element: Element | null): FocusReturn | null {
+  if (!(element instanceof HTMLElement) || element === document.body) return null;
+  const rail = element.closest<HTMLElement>("[aria-label]");
+  const cards = rail ? Array.from(rail.querySelectorAll<HTMLElement>(element.tagName)) : [];
+  return { element, railLabel: rail?.getAttribute("aria-label") ?? null, index: cards.indexOf(element), text: element.textContent?.trim().slice(0, 80) ?? "" };
+}
+
+function restoreFocus(target: FocusReturn | null) {
+  if (!target) return;
+  let attempts = 0;
+  const tryFocus = () => {
+    attempts += 1;
+    if (document.querySelector(".details-drawer")) return; // another title opened
+    if (target.element.isConnected) { target.element.focus({ preventScroll: false }); return; }
+    const rails = target.railLabel ? Array.from(document.querySelectorAll<HTMLElement>(`[aria-label="${CSS.escape(target.railLabel)}"]`)) : [];
+    for (const rail of rails) {
+      const cards = Array.from(rail.querySelectorAll<HTMLElement>(target.element.tagName));
+      const match = cards.find((card) => card.textContent?.trim().slice(0, 80) === target.text) ?? (target.index >= 0 ? cards[target.index] : undefined);
+      if (match) { match.focus({ preventScroll: false }); match.scrollIntoView?.({ block: "nearest", inline: "nearest" }); return; }
+    }
+    if (attempts < 12) window.setTimeout(tryFocus, 120);
+  };
+  window.setTimeout(tryFocus, 0);
+}
+
+/** Mount children only when the placeholder nears the viewport. */
+function LazyMount({ children, minHeight }: { children: ReactNode; minHeight: number }) {
+  const ref = useRef<HTMLDivElement | null>(null);
+  const [shown, setShown] = useState(false);
+  useEffect(() => {
+    const node = ref.current;
+    if (!node || shown) return undefined;
+    if (typeof IntersectionObserver === "undefined") { setShown(true); return undefined; }
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) { setShown(true); observer.disconnect(); }
+    }, { rootMargin: "400px 0px" });
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [shown]);
+  return <div ref={ref} style={shown ? undefined : { minHeight }}>{shown ? children : null}</div>;
+}
+
+type AutoplayRequest = { resumeSeconds: number };
+
 function DetailsView({ item }: { item: MediaItem }) {
   const translateUi = useTranslation();
-  const { streams, playStream, selectedEpisode, activeProfile, addons: installedAddons, loadEpisodeStreams, openDetails, playTrailer, setToast, settings, watchlist, refreshData, busy, isWatched, markWatchedLocally, toggleWatchlist, mdblistConnected } = useApp();
+  const { streams, playStream, selectedEpisode, activeProfile, activeStream, addons: installedAddons, loadEpisodeStreams, openDetails, closeDetails, playTrailer, setToast, settings, watchlist, refreshData, busy, isWatched, markWatchedLocally, toggleWatchlist, mdblistConnected, continueWatching } = useAppPick("streams", "playStream", "selectedEpisode", "activeProfile", "activeStream", "addons", "loadEpisodeStreams", "openDetails", "closeDetails", "playTrailer", "setToast", "settings", "watchlist", "refreshData", "busy", "isWatched", "markWatchedLocally", "toggleWatchlist", "mdblistConnected", "continueWatching");
   const [detailsItem, setDetailsItem] = useState<MediaItem>(item);
   const [detailsLoading, setDetailsLoading] = useState(false);
   const [reviews, setReviews] = useState<ReviewInfo[]>([]);
@@ -55,26 +108,90 @@ function DetailsView({ item }: { item: MediaItem }) {
   const [personLoading, setPersonLoading] = useState(false);
   const [personVisible, setPersonVisible] = useState(false);
   const [sourcePickerVisible, setSourcePickerVisible] = useState(false);
-  const [autoplayRequested, setAutoplayRequested] = useState(false);
+  const [autoplayRequest, setAutoplayRequest] = useState<AutoplayRequest | null>(null);
+  const [starting, setStarting] = useState(false);
+  const rootRef = useRef<HTMLElement | null>(null);
+  const playButtonRef = useRef<HTMLButtonElement | null>(null);
+  const episodesRef = useRef<HTMLElement | null>(null);
+  const headingId = `details-title-${item.mediaType}-${item.id}`;
+  // The chooser polls these while sources are still arriving; refs keep one
+  // selection run alive across the progressive stream updates.
+  const autoplayLive = useRef({ streams, busy, playStream, setToast });
+  autoplayLive.current = { streams, busy, playStream, setToast };
   useEffect(() => {
-    if (!autoplayRequested) return;
-    const source = browserAutoplayCandidates(streams)[0];
-    if (source) {
-      setAutoplayRequested(false);
-      playStream({ ...source, autoSelect: true }, { forceBrowser: true });
-    } else if (!busy) {
-      setAutoplayRequested(false);
-      setSourcePickerVisible(true);
-      setToast("No browser-playable source is available. Choose a source manually.");
-    }
-  }, [autoplayRequested, streams, busy, playStream, setToast]);
+    if (!autoplayRequest) return undefined;
+    const controller = new AbortController();
+    // Wait briefly for a debrid source or the addon that last played on this
+    // device, probe the top candidates, then start — as soon as the best one
+    // passes — instead of taking the first row that happened to arrive.
+    void chooseAutoplaySource({
+      candidates: () => browserAutoplayCandidates(autoplayLive.current.streams),
+      searching: () => Boolean(autoplayLive.current.busy),
+      preference: loadAutoplayPreference(),
+      isDebrid: (stream) => Boolean(parseDebridStream(stream.originalUrl ?? stream.url)),
+      methodOf: (stream) => playbackPlan(stream).method,
+      verify: verifyAutoplayCandidates,
+      signal: controller.signal
+    }).then(({ stream: source }) => {
+      if (controller.signal.aborted) return;
+      setAutoplayRequest(null);
+      if (source) {
+        setStarting(true);
+        autoplayLive.current.playStream({ ...source, autoSelect: true, resumePositionSeconds: autoplayRequest.resumeSeconds }, { forceBrowser: true });
+      } else {
+        setSourcePickerVisible(true);
+        autoplayLive.current.setToast("No browser-playable source is available. Choose a source manually.");
+      }
+    });
+    return () => controller.abort();
+  }, [autoplayRequest]);
+  // "Starting…" lasts until the player opens (or a bounded time on failure).
+  useEffect(() => {
+    if (!starting) return undefined;
+    if (activeStream) { setStarting(false); return undefined; }
+    const timer = window.setTimeout(() => setStarting(false), 25_000);
+    return () => window.clearTimeout(timer);
+  }, [starting, activeStream]);
   const [logo, setLogo] = useState<string | null>(null);
+  const [relayTraktLink, setRelayTraktLink] = useState(false);
+  useEffect(() => { let active = true; void relaySupportsTraktLink().then((ok) => { if (active) setRelayTraktLink(ok); }); return () => { active = false; }; }, []);
+  // Trakt's own page, found through Simkl's id mapping; the relay redirect and
+  // a title search remain the fallbacks.
+  const [traktPage, setTraktPage] = useState<string | null>(null);
+  const traktImdb = detailsItem?.imdbId ?? item.imdbId ?? null;
+  useEffect(() => {
+    setTraktPage(null);
+    let active = true;
+    void traktPageViaSimkl({ id: item.id, imdbId: traktImdb, mediaType: item.mediaType }).then((url) => { if (active) setTraktPage(url); });
+    return () => { active = false; };
+  }, [item.id, item.mediaType, traktImdb]);
+
   const displayItem = detailsItem ?? item;
   const priorityConfig = useMemo(() => getPriorityConfig(settings), [settings]);
 
+  // ---------- Dialog semantics, focus and Escape ----------
+  const close = useCallback(() => {
+    // Details were pushed onto history by BackHandler: go back so Back/forward
+    // stay in sync; a deep-linked first entry just closes.
+    if (window.history.length > 1 && (window.history.state as { arvio?: boolean } | null)?.arvio) window.history.back();
+    else closeDetails();
+  }, [closeDetails]);
   useEffect(() => {
+    const opener = describeOpener(document.activeElement);
     window.scrollTo({ top: 0, left: 0, behavior: "auto" });
-  }, [item.id, item.mediaType]);
+    const timer = window.setTimeout(() => playButtonRef.current?.focus({ preventScroll: true }), 30);
+    return () => { window.clearTimeout(timer); restoreFocus(opener); };
+  }, []);
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || !claimEscape(event) || !isTopmostLayer(rootRef.current)) return;
+      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return;
+      event.preventDefault();
+      close();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [close]);
 
   useEffect(() => {
     let active = true;
@@ -92,22 +209,27 @@ function DetailsView({ item }: { item: MediaItem }) {
       : Boolean(details.cast?.length || details.related?.length || details.trailerUrl);
     void (async () => {
       for (let attempt = 0; attempt < 3 && active; attempt += 1) {
-        const details = await getDetails(item, priorityConfig).catch(() => null);
+        const details = await loadDetails(item, priorityConfig).catch(() => null);
         if (!active) return;
-        if (details) setDetailsItem(details);
+        if (details) setDetailsItem((current) => ({ ...details, seasonNumber: current.seasonNumber ?? details.seasonNumber, episodeNumber: current.episodeNumber ?? details.episodeNumber, resumePositionSeconds: current.resumePositionSeconds ?? details.resumePositionSeconds, progress: current.progress ?? details.progress }));
         if (details && looksHydrated(details)) break;
         if (attempt < 2) await new Promise((resolve) => setTimeout(resolve, 900 * (attempt + 1)));
       }
       if (active) setDetailsLoading(false);
     })();
     return () => { active = false; };
+    // The store swaps the shallow item for the hydrated one under the same key:
+    // the in-flight loader shares one request for both.
   }, [item, priorityConfig]);
 
+  // Below the fold: reviews load after the details payload, not alongside it.
   useEffect(() => {
+    if (detailsLoading) return undefined;
     let active = true;
-    void getReviews(item).then((r) => active && setReviews(r)).catch(() => undefined);
+    void loadReviews(item).then((r) => active && setReviews(r)).catch(() => undefined);
     return () => { active = false; };
-  }, [item.id, item.mediaType]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [item.id, item.mediaType, detailsLoading]);
 
   useEffect(() => {
     let active = true;
@@ -118,10 +240,60 @@ function DetailsView({ item }: { item: MediaItem }) {
     return () => { active = false; };
   }, [item.id, item.mediaType]);
 
+  // MKV sources need the in-browser remux path: fetch its code while the
+  // viewer is still reading, so pressing Play does not wait for the chunk.
+  const hasRemuxSource = streams.some((stream) => stream.url && playbackPlan(stream).method === "remux");
+  useEffect(() => {
+    if (hasRemuxSource) void import("@/lib/remux").catch(() => undefined);
+  }, [hasRemuxSource]);
+
   const isTv = displayItem.mediaType === "tv";
   const inWatchlist = watchlist.some((entry) => entry.mediaType === item.mediaType && entry.id === item.id);
-  const canPlayBest = streams.length > 0;
   const detailWatched = isWatched(displayItem, selectedEpisode?.season, selectedEpisode?.episode);
+
+  // ---------- Resume, from any entry point ----------
+  // The rail item, the Continue Watching row and the cloud watch history all
+  // know where the viewer stopped; a title opened from search knows nothing.
+  const [history, setHistory] = useState<WatchHistoryEntry[]>([]);
+  useEffect(() => {
+    if (!authClient.session) return undefined;
+    let active = true;
+    void getContinueWatching(authClient, activeProfile?.id ?? null, installedAddons)
+      .then((rows) => { if (active) setHistory(rows.filter((row) => row.media_type === item.mediaType && (row.show_tmdb_id === item.id || row.show_tmdb_id === item.tmdbId))); })
+      .catch(() => undefined);
+    return () => { active = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [item.id, item.mediaType, activeProfile?.id]);
+  const resumePoints = useMemo<ResumePoint[]>(() => collectResumePoints(displayItem, { self: item, continueWatching, history }),
+    [continueWatching, displayItem, history, item]);
+  const watchedEpisode = useCallback((season: number, episode: number) => isWatched(displayItem, season, episode), [displayItem, isWatched]);
+  const episodeProgress = useMemo(() => episodeProgressMap(resumePoints, watchedEpisode), [resumePoints, watchedEpisode]);
+
+  // Series with nothing in progress: find the first unwatched aired episode.
+  const [firstUnwatched, setFirstUnwatched] = useState<{ season: number; episode: number } | null>(null);
+  const needsFirstUnwatched = isTv && !selectedEpisode && !resumePoints.some((point) => point.season != null);
+  const regularSeasons = useMemo(() => (displayItem.seasons ?? []).map((season) => season.seasonNumber).filter((n) => n > 0).sort((a, b) => a - b), [displayItem.seasons]);
+  useEffect(() => {
+    if (!needsFirstUnwatched || !regularSeasons.length) return undefined;
+    let active = true;
+    void (async () => {
+      for (const season of regularSeasons.slice(0, 4)) {
+        const episodes = await loadSeasonEpisodes(displayItem.id, season, "en-US", priorityConfig, { tvdbId: displayItem.tvdbId, anilistId: displayItem.anilistId, isAnime: displayItem.isAnime }).catch(() => []);
+        if (!active) return;
+        const found = firstUnwatchedEpisode(episodes, watchedEpisode);
+        if (found) { setFirstUnwatched({ season: found.seasonNumber, episode: found.episodeNumber }); return; }
+      }
+    })();
+    return () => { active = false; };
+  }, [displayItem.anilistId, displayItem.id, displayItem.isAnime, displayItem.tvdbId, needsFirstUnwatched, priorityConfig, regularSeasons, watchedEpisode]);
+
+  const plan = planPrimaryAction({
+    item: displayItem,
+    points: resumePoints,
+    selectedEpisode,
+    firstUnwatched,
+    isWatched: (season, episode) => season == null ? isWatched(displayItem) : isWatched(displayItem, season, episode)
+  });
 
   // Real IMDb rating for the title (Cinemeta by imdb id), matching the Android
   // app. Episode rows get theirs from Agregarr (see getSeasonEpisodeRatings).
@@ -146,7 +318,6 @@ function DetailsView({ item }: { item: MediaItem }) {
     }).catch(() => undefined);
     return () => { active = false; };
   }, [displayItem.id, displayItem.mediaType, mdblistConnected]);
-  const continueLabel = buildContinueLabel(displayItem, selectedEpisode);
   const detailMeta = buildDetailMeta(displayItem, settings.showBudget);
   // Clearlogos (bundled from the app, no background tiles). Providers we have
   // no clearlogo for are skipped rather than shown as white TMDB tiles.
@@ -156,46 +327,54 @@ function DetailsView({ item }: { item: MediaItem }) {
     .filter((logo, index, arr) => arr.findIndex((candidate) => candidate.name === logo.name) === index)
     .slice(0, 4);
 
-  const playBest = () => {
-    if (isTv && !selectedEpisode) {
-      setToast(isTv ? "Pick an episode to find sources first." : "No sources found yet.");
-      return;
-    }
-    setAutoplayRequested(true);
+  const requestAutoplay = (request: AutoplayRequest) => {
+    // Explore mode: ask for Premium before waiting on sources.
+    if (!premiumAllows("play", () => setAutoplayRequest(request))) return;
+    setAutoplayRequest(request);
   };
 
-  const openEpisodeSources = async (season: number, episode: number) => {
+  const openEpisodeSources = async (season: number, episode: number, resumeSeconds?: number) => {
+    if (!premiumAllows("play", () => { void openEpisodeSources(season, episode, resumeSeconds); })) return;
+    const progress = episodeProgress.get(episodeKey(season, episode));
+    const resume = resumeSeconds ?? (progress ? progress.positionSeconds || Math.round(progress.durationSeconds * progress.percent / 100) : 0);
+    setAutoplayRequest(null);
+    setStarting(true);
     await loadEpisodeStreams(displayItem, season, episode);
-    setAutoplayRequested(true);
+    setStarting(false);
+    setAutoplayRequest({ resumeSeconds: resume });
   };
 
-  const addToWatchlist = async () => {
-    if (!syncClient().isConnected) {
-      setToast("Connect Trakt, Simkl, or MDBList in Settings to use Watchlist.");
+  const playPrimary = (fromStart = false) => {
+    if (autoplayRequest || starting) return;
+    const resumeSeconds = fromStart ? 0 : plan.resumeSeconds;
+    if (!isTv) { requestAutoplay({ resumeSeconds }); return; }
+    if (plan.season == null || plan.episode == null) {
+      episodesRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      episodesRef.current?.querySelector<HTMLElement>(".episode-row")?.focus({ preventScroll: true });
       return;
     }
-    try {
-      await syncClient().addToWatchlist({ mediaType: item.mediaType, tmdbId: item.id });
-      setToast("Added to watchlist.");
-      void refreshData();
-    } catch (error) {
-      setToast(error instanceof Error ? error.message : "Could not add to watchlist.");
-    }
+    if (selectedEpisode?.season === plan.season && selectedEpisode?.episode === plan.episode) requestAutoplay({ resumeSeconds });
+    else void openEpisodeSources(plan.season, plan.episode, resumeSeconds);
   };
 
-  const removeFromWatchlist = async () => {
-    if (!syncClient().isConnected) {
-      setToast("Connect Trakt, Simkl, or MDBList in Settings to remove watchlist items.");
-      return;
-    }
-    try {
-      await syncClient().removeFromWatchlist({ mediaType: item.mediaType, tmdbId: item.id });
-      setToast("Removed from watchlist.");
-      void refreshData();
-    } catch (error) {
-      setToast(error instanceof Error ? error.message : "Could not remove watchlist item.");
-    }
-  };
+  // Home billboard "Play": start playback here through the same automatic
+  // source choice as the Play button. Movies start at once (the chooser waits
+  // for sources); series wait briefly for the resume / next episode, else play
+  // the episode the billboard named, or S1 E1.
+  const [heroPlayIntent] = useState(() => peekPlayOnOpen(item));
+  const heroPlayDone = useRef(false);
+  useEffect(() => {
+    if (!heroPlayIntent || heroPlayDone.current) return undefined;
+    const start = (run: () => void) => { heroPlayDone.current = true; clearPlayOnOpen(); run(); };
+    if (!isTv) { start(() => playPrimary(false)); return undefined; }
+    if (plan.season != null && plan.episode != null) { start(() => playPrimary(false)); return undefined; }
+    const timer = window.setTimeout(() => {
+      if (heroPlayDone.current) return;
+      start(() => { void openEpisodeSources(heroPlayIntent.season ?? 1, heroPlayIntent.episode ?? 1); });
+    }, 4000);
+    return () => window.clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [heroPlayIntent, isTv, plan.season, plan.episode]);
 
   const markWatched = async () => {
     const season = selectedEpisode?.season ?? item.seasonNumber ?? null;
@@ -249,14 +428,28 @@ function DetailsView({ item }: { item: MediaItem }) {
     }
   };
 
+  const simklIds = simklClient.findItemIds(displayItem.id, displayItem.mediaType === "movie" ? "movie" : "tv")
+    ?? (displayItem as unknown as { ids?: Parameters<typeof getSimklItemUrl>[0] })?.ids;
+  const simklUrl = getSimklItemUrl(simklIds, displayItem.mediaType === "movie" ? "movie" : "tv")
+    ?? simklRedirectUrl(displayItem);
+  const busyPlaying = Boolean(autoplayRequest) || starting;
+  const playLabel = busyPlaying
+    // Finding sources → checking the best ones → opening the player.
+    ? (busy === "Finding sources" && streams.length === 0 ? translateUi("Finding sources…")
+      : autoplayRequest ? translateUi("Picking the best source…") : translateUi("Starting…"))
+    : translateUi(plan.label, plan.labelValues);
+
   return (
-    <article className="details-drawer">
+    <article className="details-drawer" role="dialog" aria-modal="true" aria-labelledby={headingId} ref={rootRef}>
       <div className="detail-backdrop" style={{ backgroundImage: displayItem.backdrop ? `url(${displayItem.backdrop})` : undefined }} />
+      <button type="button" className="detail-back" onClick={close} aria-label={translateUi("Back")}>
+        <ArrowLeft size={22} />
+      </button>
       <div className="detail-body">
         <section className="detail-hero-content">
-          <div className="detail-title-line">
-            {logo ? <img className="detail-clearlogo" src={logo} alt={displayItem.title} /> : <h2>{displayItem.title}</h2>}
-          </div>
+          <h1 className="detail-title-line" id={headingId}>
+            {logo ? <img className="detail-clearlogo" src={logo} alt={displayItem.title} /> : <span className="detail-title-text">{displayItem.title}</span>}
+          </h1>
           <div className="detail-rating-line">
             {detailImdbRating ? (
               <span className="imdb-lockup">
@@ -265,23 +458,6 @@ function DetailsView({ item }: { item: MediaItem }) {
               </span>
             ) : null}
             {detailWatched && <span className="detail-watched-chip"><BadgeCheck size={13} /> {translateUi(" Watched")}</span>}
-            {(() => {
-              const ids = simklClient.findItemIds(displayItem.id, displayItem.mediaType === "movie" ? "movie" : "tv")
-                ?? (displayItem as unknown as { ids?: any })?.ids;
-              const simklUrl = getSimklItemUrl(ids, displayItem.mediaType === "movie" ? "movie" : "tv")
-                ?? `https://simkl.com/search?q=${encodeURIComponent(displayItem.title)}`;
-              return (
-                <a
-                  href={simklUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="simkl-lockup text-xs font-semibold px-1.5 py-0.5 rounded bg-surface-sunk hover:underline inline-flex items-center gap-1"
-                  title={translateUi("View on Simkl")}
-                >
-                  <span>{translateUi("Simkl")}</span>
-                </a>
-              );
-            })()}
             {displayItem.genres?.slice(0, 3).map((genre) => <span key={genre}>{genre}</span>)}
           </div>
           {externalRatings.length ? (
@@ -306,9 +482,14 @@ function DetailsView({ item }: { item: MediaItem }) {
             </div>
           ) : null}
           <div className="detail-actions">
-            <button type="button" className="primary" onClick={playBest}>
-              <Play size={18} fill="currentColor" /> {translateUi(continueLabel)}
+            <button type="button" ref={playButtonRef} className="primary detail-play" onClick={() => playPrimary(false)} aria-busy={busyPlaying || undefined}>
+              {busyPlaying ? <Loader2 size={18} className="detail-spin" /> : <Play size={18} fill="currentColor" />} {playLabel}
             </button>
+            {plan.kind === "resume" && !busyPlaying ? (
+              <button type="button" className="secondary text-button" onClick={() => playPrimary(true)}>
+                <RotateCcw size={18} /> {translateUi(plan.startOverLabel)}
+              </button>
+            ) : null}
             <button type="button" className="secondary text-button" onClick={() => setSourcePickerVisible(true)}><Folder size={18} /> {translateUi("Sources")}</button>
             {inWatchlist ? (
               <button type="button" className="secondary text-button" onClick={() => void toggleWatchlist(displayItem)}><Trash2 size={18} /> {translateUi(" Remove")}</button>
@@ -317,29 +498,40 @@ function DetailsView({ item }: { item: MediaItem }) {
             )}
             <button type="button" className={`secondary text-button ${detailWatched ? "is-active" : ""}`} onClick={() => void markWatched()}><BadgeCheck size={18} /> {detailWatched ? translateUi("Watched") : translateUi("Mark Watched")}</button>
             {displayItem.trailerUrl && (
-              <button type="button" className="secondary text-button" onClick={() => void playTrailer(displayItem)}>
-                <Play size={18} fill="currentColor" /> {translateUi(" Trailer")}</button>
+              <button type="button" className="secondary text-button detail-trailer" onClick={() => void playTrailer(displayItem)}>
+                <Play size={18} fill="currentColor" /> {translateUi("Trailer")}</button>
             )}
           </div>
-          {!canPlayBest && !isTv && (
-            <p className="detail-action-hint">
-              {streams.length ? translateUi("The installed addons returned sources, but none have a direct browser-playable URL yet.") : translateUi("Sources will appear here when an installed addon returns results.")}
-            </p>
+          <div className="detail-links">
+            <a href={simklUrl} target="_blank" rel="noopener noreferrer" className="detail-link">{translateUi("View on Simkl")}</a>
+            <a href={traktPage ?? traktLinkUrl(displayItem, relayTraktLink)} target="_blank" rel="noopener noreferrer" className="detail-link">{translateUi("View on Trakt")}</a>
+          </div>
+          {!streams.length && !isTv && busy !== "Finding sources" && (
+            <p className="detail-action-hint">{translateUi("Sources will appear here when an installed addon returns results.")}</p>
           )}
         </section>
 
         <div className="detail-layout">
           {isTv ? (
-            <SeasonEpisodes item={displayItem} loadingDetails={detailsLoading} selectedEpisode={selectedEpisode} isWatched={isWatched} onPlayEpisode={(s, e) => void openEpisodeSources(s, e)} />
+            <SeasonEpisodes
+              sectionRef={episodesRef}
+              item={displayItem}
+              loadingDetails={detailsLoading}
+              selectedEpisode={selectedEpisode}
+              preferredSeason={plan.season}
+              isWatched={isWatched}
+              progress={episodeProgress}
+              onPlayEpisode={(s, e) => void openEpisodeSources(s, e)}
+            />
           ) : null}
 
           {displayItem.cast?.length ? (
             <section className="detail-section detail-wide">
-              <h3>{translateUi("Cast")}</h3>
+              <h2 className="detail-section-title">{translateUi("Cast")}</h2>
               <RailScroller className="mini-strip" ariaLabel={translateUi("cast")}>
                 {displayItem.cast.map((person) => (
                   <button type="button" className="mini-card person cast-card" key={person.id} onClick={() => void openPerson(person)}>
-                    {person.image ? <img src={person.image} alt="" /> : <UserCircle size={30} />}
+                    {person.image ? <img src={person.image} alt="" loading="lazy" /> : <UserCircle size={30} />}
                     <strong>{person.name}</strong>
                     <span>{person.character || translateUi("Cast")}</span>
                   </button>
@@ -348,39 +540,27 @@ function DetailsView({ item }: { item: MediaItem }) {
             </section>
           ) : null}
 
-          {reviews.length > 0 && (
-            <section className="detail-section detail-wide">
-              <h3>{translateUi("Reviews")}</h3>
-              <div className="review-list">
-                {reviews.map((review) => (
-                  <article className="review-card" key={review.id}>
-                    <div className="review-head">
-                      {review.avatar ? <img src={review.avatar} alt="" /> : <UserCircle size={26} />}
-                      <strong>{review.author}</strong>
-                      {review.rating != null && <span className="review-rating"><Star size={13} fill="currentColor" /> {review.rating}</span>}
-                    </div>
-                    <p>{review.content.length > 600 ? `${review.content.slice(0, 600)}...` : review.content}</p>
-                  </article>
-                ))}
-              </div>
-            </section>
-          )}
-
           {displayItem.related?.length ? (
             <section className="detail-section related detail-wide">
-              <h3>{translateUi("More Like This")}</h3>
-              <RailScroller className="rail-strip compact" ariaLabel={translateUi("more like this")}>
-                {displayItem.related.map((related) => (
-                  <MediaCard
-                    key={`related-${related.mediaType}-${related.id}`}
-                    item={related}
-                    onOpen={openDetails}
-                    posterMode={settings.cardLayoutMode === "poster"}
-                  />
-                ))}
-              </RailScroller>
+              <h2 className="detail-section-title">{translateUi("More Like This")}</h2>
+              {/* Cards fetch logos, providers and IMDb ratings on mount: only
+                  mount them when the row is about to be seen. */}
+              <LazyMount minHeight={240}>
+                <RailScroller className="rail-strip compact" ariaLabel={translateUi("more like this")}>
+                  {displayItem.related.map((related) => (
+                    <MediaCard
+                      key={`related-${related.mediaType}-${related.id}`}
+                      item={related}
+                      onOpen={openDetails}
+                      posterMode={settings.cardLayoutMode === "poster"}
+                    />
+                  ))}
+                </RailScroller>
+              </LazyMount>
             </section>
           ) : null}
+
+          {reviews.length > 0 && <ReviewsSection reviews={reviews} />}
         </div>
       </div>
       <PersonModal
@@ -409,379 +589,49 @@ function DetailsView({ item }: { item: MediaItem }) {
   );
 }
 
-function SourcePickerModal({
-  visible,
-  item,
-  streams,
-  installedAddons,
-  selectedEpisode,
-  activeProfileId,
-  onClose,
-  onToast,
-  loading
-}: {
-  visible: boolean;
-  item: MediaItem;
-  streams: StreamSource[];
-  installedAddons: InstalledAddon[];
-  selectedEpisode: { season: number; episode: number } | null;
-  activeProfileId: string | null;
-  onClose: () => void;
-  onToast: (message: string) => void;
-  loading: boolean;
-}) {
+const REVIEW_LIMIT = 3;
+
+function ReviewsSection({ reviews }: { reviews: ReviewInfo[] }) {
   const translateUi = useTranslation();
-  const { settings, playStream } = useApp();
-  // Recompute visible plans after selected-source failures without probing the result list.
-  useSyncExternalStore(subscribePlaybackCompatibility, playbackCompatibilityRevision, () => 0);
-  const [addonFilter, setAddonFilter] = useState("all");
-  const [query, setQuery] = useState("");
-  // Windows-only: offer the one-time vlc:// setup so "Open in VLC" launches VLC
-  // directly instead of downloading a .m3u. Hidden once the user has set it up.
-  // macOS is excluded — VLC self-registers vlc:// there, so no installer is
-  // needed (and the .bat wouldn't run on a Mac anyway).
-  const [vlcReady, setVlcReady] = useState<boolean>(() => vlcProtocolReady());
-  const showVlcSetup = (isWindows() || isLinux()) && !vlcReady;
-  const enableVlcProtocol = () => {
-    // Download the tiny installer script for the platform, then remember the user set it up
-    if (isLinux()) {
-      triggerDownload(VLC_SETUP_SH_URL, "vlc-setup.sh");
-      setVlcProtocolReady(true);
-      setVlcReady(true);
-      onToast("Run `bash vlc-setup.sh` once in terminal — then Open in VLC works instantly.");
-    } else {
-      triggerDownload(VLC_SETUP_URL, "vlc-setup.bat");
-      setVlcProtocolReady(true);
-      setVlcReady(true);
-      onToast("Run the downloaded vlc-setup.bat once — then Open in VLC works instantly.");
-    }
-  };
-  // Addon subtitles for this title, fetched in the background when the panel
-  // opens so the VLC/Infuse buttons can attach them synchronously on click.
-  const [panelSubtitles, setPanelSubtitles] = useState<SubtitleTrack[]>([]);
-
-  useEffect(() => {
-    if (!visible) return undefined;
-    setAddonFilter("all");
-    setQuery("");
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose, visible]);
-
-  useEffect(() => {
-    setPanelSubtitles([]);
-    if (!visible || !item) return undefined;
-    let active = true;
-    void fetchSubtitlesForItem(
-      installedAddons,
-      item,
-      selectedEpisode?.season ?? item.seasonNumber ?? undefined,
-      selectedEpisode?.episode ?? item.episodeNumber ?? undefined
-    ).then((subs) => { if (active) setPanelSubtitles(subs); }).catch(() => undefined);
-    return () => { active = false; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visible, item?.id, selectedEpisode?.season, selectedEpisode?.episode]);
-
-  const addons = useMemo(() => {
-    // Only surface addons that actually returned sources for this title. Seeding a
-    // chip for every installed stream-capable addon meant subtitle providers
-    // (OpenSubtitles, Ktuvit, Wizdom) — whose manifests also declare a "stream"
-    // resource — showed up as empty source filters. A name lookup from the
-    // installed list keeps the pretty addon names.
-    const nameById = new Map(installedAddons.map((addon) => [addon.id, addon.name]));
-    const unique = new Map<string, { id: string; name: string; count: number }>();
-    streams.forEach((stream) => {
-      const id = stream.addonId || stream.addonName;
-      const existing = unique.get(id);
-      unique.set(id, {
-        id,
-        name: existing?.name || nameById.get(id) || stream.addonName,
-        count: (existing?.count ?? 0) + 1
-      });
-    });
-    return Array.from(unique.values());
-  }, [installedAddons, streams]);
-
-  const filtered = useMemo(() => {
-    const needle = query.trim().toLowerCase();
-    return streams.filter((stream) => {
-      if (addonFilter !== "all" && (stream.addonId || stream.addonName) !== addonFilter) return false;
-      if (!needle) return true;
-      return `${stream.source} ${stream.addonName} ${stream.description ?? ""} ${stream.quality ?? ""} ${stream.size ?? ""}`.toLowerCase().includes(needle);
-      // Keep quality-first ordering independent of the playback warning.
-    }).sort((a, b) => sourcePickerScore(b, "external") - sourcePickerScore(a, "external"));
-  }, [addonFilter, query, streams]);
-
-  // Warm the direct CDN URLs of the top debrid picks while the user is still
-  // looking at the list — pressing Play then skips the resolver round-trips
-  // (which ride the Netlify proxy in production and cost 1-3s each).
-  const prefetchSignature = filtered.slice(0, 3).map((stream) => stream.url ?? "").join("|");
-  useEffect(() => {
-    filtered.slice(0, 3).forEach((stream) => {
-      if (isDisabledTelegramSource(stream)) return;
-      if (!isUncachedDebridStream(stream)) prefetchDebridDirectUrl(stream.url);
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [prefetchSignature]);
-
-  const title = selectedEpisode ? `${item.title} - S${selectedEpisode.season} E${selectedEpisode.episode}` : item.title;
-  const rejectDisabledTelegram = (stream: StreamSource) => {
-    if (!isDisabledTelegramSource(stream)) return false;
-    onToast(TELEGRAM_DISABLED_MESSAGE);
-    return true;
-  };
-  const openExternal = (player: "vlc" | "infuse", stream: StreamSource) => {
-    if (rejectDisabledTelegram(stream)) return;
-    if (!stream.url) {
-      onToast("This source has no direct URL for an external player.");
-      return;
-    }
-    // Build the launch target. Use the prefetch-cached CDN url if we already
-    // have it; otherwise hand VLC the raw source (it follows the redirect
-    // itself). Subtitles are attached only when synchronously present.
-    const cachedCdn = parseDebridStream(stream.url) ? cachedDebridDirectUrl(stream.url) : null;
-    let target = cachedCdn ? { ...stream, url: cachedCdn, originalUrl: stream.url } : stream;
-    if (!target.subtitles?.length && panelSubtitles.length) target = { ...target, subtitles: panelSubtitles };
-    // Persist the pending record and toast BEFORE launching. Both are
-    // synchronous (localStorage / React state) so they don't consume the user
-    // gesture, and writing first guarantees the return-to-app "mark finished"
-    // prompt has its record even if the scheme navigation freezes/unloads the
-    // page the instant it fires.
-    onToast(
-      player === "infuse"
-        ? "Opening in Infuse..."
-        : externalLaunchMode("vlc") === "playlist"
-          ? "VLC playlist saved — open it from your downloads to play."
-          : "Opening in VLC..."
-    );
-    createPendingExternalPlayback({
-      player,
-      item,
-      stream: target,
-      title,
-      profileId: activeProfileId,
-      season: selectedEpisode?.season ?? item.seasonNumber ?? null,
-      episode: selectedEpisode?.episode ?? item.episodeNumber ?? null
-    });
-    // The deep link MUST fire synchronously inside the click — iOS Safari blocks
-    // navigation to custom schemes (vlc-x-callback://) once the user gesture is
-    // lost, so the app would appear to do nothing. Launch last.
-    openExternalPlayer(player, target, title, settings.defaultSubtitle);
-    void trackPremiumEvent(authClient, "external_playback_requested", { player, entry: "sources" }, true);
-  };
-  // Android: open in whichever player the user picks (VLC, MX Player, …) via the
-  // system chooser — the equivalent of the iOS-only Infuse button.
-  const openAnyPlayer = (stream: StreamSource) => {
-    if (rejectDisabledTelegram(stream)) return;
-    if (!stream.url) {
-      onToast("This source has no direct URL for an external player.");
-      return;
-    }
-    const cachedCdn = parseDebridStream(stream.url) ? cachedDebridDirectUrl(stream.url) : null;
-    let target = cachedCdn ? { ...stream, url: cachedCdn, originalUrl: stream.url } : stream;
-    if (!target.subtitles?.length && panelSubtitles.length) target = { ...target, subtitles: panelSubtitles };
-    onToast("Opening in your player…");
-    createPendingExternalPlayback({
-      player: "vlc",
-      item,
-      stream: target,
-      title,
-      profileId: activeProfileId,
-      season: selectedEpisode?.season ?? item.seasonNumber ?? null,
-      episode: selectedEpisode?.episode ?? item.episodeNumber ?? null
-    });
-    openInAnyPlayer(target, title, settings.defaultSubtitle);
-    void trackPremiumEvent(authClient, "external_playback_requested", { player: "chooser", entry: "sources" }, true);
-  };
-  const copyUrl = async (stream: StreamSource) => {
-    if (rejectDisabledTelegram(stream)) return;
-    const copied = await copyStreamUrl(stream).catch(() => false);
-    onToast(copied ? "Stream URL copied." : "Could not copy this stream URL.");
-  };
-  const downloadSource = async (stream: StreamSource) => {
-    if (rejectDisabledTelegram(stream)) return;
-    void trackPremiumEvent(authClient, "download_requested", { entry: "sources" }, true);
-    if (!stream.url) {
-      void trackPremiumEvent(authClient, "download_failed", { stage: "missing_url" }, true);
-      onToast("This source has no direct URL to download.");
-      return;
-    }
-    let fileHandle: Awaited<ReturnType<typeof chooseDownloadFile>>;
-    try { fileHandle = await chooseDownloadFile(title, /\.mp4(?:[?#/]|$)/i.test(`${stream.url} ${stream.source ?? ""}`) ? "mp4" : "mkv"); }
-    catch (error) { if (!(error instanceof DOMException && error.name === "AbortError")) onToast("Could not select a download file."); return; }
-    const downloadScope = `${authClient.session?.userId ?? "local"}:${activeProfileId ?? "default"}`;
-    // Resolve debrid streams to the final CDN file URL first (the download
-    // proxy must get the real file, not the torrentio redirect chain, which
-    // 403s server egress). Hard 20s timeout — jsonRequest has none, and a
-    // stalled proxy call would leave "Preparing" up forever.
-    let target = stream;
-    const debridInfo = parseDebridStream(stream.url);
-    if (debridInfo) {
-      onToast("Preparing download...");
-      const direct = cachedDebridDirectUrl(stream.url) ?? await Promise.race([
-        resolveDebridDirectUrl(debridInfo).then((result) => result?.url ?? null).catch(() => null),
-        new Promise<null>((resolve) => setTimeout(() => resolve(null), 20_000))
-      ]);
-      if (!direct) {
-        void trackPremiumEvent(authClient, "download_failed", { stage: "resolution" }, true);
-        onToast("Could not prepare this download — the source may not be cached. Try a [TB+] source.");
-        return;
-      }
-      target = { ...stream, url: direct, originalUrl: stream.url };
-    }
-    if (fileHandle) {
-      const href = downloadStreamUrl(target, title);
-      if (!href) { onToast("Could not start this download."); return; }
-      try { await startManagedDownload(title, href, downloadScope, fileHandle); onToast("Download started. Manage it in Settings > Downloads."); }
-      catch (error) { onToast(error instanceof Error ? error.message : "Could not start this download."); }
-      return;
-    }
-    // iOS/iPadOS can't reliably download a multi-GB file in a browser tab —
-    // WebKit buffers the whole response in memory and hits the per-tab limit at a
-    // random point, with no resume (every browser on iOS is WebKit, incl.
-    // Chrome). Hand the resolved direct URL to VLC's `download` action instead:
-    // it saves the file to VLC's own storage (outside the browser memory limit)
-    // for offline playback on the device. Desktop keeps the normal file download.
-    if (isAppleMobile()) {
-      const ok = downloadToVlc(target, title, settings.defaultSubtitle);
-      if (ok) recordDownloadHandoff(title, downloadScope);
-      void trackPremiumEvent(authClient, ok ? "download_handoff" : "download_failed", { destination: "vlc" }, true);
-      onToast(ok
-        ? "Downloading to VLC for offline playback. If VLC doesn't open, install it from the App Store."
-        : "Could not hand this download to VLC.");
-      return;
-    }
-    const href = downloadStreamUrl(target, title);
-    if (!href) {
-      void trackPremiumEvent(authClient, "download_failed", { stage: "missing_download_url" }, true);
-      onToast("Could not start this download.");
-      return;
-    }
-    // Programmatic <a download> click — reliable in real browser tabs AND
-    // installed PWAs, and keeps the app in place (the old window.location.href
-    // navigated the whole tab, so a rate-limited/expired download left a blank
-    // page with no feedback). The download proxy sets Content-Disposition:
-    // attachment, so the browser's download manager owns the transfer.
-    const started = triggerDownload(href, `${title}.${/\.mp4(?:[?#/]|$)/i.test(`${target.url} ${target.source ?? ""}`) ? "mp4" : "mkv"}`);
-    if (started) recordDownloadHandoff(title, downloadScope);
-    void trackPremiumEvent(authClient, started ? "download_handoff" : "download_failed", { destination: "browser" }, true);
-    onToast(started ? "Download started — check your browser downloads." : "Could not start this download.");
-  };
-
-  if (!visible || typeof document === "undefined") return null;
-  return createPortal(
-    <section className="source-modal" role="dialog" aria-modal="true" aria-label={translateUi("Choose source")}>
-      <div className="source-modal-bg" onClick={onClose} />
-      <div className="source-panel">
-        <header className="source-panel-head">
-          <div>
-            <p className="eyebrow">{translateUi("sources")}</p>
-            <h2>{title}</h2>
-            <span>
-              {streams.length} {translateUi(" sources — highest quality and largest files first. Choose browser playback or a compatible external player.")}</span>
-          </div>
-          <button type="button" className="person-close" onClick={onClose} aria-label={translateUi("Close source picker")}><X size={24} /></button>
-        </header>
-
-        {showVlcSetup && (
-          <div className="vlc-setup-hint">
-            <span>{translateUi("Windows/desktop: enable one-click \"Open in VLC\" (no more .m3u download).")}</span>
-            <button type="button" onClick={enableVlcProtocol}>{translateUi("Set up VLC integration")}</button>
-          </div>
-        )}
-
-        <div className="source-toolbar">
-          <label className="source-search">
-            <Search size={18} />
-            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={translateUi("Search quality, release, provider")} />
-          </label>
-          {/* Possible browser routes are not proof of playback; keep every source searchable. */}
-          <div className="source-filter-group" aria-label={translateUi("Source count")}>
-            <button type="button" className="is-active" disabled>
-              <Filter size={16} /> {translateUi(" All sources")}{streams.length ? ` ${streams.length}` : ""}
-            </button>
-          </div>
-        </div>
-
-        <div className="source-addon-tabs">
-          <button type="button" className={addonFilter === "all" ? "is-active" : ""} onClick={() => setAddonFilter("all")}>{translateUi("All Addons")}</button>
-          {addons.map((addon) => (
-            <button type="button" key={addon.id} className={addonFilter === addon.id ? "is-active" : ""} onClick={() => setAddonFilter(addon.id)}>
-              {addon.name}{addon.count > 0 ? ` ${addon.count}` : ""}
-            </button>
-          ))}
-        </div>
-
-        <div className="source-picker-list">
-          {filtered.length === 0 && (
-            <p className="source-empty">
-              {loading
-                ? translateUi("Searching addons...")
-                : addonFilter !== "all"
-                  ? translateUi("{value0} returned no sources for this title.", {value0: addons.find((addon) => addon.id === addonFilter)?.name ?? "This addon"})
-                  : translateUi("No sources match this filter.")}
-            </p>
-          )}
-          {filtered.map((stream, index) => {
-            const telegramDisabled = isDisabledTelegramSource(stream);
-            const locked = !stream.url || telegramDisabled;
-            const uncached = isUncachedDebridStream(stream);
-            const plan = playbackPlan(stream);
-            const playback = telegramDisabled
-              ? sourcePlaybackPresentation({ url: null }, { ...plan, detail: TELEGRAM_DISABLED_MESSAGE }, uncached)
-              : sourcePlaybackPresentation(stream, plan, uncached);
-            const StatusIcon = playback.state === "blocked" ? TriangleAlert : Info;
-            return (
-              <article key={`${stream.addonId}-${stream.url ?? stream.source}`} className={`source-picker-row ${locked ? "is-locked" : ""}`}>
-                <span className="source-rank">{index + 1}</span>
-                <span className="source-main">
-                  <strong>{stream.source || stream.addonName}</strong>
-                  <em>{stream.addonName}{stream.description ? ` - ${stream.description}` : ""}</em>
-                  <span className="source-status-line" data-playback-state={playback.state}>
-                    <span className={`source-playback-status ${playback.className}`} style={{ maxWidth: "100%", whiteSpace: "normal", overflowWrap: "anywhere", gap: 6, paddingBlock: 4 }}>
-                      <StatusIcon size={13} aria-hidden="true" style={{ flexShrink: 0 }} />
-                      <span>{translateUi(playback.label)}</span>
-                    </span>
-                    {(telegramDisabled || playback.detail) && <span className="source-warning">{telegramDisabled ? TELEGRAM_DISABLED_MESSAGE : translateUi(playback.detail)}</span>}
-                  </span>
-                  <span className="stream-badges">
-                    {streamBadges(stream).map((badge) => (
-                      <span key={badge.label} className={`stream-badge ${badge.tone ?? ""}`}>{translateUi(badge.label)}</span>
-                    ))}
-                  </span>
-                </span>
-                <span className="source-side">
-                  <b>{stream.quality || translateUi("Unknown")}</b>
-                  <small>{telegramDisabled ? translateUi("Not browser-playable") : locked ? translateUi("Needs resolver") : playback.state === "conversion" ? translateUi("Conversion required") : playback.state === "blocked" ? translateUi("Not browser-playable") : translateUi("Unverified")}</small>
-                  {!telegramDisabled && <span className="source-row-actions">
-                    {playback.canTryBrowser && <button type="button" className="source-action primary-action" aria-label={playback.state === "conversion" ? translateUi("Try provider conversion in browser") : translateUi("Try browser playback")} title={translateUi(playback.detail) || translateUi("Try browser playback")} onClick={() => { playStream(stream, { forceBrowser: true }); onClose(); }}><Play size={13} /> {translateUi(" Try")}</button>}
-                    <button
-                      type="button"
-                      className={`source-action ${locked ? "" : "primary-action"}`}
-                      disabled={locked}
-                      onClick={() => openExternal("vlc", stream)}
-                    >
-                      <ExternalLink size={13} /> {translateUi(" VLC")}</button>
-                    <button type="button" className="source-action" disabled={locked} onClick={() => openAnyPlayer(stream)}>
-                      <ExternalLink size={13} /> {translateUi(" Player")}</button>
-                    <button type="button" className="source-action icon-only" disabled={locked} onClick={() => void downloadSource(stream)} aria-label={translateUi("Download this source")}>
-                      <Download size={13} />
-                    </button>
-                    <button type="button" className="source-action icon-only" disabled={locked} onClick={() => void copyUrl(stream)} aria-label={translateUi("Copy stream URL")}>
-                      <Copy size={13} />
-                    </button>
-                  </span>}
-                </span>
-              </article>
-            );
-          })}
-        </div>
+  const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
+  const [showAll, setShowAll] = useState(false);
+  const visible = showAll ? reviews : reviews.slice(0, REVIEW_LIMIT);
+  return (
+    <section className="detail-section detail-wide detail-reviews">
+      <h2 className="detail-section-title">{translateUi("Reviews")}</h2>
+      <div className="review-list">
+        {visible.map((review) => {
+          const text = cleanReviewText(review.content);
+          const open = expanded.has(review.id);
+          const long = text.length > 320;
+          return (
+            <article className="review-card" key={review.id}>
+              <div className="review-head">
+                {review.avatar ? <img src={review.avatar} alt="" loading="lazy" /> : <UserCircle size={26} />}
+                <strong>{review.author}</strong>
+                {review.rating != null && <span className="review-rating"><Star size={13} fill="currentColor" /> {review.rating}</span>}
+                {review.createdAt ? <time className="review-date" dateTime={review.createdAt}>{formatDate(review.createdAt)}</time> : null}
+              </div>
+              <p className={`review-text ${open || !long ? "is-open" : ""}`}>{text}</p>
+              {long ? (
+                <button type="button" className="review-more" aria-expanded={open} onClick={() => setExpanded((current) => {
+                  const next = new Set(current);
+                  if (next.has(review.id)) next.delete(review.id); else next.add(review.id);
+                  return next;
+                })}>
+                  {open ? translateUi("Show less") : translateUi("Read more")}
+                </button>
+              ) : null}
+            </article>
+          );
+        })}
       </div>
-    </section>,
-    document.body
+      {reviews.length > REVIEW_LIMIT ? (
+        <button type="button" className="secondary text-button review-all" onClick={() => setShowAll((value) => !value)}>
+          {showAll ? translateUi("Show fewer reviews") : translateUi("All {value0} reviews", { value0: reviews.length })}
+        </button>
+      ) : null}
+    </section>
   );
 }
 
@@ -801,19 +651,26 @@ function PersonModal({
   posterMode: boolean;
 }) {
   const translateUi = useTranslation();
+  const layerRef = useRef<HTMLElement | null>(null);
   useEffect(() => {
     if (!visible) return undefined;
+    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const timer = window.setTimeout(() => layerRef.current?.querySelector<HTMLElement>(".person-close")?.focus(), 0);
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
+      if (event.key === "Escape" && claimEscape(event) && isTopmostLayer(layerRef.current)) onClose();
     };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    return () => {
+      window.clearTimeout(timer);
+      window.removeEventListener("keydown", onKey);
+      if (opener?.isConnected) window.setTimeout(() => opener.focus({ preventScroll: true }), 0);
+    };
   }, [onClose, visible]);
 
   if (!visible) return null;
   if (typeof document === "undefined") return null;
   return createPortal(
-    <section className="person-modal" role="dialog" aria-modal="true" aria-label={person?.name ?? translateUi("Cast details")}>
+    <section className="person-modal" role="dialog" aria-modal="true" aria-label={person?.name ?? translateUi("Cast details")} ref={layerRef}>
       <div className="person-modal-bg" onClick={onClose} />
       <div className="person-panel">
         <button type="button" className="person-close" onClick={onClose} aria-label={translateUi("Close cast details")}><X size={24} /></button>
@@ -861,94 +718,22 @@ function PersonModal({
   );
 }
 
-function formatDate(date: string) {
-  const parsed = new Date(`${date}T00:00:00`);
-  if (Number.isNaN(parsed.getTime())) return date;
-  return parsed.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
-}
-
-function streamBadges(stream: StreamSource) {
-  const text = `${stream.source} ${stream.description ?? ""} ${stream.size ?? ""}`.toLowerCase();
-  const labels: Array<{ label: string; tone?: string }> = [];
-  const quality = stream.quality || detectSourceBadge(text);
-  if (quality) labels.push({ label: quality, tone: quality === "4K" ? "gold" : "" });
-  if (text.includes("hdr10+") || text.includes("hdr")) labels.push({ label: "HDR" });
-  if (text.includes("dolby vision") || /\bdv\b/i.test(text)) labels.push({ label: "DV" });
-  if (text.includes("atmos")) labels.push({ label: "ATMOS" });
-  else if (text.includes("7.1")) labels.push({ label: "7.1" });
-  else if (text.includes("5.1")) labels.push({ label: "5.1" });
-  const size = stream.size || text.match(/\b\d+(?:\.\d+)?\s?(?:gb|mb|tb)\b/i)?.[0]?.toUpperCase();
-  if (size) labels.push({ label: size });
-  if (stream.behaviorHints?.cached) labels.push({ label: "CACHED", tone: "ok" });
-  if (parseDebridStream(stream.url) || /real-?debrid|premiumize|alldebrid|torbox|\brd\b|\bpm\b|\bad\b|\bdebrid\b/i.test(text)) labels.push({ label: "DEBRID", tone: "ok" });
-  // A URL is not evidence of browser support, or of a resolved direct media link.
-  if (stream.url) labels.push({ label: "URL" });
-  if (!stream.url) labels.push({ label: "NO URL", tone: "warn" });
-  const seen = new Set<string>();
-  return labels.filter((badge) => {
-    if (seen.has(badge.label)) return false;
-    seen.add(badge.label);
-    return true;
-  }).slice(0, 7);
-}
-
-function detectSourceBadge(text: string) {
-  if (text.includes("2160") || text.includes("4k")) return "4K";
-  if (text.includes("1080")) return "1080p";
-  if (text.includes("720")) return "720p";
-  if (text.includes("480")) return "480p";
-  return "";
-}
-
-function buildDetailMeta(item: MediaItem, showBudget: boolean) {
-  const meta = [
-    item.releaseDate || item.year || null,
-    item.duration || null,
-    item.mediaType === "tv" && item.numberOfSeasons ? `${item.numberOfSeasons} season${item.numberOfSeasons === 1 ? "" : "s"}` : null,
-    item.mediaType === "tv" && item.numberOfEpisodes ? `${item.numberOfEpisodes} episodes` : null,
-    item.mediaType === "tv" && item.lastAirDate ? `Last aired ${item.lastAirDate}` : null,
-    item.status || null,
-    item.originalLanguage ? item.originalLanguage.toUpperCase() : null
-  ];
-  if (showBudget && item.mediaType === "movie") {
-    meta.push(formatMoney(item.budget, "Budget"));
-    meta.push(formatMoney(item.revenue, "Box office"));
-  }
-  return meta.filter((value): value is string => Boolean(value));
-}
-
-function buildContinueLabel(item: MediaItem, selectedEpisode: { season: number; episode: number } | null) {
-  const season = selectedEpisode?.season ?? item.seasonNumber ?? null;
-  const episode = selectedEpisode?.episode ?? item.episodeNumber ?? null;
-  if (item.mediaType === "tv") {
-    return season != null && episode != null ? `Continue S${season} E${episode}` : "Choose episode";
-  }
-  const progress = item.progress ?? 0;
-  return progress >= 1 && progress <= 94 ? `Continue ${Math.round(progress)}%` : "Play";
-}
-
-function formatMoney(value: number | null | undefined, label: string) {
-  if (!value || value <= 0) return null;
-  const compact = new Intl.NumberFormat("en-US", {
-    notation: "compact",
-    maximumFractionDigits: 1,
-    style: "currency",
-    currency: "USD"
-  }).format(value);
-  return `${label} ${compact}`;
-}
-
-function SeasonEpisodes({ item, loadingDetails, selectedEpisode, isWatched, onPlayEpisode }: {
+function SeasonEpisodes({ sectionRef, item, loadingDetails, selectedEpisode, preferredSeason, isWatched, progress, onPlayEpisode }: {
+  sectionRef: React.RefObject<HTMLElement | null>;
   item: MediaItem;
   loadingDetails: boolean;
   selectedEpisode: { season: number; episode: number } | null;
+  preferredSeason: number | null;
   isWatched: (item: MediaItem, seasonNumber?: number | null, episodeNumber?: number | null) => boolean;
+  progress: Map<string, ResumePoint>;
   onPlayEpisode: (season: number, episode: number) => void;
 }) {
   const translateUi = useTranslation();
-  const { openContextMenu, setToast, settings, toggleWatched } = useApp();
+  const { openContextMenu, setToast, settings, toggleWatched } = useAppPick("openContextMenu", "setToast", "settings", "toggleWatched");
+  const narrow = useCompactSources();
   const seasons = (item.seasons ?? []).filter(entry => entry.seasonNumber > 0 || settings.includeSpecials || item.seasonNumber === 0);
-  const [season, setSeason] = useState(selectedEpisode?.season ?? item.seasonNumber ?? seasons[0]?.seasonNumber ?? 1);
+  const [season, setSeason] = useState(selectedEpisode?.season ?? item.seasonNumber ?? preferredSeason ?? seasons[0]?.seasonNumber ?? 1);
+  const userPicked = useRef(false);
   const [episodes, setEpisodes] = useState<EpisodeInfo[]>([]);
   const [loading, setLoading] = useState(false);
   const [retryNonce, setRetryNonce] = useState(0);
@@ -959,6 +744,14 @@ function SeasonEpisodes({ item, loadingDetails, selectedEpisode, isWatched, onPl
     isAnime: item.isAnime
   }), [item.anilistId, item.isAnime, item.tvdbId]);
 
+  // Follow the resume/next episode's season until the viewer picks one.
+  useEffect(() => {
+    if (userPicked.current) return;
+    const target = selectedEpisode?.season ?? preferredSeason;
+    if (target != null && seasons.some((entry) => entry.seasonNumber === target)) setSeason(target);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [preferredSeason, selectedEpisode?.season, seasons.length]);
+
   useEffect(() => {
     if (seasons.length && !seasons.some((entry) => entry.seasonNumber === season)) {
       setSeason(seasons[0]?.seasonNumber ?? 1);
@@ -968,16 +761,21 @@ function SeasonEpisodes({ item, loadingDetails, selectedEpisode, isWatched, onPl
   useEffect(() => {
     let active = true;
     setLoading(true);
-    void getSeasonEpisodes(item.id, season, "en-US", priorityConfig, metadataContext)
+    void loadSeasonEpisodes(item.id, season, "en-US", priorityConfig, metadataContext)
       .then((eps) => { if (active) setEpisodes(eps); })
       .catch(() => undefined)
       .finally(() => active && setLoading(false));
     return () => { active = false; };
   }, [item.id, metadataContext, priorityConfig, retryNonce, season]);
 
+  const pickSeason = (value: number) => {
+    userPicked.current = true;
+    setSeason(value);
+  };
+
   const updateSeasonWatched = async (seasonNum: number, watched: boolean) => {
     try {
-      const targetEpisodes = await getSeasonEpisodes(item.id, seasonNum, "en-US", priorityConfig, metadataContext);
+      const targetEpisodes = await loadSeasonEpisodes(item.id, seasonNum, "en-US", priorityConfig, metadataContext);
       const changedEpisodes = targetEpisodes.filter(ep => isWatched(item, seasonNum, ep.episodeNumber) !== watched);
       await syncSeasonWatched({
         mediaType: "tv",
@@ -995,105 +793,122 @@ function SeasonEpisodes({ item, loadingDetails, selectedEpisode, isWatched, onPl
     }
   };
 
-  const handleSeasonContextMenu = (e: React.MouseEvent, seasonNum: number, seasonName: string) => {
-    e.preventDefault();
-    e.stopPropagation();
+  const anchorPosition = (anchor: HTMLElement | { x: number; y: number }) => {
+    if (!(anchor instanceof HTMLElement)) return anchor;
+    const rect = anchor.getBoundingClientRect();
+    return { x: Math.max(16, rect.right - 300), y: rect.bottom + 6 };
+  };
+
+  const openSeasonMenu = (anchor: HTMLElement | { x: number; y: number }, seasonNum: number, seasonName: string) => {
     openContextMenu({
       title: seasonName || `Season ${seasonNum}`,
       subtitle: item.title,
-      position: { x: e.clientX, y: e.clientY },
+      position: anchorPosition(anchor),
       actions: [
-        {
-          id: "mark_season_watched",
-          label: "Mark Season Watched",
-          icon: <Check size={18} />,
-          action: async () => {
-            await updateSeasonWatched(seasonNum, true);
-          }
-        },
-        {
-          id: "mark_season_unwatched",
-          label: "Mark Season Unwatched",
-          icon: <EyeOff size={18} />,
-          action: async () => {
-            await updateSeasonWatched(seasonNum, false);
-          }
-        }
+        { id: "mark_season_watched", label: "Mark Season Watched", icon: <Check size={18} />, action: async () => { await updateSeasonWatched(seasonNum, true); } },
+        { id: "mark_season_unwatched", label: "Mark Season Unwatched", icon: <EyeOff size={18} />, action: async () => { await updateSeasonWatched(seasonNum, false); } }
       ]
     });
   };
 
-  const handleEpisodeContextMenu = (e: React.MouseEvent, ep: EpisodeInfo) => {
-    e.preventDefault();
-    e.stopPropagation();
+  const openEpisodeMenu = (anchor: HTMLElement | { x: number; y: number }, ep: EpisodeInfo) => {
     const watched = isWatched(item, season, ep.episodeNumber);
     openContextMenu({
       title: ep.name || `Episode ${ep.episodeNumber}`,
       subtitle: `${item.title} - S${season} E${ep.episodeNumber}`,
-      position: { x: e.clientX, y: e.clientY },
+      position: anchorPosition(anchor),
       actions: [
-        {
-          id: "play_episode",
-          label: "Play Episode",
-          icon: <Play size={18} fill="currentColor" />,
-          action: () => {
-            onPlayEpisode(season, ep.episodeNumber);
-          }
-        },
-        {
-          id: "toggle_episode_watched",
-          label: watched ? "Mark as Unwatched" : "Mark as Watched",
-          icon: watched ? <EyeOff size={18} /> : <Check size={18} />,
-          action: () => {
-            void toggleWatched(item, season, ep.episodeNumber);
-          }
-        }
+        { id: "play_episode", label: "Play Episode", icon: <Play size={18} fill="currentColor" />, action: () => { onPlayEpisode(season, ep.episodeNumber); } },
+        { id: "toggle_episode_watched", label: watched ? "Mark as Unwatched" : "Mark as Watched", icon: watched ? <EyeOff size={18} /> : <Check size={18} />, action: () => { void toggleWatched(item, season, ep.episodeNumber); } }
       ]
     });
   };
 
+  const currentSeason = seasons.find((entry) => entry.seasonNumber === season);
+  const seasonLabel = (entry: { seasonNumber: number; name?: string }) => entry.name || translateUi("Season {value0}", { value0: entry.seasonNumber });
+  const cards = !loading ? episodes.map((episode) => {
+    const active = (selectedEpisode?.season ?? item.seasonNumber) === season &&
+      (selectedEpisode?.episode ?? item.episodeNumber) === episode.episodeNumber;
+    const watched = isWatched(item, season, episode.episodeNumber);
+    return (
+      <EpisodeCard
+        key={episode.id}
+        episode={episode}
+        active={active}
+        watched={watched}
+        progress={progress.get(episodeKey(season, episode.episodeNumber))?.percent ?? null}
+        onPlay={() => onPlayEpisode(season, episode.episodeNumber)}
+        onContextMenu={(event) => { event.preventDefault(); event.stopPropagation(); openEpisodeMenu({ x: event.clientX, y: event.clientY }, episode); }}
+        onMenu={(anchor) => openEpisodeMenu(anchor, episode)}
+      />
+    );
+  }) : [];
+  const status = (
+    <>
+      {(loading || loadingDetails) && <p className="empty">{translateUi("Loading episodes...")}</p>}
+      {!loading && !loadingDetails && !episodes.length ? (
+        <p className="empty">
+          {translateUi("No episodes found.")}{" "}
+          <button type="button" className="episode-retry" onClick={() => setRetryNonce((n) => n + 1)}>{translateUi("Retry")}</button>
+        </p>
+      ) : null}
+    </>
+  );
+
   return (
-    <section className="detail-section episodes-section detail-wide">
-      <h3>{translateUi("Episodes")}</h3>
-      <div className="season-tabs">
-        {seasons.map((s) => (
-          <button
-            type="button"
-            key={s.id}
-            className={`season-tab ${s.seasonNumber === season ? "is-active" : ""}`}
-            aria-pressed={s.seasonNumber === season}
-            onClick={() => setSeason(s.seasonNumber)}
-            onContextMenu={(e) => handleSeasonContextMenu(e, s.seasonNumber, s.name || `Season ${s.seasonNumber}`)}
-          >
-            {s.name || translateUi("Season {value0}", {value0: s.seasonNumber})}
-          </button>
-        ))}
-        {!seasons.length && loadingDetails ? <span className="season-tab is-loading">{translateUi("Loading seasons...")}</span> : null}
+    <section className={`detail-section episodes-section detail-wide ${narrow ? "is-narrow" : ""}`} ref={sectionRef}>
+      <div className="episodes-head">
+        <h2 className="detail-section-title">{translateUi("Episodes")}</h2>
+        <div className="season-picker">
+          {narrow || seasons.length > 8 ? (
+            <label className="season-select">
+              <span className="sr-only">{translateUi("Season")}</span>
+              <select value={season} onChange={(event) => pickSeason(Number(event.target.value))} aria-label={translateUi("Season")}>
+                {seasons.map((entry) => <option key={entry.id} value={entry.seasonNumber}>{seasonLabel(entry)}</option>)}
+              </select>
+              <ChevronDown size={16} aria-hidden="true" />
+            </label>
+          ) : (
+            <div className="season-tabs" role="group" aria-label={translateUi("Seasons")}>
+              {seasons.map((s) => (
+                <button
+                  type="button"
+                  key={s.id}
+                  className={`season-tab ${s.seasonNumber === season ? "is-active" : ""}`}
+                  aria-pressed={s.seasonNumber === season}
+                  onClick={() => pickSeason(s.seasonNumber)}
+                  onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); openSeasonMenu({ x: e.clientX, y: e.clientY }, s.seasonNumber, seasonLabel(s)); }}
+                >
+                  {seasonLabel(s)}
+                </button>
+              ))}
+              {!seasons.length && loadingDetails ? <span className="season-tab is-loading">{translateUi("Loading seasons...")}</span> : null}
+            </div>
+          )}
+          {seasons.length ? (
+            <button
+              type="button"
+              className="season-menu-button"
+              aria-haspopup="dialog"
+              aria-label={translateUi("Options for {value0}", { value0: currentSeason ? seasonLabel(currentSeason) : translateUi("Season {value0}", { value0: season }) })}
+              onClick={(event) => openSeasonMenu(event.currentTarget, season, currentSeason ? seasonLabel(currentSeason) : "")}
+            >
+              <MoreHorizontal size={18} />
+            </button>
+          ) : null}
+        </div>
       </div>
-      <RailScroller className="episode-list" ariaLabel={translateUi("season {value0} episodes", {value0:season})}>
-        {(loading || loadingDetails) && <p className="empty">{translateUi("Loading episodes...")}</p>}
-        {!loading && !loadingDetails && !episodes.length ? (
-          <p className="empty">
-            {translateUi("No episodes found.")}{" "}
-            <button type="button" className="episode-retry" onClick={() => setRetryNonce((n) => n + 1)}>{translateUi("Retry")}</button>
-          </p>
-        ) : null}
-        {!loading && episodes.map((episode) => {
-          const active = (selectedEpisode?.season ?? item.seasonNumber) === season &&
-            (selectedEpisode?.episode ?? item.episodeNumber) === episode.episodeNumber;
-          const watched = isWatched(item, season, episode.episodeNumber);
-          return (
-            <EpisodeCard
-              key={episode.id}
-              episode={episode}
-              active={active}
-              watched={watched}
-              onPlay={() => onPlayEpisode(season, episode.episodeNumber)}
-              onContextMenu={event => handleEpisodeContextMenu(event, episode)}
-            />
-          );
-        })}
-      </RailScroller>
+      {narrow ? (
+        <div className="episode-list episode-list-vertical" aria-label={translateUi("season {value0} episodes", { value0: season })}>
+          {status}
+          {cards}
+        </div>
+      ) : (
+        <RailScroller className="episode-list" ariaLabel={translateUi("season {value0} episodes", { value0: season })}>
+          {status}
+          {cards}
+        </RailScroller>
+      )}
     </section>
   );
 }

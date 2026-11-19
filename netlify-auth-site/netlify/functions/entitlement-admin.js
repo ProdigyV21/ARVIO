@@ -49,7 +49,9 @@ exports.handler = async (event) => {
     }
     if (action === "grant") {
       const days = body.days === null || body.days === undefined ? null : Number(body.days);
-      const record = buildPaidRecord(existing, {
+      // An admin grant sets the access window from now (it does not stack on
+      // remaining time the way payments do).
+      const record = buildPaidRecord(existing ? { ...existing, status: "admin-reset", expiresAt: undefined } : null, {
         source: body.source || "manual",
         tier: body.tier || null,
         days,

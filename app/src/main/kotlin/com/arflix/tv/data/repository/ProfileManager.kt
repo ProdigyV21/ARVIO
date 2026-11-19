@@ -70,6 +70,8 @@ class ProfileManager @Inject constructor(
         return id
     }
 
+    suspend fun getActiveProfile(): com.arflix.tv.data.model.Profile? = profileRepository.getActiveProfile()
+
     /**
      * Initialize the profile manager - call this early in app startup
      */

@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="library_calendar">לוח שנה</string>
+    <string name="calendar_all_watchlists">כל רשימות הצפייה</string>
+    <string name="calendar_arvio_watchlist">רשימת הצפייה של ARVIO</string>
+    <string name="calendar_today">היום</string>
+    <string name="calendar_local_time">שעה מקומית</string>
+    <string name="calendar_time_tba">שעה תפורסם בהמשך</string>
+    <string name="calendar_next_month">החודש הבא</string>
+    <string name="calendar_previous_month">החודש הקודם</string>
+    <string name="calendar_release">יציאה</string>
+    <string name="calendar_releases">יציאות</string>
+    <string name="calendar_more">עוד</string>
+    <string name="calendar_navigate_days">ניווט בין ימים</string>
+    <string name="calendar_open_day">פתיחת היום</string>
+    <string name="calendar_partial">חלק מהמקורות אינם זמינים</string>
+    <string name="calendar_loading">מאתר את היציאות שלך…</string>
+    <string name="calendar_unavailable">לוח השנה אינו זמין</string>
+    <string name="calendar_incomplete">לוח היציאות אינו שלם</string>
+    <string name="calendar_empty_watchlist">רשימת הצפייה שלך, בלוח השנה</string>
+    <string name="calendar_empty_day">אין יציאות ביום זה</string>
+    <string name="calendar_add_watchlist">אפשר להוסיף סרטים וסדרות לרשימת הצפייה של ARVIO. אין צורך בחשבון מעקב.</string>
+    <string name="calendar_choose_day">יש לבחור יום או רשימת צפייה אחרים כדי לגלות יציאות קרובות.</string>
+    <string name="calendar_cinema">קולנוע</string>
+    <string name="calendar_digital">דיגיטלי</string>
+    <string name="calendar_physical">פיזי</string>
+    <string name="calendar_next_release">היציאה הבאה</string>
+    <string name="calendar_partial_details">חלק מפרטי היציאה אינם זמינים</string>
+    <string name="calendar_refresh">רענון לוח השנה</string>
+</resources>

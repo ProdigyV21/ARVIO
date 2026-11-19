@@ -32,6 +32,7 @@ import androidx.compose.foundation.MutatePriority
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.collectIsDraggedAsState
 import androidx.compose.ui.res.painterResource
 import com.arflix.tv.R
 import androidx.compose.foundation.rememberScrollState
@@ -109,6 +110,7 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import android.content.res.Configuration
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
@@ -160,6 +162,7 @@ import com.arflix.tv.ui.components.SkeletonMediaCard
 import androidx.compose.material3.TextButton
 import com.arflix.tv.ui.components.MobileHeroBanner
 import com.arflix.tv.ui.components.MobileHeroLayoutSpec
+import com.arflix.tv.ui.components.mobileDetailsArtworkSource
 import com.arflix.tv.ui.components.resolveMobileHeroLayout
 import com.arflix.tv.ui.components.ProfileAvatarVisual
 import com.arflix.tv.util.LocalDeviceType
@@ -168,8 +171,6 @@ import com.arflix.tv.ui.components.ListPickerMenu
 import com.arflix.tv.ui.components.MediaContextMenu
 import com.arflix.tv.ui.components.rememberCardLayoutMode
 import com.arflix.tv.ui.components.rememberCatalogueRowLayoutMode
-import com.arflix.tv.ui.components.Toast
-import com.arflix.tv.ui.components.ToastType as ComponentToastType
 import com.arflix.tv.ui.components.SidebarItem
 import com.arflix.tv.ui.components.topBarFocusedItem
 import com.arflix.tv.ui.components.topBarMaxIndex
@@ -211,6 +212,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import dagger.hilt.android.EntryPointAccessors
 import com.arflix.tv.ui.components.TrailerPlayerEntryPoint
@@ -385,6 +387,7 @@ internal class HomeFocusState(
 internal fun localizedCategoryTitle(category: Category): String = when (category.id) {
     "continue_watching"        -> stringResource(R.string.continue_watching)
     HOME_WATCHLIST_ROW_ID       -> stringResource(R.string.watchlist)
+    HOME_COMING_UP_ROW_ID      -> stringResource(R.string.home_coming_up)
     "trending_movies"          -> stringResource(R.string.trending_movies)
     "trending_series"          -> stringResource(R.string.trending_series)
     "trending_tv"              -> stringResource(R.string.trending_in_shows)
@@ -562,7 +565,9 @@ internal fun homeHeroUsesHls(url: String, serverSaysHls: Boolean): Boolean {
 @androidx.compose.runtime.Immutable
 private data class HomeHeroPlaybackHandles(
     val player: ExoPlayer,
-    val hlsFactory: HlsMediaSource.Factory
+    val hlsFactory: HlsMediaSource.Factory,
+    val iptvClient: OkHttpClient,
+    val userAgent: String
 )
 
 private fun createHomeHeroPlaybackHandles(context: Context): HomeHeroPlaybackHandles {
@@ -575,8 +580,9 @@ private fun createHomeHeroPlaybackHandles(context: Context): HomeHeroPlaybackHan
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(20, TimeUnit.SECONDS)
         .build()
+    val heroUserAgent = OkHttpProvider.getAppUserAgent(context)
     val heroDataSourceFactory =
-        OkHttpDataSource.Factory(heroOkHttp).setUserAgent(OkHttpProvider.getAppUserAgent(context))
+        OkHttpDataSource.Factory(heroOkHttp).setUserAgent(heroUserAgent)
     // The hero previews favorite IPTV channels, so it needs the same non-IDR keyframe
     // extractors as the TV screens or those channels stall on the home screen.
     val heroHlsFactory = HlsMediaSource.Factory(heroDataSourceFactory)
@@ -601,7 +607,9 @@ private fun createHomeHeroPlaybackHandles(context: Context): HomeHeroPlaybackHan
         }
     return HomeHeroPlaybackHandles(
         player = player,
-        hlsFactory = heroHlsFactory
+        hlsFactory = heroHlsFactory,
+        iptvClient = homeHeroIptvClient(heroOkHttp),
+        userAgent = heroUserAgent
     )
 }
 
@@ -784,7 +792,7 @@ fun HomeScreen(
     preloadedHeroLogoUrl: String? = null,
     preloadedLogoCache: Map<String, String> = emptyMap(),
     currentProfile: com.arflix.tv.data.model.Profile? = null,
-    onNavigateToDetails: (MediaType, Int, Int?, Int?) -> Unit = { _, _, _, _ -> },
+    onNavigateToDetails: (MediaType, Int, Int?, Int?, Boolean) -> Unit = { _, _, _, _, _ -> },
     onNavigateToCollection: (String) -> Unit = {},
     onNavigateToCategory: (String) -> Unit = {},
     onNavigateToSearch: () -> Unit = {},
@@ -793,7 +801,8 @@ fun HomeScreen(
     onNavigateToPlayer: (MediaType, Int, String, String?, String?) -> Unit = { _, _, _, _, _ -> },
     onNavigateToSettings: () -> Unit = {},
     onSwitchProfile: () -> Unit = {},
-    onExitApp: () -> Unit = {}
+    onExitApp: () -> Unit = {},
+    upcomingItems: List<MediaItem> = emptyList()
 ) {
     val isMobile = LocalDeviceType.current.isTouchDevice()
 
@@ -830,7 +839,7 @@ fun HomeScreen(
     val lifecycleOwner = LocalLifecycleOwner.current
     var suppressSelectUntilMs by remember { mutableLongStateOf(0L) }
 
-    val navigateToDetailsWithCache: (MediaType, Int, Int?, Int?) -> Unit = { mediaType, mediaId, initialSeason, initialEpisode ->
+    val navigateToDetailsWithCache: (MediaType, Int, Int?, Int?, Boolean) -> Unit = { mediaType, mediaId, initialSeason, initialEpisode, autoPlay ->
         val matchingItem = uiState.categories.asSequence()
             .flatMap { it.items.asSequence() }
             .firstOrNull { it.id == mediaId && it.mediaType == mediaType }
@@ -845,7 +854,7 @@ fun HomeScreen(
         if (!matchingLogo.isNullOrBlank()) {
             viewModel.cacheLogoUrl(mediaType, mediaId, matchingLogo)
         }
-        onNavigateToDetails(mediaType, mediaId, initialSeason, initialEpisode)
+        onNavigateToDetails(mediaType, mediaId, initialSeason, initialEpisode, autoPlay)
     }
 
     LaunchedEffect(Unit) {
@@ -894,8 +903,9 @@ fun HomeScreen(
     val rawDisplayCategories = remember(rawDisplayCategoriesBase, sportsHomeRows) {
         viewModel.withSportsHomeRows(rawDisplayCategoriesBase, sportsHomeRows)
     }
-    val displayCategories = remember(rawDisplayCategories, homeWatchlistItems) {
-        withHomeWatchlistRow(deduplicateHomeCategories(rawDisplayCategories), homeWatchlistItems, enabled = true)
+    val displayCategories = remember(rawDisplayCategories, homeWatchlistItems, upcomingItems, kidsFilterState) {
+        val rows = withHomeWatchlistRow(deduplicateHomeCategories(rawDisplayCategories), homeWatchlistItems, enabled = true)
+        withHomeComingUpRow(rows, viewModel.filterForKids(upcomingItems, kidsFilterState))
     }
     val displayHeroItem = uiState.heroItem ?: preloadedHeroItem?.takeIf { !kidsFilterState.isActive }
         ?: if (uiState.categories.isEmpty()) {
@@ -957,7 +967,7 @@ fun HomeScreen(
     var billboardItem by remember(currentProfile?.id) { mutableStateOf<MediaItem?>(null) }
     LaunchedEffect(netflixHome, displayCategories, kidsFilterState) {
         if (!netflixHome) return@LaunchedEffect
-        val candidates = netflixBillboardCandidates(displayCategories) { item ->
+        val candidates = netflixBillboardCandidates(displayCategories.filterNot { it.id == HOME_COMING_UP_ROW_ID }) { item ->
             viewModel.isIptvItem(item) || viewModel.isCollectionItem(item) || viewModel.isSportsHomeItem(item)
         }
         // The billboard keeps its title for the whole visit; on a kids profile that title
@@ -971,6 +981,23 @@ fun HomeScreen(
         val selected = stableNetflixBillboard(restored, candidates) { it.random() }
         billboardItem = selected
         billboardKey = selected?.let(::homeRowItemKey)
+    }
+    // Home finished loading and no row offers a billboard title: collapse the billboard
+    // and move focus off it, or Home opens on an empty black box that Up can't return to.
+    // Addon rows (the last billboard fallback) can land after Home reports loaded, so
+    // give them a grace period, and hand focus back if a title arrives before any input.
+    var billboardHidden by remember(currentProfile?.id) { mutableStateOf(false) }
+    val billboardLoading = uiState.isLoading || uiState.isInitialLoad
+    LaunchedEffect(focusState, netflixHome, billboardItem != null, billboardLoading) {
+        updateNetflixBillboardVisibility(
+            enabled = netflixHome,
+            hasCandidate = billboardItem != null,
+            isLoading = billboardLoading,
+            wasHidden = billboardHidden,
+            focusState = focusState,
+            categories = { latestDisplayCategories },
+            onHiddenChanged = { billboardHidden = it }
+        )
     }
     // While the billboard is focused it is the ViewModel's hero, which loads its
     // details, logo and trailer exactly as for a focused card.
@@ -1215,6 +1242,10 @@ fun HomeScreen(
     val serviceHeroVideoUrl = displayHeroItem
         ?.takeIf { heroVideoAllowed && isHeroCollection && collectionVideoFinishedId != it.id }
         ?.let { viewModel.getCollectionHeroVideoUrl(it) }
+    var heroIptvPreviewGate by remember { mutableStateOf<HomeIptvPreviewGate?>(null) }
+    LaunchedEffect(displayHeroItem?.id, isHeroIptv, iptvChannelsVersion, isHomeStarted) {
+        heroIptvPreviewGate = displayHeroItem?.takeIf { isHeroIptv }?.let { viewModel.iptvPreviewGate(it.id) }
+    }
     val heroVideoUrl = when {
         netflixHome && focusState.isHeroFocused -> null
         !isMobile && !focusState.userHasNavigated -> null
@@ -1224,8 +1255,8 @@ fun HomeScreen(
         // Keep the idle gate for heavier IPTV/live playback, but do not delay MP4 previews.
         serviceHeroVideoUrl != null -> serviceHeroVideoUrl
         suppressHeroVideoPlayback -> null
-        // Reading the version re-evaluates this once resolveIptvChannels() finds the channel.
-        isHeroIptv -> displayHeroItem?.takeIf { iptvChannelsVersion >= 0 }?.let { viewModel.getIptvStreamUrl(it.id) }
+        // The gate's effect keys on the channels version, so this re-evaluates once resolveIptvChannels() finds the channel.
+        isHeroIptv -> homeIptvPreviewUrl(displayHeroItem?.id, heroIptvPreviewGate, viewModel::getIptvStreamUrl)
         else -> null
     }
     // A focused channel card whose channel isn't known yet: look it up now rather than
@@ -1246,10 +1277,13 @@ fun HomeScreen(
 
     var heroPlaybackHandles by remember { mutableStateOf<HomeHeroPlaybackHandles?>(null) }
     var preparedHeroVideoUrl by remember { mutableStateOf<String?>(null) }
+    var preparedHeroStopsOnLeave by remember { mutableStateOf(false) }
+    val homeIptvPreview = remember { HomeIptvPreviewSessions(checkAccount = viewModel::iptvAccountUsage) }
     val heroExoPlayer = heroPlaybackHandles?.player
     DisposableEffect(Unit) {
         onDispose {
             heroPlaybackHandles?.player?.release()
+            homeIptvPreview.close()
             heroPlaybackHandles = null
             preparedHeroVideoUrl = null
         }
@@ -1264,6 +1298,7 @@ fun HomeScreen(
                 player.stop()
                 player.clearMediaItems()
             }
+            homeIptvPreview.close()
             preparedHeroVideoUrl = null
         }
     }
@@ -1300,15 +1335,34 @@ fun HomeScreen(
         if (heroVideoUrl != null) {
             val handles = heroPlaybackHandles ?: return@LaunchedEffect
             if (preparedHeroVideoUrl != heroVideoUrl) {
-                // Channel cards: ask the server what an address without a file type serves, as
-                // the Live TV screen does. Other previews keep reading the address alone.
-                val iptvTarget = displayHeroItem
-                    ?.takeIf { isHeroIptv }
-                    ?.let { viewModel.resolveIptvPreviewTarget(it.id) }
-                // Channel previews follow the profile's default subtitle setting, as the Live TV
-                // screen does. Trailers and other previews share this player, so they get the
-                // player's own defaults back rather than whatever the last channel set.
-                val subtitleDefault = if (isHeroIptv) viewModel.previewSubtitleDefault() else null
+                val heroIptvItem = displayHeroItem?.takeIf { isHeroIptv }
+                val iptvSession: com.arflix.tv.network.IptvStreamSession?
+                if (heroIptvItem != null) {
+                    // The admission may stop the player, so nothing counts as prepared until the new source is.
+                    preparedHeroVideoUrl = null
+                    val admission = homeIptvPreview.admit(player) { viewModel.iptvPreviewPolicy(heroIptvItem.id) }
+                    if (admission == null) {
+                        heroIptvPreviewGate = heroIptvPreviewGate.refused(heroIptvItem.id)
+                        return@LaunchedEffect
+                    }
+                    iptvSession = admission.session
+                } else {
+                    homeIptvPreview.close()
+                    iptvSession = null
+                }
+                val (iptvTarget, subtitleDefault) = try {
+                    // Channel previews probe through the admitted session and follow the profile subtitle setting.
+                    val target = heroIptvItem?.let { viewModel.resolveIptvPreviewTarget(it.id, iptvSession) }
+                    val subtitles = if (isHeroIptv) viewModel.previewSubtitleDefault() else null
+                    target to subtitles
+                } catch (error: Throwable) {
+                    iptvSession?.close()
+                    throw error
+                }
+                if (iptvSession?.isClosed == true) {
+                    heroIptvItem?.let { heroIptvPreviewGate = heroIptvPreviewGate.refused(it.id) }
+                    return@LaunchedEffect
+                }
                 player?.stop()
                 player?.clearMediaItems()
                 player?.let { p ->
@@ -1325,13 +1379,17 @@ fun HomeScreen(
                             .setMinPlaybackSpeed(1.0f).setMaxPlaybackSpeed(1.0f)
                             .setTargetOffsetMs(4_000).build()
                     ).build()
-                if (useHls) {
+                if (heroIptvItem != null) {
+                    val headers = homeIptvPreviewHeaders(handles.userAgent, viewModel.getIptvRequestHeaders(heroIptvItem.id))
+                    player?.setMediaSource(homeIptvPreviewSource(context, handles.iptvClient, headers, iptvSession, mi, useHls))
+                } else if (useHls) {
                     player?.setMediaSource(handles.hlsFactory.createMediaSource(mi))
                 } else {
                     player?.setMediaItem(mi)
                 }
                 player?.prepare()
                 preparedHeroVideoUrl = heroVideoUrl
+                preparedHeroStopsOnLeave = homeHeroStopsOnLeave(isHeroIptv, heroIptvPreviewGate)
             }
             // Service videos play once with sound and stop; IPTV live streams
             // naturally don't loop (they're live) so REPEAT_MODE_OFF is safe
@@ -1340,7 +1398,10 @@ fun HomeScreen(
             player?.volume = 1f
             player?.playWhenReady = true
         } else {
-            player?.playWhenReady = false
+            if (homeIptvPreview.leave(player, preparedHeroStopsOnLeave)) {
+                preparedHeroVideoUrl = null
+                preparedHeroStopsOnLeave = false
+            }
         }
     }
 
@@ -1543,7 +1604,7 @@ fun HomeScreen(
                     } else if (viewModel.isCollectionItem(item)) {
                         onNavigateToCollection(item.status?.removePrefix("collection:").orEmpty())
                     } else {
-                        navigateToDetailsWithCache(item.mediaType, item.id, item.nextEpisode?.seasonNumber, item.nextEpisode?.episodeNumber)
+                        navigateToDetailsWithCache(item.mediaType, item.id, item.nextEpisode?.seasonNumber, item.nextEpisode?.episodeNumber, true)
                     }
                 }
             },
@@ -1556,7 +1617,7 @@ fun HomeScreen(
                     } else if (viewModel.isCollectionItem(item)) {
                         onNavigateToCollection(item.status?.removePrefix("collection:").orEmpty())
                     } else {
-                        navigateToDetailsWithCache(item.mediaType, item.id, null, null)
+                        navigateToDetailsWithCache(item.mediaType, item.id, null, null, false)
                     }
                 }
             },
@@ -1574,7 +1635,7 @@ fun HomeScreen(
             onMobileCategoryVisiblePosition = { categoryId, lastVisibleItemIndex ->
                 viewModel.onMobileCategoryVisiblePosition(categoryId, lastVisibleItemIndex)
             },
-            onNavigateToDetails = navigateToDetailsWithCache,
+            onNavigateToDetails = { type, id, s, ep -> navigateToDetailsWithCache(type, id, s, ep, false) },
             onNavigateToCollection = onNavigateToCollection,
             onNavigateToCategory = onNavigateToCategory,
             onNavigateToSearch = onNavigateToSearch,
@@ -1603,14 +1664,16 @@ fun HomeScreen(
                     trailerVolume = if (uiState.trailerSoundEnabled) 1f else 0f,
                     featuredOverview = displayHeroOverview,
                     channelPreviewPlayer = heroExoPlayer?.takeIf { isHeroIptv },
-                    channelPreviewItem = displayHeroItem?.takeIf { isHeroIptv }
+                    channelPreviewItem = displayHeroItem?.takeIf { isHeroIptv },
+                    billboardHidden = billboardHidden
                 )
             } else null,
             onBillboardOpen = { item, play ->
                 navigateToDetailsWithCache(
                     item.mediaType, item.id,
                     item.nextEpisode?.seasonNumber.takeIf { play },
-                    item.nextEpisode?.episodeNumber.takeIf { play }
+                    item.nextEpisode?.episodeNumber.takeIf { play },
+                    play
                 )
             },
             reserveTrailerSpace = reserveTrailerSpace,
@@ -1634,7 +1697,7 @@ fun HomeScreen(
                 isMobile = isMobile,
                 showBudget = uiState.showBudget,
                 compactForTrailer = reserveTrailerSpace,
-                onNavigateToDetails = navigateToDetailsWithCache,
+                onNavigateToDetails = { type, id, s, ep -> navigateToDetailsWithCache(type, id, s, ep, false) },
                 onNavigateToTv = { channelId, streamUrl -> onNavigateToTv(channelId, streamUrl) },
                 isIptvItem = { item -> viewModel.isIptvItem(item) },
                 getIptvChannelId = { item -> viewModel.getIptvChannelId(item) }
@@ -1694,7 +1757,7 @@ fun HomeScreen(
                         } else if (viewModel.isIptvItem(item)) {
                             onNavigateToTv(viewModel.getIptvChannelId(item), null)
                         } else {
-                            navigateToDetailsWithCache(item.mediaType, item.id, item.nextEpisode?.seasonNumber, item.nextEpisode?.episodeNumber)
+                            navigateToDetailsWithCache(item.mediaType, item.id, item.nextEpisode?.seasonNumber, item.nextEpisode?.episodeNumber, true)
                         }
                     },
                     onViewDetails = {
@@ -1703,7 +1766,7 @@ fun HomeScreen(
                         } else if (viewModel.isIptvItem(item)) {
                             onNavigateToTv(viewModel.getIptvChannelId(item), null)
                         } else {
-                            navigateToDetailsWithCache(item.mediaType, item.id, item.nextEpisode?.seasonNumber, item.nextEpisode?.episodeNumber)
+                            navigateToDetailsWithCache(item.mediaType, item.id, item.nextEpisode?.seasonNumber, item.nextEpisode?.episodeNumber, false)
                         }
                     },
                     onToggleWatchlist = {
@@ -1746,21 +1809,22 @@ fun HomeScreen(
         }
 
 
-        // Toast notification
-        uiState.toastMessage?.let { message ->
-            // Above the context menu and list picker, whose results it reports.
-            Box(modifier = Modifier.fillMaxSize().zIndex(122f)) {
-                Toast(
-                    message = message,
-                    type = when (uiState.toastType) {
-                        ToastType.SUCCESS -> ComponentToastType.SUCCESS
-                        ToastType.ERROR -> ComponentToastType.ERROR
-                        ToastType.INFO -> ComponentToastType.INFO
-                    },
-                    isVisible = true,
-                    onDismiss = { viewModel.dismissToast() }
-                )
-            }
+        val quietUpdateNotice by viewModel.quietUpdateNotice.collectAsStateWithLifecycle()
+        HomeToastNotifications(
+            toastMessage = uiState.toastMessage,
+            toastType = uiState.toastType,
+            quietUpdateNotice = quietUpdateNotice,
+            onToastDismiss = viewModel::dismissToast,
+            onQuietUpdateDismiss = viewModel::dismissQuietUpdateNotice
+        )
+
+        // Not compiled with the baseline profile yet: warn that scrolling may be slow.
+        Box(modifier = Modifier.fillMaxSize().zIndex(122f)) {
+            HomeOptimizingNotice(
+                Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(top = com.arflix.tv.ui.components.AppTopBarHeight + 4.dp, end = 48.dp)
+            )
         }
 
         // App Update Modal
@@ -1883,7 +1947,7 @@ private fun HeroSection(
                 if (showInCinema) {
                     Box(
                         modifier = Modifier
-                            .background(inCinemaColor, RoundedCornerShape(6.dp))
+                            .background(inCinemaColor, RoundedCornerShape(8.dp))
                             .padding(horizontal = 10.dp, vertical = 4.dp)
                     ) {
                         Text(
@@ -1914,7 +1978,7 @@ private fun HeroSection(
                     ) {
                         Box(
                             modifier = Modifier
-                                .background(AccentRed, RoundedCornerShape(4.dp))
+                                .background(AccentRed, RoundedCornerShape(8.dp))
                                 .padding(horizontal = 8.dp, vertical = 3.dp)
                         ) {
                             Text(
@@ -2463,44 +2527,50 @@ private fun MobileHeroOverlay(
     }
 }
 
-/** Netflix-style mobile hero carousel: card-based banner pager with profile/search overlay. */
+@Composable
+private fun MobileHomeHeader(
+    currentProfile: com.arflix.tv.data.model.Profile?,
+    onSwitchProfile: () -> Unit,
+    onNavigateToSearch: () -> Unit,
+) {
+    Row(
+        Modifier.fillMaxWidth().statusBarsPadding()
+            .padding(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 8.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(Modifier.size(48.dp).clip(CircleShape).clickable(onClick = onSwitchProfile)
+            .padding(5.dp).clip(CircleShape)) {
+            if (currentProfile != null) ProfileAvatarVisual(
+                profile = currentProfile, letterFontSize = 15.sp, iconPadding = 5.dp)
+        }
+        Box(Modifier.size(48.dp).clip(CircleShape).clickable(onClick = onNavigateToSearch)
+            .padding(5.dp).background(Color.Black.copy(alpha = 0.32f), CircleShape),
+            contentAlignment = Alignment.Center) {
+            Icon(Icons.Filled.Search, stringResource(R.string.search), tint = Color.White,
+                modifier = Modifier.size(26.dp))
+        }
+    }
+}
+
+/** Mobile hero carousel; immersive artwork extends behind the safe-area header. */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun MobileHeroCarousel(
+internal fun MobileHeroCarousel(
     categories: List<Category>,
     heroLayout: MobileHeroLayoutSpec,
+    posterStyle: Boolean = true,
     cardLogoUrls: Map<String, String> = emptyMap(),
     cardImdbRatings: Map<String, String> = emptyMap(),
     currentProfile: com.arflix.tv.data.model.Profile? = null,
     onNavigateToSearch: () -> Unit = {},
     onSwitchProfile: () -> Unit = {},
     onNavigateToDetails: (MediaType, Int, Int?, Int?) -> Unit,
-    onPreloadHeroImdbRatings: (List<MediaItem>) -> Unit = {}
+    onPreloadHeroImdbRatings: (List<MediaItem>) -> Unit = {},
 ) {
     val context = LocalContext.current
-    val density = LocalDensity.current
-    val heroItems = remember(categories) {
-        val eligibleRows = categories.filter {
-            it.id != "continue_watching" &&
-                !it.id.startsWith("collection_row_") &&
-                it.id != SportsAddonCapabilities.SPORTS_CATEGORY_ROW_ID &&
-                it.id != SportsAddonCapabilities.POPULAR_LIVE_TV_ROW_ID
-        }
-        val firstCat = eligibleRows.getOrNull(0)
-            ?.items?.filter { !it.isPlaceholder && it.id > 0 && !SportsAddonCapabilities.isSportsHomeStatus(it.status) && !SportsAddonCapabilities.isSportsLockedStatus(it.status) }?.take(5)
-            .orEmpty()
-        val secondCat = eligibleRows.getOrNull(1)
-            ?.items?.filter { !it.isPlaceholder && it.id > 0 && !SportsAddonCapabilities.isSportsHomeStatus(it.status) && !SportsAddonCapabilities.isSportsLockedStatus(it.status) }?.take(5)
-            .orEmpty()
-        // Interleave: first[0], second[0], first[1], second[1], …
-        buildList {
-            val maxLen = maxOf(firstCat.size, secondCat.size)
-            for (i in 0 until maxLen) {
-                if (i < firstCat.size) add(firstCat[i])
-                if (i < secondCat.size) add(secondCat[i])
-            }
-        }.distinctBy { "${it.mediaType}_${it.id}" }
-    }
+    val incomingItems = remember(categories) { mobileHeroItems(categories) }
+    var heroItems by remember { mutableStateOf(incomingItems) }
 
     LaunchedEffect(heroItems) {
         if (heroItems.isNotEmpty()) {
@@ -2509,41 +2579,9 @@ private fun MobileHeroCarousel(
     }
 
     if (heroItems.isEmpty()) {
+        LaunchedEffect(incomingItems) { heroItems = incomingItems }
         Column(modifier = Modifier.fillMaxWidth()) {
-            // Profile avatar + search icon row — above the pager, respects status bar
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .statusBarsPadding()
-                    .padding(start = 26.dp, end = 26.dp, top = 12.dp, bottom = 10.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                if (currentProfile != null) {
-                    Box(
-                        modifier = Modifier
-                            .size(38.dp)
-                            .clip(CircleShape)
-                            .clickable { onSwitchProfile() }
-                    ) {
-                        ProfileAvatarVisual(
-                            profile = currentProfile,
-                            letterFontSize = 15.sp,
-                            iconPadding = 5.dp
-                        )
-                    }
-                } else {
-                    Spacer(modifier = Modifier.size(38.dp))
-                }
-                Icon(
-                    imageVector = Icons.Filled.Search,
-                    contentDescription = stringResource(R.string.search),
-                    tint = Color.White,
-                    modifier = Modifier
-                        .size(26.dp)
-                        .clickable { onNavigateToSearch() }
-                )
-            }
+            if (posterStyle) MobileHomeHeader(currentProfile, onSwitchProfile, onNavigateToSearch)
 
             Box(
                 modifier = Modifier
@@ -2558,26 +2596,42 @@ private fun MobileHeroCarousel(
                         heroLayout.cardHeightDp.dp,
                     ),
                 )
+                if (!posterStyle) Box(Modifier.align(Alignment.TopCenter)) {
+                    MobileHomeHeader(currentProfile, onSwitchProfile, onNavigateToSearch)
+                }
             }
         }
         return
     }
 
-    // Circular paging: use a large virtual page count that's a multiple of heroItems.size
-    // so page % heroItems.size always maps correctly and starts at item[0].
-    val virtualPageCount = heroItems.size * 1000
-    val initialPage = heroItems.size * 500
     val pagerState = rememberPagerState(
-        initialPage = initialPage,
-        pageCount = { virtualPageCount }
+        initialPage = mobileHeroPageForIndex(MobileHeroPageCount / 2, heroItems.size, 0),
+        pageCount = { MobileHeroPageCount },
     )
+    LaunchedEffect(incomingItems) {
+        if (incomingItems == heroItems) return@LaunchedEffect
+        if (incomingItems.isEmpty()) {
+            heroItems = emptyList()
+            return@LaunchedEffect
+        }
+        snapshotFlow { pagerState.isScrollInProgress }.first { !it }
+        val selected = heroItems[pagerState.currentPage.mod(heroItems.size)]
+        val nextIndex = incomingItems.indexOfFirst { it.id == selected.id && it.mediaType == selected.mediaType }
+            .coerceAtLeast(0)
+        pagerState.scrollToPage(mobileHeroPageForIndex(pagerState.currentPage, incomingItems.size, nextIndex))
+        heroItems = incomingItems
+    }
 
-    // Restart the 10s countdown whenever the pager settles on a new page,
-    // whether from a user swipe or the previous auto-advance. This gives
-    // the user a full 10s after any manual interaction before the next advance.
-    LaunchedEffect(pagerState.settledPage, heroItems.size) {
-        if (heroItems.size <= 1) return@LaunchedEffect
+    val isDragged by pagerState.interactionSource.collectIsDraggedAsState()
+    val lifecycleState by LocalLifecycleOwner.current.lifecycle.currentStateAsState()
+    LaunchedEffect(pagerState.settledPage, heroItems, isDragged, lifecycleState) {
+        if (heroItems.size <= 1 || isDragged || !lifecycleState.isAtLeast(Lifecycle.State.RESUMED)) return@LaunchedEffect
         delay(10000L)
+        if (pagerState.isScrollInProgress) return@LaunchedEffect
+        if (pagerState.currentPage == MobileHeroPageCount - 1) {
+            pagerState.scrollToPage(mobileHeroPageForIndex(MobileHeroPageCount / 2, heroItems.size,
+                pagerState.currentPage.mod(heroItems.size)))
+        }
         pagerState.animateScrollToPage(
             pagerState.currentPage + 1,
             animationSpec = tween(durationMillis = 900, easing = FastOutSlowInEasing)
@@ -2585,42 +2639,10 @@ private fun MobileHeroCarousel(
     }
 
     Column(modifier = Modifier.fillMaxWidth()) {
-        // Profile avatar + search icon row — above the pager, respects status bar
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .statusBarsPadding()
-                .padding(start = 26.dp, end = 26.dp, top = 12.dp, bottom = 10.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            if (currentProfile != null) {
-                Box(
-                    modifier = Modifier
-                        .size(38.dp)
-                        .clip(CircleShape)
-                        .clickable { onSwitchProfile() }
-                ) {
-                    ProfileAvatarVisual(
-                        profile = currentProfile,
-                        letterFontSize = 15.sp,
-                        iconPadding = 5.dp
-                    )
-                }
-            } else {
-                Spacer(modifier = Modifier.size(38.dp))
-            }
-            Icon(
-                imageVector = Icons.Filled.Search,
-                contentDescription = stringResource(R.string.search),
-                tint = Color.White,
-                modifier = Modifier
-                    .size(26.dp)
-                    .clickable { onNavigateToSearch() }
-            )
-        }
+        if (posterStyle) MobileHomeHeader(currentProfile, onSwitchProfile, onNavigateToSearch)
 
         // Banner card pager — circular, peeks at adjacent cards on both sides
+        Box(Modifier.fillMaxWidth().height(heroLayout.cardHeightDp.dp).testTag("mobile_hero_pager")) {
         HorizontalPager(
             state = pagerState,
             contentPadding = PaddingValues(horizontal = heroLayout.carouselHorizontalPaddingDp.dp),
@@ -2654,29 +2676,25 @@ private fun MobileHeroCarousel(
                     imdbRatingFor(item)
                 }
             }
-            val logoUrl = remember(item.id) { cardLogoUrls["${item.mediaType}_${item.id}"] }
-            val heroImageUrl = remember(item.backdrop, item.image, heroLayout, density) {
-                TmdbImageSizing.forSlot(
-                    item.backdrop ?: item.image ?: "",
-                    with(density) { heroLayout.cardWidthDp.dp.roundToPx() },
-                    with(density) { heroLayout.cardHeightDp.dp.roundToPx() },
-                    TmdbImageSizing.Kind.BACKDROP
-                )
+            val logoUrl = cardLogoUrls["${item.mediaType}_${item.id}"]
+            val heroArtwork = remember(item.backdrop, item.image, heroLayout.compactContent) {
+                mobileDetailsArtworkSource(item.image, item.backdrop, portrait = !heroLayout.compactContent)
             }
 
             // Scale down cards that aren't in the center; animate smoothly as they scroll in/out
-            val scale by remember(page) {
+            val scale by remember(page, posterStyle) {
                 derivedStateOf {
                     val offset = abs(
                         (pagerState.currentPage - page) + pagerState.currentPageOffsetFraction
                     )
-                    (1f - offset * 0.13f).coerceIn(0.87f, 1f)
+                    if (posterStyle) (1f - offset * 0.08f).coerceIn(0.92f, 1f) else 1f
                 }
             }
 
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 MobileHeroBanner(
-                    imageUrl = heroImageUrl,
+                    imageUrl = heroArtwork?.url.orEmpty(),
+                    isPosterArtwork = heroArtwork?.isPoster == true,
                     title = item.title,
                     genres = genres,
                     year = year,
@@ -2684,6 +2702,8 @@ private fun MobileHeroCarousel(
                     logoUrl = logoUrl,
                     onClick = { onNavigateToDetails(item.mediaType, item.id, null, null) },
                     compactContent = heroLayout.compactContent,
+                    immersive = !posterStyle,
+                    showPageIndicators = heroItems.size > 1,
                     modifier = Modifier
                         .size(heroLayout.cardWidthDp.dp, heroLayout.cardHeightDp.dp)
                         .graphicsLayer {
@@ -2693,14 +2713,17 @@ private fun MobileHeroCarousel(
                 )
             }
         }
+        if (!posterStyle) MobileHomeHeader(currentProfile, onSwitchProfile, onNavigateToSearch)
 
-        // Animated pill indicators — centered below the pager
+        // Keep pagination on the artwork, without adding a separate strip below the hero.
         if (heroItems.size > 1) {
             val currentIndex = pagerState.currentPage % heroItems.size
             Row(
                 modifier = Modifier
+                    .align(Alignment.BottomCenter)
                     .fillMaxWidth()
-                    .padding(top = 10.dp, bottom = 8.dp),
+                    .padding(bottom = 12.dp)
+                    .testTag("mobile_hero_indicators"),
                 horizontalArrangement = Arrangement.Center,
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -2714,15 +2737,17 @@ private fun MobileHeroCarousel(
                     )
                     Box(
                         modifier = Modifier
+                            .testTag("mobile_hero_dot_$index")
                             .height(4.dp)
                             .width(6.dp + 18.dp * expandFraction)
-                            .clip(RoundedCornerShape(2.dp))
+                            .clip(RoundedCornerShape(8.dp))
                             .background(
                                 if (isSelected) Color.White else Color.White.copy(alpha = 0.30f)
                             )
                     )
                 }
             }
+        }
         }
     }
 }
@@ -2837,6 +2862,7 @@ internal fun HomeInputLayer(
     // profile switcher). Focus navigation includes it as the first focusable item.
     val hasProfile = currentProfile != null
     val maxSidebarIndex = topBarMaxIndex(hasProfile)
+    com.arflix.tv.ui.components.ReconcileTopBarFocus(focusState.sidebarFocusIndex, hasProfile) { focusState.sidebarFocusIndex = it }
 
     LaunchedEffect(Unit) {
         focusRequester.requestFocus()
@@ -2849,7 +2875,7 @@ internal fun HomeInputLayer(
         }
     }
     LaunchedEffect(hasProfile) {
-        if (hasProfile && !focusState.userHasNavigated) focusState.sidebarFocusIndex = 2
+        if (!focusState.userHasNavigated) focusState.sidebarFocusIndex = com.arflix.tv.ui.components.topBarSelectedIndex(SidebarItem.HOME, hasProfile)
     }
 
     // One owner reconciles both row and title identity. Input records anchors
@@ -2857,7 +2883,8 @@ internal fun HomeInputLayer(
     LaunchedEffect(categories, categoryHasMoreMap) {
         if (categories.isEmpty()) return@LaunchedEffect
 
-        if (!focusState.userHasNavigated && !focusState.isSidebarFocused) {
+        // The Netflix billboard is itself the start position; the rows below it start at the top.
+        if (!focusState.userHasNavigated && !focusState.isSidebarFocused && !focusState.isHeroFocused) {
             val preferredStartRow = preferredHomeStartRowIndex(categories)
             if (focusState.currentRowIndex != preferredStartRow) {
                 focusState.currentRowIndex = preferredStartRow
@@ -3322,6 +3349,8 @@ private fun HomeRowsLayer(
     onItemClick: (MediaItem) -> Unit,
     onItemLongClick: ((MediaItem, Boolean) -> Unit)? = null
 ) {
+    val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
+
     if (!isMobile && netflix != null) {
         NetflixTvHomeRowsLayer(
             categories = categories,
@@ -3337,34 +3366,62 @@ private fun HomeRowsLayer(
             onItemClick = onItemClick
         )
     } else if (isMobile) {
-        MobileHomeRowsLayer(
-            categories = categories,
-            cardLogoUrls = cardLogoUrls,
-            cardImdbRatings = cardImdbRatings,
-            onPreloadHeroImdbRatings = onPreloadHeroImdbRatings,
-            contentStartPadding = contentStartPadding,
-            currentProfile = currentProfile,
-            onNavigateToSearch = onNavigateToSearch,
-            onSwitchProfile = onSwitchProfile,
-            usePosterCards = usePosterCards,
-            categoryHasMoreMap = categoryHasMoreMap,
-            isSlowLoading = isSlowLoading,
-            onRetry = onRetry,
-            onLoadMoreCategory = onLoadMoreCategory,
-            onNavigateToDetails = onNavigateToDetails,
-            onItemClick = onItemClick,
-            onItemLongClick = onItemLongClick,
-            onViewAllCategory = onViewAllCategory,
-            onCategoryVisiblePosition = { categoryId, lastVisibleItemIndex ->
-                onMobileCategoryVisiblePosition(categoryId, lastVisibleItemIndex)
-                val rowIndex = categories.indexOfFirst { it.id == categoryId }
-                val visibleItem = categories
-                    .getOrNull(rowIndex)
-                    ?.items
-                    ?.getOrNull(lastVisibleItemIndex)
-                if (visibleItem != null) onItemFocusedPrefetch(visibleItem)
+        HomeOrientationState(isLandscape) {
+            if (isLandscape) {
+                LandscapeHomeRowsLayer(
+                    categories = categories,
+                    cardLogoUrls = cardLogoUrls,
+                    cardImdbRatings = cardImdbRatings,
+                    onPreloadHeroImdbRatings = onPreloadHeroImdbRatings,
+                    contentStartPadding = contentStartPadding,
+                    onNavigateToDetails = onNavigateToDetails,
+                    onItemClick = onItemClick,
+                    onItemLongClick = onItemLongClick,
+                    onViewAllCategory = onViewAllCategory,
+                    onCategoryVisiblePosition = { categoryId, lastVisibleItemIndex ->
+                        onMobileCategoryVisiblePosition(categoryId, lastVisibleItemIndex)
+                        val rowIndex = categories.indexOfFirst { it.id == categoryId }
+                        val visibleItem = categories
+                            .getOrNull(rowIndex)
+                            ?.items
+                            ?.getOrNull(lastVisibleItemIndex)
+                        if (visibleItem != null) onItemFocusedPrefetch(visibleItem)
+                    },
+                    categoryHasMoreMap = categoryHasMoreMap,
+                    isSlowLoading = isSlowLoading,
+                    onRetry = onRetry
+                )
+            } else {
+                MobileHomeRowsLayer(
+                    categories = categories,
+                    cardLogoUrls = cardLogoUrls,
+                    cardImdbRatings = cardImdbRatings,
+                    onPreloadHeroImdbRatings = onPreloadHeroImdbRatings,
+                    contentStartPadding = contentStartPadding,
+                    currentProfile = currentProfile,
+                    onNavigateToSearch = onNavigateToSearch,
+                    onSwitchProfile = onSwitchProfile,
+                    usePosterCards = usePosterCards,
+                    categoryHasMoreMap = categoryHasMoreMap,
+                    isSlowLoading = isSlowLoading,
+                    onRetry = onRetry,
+                    onLoadMoreCategory = onLoadMoreCategory,
+                    onNavigateToDetails = onNavigateToDetails,
+                    onItemClick = onItemClick,
+                    onItemLongClick = onItemLongClick,
+                    onViewAllCategory = onViewAllCategory,
+                    onCategoryVisiblePosition = { categoryId, lastVisibleItemIndex ->
+                        onMobileCategoryVisiblePosition(categoryId, lastVisibleItemIndex)
+                        val rowIndex = categories.indexOfFirst { it.id == categoryId }
+                        val visibleItem = categories
+                            .getOrNull(rowIndex)
+                            ?.items
+                            ?.getOrNull(lastVisibleItemIndex)
+                        if (visibleItem != null) onItemFocusedPrefetch(visibleItem)
+                    }
+                )
             }
-        )
+        }
     } else {
         TvHomeRowsLayer(
             categories = categories,
@@ -3412,15 +3469,21 @@ private fun MobileHomeRowsLayer(
 ) {
     val mobileItemSpacing = 14.dp
     val bottomBarHeight = LocalBottomBarHeight.current
+    val posterHero = com.arflix.tv.ui.components.rememberMobileHomeHeroStyle() == com.arflix.tv.ui.components.MobileHomeHeroStyle.POSTER
+    val mobileListState = rememberLazyListState()
+    val statusScrimScrollDistance = with(LocalDensity.current) { 72.dp.toPx() }
 
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-        val heroLayout = remember(maxWidth, maxHeight, bottomBarHeight) {
-            resolveMobileHeroLayout(
+        val heroLayout = remember(maxWidth, maxHeight, bottomBarHeight, posterHero) {
+            val poster = resolveMobileHeroLayout(
                 availableWidthDp = maxWidth.value,
                 availableHeightDp = (maxHeight - bottomBarHeight).coerceAtLeast(1.dp).value,
             )
+            if (posterHero) poster else com.arflix.tv.ui.components.resolveImmersiveMobileHeroLayout(
+                maxWidth.value, (maxHeight - bottomBarHeight).coerceAtLeast(1.dp).value)
         }
         LazyColumn(
+            state = mobileListState,
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(bottom = 16.dp + LocalBottomBarInset.current),
             verticalArrangement = Arrangement.spacedBy(20.dp)
@@ -3430,6 +3493,7 @@ private fun MobileHomeRowsLayer(
             MobileHeroCarousel(
                 categories = categories,
                 heroLayout = heroLayout,
+                posterStyle = posterHero,
                 cardLogoUrls = cardLogoUrls,
                 cardImdbRatings = cardImdbRatings,
                 currentProfile = currentProfile,
@@ -3451,7 +3515,13 @@ private fun MobileHomeRowsLayer(
             val rowKey = remember(category.id) { "home:${category.id}" }
             val rowUsePosterCards = rememberCatalogueRowLayoutMode(rowKey) == CardLayoutMode.POSTER
             val isPortrait = category.isPortrait(rowUsePosterCards)
-            val rowMobileItemWidth = if (isPortrait) HOME_MOBILE_POSTER_CARD_WIDTH_DP.dp else HOME_MOBILE_LANDSCAPE_CARD_WIDTH_DP.dp
+            val isServiceRow = isCollectionRow && category.items.firstOrNull()?.status?.startsWith("collection:collection_service_") == true
+            val rowMobileItemWidth = when {
+                isServiceRow -> 112.dp
+                isPortrait -> HOME_MOBILE_POSTER_CARD_WIDTH_DP.dp
+                isContinueWatching -> HOME_MOBILE_LANDSCAPE_CARD_WIDTH_DP.dp
+                else -> 180.dp
+            }
             // The keyed lazy item saves this state across disposal and navigation.
             val rowState = rememberLazyListState()
 
@@ -3668,6 +3738,15 @@ private fun MobileHomeRowsLayer(
             }
         }
         }
+        Spacer(Modifier.align(Alignment.TopCenter).fillMaxWidth()
+            .graphicsLayer {
+                val progress = if (mobileListState.firstVisibleItemIndex > 0) 1f
+                    else (mobileListState.firstVisibleItemScrollOffset / statusScrimScrollDistance).coerceIn(0f, 1f)
+                alpha = 0.35f + progress * 0.65f
+            }
+            .background(Brush.verticalGradient(0f to Color.Black.copy(alpha = 0.65f),
+                0.75f to Color.Black.copy(alpha = 0.55f), 1f to Color.Transparent))
+            .statusBarsPadding().height(12.dp))
     }
 }
 
@@ -3950,7 +4029,7 @@ private fun ArcticFuseRatingBadge(
     ) {
         Box(
             modifier = Modifier
-                .background(backgroundColor, RoundedCornerShape(4.dp))
+                .background(backgroundColor, RoundedCornerShape(8.dp))
                 .padding(horizontal = 8.dp, vertical = 4.dp)
         ) {
             Text(
@@ -4020,7 +4099,7 @@ private fun MetaPill(text: String) {
         modifier = Modifier
             .background(
                 color = Color.White.copy(alpha = 0.2f),
-                shape = RoundedCornerShape(2.dp)
+                shape = RoundedCornerShape(8.dp)
             )
             .padding(horizontal = 6.dp, vertical = 2.dp)
     ) {
@@ -4043,7 +4122,7 @@ private fun ImdbBadge(rating: String) {
         modifier = Modifier
             .background(
                 color = Color(0xFFF5C518), // IMDb yellow
-                shape = RoundedCornerShape(4.dp)
+                shape = RoundedCornerShape(8.dp)
             )
             .padding(horizontal = 8.dp, vertical = 5.dp)
     ) {

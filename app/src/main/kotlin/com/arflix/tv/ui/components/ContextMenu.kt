@@ -13,6 +13,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -23,6 +24,11 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bookmark
@@ -45,6 +51,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.platform.testTag
 import androidx.annotation.StringRes
 import androidx.compose.foundation.focusable
 import androidx.compose.runtime.LaunchedEffect
@@ -60,6 +67,7 @@ import androidx.compose.ui.unit.dp
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Text
 import com.arflix.tv.R
+import com.arflix.tv.ui.theme.AccentGreen
 import com.arflix.tv.ui.theme.ArflixTypography
 import com.arflix.tv.ui.theme.BackgroundElevated
 import com.arflix.tv.ui.theme.Pink
@@ -84,12 +92,12 @@ data class ContextAction(
 object ContextActions {
     val play = ContextAction("play", R.string.play, Icons.Default.PlayArrow, Pink)
     val selectSource = ContextAction("sources", R.string.stream_title_select_source, Icons.Default.Info, TextPrimary)
-    val markWatched = ContextAction("mark_watched", R.string.component_ctx_mark_watched, Icons.Default.Visibility, Color(0xFF22C55E))
+    val markWatched = ContextAction("mark_watched", R.string.component_ctx_mark_watched, Icons.Default.Visibility, AccentGreen)
     val markUnwatched = ContextAction("mark_unwatched", R.string.component_ctx_mark_unwatched, Icons.Default.VisibilityOff, TextSecondary)
     val addWatchlist = ContextAction("add_watchlist", R.string.add_to_watchlist, Icons.Default.BookmarkBorder, Pink)
     val removeWatchlist = ContextAction("remove_watchlist", R.string.remove_from_watchlist, Icons.Default.Bookmark, TextSecondary)
     val viewDetails = ContextAction("view_details", R.string.component_ctx_view_details, Icons.Default.Info, TextPrimary)
-    val markSeasonWatched = ContextAction("mark_season_watched", R.string.component_ctx_mark_season_watched, Icons.Default.Check, Color(0xFF22C55E))
+    val markSeasonWatched = ContextAction("mark_season_watched", R.string.component_ctx_mark_season_watched, Icons.Default.Check, AccentGreen)
     val markSeasonUnwatched = ContextAction("mark_season_unwatched", R.string.component_ctx_mark_season_unwatched, Icons.Default.Clear, TextSecondary)
 }
 
@@ -218,15 +226,16 @@ fun ContextMenu(
             }
         }
     } else {
-        // --- Mobile layout: bottom-sheet style menu ---
+        // --- Touch layout: bounded sheet with safe insets, also on tablets. ---
         AnimatedVisibility(
             visible = isVisible,
             enter = fadeIn(),
             exit = fadeOut()
         ) {
-            Box(
+            BoxWithConstraints(
                 modifier = Modifier
                     .fillMaxSize()
+                    .statusBarsPadding()
                     .background(Color.Black.copy(alpha = 0.5f))
                     .clickable(
                         indication = null,
@@ -247,11 +256,16 @@ fun ContextMenu(
                 ) {
                     Column(
                         modifier = Modifier
+                            .widthIn(max = 560.dp)
                             .fillMaxWidth()
+                            .heightIn(max = maxHeight)
+                            .testTag("mobile_context_menu")
                             .background(
                                 BackgroundElevated,
                                 RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)
                             )
+                            .navigationBarsPadding()
+                            .verticalScroll(rememberScrollState())
                             .clickable(
                                 indication = null,
                                 interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
@@ -266,7 +280,7 @@ fun ContextMenu(
                                 .height(4.dp)
                                 .background(
                                     Color.White.copy(alpha = 0.2f),
-                                    RoundedCornerShape(2.dp)
+                                    RoundedCornerShape(8.dp)
                                 )
                         )
 
@@ -307,6 +321,7 @@ fun ContextMenu(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .heightIn(min = 48.dp)
+                                    .testTag("context_action_${action.id}")
                                     .clickable { onAction(action) }
                                     .padding(horizontal = 16.dp, vertical = 12.dp),
                                 verticalAlignment = Alignment.CenterVertically,

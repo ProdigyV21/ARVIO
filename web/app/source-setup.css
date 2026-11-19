@@ -1,29 +1,56 @@
-.source-setup-card { position: relative; margin: 24px clamp(20px, 4vw, 64px) 0; padding: 22px 24px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface, #111); }
-.content > .source-setup-card { margin-top: clamp(104px, 12vh, 132px); }
-.source-setup-card h2, .source-setup-panel h3 { display: flex; align-items: center; gap: 10px; margin: 0 0 10px; font-size: 19px; }
-.source-setup-card h2 { padding-inline-end: 28px; }
-.source-setup-card .no-addons-close { right: auto; inset-inline-end: 14px; }
+/* Home "Add a source" banner. It floats over the top of the billboard instead
+   of sitting in the page flow: it appears only once the cloud addon pull has
+   finished, and pushing Home down at that moment was a large layout shift. It
+   used to slide under the fixed top bar on iPad/laptop/TV (the old
+   `.content > .source-setup-card` rule never matched: AppShell wraps Home in a
+   <div>); the top offset now clears the bar at every size. Desktop: a card in
+   the billboard's artwork column, clear of the title and buttons. */
+.source-setup-card { position: absolute; z-index: 30; top: clamp(126px, 14.5vh, 172px); right: 3.35vw; width: min(460px, 38vw); display: grid; gap: 12px; margin: 0; padding-top: 16px; padding-inline-end: 52px; padding-bottom: 16px; padding-inline-start: 18px; border: 1px solid rgba(255, 255, 255, 0.14); border-radius: 14px; background: rgba(12, 13, 16, 0.86); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); box-shadow: 0 18px 50px rgba(0, 0, 0, 0.45); }
+[dir="rtl"] .source-setup-card { left: 3.35vw; right: auto; }
+.source-setup-card h2, .source-setup-panel h3 { display: flex; align-items: center; gap: 10px; margin: 0 0 6px; font-size: 17px; }
+.source-setup-card h2 svg { flex-shrink: 0; }
+.source-setup-card .no-addons-close { top: 6px; right: 6px; width: 44px; height: 44px; }
+[dir="rtl"] .source-setup-card .no-addons-close { left: 6px; right: auto; }
 .source-setup-card p, .source-setup-panel p { max-width: 900px; margin: 0 0 14px; color: var(--muted); font-size: 14px; line-height: 1.6; }
+.source-setup-card .source-setup-copy p { margin: 0; font-size: 13.5px; line-height: 1.5; }
+.source-setup-card .source-setup-copy p + p { margin-top: 6px; }
 .source-setup-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
 .source-setup-actions .secondary, .source-setup-actions .primary { display: inline-flex; align-items: center; justify-content: center; gap: 8px; width: auto; min-width: 0; min-height: 44px; padding: 10px 16px; border-radius: 8px; font-size: 14px; line-height: 1.4; white-space: normal; }
-.source-setup-panel { margin: 0 64px 24px; padding: 20px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface, #111); }
+.source-setup-card .source-setup-actions .secondary, .source-setup-card .source-setup-actions .primary { padding: 8px 14px; font-size: 13.5px; }
+
+/* The quiet entry point left after dismissing the banner (in the billboard). */
+.add-source-chip { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 16px; border: 1px solid rgba(255, 255, 255, 0.28); border-radius: 999px; background: rgba(0, 0, 0, 0.35); color: rgba(255, 255, 255, 0.9); font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; }
+.add-source-chip:focus-visible { border-color: #fff; color: #fff; outline: none; box-shadow: 0 0 0 3px var(--accent, #fff); }
+@media (hover: hover) and (pointer: fine) {
+  .add-source-chip:hover {
+    border-color: #fff;
+    color: #fff;
+    outline: none;
+    box-shadow: 0 0 0 3px var(--accent, #fff);
+  }
+}
 .source-setup-warning { color: var(--text) !important; }
-.addon-install-label { display: block; margin: 0 64px 8px; color: var(--muted); font-size: 13px; }
-.addon-install-help { margin: 8px 64px 24px; color: var(--muted); font-size: 13px; }
-.paywall-account-email { margin: 16px 0; color: #bbb; font-size: 12px; }
-.paywall-account-email strong { display: block; margin-top: 4px; color: #eee; overflow-wrap: anywhere; font-size: 14px; }
-.paywall-primary:disabled { opacity: .6; cursor: wait; }
-.paywall-primary + .paywall-price { margin-top: 24px; }
-@media (max-width: 900px) {
-  .source-setup-panel, .addon-install-label, .addon-install-help { margin-inline: 24px; }
+
+/* Tablets: the billboard copy sits at the bottom, so the banner spans the top. */
+@media (max-width: 1180px) {
+  /* Tablets and phones: the billboard copy fills its column, so the banner
+     goes above it in the page flow (clear of the bar) and the billboard below
+     drops the top space it reserves for the bar. */
+  .source-setup-card { position: relative; top: auto; left: auto; right: auto; width: auto; margin: clamp(112px, 14.5vh, 168px) 3.35vw 0; }
+}
+
+/* Phones: below the fixed mobile header (the app shell pads for it) and slim:
+   headline, three short lines, one row of compact buttons. */
+@media (max-width: 680px) {
+  .source-setup-card { margin: 10px var(--phone-gutter, 14px) 0; padding-top: 12px; padding-inline-end: 44px; padding-bottom: 12px; padding-inline-start: 12px; gap: 10px; border-radius: 12px; }
 }
 @media (max-width: 680px) {
-  .content > .source-setup-card { margin-top: 16px; }
-}
-@media (max-width: 600px) {
-  .source-setup-card { margin: 16px 16px 0; padding: 20px 18px; }
-  .source-setup-card h2 { font-size: 17px; align-items: flex-start; }
-  .source-setup-card h2 svg { flex-shrink: 0; }
-  .source-setup-actions { align-items: stretch; }
-  .source-setup-actions .secondary, .source-setup-actions .primary { flex: 1 1 150px; }
+  .source-setup-card h2 { font-size: 15px; align-items: flex-start; margin-bottom: 2px; }
+  .source-setup-card .source-setup-copy p { font-size: 12.5px; line-height: 1.4; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; }
+  .source-setup-card .source-setup-copy p.source-setup-warning { -webkit-line-clamp: 1; }
+  .source-setup-card .no-addons-close { top: 0; right: 0; }
+  [dir="rtl"] .source-setup-card .no-addons-close { left: 0; right: auto; }
+  .source-setup-card .source-setup-actions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin-inline-end: -32px; }
+  .source-setup-card .source-setup-actions .secondary, .source-setup-card .source-setup-actions .primary { min-width: 0; min-height: 44px; padding: 6px; font-size: 12.5px; line-height: 1.2; }
+  .source-setup-card .source-setup-actions svg { display: none; }
 }

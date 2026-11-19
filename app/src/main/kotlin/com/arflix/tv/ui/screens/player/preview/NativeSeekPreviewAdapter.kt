@@ -59,8 +59,9 @@ class NativeSeekPreviewAdapter(
     private var storyboard: PreviewStoryboard? = null
     private var failures = 0
     private var bif: PreviewHttpBytes? = null
-    private var imageUrl: String? = null
-    private var imageBytes: ByteArray? = null
+    // Retain neighboring sheets/ranges so crossing a sheet boundary and rewinding
+    // does not download the same images again. Access is protected by mutex.
+    private val imageCache = PreviewImageByteCache()
 
     suspend fun load(positionMs: Long): NativePreviewFrame? = withContext(Dispatchers.IO) {
         if (closed.get() || http == null || positionMs < 0 || !mutex.tryLock()) return@withContext null
@@ -163,6 +164,8 @@ class NativeSeekPreviewAdapter(
     private suspend fun image(cue: PreviewCue): ByteArray? {
         val client = http ?: return null
         val offset = cue.byteOffset
+        val key = PreviewImageByteCache.Key(cue.url, offset, cue.byteLength)
+        imageCache.get(key)?.let { return it }
         if (offset != null) {
             val index = bif ?: return null
             val length = cue.byteLength ?: return null
@@ -171,12 +174,10 @@ class NativeSeekPreviewAdapter(
                 return index.bytes.copyOfRange(offset.toInt(), offset.toInt() + length)
             }
             return client.get(cue.url, PREVIEW_MAX_IMAGE_BYTES,
-                PreviewByteRange(offset, length, index.totalBytes, index.validator)).bytes
+                PreviewByteRange(offset, length, index.totalBytes, index.validator)).bytes.also { imageCache.put(key, it) }
         }
-        if (cue.url == imageUrl) return imageBytes
         val fetched = client.get(cue.url, PREVIEW_MAX_IMAGE_BYTES).bytes
-        imageUrl = cue.url
-        imageBytes = fetched
+        imageCache.put(key, fetched)
         return fetched
     }
 
@@ -218,8 +219,7 @@ class NativeSeekPreviewAdapter(
 
     private fun clear() {
         storyboard = null
-        imageBytes = null
-        imageUrl = null
+        imageCache.clear()
         bif = null
     }
 }

@@ -1,6 +1,6 @@
 /* Localized public copy. Campaign measurement is handled by premium-journey.js. */
 (async function () {
-  const response = await fetch('./languages.json');
+  const response = await fetch('/premium/languages.json');
   if (!response.ok) return;
   const languages = await response.json();
   const select = document.getElementById('language');
@@ -23,18 +23,24 @@
     const base = value.split('-')[0].replace(/^nb$/, 'no');
     return Object.keys(languages).find(k => k.split('-')[0] === base);
   }
+
+  const pricing = globalThis.ARVIOPremiumPricing;
+  let regional = false;
+
   function render(code) {
     const copy = languages[code];
     document.documentElement.lang = code;
     document.documentElement.dir = /^(ar|he|fa|ur)-/.test(code) ? 'rtl' : 'ltr';
     select.value = code;
     select.setAttribute('aria-label', copy.language);
-    for (const element of document.querySelectorAll('[data-copy]')) element.textContent = copy[element.dataset.copy];
+    for (const element of document.querySelectorAll('[data-copy]')) if (copy[element.dataset.copy]) element.textContent = copy[element.dataset.copy];
     for (const [index, key] of ['tv','library','server','sports'].entries()) document.querySelectorAll('.gallery img')[index].alt = 'ARVIO Web — ' + copy[key];
-    document.querySelector('.hero-image img').alt = 'ARVIO Web — ' + copy.home;
-    document.title = 'ARVIO Premium — ' + copy.hosting.split('. ')[0];
+    document.title = 'ARVIO Premium — ' + copy.headline;
+    if (pricing) pricing.apply(copy, regional);
   }
-  const initial = match(new URL(location.href).searchParams.get('lang')) || (navigator.languages || [navigator.language]).map(match).find(Boolean) || 'en-US';
+
+  // A localized page (/de/premium/ ...) opens in its own language; the English page follows the browser.
+  const initial = match(new URL(location.href).searchParams.get('lang')) || match(document.documentElement.dataset?.pageLang) || (navigator.languages || [navigator.language]).map(match).find(Boolean) || 'en-US';
   render(initial);
   select.addEventListener('change', () => {
     render(select.value);
@@ -42,4 +48,9 @@
     url.searchParams.set('lang', select.value);
     history.replaceState(null, '', url);
   });
+  // Translate immediately; an optional country lookup must not hold up the page.
+  if (pricing) {
+    regional = pricing.regionalCountry(await pricing.loadCountry());
+    pricing.apply(languages[select.value] || languages[initial], regional);
+  }
 })().catch(() => { /* English content remains usable when translations are unavailable. */ });

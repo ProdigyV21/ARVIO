@@ -5,11 +5,12 @@ const path = require('node:path');
 const vm = require('node:vm');
 const ts = require('typescript');
 const { load, storage } = require('./load.cjs');
+const { sourceOf, storeSource } = require('./sources.cjs');
 
 // App modules share the browser's Error constructor. Give separately compiled
 // test VM modules the same realm for existing instanceof Error handling.
 const disabledGlobals = { Error, process: { env: { NEXT_PUBLIC_TELEGRAM_ENABLED: 'false' } } };
-const source = relative => fs.readFileSync(path.resolve(__dirname, '..', relative), 'utf8');
+const source = relative => sourceOf(relative);
 
 test('Telegram is enabled by default, including ordinary self-hosting, and disabled only by the build flag', () => {
   for (const env of [{}, { NEXT_PUBLIC_TELEGRAM_ENABLED: 'true' }, { NEXT_PUBLIC_SELF_HOSTED: 'true' }]) {
@@ -126,7 +127,7 @@ test('settings navigation and direct render hide Telegram only in disabled build
   const settings = source('components/settings/SettingsScreen.tsx');
   const declarations = settings.match(/const SECTIONS = [\s\S]*?const VISIBLE_SECTIONS = [^;]+;/)?.[0];
   assert.ok(declarations);
-  const icons = ['Cloud','User','Play','Download','VlcIcon','Languages','Subtitles','Captions','LayoutGrid','Tv','Network','Server','Send','ListVideo','Sparkles','Eye'];
+  const icons = ['Cloud','Crown','User','Link2','Play','Languages','Captions','Bot','Puzzle','ListVideo','Tv','Server','Send','Database','Palette','Monitor','Info'];
   for (const enabled of [true, false]) {
     const context = { config: { telegramEnabled: enabled }, module: { exports: null }, ...Object.fromEntries(icons.map(name => [name, {}])) };
     const js = ts.transpileModule(declarations + '\nmodule.exports = VISIBLE_SECTIONS.map(section => section.id);', { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
@@ -134,9 +135,11 @@ test('settings navigation and direct render hide Telegram only in disabled build
     assert.equal(context.module.exports.includes('telegram'), enabled);
     assert.equal(context.module.exports.includes('credits'), true);
   }
-  assert.equal((settings.match(/VISIBLE_SECTIONS\.map\(/g) || []).length, 2, 'both navigation surfaces must use the filtered list');
+  assert.doesNotMatch(settings, /[^_]SECTIONS\.(map|filter)\(\(s\)/, 'navigation and search must use the filtered list');
+  assert.match(settings, /VISIBLE_SECTIONS\.filter\(\(s\) => s\.group === group\)/);
   assert.match(settings, /case "telegram":\s*return config\.telegramEnabled \? <TelegramSection \/> : null/);
-  assert.match(settings, /useEffect\(\(\) => \{\s*if \(!config\.telegramEnabled\) return;\s*let unsub/);
+  const telegram = source('components/settings/sections/Telegram.tsx');
+  assert.match(telegram, /useEffect\(\(\) => \{\s*if \(!config\.telegramEnabled\) return;\s*let unsub/);
 });
 
 test('store imports use the disabled-build alias and saved-source actions are guarded', () => {
@@ -145,9 +148,11 @@ test('store imports use the disabled-build alias and saved-source actions are gu
   assert.equal((store.match(/import\("@\/lib\/telegram"\)/g) || []).length, 2);
   assert.match(store, /const appendTelegramSources = [\s\S]*?if \(!config\.telegramEnabled\) return Promise\.resolve/);
   assert.match(store, /const playStream = [^\n]+\n\s*if \(isDisabledTelegramSource\(stream\)\)/);
-  const details = source('components/details/DetailsDrawer.tsx');
-  assert.match(details, /!telegramDisabled && <span className="source-row-actions">/);
-  for (const handler of ['openExternal', 'openAnyPlayer', 'copyUrl', 'downloadSource']) {
+  const details = source('components/details/SourcePicker.tsx');
+  // Disabled Telegram rows are locked: no primary action and no row actions.
+  assert.match(details, /locked: !stream\.url \|\| telegramDisabled/);
+  assert.match(source('components/details/SourceRow.tsx'), /\{!locked && \(sideOptions\.length > 0/);
+  for (const handler of ['openExternal', 'copyUrl', 'downloadSource']) {
     assert.match(details, new RegExp('const ' + handler + ' = [^\\n]+\\n\\s*if \\(rejectDisabledTelegram\\(stream\\)\\) return;'));
   }
 });

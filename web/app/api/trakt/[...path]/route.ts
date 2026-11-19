@@ -41,7 +41,9 @@ async function handler(request: NextRequest, context: { params: Promise<{ path: 
     headers = {
       "content-type": "application/json",
       "trakt-api-version": "2",
-      "trakt-api-key": traktClientId
+      "trakt-api-key": traktClientId,
+      "user-agent": "ARVIO/2.2 (+https://arvio.tv)",
+      "accept": "application/json"
     };
     const userToken = request.headers.get("x-user-token");
     if (userToken) headers.Authorization = `Bearer ${userToken}`;
@@ -63,6 +65,8 @@ async function handler(request: NextRequest, context: { params: Promise<{ path: 
 
   const responseHeaders = new Headers();
   responseHeaders.set("content-type", response.headers.get("content-type") ?? "application/json");
+  const retryAfter = response.headers.get("retry-after");
+  if (retryAfter) responseHeaders.set("retry-after", retryAfter);
   responseHeaders.set("cache-control", response.ok ? cacheControlForTrakt(method, normalizedPath, request) : "no-store");
 
   return new NextResponse(response.body, {

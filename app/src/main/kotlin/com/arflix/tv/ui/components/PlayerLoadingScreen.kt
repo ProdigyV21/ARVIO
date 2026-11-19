@@ -364,7 +364,7 @@ fun SourceLoadingScreen(
         Box(
             modifier = Modifier
                 .width(350.dp)
-                .clip(RoundedCornerShape(20.dp))
+                .clip(RoundedCornerShape(16.dp))
                 .background(
                     Brush.linearGradient(
                         colors = listOf(
@@ -374,7 +374,7 @@ fun SourceLoadingScreen(
                     )
                 )
                 .padding(1.dp)
-                .clip(RoundedCornerShape(19.dp))
+                .clip(RoundedCornerShape(16.dp))
                 .background(BackgroundGlass)
         ) {
             Column(
@@ -448,7 +448,7 @@ fun SourceLoadingScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(4.dp)
-                            .clip(RoundedCornerShape(2.dp))
+                            .clip(RoundedCornerShape(8.dp))
                             .background(BackgroundElevated)
                     ) {
                         Box(
@@ -459,7 +459,7 @@ fun SourceLoadingScreen(
                                     Brush.horizontalGradient(
                                         colors = listOf(Cyan, Purple, Pink)
                                     ),
-                                    RoundedCornerShape(2.dp)
+                                    RoundedCornerShape(8.dp)
                                 )
                         )
                     }

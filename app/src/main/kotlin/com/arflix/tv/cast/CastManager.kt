@@ -63,9 +63,6 @@ class CastManager @Inject constructor(
     private var castContext: CastContext? = null
     private var currentSession: CastSession? = null
 
-    /** True once the Google Cast framework initialised (needs Google Play services). */
-    val isGoogleCastReady: Boolean get() = castContext != null
-
     // ── DLNA / UPnP renderers ──
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var dlna: DlnaController? = null
@@ -75,7 +72,7 @@ class CastManager @Inject constructor(
     @Volatile private var dlnaPlaying = false
     @Volatile private var dlnaPendingSeekMs = -1L
     @Volatile private var dlnaUserPaused = false
-    @Volatile private var dlnaLoadCommitted = false
+    @Volatile private var dlnaReadyForSeek = false
 
     val isDlnaSession: Boolean get() = dlna != null
 
@@ -85,7 +82,7 @@ class CastManager @Inject constructor(
         disconnectDlna(stopRemote = true)
         dlna = DlnaController(device)
         dlnaPositionMs = 0L; dlnaDurationMs = 0L; dlnaPlaying = false
-        dlnaUserPaused = false; dlnaLoadCommitted = false; dlnaPendingSeekMs = -1L
+        dlnaUserPaused = false; dlnaReadyForSeek = false; dlnaPendingSeekMs = -1L
         _castState.value = CastState.Casting(device.friendlyName)
     }
 
@@ -93,7 +90,7 @@ class CastManager @Inject constructor(
         val ctrl = dlna ?: return
         dlna = null
         dlnaPollJob?.cancel(); dlnaPollJob = null
-        dlnaLoadCommitted = false
+        dlnaReadyForSeek = false
         dlnaPendingSeekMs = -1L
         if (stopRemote) scope.launch { ctrl.stop() }
     }
@@ -112,9 +109,8 @@ class CastManager @Inject constructor(
 
     private fun startDlnaPolling(ctrl: DlnaController, playRejected: Boolean) {
         dlnaPollJob?.cancel()
-        val tracker = DlnaSessionTracker()
+        val tracker = DlnaSessionTracker(nowMs = android.os.SystemClock::elapsedRealtime)
         tracker.start(playRejected)
-        dlnaLoadCommitted = true
         dlnaPollJob = scope.launch {
             while (isActive && dlna === ctrl) {
                 val pos = ctrl.position()
@@ -139,9 +135,12 @@ class CastManager @Inject constructor(
                     if (dlna !== ctrl) return@launch
                 }
                 val pending = dlnaPendingSeekMs
-                if (pending > 0L && state == "PLAYING") {
-                    dlnaPendingSeekMs = -1L
-                    ctrl.seek(pending)
+                if (state == "PLAYING") {
+                    dlnaReadyForSeek = true
+                    if (pending >= 0L) {
+                        dlnaPendingSeekMs = -1L
+                        ctrl.seek(pending)
+                    }
                 }
                 delay(1_000L)
             }
@@ -247,7 +246,7 @@ class CastManager @Inject constructor(
         dlna?.let { ctrl ->
             dlnaPositionMs = positionMs
             dlnaPendingSeekMs = if (positionMs > 3_000L) positionMs else -1L
-            dlnaLoadCommitted = false
+            dlnaReadyForSeek = false
             scope.launch {
                 val outcome = runCatching { ctrl.load(url, title, dlnaMimeType(url, mimeType)) }
                     .onFailure { Log.w("CastManager", "DLNA load failed", it) }
@@ -315,15 +314,14 @@ class CastManager @Inject constructor(
     fun seekTo(positionMs: Long) {
         dlna?.let { c ->
             dlnaPositionMs = positionMs
-            if (dlnaLoadCommitted) {
+            if (dlnaReadyForSeek) {
                 // A user seek supersedes the pending resume seek, which would otherwise
                 // jump back to the old position when the renderer first reports PLAYING.
                 dlnaPendingSeekMs = -1L
                 scope.launch { c.seek(positionMs) }
             } else {
-                // The URI is not loaded yet: a Seek now would be rejected. Keep the user's
-                // target and apply it on the first PLAYING poll instead.
-                dlnaPendingSeekMs = if (positionMs > 0L) positionMs else -1L
+                // Queue seeks until the renderer first reports PLAYING.
+                dlnaPendingSeekMs = positionMs.coerceAtLeast(0L)
             }
             return
         }

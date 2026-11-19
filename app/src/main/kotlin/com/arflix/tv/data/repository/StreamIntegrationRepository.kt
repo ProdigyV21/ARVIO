@@ -2,6 +2,7 @@ package com.arflix.tv.data.repository
 
 import android.content.Context
 import androidx.datastore.preferences.core.edit
+import com.arflix.tv.BuildConfig
 import com.arflix.tv.core.plugin.PluginManager
 import com.arflix.tv.data.model.AddonType
 import com.arflix.tv.data.model.IptvVodSourceIds
@@ -309,6 +310,23 @@ class StreamIntegrationRepository @Inject constructor(
                         )
                     )
                 }
+
+                // 6. YouTube (sideload builds only): on like the others, but
+                // then searched only when the source list's "Search YouTube" row is pressed.
+                if (BuildConfig.YOUTUBE_SEARCH_AVAILABLE) {
+                    add(
+                        StreamProviderItem(
+                            id = YouTubeSource.PROVIDER_ID,
+                            rawProviderKeys = listOf(YouTubeCollection.ADDON_ID),
+                            displayName = YouTubeCollection.ADDON_NAME,
+                            // Null: the Sources screen shows the type's description in the app language.
+                            subtitle = null,
+                            type = StreamIntegrationType.YOUTUBE,
+                            isEnabled = true,
+                            targetConfigId = YouTubeSource.PROVIDER_ID
+                        )
+                    )
+                }
             }
         }
     }
@@ -384,6 +402,11 @@ class StreamIntegrationRepository @Inject constructor(
 
     suspend fun moveProviderItemDown(id: String): Boolean {
         return moveProviderItem(id, direction = 1)
+    }
+
+    /** Moves a source several places at once, in one write - for a row dragged on the phone. */
+    suspend fun moveProviderItemBy(id: String, steps: Int): Boolean {
+        return moveProviderItem(id, direction = steps)
     }
 
     private suspend fun moveProviderItem(id: String, direction: Int): Boolean {
@@ -472,7 +495,7 @@ class StreamIntegrationRepository @Inject constructor(
      */
     fun observeSearchMode(): Flow<StreamSearchMode> {
         return profileManager.activeProfileId.flatMapLatest { profileId ->
-            context.settingsDataStore.data.map { prefs ->
+            context.effectiveSettingsDataStore.data.map { prefs ->
                 StreamSearchMode.fromId(prefs[searchModeKey(profileId)])
             }
         }
@@ -480,13 +503,13 @@ class StreamIntegrationRepository @Inject constructor(
 
     suspend fun getSearchMode(): StreamSearchMode {
         val profileId = profileManager.getProfileId()
-        val prefs = context.settingsDataStore.data.first()
+        val prefs = context.effectiveSettingsDataStore.data.first()
         return StreamSearchMode.fromId(prefs[searchModeKey(profileId)])
     }
 
     suspend fun setSearchMode(mode: StreamSearchMode) {
         val profileId = profileManager.getProfileId()
-        context.settingsDataStore.edit { prefs ->
+        context.effectiveSettingsDataStore.edit { prefs ->
             prefs[searchModeKey(profileId)] = mode.id
         }
         invalidationBus.markDirty(

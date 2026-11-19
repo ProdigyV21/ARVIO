@@ -26,10 +26,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
+import com.arflix.tv.R
 
 /**
  * Vertical edge HUD indicator for Brightness (Left) and Volume (Right).
@@ -89,7 +91,7 @@ fun MobileEdgeIndicator(
                 modifier = Modifier
                     .width(4.dp)
                     .height(120.dp)
-                    .clip(RoundedCornerShape(2.dp))
+                    .clip(RoundedCornerShape(8.dp))
                     .background(Color.White.copy(alpha = 0.25f)),
                 contentAlignment = Alignment.BottomCenter
             ) {
@@ -100,7 +102,7 @@ fun MobileEdgeIndicator(
                         modifier = Modifier
                             .fillMaxWidth()
                             .fillMaxHeight(normalFraction)
-                            .background(Color.White, RoundedCornerShape(2.dp))
+                            .background(Color.White, RoundedCornerShape(8.dp))
                     )
 
                     // Orange bar for boost mode (100% .. 200%) filling from bottom on top of white, consuming it
@@ -110,7 +112,7 @@ fun MobileEdgeIndicator(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .fillMaxHeight(boostFraction)
-                                .background(boostColor, RoundedCornerShape(2.dp))
+                                .background(boostColor, RoundedCornerShape(8.dp))
                         )
                     }
                 }
@@ -118,7 +120,7 @@ fun MobileEdgeIndicator(
 
             // Percentage or "Auto" value label
             Text(
-                text = if (isAuto) "Auto" else "${(levelPct * 100).toInt()}%",
+                text = if (isAuto) stringResource(R.string.auto) else "${(levelPct * 100).toInt()}%",
                 color = activeColor,
                 fontSize = 11.sp,
                 fontWeight = if (isBoost) FontWeight.Bold else FontWeight.SemiBold,
@@ -147,8 +149,8 @@ fun MobileAspectIndicator(
     ) {
         Box(
             modifier = Modifier
-                .background(MobilePlayerTokens.PanelBg, RoundedCornerShape(10.dp))
-                .border(1.dp, MobilePlayerTokens.PanelBorder, RoundedCornerShape(10.dp))
+                .background(MobilePlayerTokens.PanelBg, RoundedCornerShape(12.dp))
+                .border(1.dp, MobilePlayerTokens.PanelBorder, RoundedCornerShape(12.dp))
                 .padding(horizontal = 16.dp, vertical = 8.dp)
                 .zIndex(20f),
             contentAlignment = Alignment.Center

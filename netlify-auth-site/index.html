@@ -369,6 +369,7 @@
     .premium-link:hover { background: rgba(13, 240, 194, 0.16); }
     .premium-link:focus-visible { outline: 2px solid var(--accent-1); outline-offset: 4px; }
     .premium-note { color: var(--muted); font-size: 11px; line-height: 1.5; }
+    .discord-link { margin: 12px 0 0; text-align: center; }
 
     @media (max-width: 480px) {
       .premium-banner { padding: 18px 22px 20px; }
@@ -402,26 +403,34 @@
         <span class="pair-label">Pairing code</span>
         <b id="pairCode"></b>
       </div>
-      <div class="status" id="status"></div>
+      <div class="status" id="status" role="status"></div>
 
-      <label class="label" for="email">Email</label>
-      <input class="input" id="email" type="email" autocomplete="email" placeholder="you@example.com" />
+      <div id="accountForm">
+        <label class="label" for="email">Email</label>
+        <input class="input" id="email" type="email" autocomplete="email" placeholder="you@example.com" />
 
-      <label class="label" for="password">Password</label>
-      <input class="input" id="password" type="password" autocomplete="current-password" placeholder="Your password" />
-      <div class="linkrow">
-        <button class="linkbtn" id="forgot" type="button">Forgot password?</button>
+        <label class="label" for="password">Password</label>
+        <input class="input" id="password" type="password" autocomplete="current-password" placeholder="Your password" />
+        <div class="linkrow">
+          <button class="linkbtn" id="forgot" type="button">Forgot password?</button>
+        </div>
+
+        <div class="actions">
+          <button class="btn primary" id="signin">Sign In</button>
+          <button class="btn" id="signup">Create Account</button>
+          <button class="btn" id="savepass" style="display:none;">Save New Password</button>
+        </div>
+
+        <p class="privacy-notice" id="signupNotice">Creating an account stores your email and the cloud data you choose to sync. Read the <a href="https://arvio.tv/privacy" target="_blank" rel="noopener">Privacy Policy</a> before continuing.</p>
       </div>
 
-      <div class="actions">
-        <button class="btn primary" id="signin">Sign In</button>
-        <button class="btn" id="signup">Create Account</button>
-        <button class="btn" id="savepass" style="display:none;">Save New Password</button>
-      </div>
-
-      <p class="privacy-notice">Creating an account stores your email and the cloud data you choose to sync. Read the <a href="https://arvio.tv/privacy" target="_blank" rel="noopener">Privacy Policy</a> before continuing.</p>
-
-      <p class="small">If you opened this from a TV QR code, signing in will automatically pair that TV.</p>
+      <p class="small" id="tvHelp">If you opened this from a TV QR code, signing in will automatically pair that TV.</p>
+      <p class="discord-link" id="discordEntry" hidden><a class="privacy-link" href="/?discord=1">Link your Premium Discord badge</a></p>
+      <section id="discordClaim" hidden aria-label="Discord Premium badge">
+        <button class="btn primary" id="discordConnect" type="button">Link Discord</button>
+        <p class="discord-link"><a class="privacy-link" href="/">Back to Account Access</a></p>
+      </section>
+      <p class="discord-link" id="discordJoin" hidden><a class="premium-link" href="https://discord.gg/UavuEYMfQ4" target="_blank" rel="noopener noreferrer">Join the ARVIO Discord</a></p>
       <div class="foot">ARVIO Cloud Auth</div>
       <div class="privacy-links">
         <a class="privacy-link" href="https://arvio.tv/privacy">Privacy Policy</a>
@@ -626,6 +635,20 @@
     const hashType = (hashParams.get("type") || "").trim().toLowerCase();
     const isRecoveryMode = queryMode === "recovery" || hashType === "recovery";
     const isPasswordSetupMode = queryMode === "set-password" && !!setupToken;
+    const standaloneAccount = !pairCode && !redirectUri && !isRecoveryMode && !isPasswordSetupMode;
+    const badgeMessages = {
+      linked: "Your Discord account is linked and your Premium User badge is active.",
+      join: "Join the ARVIO Discord, then sign in here and link Discord again to claim your badge.",
+      inactive: "Your ARVIO account needs active Premium to claim the badge. If you already paid, check that your payment is linked to this ARVIO account.",
+      conflict: "This Discord account is already linked to another ARVIO account. Sign in with that account or try another Discord account.",
+      error: "We couldn’t link Discord. Sign in and try again.",
+    };
+    const badgeResult = qs.get("discord_badge");
+    const hasBadgeResult = Object.hasOwn(badgeMessages, badgeResult);
+    const isDiscordMode = standaloneAccount && (qs.get("discord") === "1" || hasBadgeResult);
+    const discordClaim = document.getElementById("discordClaim");
+    const discordConnect = document.getElementById("discordConnect");
+    let discordAccessToken = "";
 
     function setStatus(msg, type = "") {
       statusEl.textContent = msg || "";
@@ -785,6 +808,54 @@
       pairCodeEl.textContent = pairCode;
     }
     if (isRecoveryMode || isPasswordSetupMode) applyRecoveryModeUi();
+    if (standaloneAccount && !isDiscordMode) document.getElementById("discordEntry").hidden = false;
+    if (isDiscordMode) {
+      document.querySelector("h1").textContent = "Premium Discord badge";
+      subtitleEl.textContent = "Sign in with the ARVIO account that has Premium. Both monthly memberships and 12-month passes qualify.";
+      document.getElementById("tvHelp").hidden = true;
+      signUpBtn.hidden = true;
+      document.getElementById("signupNotice").hidden = true;
+      if (hasBadgeResult) {
+        setStatus(badgeMessages[badgeResult], badgeResult === "linked" ? "ok" : badgeResult === "join" ? "" : "error");
+        document.getElementById("discordJoin").hidden = badgeResult !== "join";
+        if (badgeResult === "linked") {
+          document.getElementById("accountForm").hidden = true;
+          subtitleEl.textContent = "You can return to the ARVIO server to see your badge.";
+        }
+      }
+    }
+
+    discordConnect.onclick = async () => {
+      discordConnect.disabled = true;
+      setStatus("Checking your Premium access…");
+      try {
+        const response = await fetch(`${FUNCTION_BASE}/discord-premium-start`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${discordAccessToken}` },
+        });
+        if (response.status === 503) throw new Error("Discord linking is temporarily unavailable. Please try again later.");
+        if (response.status === 403) throw new Error(badgeMessages.inactive);
+        if (response.status === 401) {
+          discordAccessToken = "";
+          discordClaim.hidden = true;
+          document.getElementById("accountForm").hidden = false;
+          subtitleEl.textContent = "Sign in again to claim your Discord badge.";
+          emailEl.focus();
+          throw new Error("Your sign-in session expired.");
+        }
+        if (!response.ok) throw new Error(badgeMessages.error);
+        const { authorizeUrl } = await response.json().catch(() => ({}));
+        const url = new URL(authorizeUrl);
+        if (url.origin !== "https://discord.com" || url.username || url.password ||
+            !["/oauth2/authorize", "/api/oauth2/authorize"].includes(url.pathname)) {
+          throw new Error(badgeMessages.error);
+        }
+        window.location.assign(url.href);
+      } catch (error) {
+        setStatus(error instanceof TypeError ? badgeMessages.error : error.message, "error");
+        discordConnect.disabled = false;
+      }
+    };
 
     async function approveTvViaServer(email, password) {
       if (!pairCode) return;
@@ -939,6 +1010,18 @@
         setBusy(true);
         setStatus("Signing in...");
         const creds = await signInEmail();
+        if (isDiscordMode) {
+          discordAccessToken = creds.tokens.access_token;
+          if (!discordAccessToken) throw new Error("Sign in failed. Please try again.");
+          passEl.value = "";
+          document.getElementById("accountForm").hidden = true;
+          document.getElementById("discordJoin").hidden = true;
+          subtitleEl.textContent = "Connect the Discord account you use in the ARVIO server.";
+          setStatus("");
+          discordClaim.hidden = false;
+          discordConnect.focus();
+          return;
+        }
         if (pairCode) {
           await approveTvViaServer(creds.email, creds.password);
         }

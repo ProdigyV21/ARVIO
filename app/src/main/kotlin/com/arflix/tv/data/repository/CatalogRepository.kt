@@ -39,6 +39,8 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.combine
+import com.arflix.tv.BuildConfig
 import kotlinx.coroutines.withContext
 import com.arflix.tv.network.OkHttpProvider
 import okhttp3.CacheControl
@@ -72,7 +74,8 @@ class CatalogRepository @Inject constructor(
     private val traktApi: TraktApi,
     private val okHttpClient: OkHttpClient,
     private val invalidationBus: CloudSyncInvalidationBus,
-    private val simklListsRepository: com.arflix.tv.data.repository.simkl.SimklListsRepository? = null
+    private val simklListsRepository: com.arflix.tv.data.repository.simkl.SimklListsRepository? = null,
+    private val partnerDelivery: dagger.Lazy<PartnerDeliveryRepository>? = null
 ) {
     private val bundledPreinstalledCatalogsById by lazy {
         // Imported collections change at runtime, so they must not be frozen into
@@ -106,6 +109,7 @@ class CatalogRepository @Inject constructor(
         val key = catalogFieldKey(profileId, field)
         if (prefs[key] == json) return
         prefs[key] = json
+        if (field == "catalogsByProfile") pruneKidsListApprovals(prefs, profileId, json)
         if (stampChange) CatalogCloudFields.stamp(prefs, profileId, field, json)
     }
 
@@ -121,17 +125,32 @@ class CatalogRepository @Inject constructor(
     internal suspend fun applyCloudCatalogs(profileId: String, fields: Map<String, String>, timestamps: JSONObject): Boolean {
         var preservedLocal = false
         context.settingsDataStore.edit { prefs ->
+            val existingById = readCatalogsFromPrefs(profileId, prefs).associateBy { it.id }
             for ((field, json) in fields) {
                 if (CatalogCloudFields.isNewerLocal(prefs, profileId, field, timestamps)) {
                     preservedLocal = true
                     continue
                 }
                 val normalized = if (field == "catalogsByProfile") {
-                    gson.toJson(parseCatalogsJson(json).distinctBy { it.id })
+                    val incomingList = parseCatalogsJson(json).distinctBy { it.id }.map { item ->
+                        val prev = existingById[item.id]
+                        if (prev != null &&
+                            item.sourceType == CatalogSourceType.ADDON &&
+                            item.addonCatalogId == prev.addonCatalogId
+                        ) {
+                            item.copy(
+                                clientDelegate = item.clientDelegate ?: prev.clientDelegate,
+                                clientFilter = item.clientFilter ?: prev.clientFilter
+                            )
+                        } else {
+                            item
+                        }
+                    }
+                    gson.toJson(incomingList)
                 } else {
                     gson.toJson(gson.fromJson<List<String>>(json, hiddenListType).orEmpty().distinct())
                 }
-                prefs[catalogFieldKey(profileId, field)] = normalized
+                writeCatalogField(prefs, profileId, field, normalized, stampChange = false)
                 CatalogCloudFields.recordRemote(prefs, profileId, field, normalized, timestamps)
             }
         }
@@ -185,6 +204,13 @@ class CatalogRepository @Inject constructor(
 
     @OptIn(ExperimentalCoroutinesApi::class)
     fun observeCatalogs(): Flow<List<CatalogConfig>> {
+        val personal = observePersonalCatalogs()
+        if (!BuildConfig.PARTNER_MANAGEMENT_ENABLED || partnerDelivery == null) return personal
+        return combine(personal, partnerDelivery.get().deliveries, PartnerCatalogs::overlay).distinctUntilChanged()
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun observePersonalCatalogs(): Flow<List<CatalogConfig>> {
         return profileManager.activeProfileId
             .flatMapLatest { profileId ->
                 context.settingsDataStore.data
@@ -225,13 +251,151 @@ class CatalogRepository @Inject constructor(
     }
 
     suspend fun getCatalogs(): List<CatalogConfig> {
-        return readCatalogsForActiveProfile()
+        return PartnerCatalogs.overlay(getPersonalCatalogs(), managedDelivery())
     }
+
+    suspend fun getPersonalCatalogs(): List<CatalogConfig> = readCatalogsForActiveProfile()
+
+    private fun managedDelivery(): PartnerIptvDelivery? =
+        if (BuildConfig.PARTNER_MANAGEMENT_ENABLED) partnerDelivery?.get()?.activeDelivery() else null
 
     suspend fun getCatalogsForProfile(profileId: String): List<CatalogConfig> {
         val safeProfileId = profileId.trim().ifBlank { "default" }
         val prefs = context.settingsDataStore.data.first()
         return sanitizeCollectionCatalogs(readCatalogsFromPrefs(safeProfileId, prefs))
+    }
+
+    private fun pruneKidsListApprovals(prefs: MutablePreferences, profileId: String, catalogsJson: String) {
+        val key = KidsTrustedTitles.preferenceKey(profileId)
+        val approved = prefs[key] ?: return
+        val remaining = KidsTrustedTitles.retainRows(approved, parseCatalogsJson(catalogsJson))
+        if (remaining != approved) prefs[key] = remaining
+    }
+
+    internal fun observeKidsListApprovals(profileId: String): Flow<Set<String>> {
+        val key = KidsTrustedTitles.preferenceKey(profileId)
+        return context.settingsDataStore.data.map { it[key].orEmpty() }.distinctUntilChanged().map(KidsTrustedTitles::keys)
+    }
+
+    internal suspend fun beginKidsListRefresh(catalog: CatalogConfig): KidsListRefresh? {
+        if (!KidsTrustedTitles.isTrustedSource(catalog)) return null
+        val profile = profileManager.getActiveProfile()?.takeIf { it.isKidsProfile } ?: return null
+        val entries = context.settingsDataStore.data.first()[KidsTrustedTitles.preferenceKey(profile.id)].orEmpty()
+        val approved = KidsTrustedTitles.forRow(entries, catalog)
+        return approved.takeIf { it.isNotEmpty() }?.let { KidsListRefresh(profile.id, it) }
+    }
+
+    internal suspend fun finishKidsListRefresh(
+        refresh: KidsListRefresh, catalog: CatalogConfig, refs: List<Pair<com.arflix.tv.data.model.MediaType, Int>>
+    ) {
+        if (profileManager.getActiveProfile()?.id != refresh.profileId) return
+        val key = KidsTrustedTitles.preferenceKey(refresh.profileId)
+        context.settingsDataStore.edit { prefs ->
+            val approved = prefs[key].orEmpty()
+            val remaining = KidsTrustedTitles.retainMembers(approved, catalog, refresh.previouslyApproved, refs)
+            if (approved != remaining) prefs[key] = remaining
+        }
+    }
+
+    internal suspend fun beginKidsListApproval(profileId: String, catalog: CatalogConfig, pin: String): KidsListApprovalSession {
+        val profile = profileManager.getActiveProfile()
+        if (profile?.id != profileId || !profile.isKidsProfile) throw CatalogException(R.string.kids_list_approval_changed)
+        val hash = profile.parentPin
+        if (hash.isNullOrBlank() || !com.arflix.tv.util.PinUtil.verifyPin(pin, hash)) {
+            throw CatalogException(R.string.kids_list_approval_pin_required)
+        }
+        val session = KidsListApprovalSession(profileId, catalog, hash)
+        checkKidsListApproval(session)
+        return session
+    }
+
+    internal suspend fun checkKidsListApproval(session: KidsListApprovalSession) {
+        val profile = profileManager.getActiveProfile()
+        if (profile?.id != session.profileId || !profile.isKidsProfile || profile.parentPin != session.parentPinHash ||
+            managedDelivery()?.permissions?.editCatalogs == false ||
+            !hasKidsApprovalRow(getCatalogsForProfile(session.profileId), session.catalog)) {
+            throw CatalogException(R.string.kids_list_approval_changed)
+        }
+    }
+
+    private fun hasKidsApprovalRow(catalogs: List<CatalogConfig>, expected: CatalogConfig): Boolean {
+        val row = KidsTrustedTitles.rowKey(expected)
+        return catalogs.any { KidsTrustedTitles.isTrustedSource(it) && KidsTrustedTitles.rowKey(it) == row }
+    }
+
+    internal suspend fun saveKidsListApproval(session: KidsListApprovalSession, type: com.arflix.tv.data.model.MediaType, id: Int) {
+        checkKidsListApproval(session)
+        context.settingsDataStore.edit { prefs ->
+            val catalogs = readCatalogsFromPrefs(session.profileId, prefs)
+            if (!hasKidsApprovalRow(catalogs, session.catalog)) throw CatalogException(R.string.kids_list_approval_changed)
+            val key = KidsTrustedTitles.preferenceKey(session.profileId)
+            prefs[key] = prefs[key].orEmpty() + KidsTrustedTitles.entry(session.catalog, type, id)
+        }
+    }
+
+    /** Title keys ("TV/-123") that a parent-approved addon catalog listed on [profileId]. */
+    internal fun observeKidsCatalogMembers(profileId: String): Flow<Set<String>> {
+        val key = KidsTrustedCatalogs.membersKey(profileId)
+        return context.settingsDataStore.data.map { it[key].orEmpty() }.distinctUntilChanged()
+            .map(KidsTrustedCatalogs::titleKeys)
+    }
+
+    internal suspend fun kidsCatalogApprovals(profileId: String): Set<String> =
+        context.settingsDataStore.data.first()[KidsTrustedCatalogs.approvalsKey(profileId)].orEmpty()
+
+    /** The active profile's catalog approvals when it is a kids profile; empty for any other. */
+    internal suspend fun activeKidsCatalogApprovals(): Set<String> {
+        val profile = profileManager.getActiveProfile()?.takeIf { it.isKidsProfile } ?: return emptySet()
+        return kidsCatalogApprovals(profile.id)
+    }
+
+    /**
+     * Records the titles a page of an addon catalog listed, when the active profile is a kids
+     * profile that approved that catalog (see [KidsTrustedCatalogs]). Anything else is ignored.
+     */
+    internal suspend fun recordKidsCatalogMembers(catalogKey: String, refs: List<Pair<com.arflix.tv.data.model.MediaType, Int>>) {
+        if (refs.isEmpty()) return
+        val profile = profileManager.getActiveProfile()?.takeIf { it.isKidsProfile } ?: return
+        if (catalogKey !in kidsCatalogApprovals(profile.id)) return
+        val fresh = refs.map { (type, id) -> KidsTrustedCatalogs.member(catalogKey, type, id) }
+        context.settingsDataStore.edit { prefs ->
+            // Approval may have been removed meanwhile; it is checked again inside the write.
+            if (catalogKey !in prefs[KidsTrustedCatalogs.approvalsKey(profile.id)].orEmpty()) return@edit
+            val key = KidsTrustedCatalogs.membersKey(profile.id)
+            val current = prefs[key].orEmpty()
+            if (current.containsAll(fresh)) return@edit
+            val merged = LinkedHashSet<String>(current.size + fresh.size).apply { addAll(current); addAll(fresh) }
+            prefs[key] = if (merged.size <= KidsTrustedCatalogs.MAX_MEMBERS) merged
+                else merged.toList().takeLast(KidsTrustedCatalogs.MAX_MEMBERS).toSet()
+        }
+    }
+
+    /**
+     * Approves [catalogKeys] for the active kids profile, or removes their approval (and every
+     * title they let through). Needs that profile's parent PIN either way.
+     */
+    internal suspend fun setKidsCatalogApproval(profileId: String, catalogKeys: List<String>, approve: Boolean, pin: String) {
+        val profile = profileManager.getActiveProfile()
+        if (profile?.id != profileId || !profile.isKidsProfile || catalogKeys.isEmpty()) {
+            throw CatalogException(R.string.kids_list_approval_changed)
+        }
+        val hash = profile.parentPin
+        if (hash.isNullOrBlank() || !com.arflix.tv.util.PinUtil.verifyPin(pin, hash)) {
+            throw CatalogException(R.string.kids_list_approval_pin_required)
+        }
+        if (managedDelivery()?.permissions?.editCatalogs == false) throw CatalogException(R.string.kids_list_approval_changed)
+        context.settingsDataStore.edit { prefs ->
+            val approvals = KidsTrustedCatalogs.approvalsKey(profileId)
+            val members = KidsTrustedCatalogs.membersKey(profileId)
+            if (approve) {
+                prefs[approvals] = prefs[approvals].orEmpty() + catalogKeys
+            } else {
+                prefs[approvals] = prefs[approvals].orEmpty() - catalogKeys.toSet()
+                prefs[members] = KidsTrustedCatalogs.withoutCatalogs(prefs[members].orEmpty(), catalogKeys)
+            }
+        }
+        // Approvals ride the profile's cloud settings, so the other devices follow.
+        invalidationBus.markDirty(CloudSyncScope.PROFILE_SETTINGS, profileId, "kids catalog approval")
     }
 
     private fun isBundledPreinstalledCatalogId(catalogId: String): Boolean {
@@ -321,6 +485,29 @@ class CatalogRepository @Inject constructor(
         invalidationBus.markDirty(CloudSyncScope.CATALOGS, safeProfileId, "set hidden addon catalogs")
     }
 
+    /**
+     * Un-deletes [addon]'s rows for the active profile. Row ids are stable per addon +
+     * catalog, so rows deleted under an earlier install would otherwise stay hidden after
+     * the user installs the addon again. Call before [syncAddonCatalogs].
+     */
+    suspend fun restoreHiddenAddonCatalogs(addon: Addon) {
+        val rowIds = addon.manifest?.catalogs.orEmpty()
+            .mapNotNull { buildAddonCatalogConfig(addon, it)?.id }
+            .toSet()
+        if (rowIds.isEmpty()) return
+        val profileId = activeProfileId()
+        var restored = false
+        context.settingsDataStore.edit { prefs ->
+            val hidden = decodeHiddenAddon(profileId, prefs)
+            if (hidden.none { it in rowIds }) return@edit
+            writeCatalogField(prefs, profileId, "hiddenAddonByProfile", gson.toJson((hidden - rowIds).toList()))
+            restored = true
+        }
+        if (!restored) return
+        lastSyncedAddonFingerprint = null
+        invalidationBus.markDirty(CloudSyncScope.CATALOGS, profileId, "restore reinstalled addon catalogs")
+    }
+
     suspend fun getHiddenHomeServerCatalogIdsForProfile(profileId: String): List<String> {
         val safeProfileId = profileId.trim().ifBlank { "default" }
         val prefs = context.settingsDataStore.data.first()
@@ -337,8 +524,9 @@ class CatalogRepository @Inject constructor(
     }
 
     private suspend fun saveCatalogs(catalogs: List<CatalogConfig>, expected: Preferences? = null, targetProfileId: String? = null): Boolean {
+        if (expected == null && managedDelivery()?.permissions?.editCatalogs == false) return false
         val profileId = targetProfileId ?: activeProfileId()
-        val sanitized = catalogs
+        val sanitized = catalogs.filterNot { PartnerCatalogs.isManaged(it.id) }
             .distinctBy { it.id }
             .mapNotNull { normalizeCatalogConfig(it) }
         var saved = false
@@ -358,8 +546,9 @@ class CatalogRepository @Inject constructor(
     }
 
     suspend fun replaceCatalogsForProfile(profileId: String, catalogs: List<CatalogConfig>) {
+        if (managedDelivery()?.permissions?.editCatalogs == false) return
         val safeProfileId = profileId.trim().ifBlank { "default" }
-        val sanitized = catalogs
+        val sanitized = catalogs.filterNot { PartnerCatalogs.isManaged(it.id) }
             .distinctBy { it.id }
             .mapNotNull { normalizeCatalogConfig(it) }
         context.settingsDataStore.edit { prefs ->
@@ -470,18 +659,19 @@ class CatalogRepository @Inject constructor(
     }
 
     suspend fun syncAddonCatalogs(addons: List<Addon>): Boolean {
+        val personalAddons = addons.filterNot { PartnerCatalogs.isManaged(it.id) }
         val profileId = activeProfileId()
         // Debounce: skip if addon manifest state hasn't changed since last sync.
         // Includes profile ID + fields that affect the sync outcome so that
         // switching profiles, toggling addon enable-state, or manifest catalog
         // changes always trigger a fresh sync.
-        val fingerprint = buildAddonFingerprint(profileId, addons)
+        val fingerprint = buildAddonFingerprint(profileId, personalAddons)
         if (fingerprint == lastSyncedAddonFingerprint) return false
         lastSyncedAddonFingerprint = fingerprint
 
         val prefs = context.settingsDataStore.data.first()
         val hiddenAddonIds = decodeHiddenAddon(profileId, prefs)
-        val supportedCatalogs = addons
+        val supportedCatalogs = personalAddons
             .asSequence()
             .filter { addon ->
                     addon.isInstalled &&
@@ -525,7 +715,9 @@ class CatalogRepository @Inject constructor(
                 addonId = desired.addonId,
                 addonCatalogType = desired.addonCatalogType,
                 addonCatalogId = desired.addonCatalogId,
-                addonName = desired.addonName
+                addonName = desired.addonName,
+                clientDelegate = desired.clientDelegate,
+                clientFilter = desired.clientFilter
             )
             if (merged != existing) {
                 current[index] = merged
@@ -555,7 +747,7 @@ class CatalogRepository @Inject constructor(
      * affecting the sync outcome. Unlike the previous ID-only fingerprint, this includes:
      * - Active profile ID (so profile switches always trigger a fresh sync)
      * - Addon installed/enabled state, type, and URL
-     * - Manifest catalog contents (catalog type + ID per addon)
+     * - Manifest catalog contents (catalog type, ID, name, delegation, and filter per addon)
      *
      * This ensures that toggling an addon, switching profiles, or manifest catalog
      * changes never leave stale/missing catalogs.
@@ -576,6 +768,12 @@ class CatalogRepository @Inject constructor(
                     append(catalog.type)
                     append(':')
                     append(catalog.id)
+                    append(':')
+                    append(catalog.name)
+                    append(':')
+                    append(catalog.clientDelegate ?: "")
+                    append(':')
+                    append(catalog.clientFilter ?: "")
                     append(']')
                 }
                 append(',')
@@ -588,6 +786,7 @@ class CatalogRepository @Inject constructor(
         val prefs = context.settingsDataStore.data.first()
         val hiddenHomeServerIds = decodeHiddenHomeServer(profileId, prefs)
         val desiredCatalogs = candidates
+            .filterNot { PartnerCatalogs.isManaged(it.connectionId) }
             .filter { it.sourceRef.isNotBlank() && it.title.isNotBlank() }
             .map { candidate ->
                 val stableId = "home_server_${sha256Short(candidate.sourceRef)}"
@@ -678,7 +877,9 @@ class CatalogRepository @Inject constructor(
             addonId = addonId,
             addonCatalogType = normalizedType,
             addonCatalogId = catalogId,
-            addonName = addon.name
+            addonName = addon.name,
+            clientDelegate = catalog.clientDelegate,
+            clientFilter = catalog.clientFilter
         )
     }
 
@@ -789,7 +990,7 @@ class CatalogRepository @Inject constructor(
             manifestResult.getOrThrow()
         }
 
-        val current = getCatalogs().toMutableList()
+        val current = getPersonalCatalogs().toMutableList()
         val addedConfigs = mutableListOf<CatalogConfig>()
 
         val manifestId = finalManifest.id ?: return Result.failure(CatalogException(R.string.catalog_pack_manifest_missing_id))
@@ -933,6 +1134,115 @@ class CatalogRepository @Inject constructor(
     }
 
     /**
+     * Adds a YouTube video link to the profile's YouTube row, creating the row on first use.
+     * Returns the row and the video's title. The title comes from YouTube's public oEmbed
+     * endpoint, falling back to the video id; a caller that already knows it (a YouTube search
+     * result) passes [knownTitle] and skips that request.
+     */
+    suspend fun addYouTubeVideo(
+        rawUrl: String,
+        parentPin: String? = null,
+        targetProfileId: String = profileManager.getProfileIdSync(),
+        knownTitle: String? = null
+    ): Result<Pair<CatalogConfig, String>> {
+        suspend fun approvalError(): CatalogException? {
+            val profile = profileManager.getActiveProfile()
+            if (targetProfileId != profileManager.getProfileIdSync() ||
+                (profile?.id ?: "default") != targetProfileId) {
+                return CatalogException(R.string.youtube_profile_changed)
+            }
+            return if (YouTubeCollection.canAddToProfile(profile, parentPin)) null
+            else CatalogException(R.string.youtube_parent_approval_required)
+        }
+        approvalError()?.let { return Result.failure(it) }
+        val videoId = YouTubeCollection.videoIdFromUrl(rawUrl)
+            ?: return Result.failure(CatalogException(R.string.catalog_url_invalid))
+        val oembed = if (!knownTitle.isNullOrBlank()) null else fetchUrl(
+            "https://www.youtube.com/oembed?format=json&url=" +
+                java.net.URLEncoder.encode(YouTubeCollection.watchUrl(videoId), "UTF-8")
+        )
+        val title = knownTitle?.trim()?.takeIf { it.isNotBlank() } ?: oembed?.let {
+            runCatching {
+                com.google.gson.JsonParser.parseString(it).asJsonObject.get("title")?.asString
+            }.getOrNull()
+        }?.trim()?.takeIf { it.isNotBlank() } ?: videoId
+
+        approvalError()?.let { return Result.failure(it) }
+        var updated: CatalogConfig? = null
+        var error: CatalogException? = null
+        // Check the limit against the latest list in the same transaction as the addition.
+        context.settingsDataStore.edit { prefs ->
+            if (targetProfileId != profileManager.getProfileIdSync()) {
+                error = CatalogException(R.string.youtube_profile_changed)
+                return@edit
+            }
+            val current = sanitizeCollectionCatalogs(readCatalogsFromPrefs(targetProfileId, prefs)).toMutableList()
+            val index = current.indexOfFirst { it.sourceType == CatalogSourceType.YOUTUBE }
+            val existing = current.getOrNull(index)
+            val videos = YouTubeCollection.decode(existing?.sourceRef)
+            if (videos.any { it.id == videoId }) {
+                error = CatalogException(R.string.catalog_already_added)
+                return@edit
+            }
+            if (videos.size >= YouTubeCollection.MAX_VIDEOS) {
+                error = CatalogException(R.string.youtube_collection_full, listOf(YouTubeCollection.MAX_VIDEOS))
+                return@edit
+            }
+            val ref = YouTubeCollection.encode(listOf(YouTubeCollection.Video(videoId, title)) + videos)
+            val row = existing?.copy(sourceRef = ref) ?: CatalogConfig(
+                id = "youtube_${System.currentTimeMillis()}", title = YouTubeCollection.DEFAULT_TITLE,
+                sourceType = CatalogSourceType.YOUTUBE, sourceRef = ref, isPreinstalled = false
+            )
+            if (existing != null) current[index] = row else current.add(0, row)
+            writeCatalogField(prefs, targetProfileId, "catalogsByProfile", gson.toJson(current))
+            updated = row
+        }
+        error?.let { return Result.failure(it) }
+        invalidationBus.markDirty(CloudSyncScope.CATALOGS, targetProfileId, "add YouTube video")
+        return Result.success(requireNotNull(updated) to title)
+    }
+
+    /** True when [videoId] is in the active profile's YouTube row (its "favorites"). */
+    suspend fun isYouTubeVideoSaved(videoId: String): Boolean =
+        getPersonalCatalogs().firstOrNull { it.sourceType == CatalogSourceType.YOUTUBE }
+            ?.let { row -> YouTubeCollection.decode(row.sourceRef).any { it.id == videoId } } == true
+
+    /** Takes [videoId] out of the active profile's YouTube row, wherever it sits. */
+    suspend fun removeSavedYouTubeVideo(videoId: String): Result<Unit> {
+        val row = getPersonalCatalogs().firstOrNull { it.sourceType == CatalogSourceType.YOUTUBE }
+            ?: return Result.success(Unit)
+        return removeYouTubeVideo(row.id, videoId)
+    }
+
+    /** Moves one video of the profile's YouTube row by [delta] places (negative = towards the top). */
+    suspend fun moveYouTubeVideo(catalogId: String, videoId: String, delta: Int): Result<Unit> {
+        val targetProfileId = profileManager.getProfileIdSync()
+        val current = getCatalogsForProfile(targetProfileId).toMutableList()
+        val index = current.indexOfFirst { it.id == catalogId && it.sourceType == CatalogSourceType.YOUTUBE }
+        if (index < 0) return Result.failure(CatalogException(R.string.catalog_not_found))
+        val videos = YouTubeCollection.decode(current[index].sourceRef).toMutableList()
+        val from = videos.indexOfFirst { it.id == videoId }
+        val to = from + delta
+        if (from < 0 || to !in videos.indices) return Result.success(Unit)
+        videos.add(to, videos.removeAt(from))
+        current[index] = current[index].copy(sourceRef = YouTubeCollection.encode(videos))
+        saveCatalogs(current, targetProfileId = targetProfileId)
+        return Result.success(Unit)
+    }
+
+    /** Removes one video from the profile's YouTube row; the row itself stays, even when empty. */
+    suspend fun removeYouTubeVideo(catalogId: String, videoId: String): Result<Unit> {
+        val targetProfileId = profileManager.getProfileIdSync()
+        val current = getCatalogsForProfile(targetProfileId).toMutableList()
+        val index = current.indexOfFirst { it.id == catalogId && it.sourceType == CatalogSourceType.YOUTUBE }
+        if (index < 0) return Result.failure(CatalogException(R.string.catalog_not_found))
+        val videos = YouTubeCollection.decode(current[index].sourceRef)
+        current[index] = current[index].copy(sourceRef = YouTubeCollection.encode(videos.filterNot { it.id == videoId }))
+        saveCatalogs(current, targetProfileId = targetProfileId)
+        return Result.success(Unit)
+    }
+
+    /**
      * Appends TMDB catalogs to [profileId]'s list, after its own rows, skipping any whose page
      * is already there. Used for a kids profile's starter rows; afterwards they are ordinary
      * catalogs the profile can hide, move, rename or remove. [starters] are (id, title, url).
@@ -1029,7 +1339,7 @@ class CatalogRepository @Inject constructor(
     suspend fun renameCatalog(catalogId: String, newTitle: String): Boolean {
         val trimmed = newTitle.trim()
         if (trimmed.isBlank()) return false
-        val current = getCatalogs().toMutableList()
+        val current = getPersonalCatalogs().toMutableList()
         val index = current.indexOfFirst { it.id == catalogId }
         if (index < 0) return false
         current[index] = current[index].copy(title = trimmed)
@@ -1038,7 +1348,7 @@ class CatalogRepository @Inject constructor(
     }
 
     suspend fun moveCatalogUp(catalogId: String): Boolean {
-        val current = getCatalogs().toMutableList()
+        val current = getPersonalCatalogs().toMutableList()
         val visible = current.filter { isVisibleCatalogInSettings(it) }
         val visibleIndex = visible.indexOfFirst { it.id == catalogId }
         if (visibleIndex <= 0) return false
@@ -1054,7 +1364,7 @@ class CatalogRepository @Inject constructor(
     }
 
     suspend fun moveCatalogDown(catalogId: String): Boolean {
-        val current = getCatalogs().toMutableList()
+        val current = getPersonalCatalogs().toMutableList()
         val visible = current.filter { isVisibleCatalogInSettings(it) }
         val visibleIndex = visible.indexOfFirst { it.id == catalogId }
         if (visibleIndex < 0 || visibleIndex >= visible.lastIndex) return false
@@ -1065,6 +1375,32 @@ class CatalogRepository @Inject constructor(
         val moved = current.removeAt(currentIndex)
         val insertAt = if (currentIndex < nextIndex) nextIndex else nextIndex + 1
         current.add(insertAt.coerceAtMost(current.size), moved)
+        saveCatalogs(current)
+        return true
+    }
+
+    /**
+     * Moves a catalog [steps] places among the catalogs the settings list shows, in one write - for
+     * a row dragged on the phone. Catalogs the list hides keep their place relative to their
+     * neighbours, exactly as they do with [moveCatalogUp] and [moveCatalogDown] repeated.
+     */
+    suspend fun moveCatalogBy(catalogId: String, steps: Int): Boolean {
+        if (steps == 0) return false
+        val current = getCatalogs().toMutableList()
+        val visible = current.filter { isVisibleCatalogInSettings(it) }
+        val visibleIndex = visible.indexOfFirst { it.id == catalogId }
+        if (visibleIndex < 0) return false
+        val targetVisibleIndex = (visibleIndex + steps).coerceIn(0, visible.lastIndex)
+        if (targetVisibleIndex == visibleIndex) return false
+        val anchorId = visible[targetVisibleIndex].id
+        val currentIndex = current.indexOfFirst { it.id == catalogId }
+        if (currentIndex < 0) return false
+        val moved = current.removeAt(currentIndex)
+        val anchorIndex = current.indexOfFirst { it.id == anchorId }
+        if (anchorIndex < 0) return false
+        // Moving up lands in front of the catalog that held the target place, moving down behind it.
+        val insertAt = if (steps < 0) anchorIndex else anchorIndex + 1
+        current.add(insertAt.coerceIn(0, current.size), moved)
         saveCatalogs(current)
         return true
     }
@@ -1154,6 +1490,7 @@ class CatalogRepository @Inject constructor(
             CatalogSourceType.PREINSTALLED -> null
             CatalogSourceType.ADDON -> null
             CatalogSourceType.HOME_SERVER -> null
+            CatalogSourceType.YOUTUBE -> null
         }
     }
 
@@ -1191,6 +1528,7 @@ class CatalogRepository @Inject constructor(
             CatalogSourceType.PREINSTALLED -> null
             CatalogSourceType.ADDON -> null
             CatalogSourceType.HOME_SERVER -> null
+            CatalogSourceType.YOUTUBE -> null
         }
     }
 
@@ -1559,6 +1897,7 @@ class CatalogRepository @Inject constructor(
             // URL/ref evidence always wins over stale enum values from older builds.
             sourceRef?.startsWith(HomeServerRepository.CATALOG_SOURCE_REF_PREFIX, ignoreCase = true) == true -> CatalogSourceType.HOME_SERVER
             sourceRef?.startsWith(ADDON_SOURCE_REF_PREFIX, ignoreCase = true) == true -> CatalogSourceType.ADDON
+            sourceRef?.startsWith(YouTubeCollection.SOURCE_REF_PREFIX) == true -> CatalogSourceType.YOUTUBE
             sourceRef?.startsWith("simkl_list:", ignoreCase = true) == true -> CatalogSourceType.SIMKL
             sourceUrl?.let { CatalogUrlParser.parseSimkl(it) } != null -> CatalogSourceType.SIMKL
             sourceRef?.startsWith("trakt_", ignoreCase = true) == true -> CatalogSourceType.TRAKT

@@ -11,9 +11,15 @@ const assert = require('node:assert/strict');
 (async () => {
   const root = path.resolve(__dirname, '..');
   const fixture = name => path.join(root, 'tests/fixtures', name);
+  const regionalOnly = process.env.PAYMENT_UI_ONLY === 'regional-pricing';
+  const attributionOnly = process.env.PAYMENT_UI_ONLY === 'attribution';
+  const serveOnly = process.argv.includes('--serve');
+  const yearlyUrl = 'https://ko-fi.com/s/373de24a07';
+  const regionalUrl = 'https://ko-fi.com/arvio/link/ARVIOREGION50';
   const result = await esbuild.build({
     entryPoints: [fixture('premium-ui.tsx')], bundle: true, write: false, outdir: 'payment-fixture', jsx: 'automatic',
-    define: { 'process.env': '{}', 'process.env.NODE_ENV': '"development"', 'process.env.NEXT_PUBLIC_PAYWALL_ENABLED': '"true"', 'process.env.NEXT_PUBLIC_KOFI_URL': '"https://ko-fi.com/arvio/tiers"' },
+    define: { 'process.env': '{}', 'process.env.NODE_ENV': '"development"', 'process.env.NEXT_PUBLIC_PAYWALL_ENABLED': '"true"', 'process.env.NEXT_PUBLIC_KOFI_URL': '"https://ko-fi.com/arvio/tiers"',
+      'process.env.NEXT_PUBLIC_KOFI_YEARLY_URL': JSON.stringify(regionalOnly || serveOnly ? yearlyUrl : '') },
     plugins: [{ name: 'local-only-payment-transport', setup(build) {
       build.onResolve({ filter: /^@\// }, args => ({ path: args.path === '@/lib/store' ? fixture('premium-store.ts') : ['.tsx', '.ts', '/index.tsx', '/index.ts', ''].map(ext => path.join(root, args.path.slice(2) + ext)).find(file => fs.existsSync(file)) }));
       build.onResolve({ filter: /(^|\/)http$/ }, () => ({ path: fixture('premium-http.ts') }));
@@ -24,6 +30,12 @@ const assert = require('node:assert/strict');
   const server = http.createServer((req, res) => {
     const url = new URL(req.url, 'http://localhost');
     res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'");
+    if (url.pathname === '/api/geo') {
+      let country = 'US';
+      try { if (new URL(req.headers.referer).searchParams.get('country') === 'BR') country = 'BR'; } catch { /* fixture default */ }
+      res.setHeader('content-type', 'application/json');
+      return res.end(JSON.stringify({ country }));
+    }
     if (url.pathname === '/bundle.js' || url.pathname === '/bundle.css') {
       res.setHeader('content-type', url.pathname.endsWith('js') ? 'text/javascript' : 'text/css');
       return res.end(url.pathname.endsWith('js') ? js : css);
@@ -36,6 +48,11 @@ const assert = require('node:assert/strict');
     res.end('<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><title>Local payment-flow test</title><link rel="stylesheet" href="/bundle.css"></head><body><div id="root"></div><script src="/bundle.js"></script></body></html>');
   });
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  if (serveOnly) {
+    console.log(`Isolated payment fixture: http://127.0.0.1:${server.address().port}/?case=purchase-yearly`);
+    console.log('Other cases: purchase-monthly, purchase-paid, purchase-signedout. Use a fresh tab/session for country=BR. No real billing or account writes.');
+    return;
+  }
   // A second, fail-closed network barrier covers native browser requests that
   // are not associated with a routed page. This proxy never opens an upstream
   // connection. Local fixture traffic bypasses it.
@@ -65,6 +82,39 @@ const assert = require('node:assert/strict');
     const events = name => page.evaluate(name => window.__premiumFixture.events.filter(event => event.event_name === name), name);
     const waitEvent = name => page.waitForFunction(name => window.__premiumFixture.events.some(event => event.event_name === name), name);
     const go = async scenario => { await page.goto(`${base}/?case=${scenario}`); await page.getByRole('link', { name: /Keep Premium|Subscribe on Ko-fi/ }).first().waitFor(); };
+    if (regionalOnly) {
+      const preview = page.locator('.web-preview-hero-cta');
+      await context.route('**/api/geo', route => route.fulfill({ json: { country: new URL(page.url()).searchParams.get('country') } }));
+      for (const [country, price, destination] of [['BR', '$10', regionalUrl], ['US', '$20', yearlyUrl]]) {
+        await page.goto(`${base}/?case=preview-signedout&country=${country}`);
+        await preview.getByText(`12-month pass · ${price}`, { exact: false }).waitFor();
+        assert.match(await preview.innerText(), /Monthly · \$2\.99/);
+        if (country === 'BR') {
+          await page.getByText('Regional price · save 72% vs. 12 monthly payments', { exact: true }).waitFor();
+          assert.doesNotMatch(await preview.innerText(), /\$20/);
+        }
+        await page.goto(`${base}/?case=preview-paid&country=${country}`);
+        await page.getByText('Membership active', { exact: true }).waitFor();
+        const offer = page.getByRole('link', { name: `Get the 12-month pass · ${price}`, exact: true });
+        await offer.waitFor();
+        assert.equal(await offer.getAttribute('href'), destination);
+        const opened = context.waitForEvent('page');
+        await offer.click();
+        await (await opened).close();
+        await waitEvent('checkout_opened');
+        const recovery = page.getByRole('dialog', { name: 'Finish your membership' });
+        await recovery.getByRole('link', { name: 'Return to Ko-fi' }).waitFor();
+        assert.equal(await recovery.getByRole('link', { name: 'Return to Ko-fi' }).getAttribute('href'), destination);
+        await recovery.getByText(/Payment has not arrived yet/).waitFor();
+        await page.evaluate(() => window.__premiumFixture.markYearlyPaid());
+        await recovery.getByRole('button', { name: 'Check payment status', exact: true }).click();
+        await page.getByText('12-month pass active', { exact: true }).waitFor();
+        await page.evaluate(() => sessionStorage.removeItem('arvio.visitorCountry.v1'));
+      }
+      assert.deepEqual(errors, []);
+      console.log('Regional and standard prices, checkout destinations and annual activation passed.');
+      return;
+    }
     const handoff = async (link, button = 'left') => {
       assert.equal(await link.getAttribute('href'), 'https://ko-fi.com/arvio/tiers', 'native provider URL has no email, journey ID or tracking query');
       assert.equal(await link.getAttribute('target'), '_blank');
@@ -82,6 +132,46 @@ const assert = require('node:assert/strict');
       await popup.close();
     };
     const returnToApp = () => page.evaluate(() => { window.dispatchEvent(new Event('blur')); window.dispatchEvent(new Event('focus')); });
+    if (attributionOnly) {
+      process.env.ARVIO_AUTH_SECRET = 'isolated-browser-attribution-test-secret-32-bytes';
+      const { summarizeMeasurements } = require('../../netlify-auth-site/netlify/functions/_premium-measurement');
+      const journey = 'a1101111-2222-4333-8444-555566667777';
+      for (const [query, source, landing] of [
+        [`arvio_journey=${journey}&arvio_landing=jellyfin&utm_source=www.google.com&utm_medium=organic&utm_campaign=discovery`, 'www.google.com', 'jellyfin'],
+        ['utm_source=reddit&utm_medium=social&utm_campaign=community', 'reddit', 'web']
+      ]) {
+        await page.goto(`${base}/?case=checkout&${query}`);
+        await page.getByRole('link', { name: /Keep Premium/ }).waitFor();
+        await handoff(page.getByRole('link', { name: /Keep Premium/ }));
+        const recorded = await page.evaluate(() => window.__premiumFixture.events);
+        const checkout = recorded.find(event => event.event_name === 'checkout_opened');
+        assert.equal(checkout.metadata.source, source);
+        assert.equal(checkout.metadata.landing_page, landing);
+        assert.equal(checkout.metadata.entry, 'account_settings');
+        const records = recorded.map((event, index) => ({ accountKey: 'isolated-buyer', eventName: event.event_name,
+          firstAt: new Date(Date.UTC(2026, 10, 13, 10, 0, index)).toISOString(), metadata: event.metadata }));
+        assert.equal(summarizeMeasurements(records, []).paymentAttribution.confirmedBuyingAccounts, 0,
+          'browser checkout events cannot create a payment');
+        // Simulate only the server-confirmed event locally. There is no Ko-fi
+        // request or production write, and the missing anonymous beacon stays
+        // missing: the authenticated checkout is sufficient evidence.
+        records.push({ accountKey: 'isolated-buyer', eventName: 'subscription_started', firstAt: '2026-11-13T11:00:00.000Z' });
+        const report = summarizeMeasurements(records, []).paymentAttribution;
+        assert.equal(report.bySource[source], 1);
+        assert.equal(report.byLandingPage[landing], 1);
+        assert.equal(report.byCheckoutEntry.account_settings, 1);
+        assert.equal(report.byMethod.authenticated_event, 1);
+        await page.evaluate(() => window.__premiumFixture.markPaid());
+        await page.getByRole('dialog').getByRole('button', { name: 'Check payment status', exact: true }).click();
+        await page.getByTestId('activation-result').filter({ hasText: /^Paid activation/ }).waitFor();
+        await page.evaluate(() => sessionStorage.clear());
+      }
+      assert.deepEqual(errors, []);
+      assert.ok(externalAttempts.length >= 2);
+      assert.equal(externalAttempts.every(url => url === 'https://ko-fi.com/arvio/tiers'), true);
+      console.log('Attribution browser scenarios passed: source + landing + checkout entry survive native payment handoff; missing anonymous beacons recover from authenticated events; activation works; real billing/network blocked.');
+      return;
+    }
     const noOverflow = async name => {
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, `${name}: no page overflow`);
       for (const dialog of await page.getByRole('dialog').all()) assert.equal(await dialog.evaluate(element => element.scrollWidth > element.clientWidth), false, `${name}: no dialog overflow`);

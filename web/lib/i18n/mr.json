@@ -11,5 +11,6 @@
   "Completed": "पूर्ण",
   "Dropped": "सोडून दिलेले",
   "Silo: use the Jellyfin-compatible address. Optional profile: username#ProfileName. Protected profile: password#PIN.": "Silo: Jellyfin-सुसंगत पत्ता वापरा. पर्यायी प्रोफाइल: username#ProfileName. संरक्षित प्रोफाइल: password#PIN.",
-  "None of your enabled addons provide playback sources.": "तुमच्या सक्षम केलेल्या कोणत्याही ॲडऑनमध्ये प्लेबॅक स्रोत उपलब्ध नाहीत."
+  "None of your enabled addons provide playback sources.": "तुमच्या सक्षम केलेल्या कोणत्याही ॲडऑनमध्ये प्लेबॅक स्रोत उपलब्ध नाहीत.",
+  "View on Trakt": "Trakt वर पहा"
 }

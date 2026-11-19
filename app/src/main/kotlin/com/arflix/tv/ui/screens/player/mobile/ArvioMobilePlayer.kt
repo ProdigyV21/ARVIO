@@ -65,6 +65,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import com.arflix.tv.R
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -107,6 +108,8 @@ import com.arflix.tv.ui.screens.player.PlayerUiState
 import com.arflix.tv.ui.screens.player.localizedText
 import com.arflix.tv.ui.screens.player.preview.SeekPreviewFrame
 import com.arflix.tv.ui.theme.ArflixTypography
+import com.arflix.tv.ui.theme.BackgroundDark
+import com.arflix.tv.ui.theme.ErrorRed
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
@@ -448,6 +451,10 @@ fun ArvioMobilePlayer(
         }
     }
 
+    val skipRecapLabel = stringResource(R.string.player_skip_recap)
+    val skipIntroLabel = stringResource(R.string.player_skip_intro)
+    val skipEndingLabel = stringResource(R.string.player_skip_ending)
+
     // Automatic progression belongs to the shared STATE_ENDED prompt, not timeline position.
     val promptState = remember(
         isIntroInterval,
@@ -465,9 +472,8 @@ fun ArvioMobilePlayer(
         // 1. Skip Intro / Recap
         if (isIntroInterval && !dismissedIntro && activeSkip != null && currentPositionMs in activeSkip.startMs until activeSkip.endMs) {
             val label = when (activeSkip.type.lowercase()) {
-                "recap" -> "Skip Recap"
-                "op", "mixed-op" -> "Skip Intro"
-                else -> "Skip Intro"
+                "recap" -> skipRecapLabel
+                else -> skipIntroLabel
             }
             val totalMs = (activeSkip.endMs - activeSkip.startMs).coerceAtLeast(1000L)
             val progress = ((activeSkip.endMs - currentPositionMs).toFloat() / totalMs.toFloat()).coerceIn(0f, 1f)
@@ -521,8 +527,7 @@ fun ArvioMobilePlayer(
             }
             if (currentPositionMs in upNextEndMs until activeSkip.endMs) {
                 val label = when (activeSkip.type.lowercase()) {
-                    "ed", "mixed-ed" -> "Skip Ending"
-                    else -> "Skip Outro"
+                    else -> skipEndingLabel
                 }
                 val totalMs = (activeSkip.endMs - activeSkip.startMs).coerceAtLeast(1000L)
                 val progress = ((activeSkip.endMs - currentPositionMs).toFloat() / totalMs.toFloat()).coerceIn(0f, 1f)
@@ -550,10 +555,11 @@ fun ArvioMobilePlayer(
     val currentAudioTrackName = audioTracks.getOrNull(selectedAudioIndex)?.let {
         it.label?.takeIf { l -> l.isNotBlank() }
             ?: it.language?.takeIf { l -> l.isNotBlank() }
-            ?: "Audio ${it.index + 1}"
-    } ?: "Audio"
+            ?: stringResource(R.string.mplayer_audio_track_number, it.index + 1)
+    } ?: stringResource(R.string.audio)
 
-    val currentSubtitleTrackName = uiState.selectedSubtitle?.lang?.takeIf { it.isNotBlank() } ?: "Off"
+    // Blank means "off"; the controls show their own translated label for it.
+    val currentSubtitleTrackName = uiState.selectedSubtitle?.lang?.takeIf { it.isNotBlank() }.orEmpty()
 
     var initialAspectSeen by remember { mutableStateOf(false) }
     // Automatically trigger HUD flash when aspect ratio changes (suppressed on initial load)
@@ -1000,7 +1006,7 @@ fun ArvioMobilePlayer(
 
         // ── Center Aspect Ratio HUD Flash Indicator ──
         MobileAspectIndicator(
-            aspectText = aspectFlashText,
+            aspectText = aspectModeDisplayLabel(aspectFlashText),
             visible = showAspectFlash,
             modifier = Modifier.align(Alignment.Center)
         )
@@ -1065,12 +1071,12 @@ fun ArvioMobilePlayer(
             ) {
                 Icon(
                     painter = painterResource(R.drawable.ic_huge_lock_open),
-                    contentDescription = "Unlock",
+                    contentDescription = stringResource(R.string.mplayer_cd_unlock),
                     tint = MobilePlayerTokens.InkPrimary,
                     modifier = Modifier.size(26.dp)
                 )
                 Text(
-                    text = "Tap to unlock",
+                    text = stringResource(R.string.mplayer_tap_to_unlock),
                     color = MobilePlayerTokens.InkSecondary,
                     fontSize = 12.sp,
                     fontWeight = FontWeight.SemiBold
@@ -1084,7 +1090,7 @@ fun ArvioMobilePlayer(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(Color(0xFF08090C))
+                    .background(BackgroundDark)
                     .zIndex(30f)
             ) {
                 // Top-left Close ('X') button so users can exit the player
@@ -1098,7 +1104,7 @@ fun ArvioMobilePlayer(
                 ) {
                     MobileIconButton(
                         icon = Icons.Default.Close,
-                        contentDescription = "Close",
+                        contentDescription = stringResource(R.string.close),
                         onClick = onBack,
                         size = 20.dp
                     )
@@ -1116,11 +1122,13 @@ fun ArvioMobilePlayer(
                     Icon(
                         imageVector = Icons.Outlined.ErrorOutline,
                         contentDescription = null,
-                        tint = Color(0xFFEF4444),
+                        tint = ErrorRed,
                         modifier = Modifier.size(42.dp)
                     )
                     Text(
-                        text = if (!hasStreams) "No Playable Streams" else "Playback Failed",
+                        text = stringResource(
+                            if (!hasStreams) R.string.mplayer_error_no_streams_title else R.string.mplayer_error_playback_failed_title
+                        ),
                         color = MobilePlayerTokens.InkPrimary,
                         fontSize = 17.sp,
                         fontWeight = FontWeight.SemiBold
@@ -1128,9 +1136,9 @@ fun ArvioMobilePlayer(
                     Text(
                         text = uiState.error?.localizedText().orEmpty().ifBlank {
                             if (!hasStreams) {
-                                "No playable streams found for this content. Try reloading streams or checking addon settings."
+                                stringResource(R.string.mplayer_error_no_streams_message)
                             } else {
-                                "The connection was interrupted, or this stream format could not be played."
+                                stringResource(R.string.mplayer_error_playback_failed_message)
                             }
                         },
                         color = MobilePlayerTokens.InkTertiary,
@@ -1160,7 +1168,7 @@ fun ArvioMobilePlayer(
                                 contentAlignment = Alignment.Center
                             ) {
                                 Text(
-                                    text = "Retry",
+                                    text = stringResource(R.string.retry),
                                     color = MobilePlayerTokens.InkPrimary,
                                     fontSize = 13.5.sp,
                                     fontWeight = FontWeight.SemiBold
@@ -1182,8 +1190,8 @@ fun ArvioMobilePlayer(
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
-                                text = "Reload Streams",
-                                color = Color(0xFF0B0C10),
+                                text = stringResource(R.string.mplayer_reload_streams),
+                                color = Color.Black,
                                 fontSize = 13.5.sp,
                                 fontWeight = FontWeight.Bold
                             )

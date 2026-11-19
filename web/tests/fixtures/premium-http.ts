@@ -3,7 +3,7 @@ const trial = { entitled: true, reason: 'trial', status: 'active', source: 'tria
 const paid = { ...trial, reason: 'subscription', source: 'kofi' };
 const scenario = new URLSearchParams(location.search).get('case');
 const unpaid = { ...trial, entitled: false, reason: 'none', source: null, expiresAt: null, trialAvailable: false, trialDurationDays: 0 };
-let state: Record<string, unknown> = scenario === 'preview-paid' ? paid : ['paywall', 'preview-unpaid', 'preview-signedout', 'preview-legacy', 'delayed-payment'].includes(scenario || '') ? unpaid : trial;
+let state: Record<string, unknown> = scenario === 'preview-paid' || scenario === 'purchase-paid' ? paid : scenario?.startsWith('purchase-') || ['paywall', 'preview-unpaid', 'preview-signedout', 'preview-legacy', 'delayed-payment'].includes(scenario || '') ? unpaid : trial;
 let checkoutSeen = false;
 let paymentChecks = 0;
 let completeStatus: ((value: typeof trial) => void) | undefined;
@@ -18,6 +18,7 @@ export const fixture = {
   deferNextStatus: false,
   deferNextLink: false,
   markPaid: () => { state = paid; },
+  markYearlyPaid: () => { state = { ...paid, plan: 'yearly' }; },
   completeStatusAsPaid: () => { completeStatus?.(paid); completeStatus = undefined; },
   completeLinkAsPaid: () => { completeLink?.(paid); completeLink = undefined; },
 };
@@ -49,3 +50,4 @@ export async function jsonRequest(url: string, init: RequestInit = {}) {
   }
   throw Error('Unmocked request blocked');
 }
+export function proxiedUrl(url: string) { return '/api/proxy?url=' + encodeURIComponent(url); }

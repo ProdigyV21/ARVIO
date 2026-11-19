@@ -73,11 +73,12 @@ android {
         // Fire TV devices can be as low as Android 7.1 (API 25) or lower depending on model/OS.
         minSdk = 23
         targetSdk = 36
-        versionCode = 320
-        versionName = "2.2"
+        versionCode = 323
+        versionName = "2.4"
         buildConfigField("String", "GITHUB_OWNER", "\"ProdigyV21\"")
         buildConfigField("String", "GITHUB_REPO", "\"ARVIO\"")
         buildConfigField("Boolean", "FEATURE_PLUGINS_ENABLED", "false")
+        buildConfigField("Boolean", "PARTNER_MANAGEMENT_ENABLED", (providers.gradleProperty("partnerManagement").orNull == "true").toString())
         // Use the same resolution for generated values and release validation.
         buildConfigField("String", "TELEGRAM_API_ID", "\"${escapeBuildConfigString(localSecretValue("TELEGRAM_API_ID"))}\"")
         buildConfigField("String", "TELEGRAM_API_HASH", "\"${escapeBuildConfigString(localSecretValue("TELEGRAM_API_HASH"))}\"")
@@ -147,12 +148,15 @@ android {
             buildConfigField("Boolean", "FEATURE_PLUGINS_ENABLED", "false")
             // The initial Sync by Hearing rollout is limited to sideload builds.
             buildConfigField("Boolean", "AUDIO_SYNC_AVAILABLE", "false")
+            // Searching YouTube from Search is a sideload-only feature (YouTube API policies).
+            buildConfigField("Boolean", "YOUTUBE_SEARCH_AVAILABLE", "false")
         }
         create("sideload") {
             dimension = "distribution"
             buildConfigField("Boolean", "SELF_UPDATE_ENABLED", "true")
             buildConfigField("Boolean", "FEATURE_PLUGINS_ENABLED", "true")
             buildConfigField("Boolean", "AUDIO_SYNC_AVAILABLE", "true")
+            buildConfigField("Boolean", "YOUTUBE_SEARCH_AVAILABLE", "true")
         }
     }
 
@@ -425,10 +429,9 @@ ksp {
     implementation("androidx.media3:media3-session:$media3Version")
     implementation("androidx.media3:media3-common:$media3Version")
     // FFmpeg extension for software decoding of DTS/TrueHD/Atmos/HEVC/DV.
-    // Keep this only in the sideload build. The Play Store build must comply
-    // with 16 KB memory page support, and the current prebuilt native library
-    // (libffmpegJNI.so) is the likely source of the Play Console warning.
-    add("sideloadImplementation", "org.jellyfin.media3:media3-ffmpeg-decoder:1.9.0+1")
+    // This version's ARM64 ELF load segments are 16 KB aligned. Both distributions need
+    // software audio decoding on TVs without a compatible hardware decoder/output route.
+    implementation("org.jellyfin.media3:media3-ffmpeg-decoder:1.9.0+1")
 
     // Networking - Retrofit + OkHttp
     implementation("com.squareup.retrofit2:retrofit:2.9.0")
@@ -453,6 +456,7 @@ ksp {
     implementation("io.coil-kt:coil-compose:2.5.0")
     implementation("io.coil-kt:coil-gif:2.5.0")
     implementation("io.coil-kt:coil-svg:2.5.0")
+    implementation("androidx.palette:palette-ktx:1.0.0")
     implementation("com.google.zxing:core:3.5.3")
 
     // Supabase (optional - for cloud sync)
@@ -516,7 +520,8 @@ ksp {
     add("sideloadImplementation", "com.fasterxml.jackson.core:jackson-databind:2.17.0")
     add("sideloadImplementation", "com.fasterxml.jackson.module:jackson-module-kotlin:2.17.0")
     add("sideloadImplementation", "com.github.Blatzar:NiceHttp:0.4.11")
-    add("sideloadImplementation", "org.conscrypt:conscrypt-android:2.5.3")
+    // The 2.5.3 ARM64 binary has a 4 KB RELRO boundary inside a writable segment.
+    add("sideloadImplementation", "org.conscrypt:conscrypt-android:2.6.3")
     add("sideloadImplementation", "com.github.recloudstream.cloudstream:library-android:v4.7.0") {
         exclude(group = "org.mozilla", module = "rhino")
     }
@@ -543,6 +548,7 @@ ksp {
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")
     androidTestImplementation("androidx.test.uiautomator:uiautomator:2.2.0")
     androidTestImplementation("io.mockk:mockk-android:1.13.8")
+    androidTestImplementation("com.squareup.okhttp3:mockwebserver:5.3.2")
     androidTestImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.2")
 }
 
@@ -682,7 +688,6 @@ dependencies {
     add("sideloadImplementation", "com.fasterxml.jackson.core:jackson-databind:2.17.0")
     add("sideloadImplementation", "com.fasterxml.jackson.module:jackson-module-kotlin:2.17.0")
     add("sideloadImplementation", "com.github.Blatzar:NiceHttp:0.4.11")
-    add("sideloadImplementation", "org.conscrypt:conscrypt-android:2.5.3")
     add("sideloadImplementation", "com.github.recloudstream.cloudstream:library-android:v4.7.0") {
         exclude(group = "org.mozilla", module = "rhino")
     }

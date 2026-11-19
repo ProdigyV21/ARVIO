@@ -112,7 +112,8 @@ function endpointFixture(initial, competing, alwaysConflict = false) {
   const appended = [];
   vm.runInNewContext(fs.readFileSync(require.resolve("../netlify/functions/account-sync-push"), "utf8"), {
     exports, console,
-    require: (name) => name === "./_watchlist-sync" ? require("../netlify/functions/_watchlist-sync") : {
+    require: (name) => name === "./_watchlist-sync" ? require("../netlify/functions/_watchlist-sync")
+      : name === "./_sync-merge" ? require("../netlify/functions/_sync-merge") : {
       json: (statusCode, body) => ({ statusCode, body }), options: () => null, parseBody: (event) => event.body,
       resolveIdentity: async () => ({ supabaseUserId: "user-1" }),
       applyAddonWipeGuard: (_existing, incoming) => ({ payload: incoming, guarded: false }),

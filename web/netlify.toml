@@ -41,6 +41,14 @@
   [headers.values]
     Cache-Control = "no-store, must-revalidate"
 
+# Browsers (and Chrome's install check) expect the web app manifest's own
+# media type; a generic octet-stream/JSON type makes some ignore it.
+[[headers]]
+  for = "/manifest.webmanifest"
+  [headers.values]
+    Content-Type = "application/manifest+json; charset=utf-8"
+    Cache-Control = "public, max-age=3600, must-revalidate"
+
 # The one-time "Open in VLC" setup script must download, not render in the tab.
 [[headers]]
   for = "/vlc-setup.bat"

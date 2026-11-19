@@ -62,8 +62,9 @@ data class MediaItem(
     val sourceOrder: Int = Int.MAX_VALUE,
     // Placeholder card - shows skeleton loading animation
     val isPlaceholder: Boolean = false,
-    // Continue Watching: formatted time remaining (e.g., "23min left", "1hr 15min left")
-    val timeRemainingLabel: String? = null,
+    // Continue Watching: whole minutes left in the current movie/episode; null under a minute.
+    // The card words it in the user's language, long or short for its width.
+    val timeRemainingMinutes: Int? = null,
     // Continue Watching: true only when progress represents current movie/episode playback.
     val showPlaybackProgress: Boolean = true,
     // Native home-server identity. The TMDB id remains `id` when available;
@@ -103,7 +104,10 @@ data class NextEpisode(
     val seasonNumber: Int,
     val episodeNumber: Int,
     val name: String,
-    val overview: String = ""
+    val overview: String = "",
+    // Presentation numbers can differ from the canonical episode used for playback (anime).
+    val displaySeason: Int? = null,
+    val displayEpisode: Int? = null
 ) : Serializable
 
 /**
@@ -245,7 +249,12 @@ data class StreamSource(
     // that are intentionally separate from behaviorHints.filename.
     val addonTitle: String? = null,
     // Explicit source metadata only; discovery is deferred until a preview is requested.
-    val preview: StreamPreviewMetadata? = null
+    val preview: StreamPreviewMetadata? = null,
+    // Ephemeral resolved YouTube tracks, never persisted as collection URLs.
+    val youTubeAudioUrl: String? = null,
+    val youTubeFallbackUrl: String? = null,
+    // The playlist or portal an IPTV VOD source came from; the URL that plays can't tell.
+    val iptvSourceId: String? = null
 ) : Serializable
 
 enum class StreamPreviewKind { JELLYFIN, PLEX, EMBY, WEBVTT, IMAGE_HLS, BIF }
@@ -358,7 +367,9 @@ data class AddonCatalog(
     val id: String,                                // catalog ID
     val name: String = "",
     val genres: List<String>? = null,
-    val extra: List<AddonCatalogExtra>? = null
+    val extra: List<AddonCatalogExtra>? = null,
+    val clientDelegate: String? = null,
+    val clientFilter: String? = null
 ) : Serializable
 
 data class AddonCatalogExtra(
@@ -393,7 +404,9 @@ data class Addon(
     val transportUrl: String? = null,              // Base URL for API calls (without manifest.json)
     // The addon's own settings page. Kept separately from the manifest because a configured
     // addon usually stops advertising `configurable` (see AddonSetup.kt).
-    val configureUrl: String? = null
+    val configureUrl: String? = null,
+    val setupUpdatedAt: Long = 0L,
+    val metadataUpdatedAt: Long = 0L
 )
 
 enum class AddonType {

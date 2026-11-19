@@ -1,0 +1,71 @@
+name: Deploy stream relay (resolver-worker)
+
+# Deploys resolver-worker/ to Cloudflare (resolve.arvio.tv) when it changes on
+# main, or on demand from the Actions tab. Needs two repository secrets:
+#   CLOUDFLARE_API_TOKEN  - an API token with the "Edit Cloudflare Workers" template
+#   CLOUDFLARE_ACCOUNT_ID - the Cloudflare account id that owns arvio.tv
+# Until they exist the job only prints a notice and succeeds. Worker secrets
+# set in the Cloudflare dashboard are kept by `wrangler deploy`.
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "resolver-worker/**"
+      - ".github/workflows/deploy-resolver.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-resolver-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Typecheck and deploy resolve.arvio.tv
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: resolver-worker
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - name: Check for Cloudflare credentials
+        id: creds
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "::notice::CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID secrets are not set; skipping the stream relay deploy."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+        working-directory: .
+
+      - name: Checkout
+        if: steps.creds.outputs.ready == 'true'
+        uses: actions/checkout@v5
+
+      - name: Set up Node.js
+        if: steps.creds.outputs.ready == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: resolver-worker/package-lock.json
+
+      - name: Install
+        if: steps.creds.outputs.ready == 'true'
+        run: npm ci
+
+      - name: Typecheck
+        if: steps.creds.outputs.ready == 'true'
+        run: npm run typecheck
+
+      - name: Deploy
+        if: steps.creds.outputs.ready == 'true'
+        run: npx wrangler deploy

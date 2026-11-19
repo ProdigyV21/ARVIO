@@ -78,6 +78,7 @@ internal class IptvPlaybackUrlResolver(
         headers: Map<String, String>,
         forceRefresh: Boolean = false,
         probeKnownUrl: Boolean = false,
+        session: com.arflix.tv.network.IptvStreamSession? = null,
     ): IptvPlaybackTarget {
         val url = rawUrl.trim()
         val key = cacheKey(url, headers)
@@ -101,13 +102,14 @@ internal class IptvPlaybackUrlResolver(
         if (!probeKnownUrl && !shouldResolveIptvPlaybackRedirect(url)) return inferredTarget
 
         val resolved = withContext(Dispatchers.IO) {
-            val headProbe = executeProbe(url, headers, useHead = true)
+            val calls = session?.callFactory(client) ?: client
+            val headProbe = executeProbe(url, headers, useHead = true, calls = calls)
             if (headProbe?.isConclusive == true) {
                 headProbe.target
             } else if (headProbe != null && iptvProviderCooldownMs(headProbe.statusCode, null, now) > 0L) {
                 null
             } else {
-                executeProbe(url, headers, useHead = false)?.takeIf { it.isConclusive }?.target
+                executeProbe(url, headers, useHead = false, calls = calls)?.takeIf { it.isConclusive }?.target
             }
         }
 
@@ -133,6 +135,7 @@ internal class IptvPlaybackUrlResolver(
         url: String,
         headers: Map<String, String>,
         useHead: Boolean,
+        calls: okhttp3.Call.Factory,
     ): ProbeResult? {
         return try {
             val request = Request.Builder()
@@ -157,7 +160,7 @@ internal class IptvPlaybackUrlResolver(
                 .build()
 
             suspendCancellableCoroutine { continuation ->
-                val call = client.newCall(request)
+                val call = calls.newCall(request)
                 continuation.invokeOnCancellation { call.cancel() }
                 call.enqueue(object : Callback {
                     override fun onFailure(call: Call, e: IOException) {

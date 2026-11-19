@@ -4,9 +4,10 @@ import { useSyncExternalStore } from 'react';
 const listeners = new Set<() => void>();
 type FixtureSession = { userId: string; email: string; accessToken: string; provider: string };
 const scenario = new URLSearchParams(location.search).get('case');
-let view = scenario === 'preview-signedout' ? 'login' : 'profiles';
+const signedOut = scenario === 'preview-signedout' || scenario === 'purchase-signedout';
+let view = signedOut ? 'login' : 'profiles';
 export const authClient = {
-  session: (scenario === 'preview-signedout' ? null : { userId: 'premium-fixture', email: 'tester@example.test', accessToken: 'fixture', provider: 'netlify' }) as FixtureSession | null,
+  session: (signedOut ? null : { userId: 'premium-fixture', email: 'tester@example.test', accessToken: 'fixture', provider: 'netlify' }) as FixtureSession | null,
   accessToken: async () => 'fixture',
   refresh: async () => undefined
 };
@@ -15,6 +16,8 @@ export function setFixtureAccount(userId: string | null) {
   for (const listener of listeners) listener();
 }
 export function setFixtureView(next: string) { view = next; for (const listener of listeners) listener(); }
+export const useAppPick = (..._keys: string[]) => useApp();
+export const useAppSelector = <T>(select: (store: ReturnType<typeof useApp>) => T) => select(useApp());
 export const useApp = () => {
   const auth = useSyncExternalStore(listener => { listeners.add(listener); return () => { listeners.delete(listener); }; }, () => authClient.session);
   const currentView = useSyncExternalStore(listener => { listeners.add(listener); return () => { listeners.delete(listener); }; }, () => view);

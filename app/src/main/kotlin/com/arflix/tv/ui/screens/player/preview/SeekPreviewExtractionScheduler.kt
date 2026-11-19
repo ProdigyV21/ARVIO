@@ -50,10 +50,14 @@ internal class SeekPreviewExtractionScheduler<T>(private val scope: CoroutineSco
     suspend fun submit(background: Boolean = false, operation: suspend () -> T): T? {
         val request = Request(operation)
         synchronized(lock) {
-            if (closed || (background && (active != null || pending != null))) return null
+            if (closed || (background && (active?.result?.isCompleted == false || pending != null))) return null
             pending?.result?.cancel()
-            active?.result?.cancel()
-            active?.job?.cancel()
+            // Completion wakes the caller before the worker clears active. Queue its
+            // neighbor behind cleanup instead of silently dropping the whole window.
+            if (!background) {
+                active?.result?.cancel()
+                active?.job?.cancel()
+            }
             pending = request
             wakeup.trySend(Unit)
         }

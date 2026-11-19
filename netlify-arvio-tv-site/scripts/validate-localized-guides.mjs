@@ -5,14 +5,19 @@ import { standaloneGuideRoutes } from "./standalone-guide-routes.mjs";
 
 const siteRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const baseUrl = "https://arvio.tv";
-const roots = ["pt-br", "es"];
+// pt-BR and es, plus every language in scripts/guide-locales/.
+const extraLocales = fs.readdirSync(path.join(siteRoot, "scripts/guide-locales")).filter((name) => name.endsWith(".json"))
+  .map((name) => JSON.parse(fs.readFileSync(path.join(siteRoot, "scripts/guide-locales", name), "utf8")));
+const roots = ["pt-br", "es", ...extraLocales.map((data) => data.slugs.home.replaceAll("/", ""))];
+const localizedPremium = JSON.parse(fs.readFileSync(path.join(siteRoot, "premium/localized-routes.json"), "utf8"));
 const errors = [];
 const pages = [];
 
 function walk(directory) {
   for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
     const target = path.join(directory, entry.name);
-    if (entry.isDirectory()) walk(target);
+    // The Premium pages are checked by premium-membership.test.cjs.
+    if (entry.isDirectory() && entry.name !== "premium") walk(target);
     if (entry.isFile() && entry.name === "index.html") pages.push(target);
   }
 }
@@ -37,7 +42,7 @@ for (const file of pages) {
   const canonical = html.match(/<link rel="canonical" href="([^"]+)"/u)?.[1];
   if (canonical !== expectedCanonical) errors.push(`${route}: expected canonical ${expectedCanonical}, got ${canonical}`);
 
-  for (const hreflang of ["en", "pt-BR", "es", "x-default"]) {
+  for (const hreflang of ["en", "pt-BR", "es", ...extraLocales.map((data) => data.locale.hreflang), "x-default"]) {
     if (!html.includes(`hreflang="${hreflang}"`)) errors.push(`${route}: missing hreflang ${hreflang}`);
   }
 
@@ -58,7 +63,8 @@ for (const file of pages) {
 
 const sitemap = fs.readFileSync(path.join(siteRoot, "sitemap.xml"), "utf8");
 const sitemapUrls = [...sitemap.matchAll(/<loc>([^<]+)<\/loc>/gu)].map((match) => match[1]);
-const expectedSitemapCount = 33 + 2 + standaloneGuideRoutes.length;
+// 11 pages × (English + pt + es + extra languages) + /premium/ /media-kit/ /sponsors/ + standalone guides + Premium per language.
+const expectedSitemapCount = 11 * (3 + extraLocales.length) + 3 + standaloneGuideRoutes.length + localizedPremium.length;
 if (sitemapUrls.length !== expectedSitemapCount) errors.push(`sitemap: expected ${expectedSitemapCount} URLs, got ${sitemapUrls.length}`);
 if (new Set(sitemapUrls).size !== sitemapUrls.length) errors.push("sitemap: duplicate URLs");
 for (const { route } of standaloneGuideRoutes) {
@@ -77,6 +83,7 @@ for (const { route } of standaloneGuideRoutes) {
     if (!fs.existsSync(localPath)) errors.push(`${route}: local resource does not resolve (${href})`);
   }
 }
+for (const route of localizedPremium) if (!sitemapUrls.includes(`${baseUrl}${route}`)) errors.push(`sitemap: missing ${baseUrl}${route}`);
 for (const file of pages) {
   const url = `${baseUrl}${routeForFile(file)}`;
   if (!sitemapUrls.includes(url)) errors.push(`sitemap: missing ${url}`);

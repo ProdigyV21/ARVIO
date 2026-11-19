@@ -11,11 +11,16 @@ export const app={
  openDetails:(item:unknown)=>{(window as any).openedLibraryItem=item;},isWatched:()=>false,openContextMenu:()=>{},setSection:()=>{}
 };
 export const useApp=()=>app;
+export const useAppPick=(..._keys:string[])=>app;
+export const useAppSelector=(select:(store:typeof app)=>unknown)=>select(app);
 export const authClient={session:null};
 export const traktClient={watchlist:async()=>[],calendarSeason:async()=>[]};
 export const getLogoUrl=async(item:{id:number})=>asset(fixtures.find((row)=>row.id===item.id)?.logo);
 export const getCardMeta=async()=>({});
 export const getCardProviders=async()=>[];
+export const peekCardExtras=()=>null;
+export const getCardExtras=async(item:{id:number})=>({logo:asset(fixtures.find((row)=>row.id===item.id)?.logo)||null,providers:[],runtime:0,image:"",backdrop:null,imdbId:null});
+export const peekImdbRating=()=>undefined;
 export const getCollectionPreview=async(item:any)=>({...item,overview:`A detailed description of ${item.title}.`,duration:"1h 48m",rating:"7.8"});
 export const prefetchDetails=()=>{};
 export const resolveTmdbId=async(item:{id:number})=>item.id;

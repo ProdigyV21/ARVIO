@@ -4,6 +4,13 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class SeekInteractionTest {
+    @Test fun `cold preview is not cancelled by the normal two second commit`() {
+        val seek = SeekInteraction().step(SeekSurface.Controls, 10_000, 300_000, 3_600_000, true, 100)
+        assertEquals(8_000L, seek.autoCommitDelayMs(2_100, previewPending = true))
+        assertEquals(0L, seek.autoCommitDelayMs(10_100, previewPending = true))
+        assertEquals(0L, seek.autoCommitDelayMs(2_100, previewPending = false))
+    }
+
     private val duration = 3_600_000L
 
     @Test fun `remote browsing commits two seconds after the most recent key`() {

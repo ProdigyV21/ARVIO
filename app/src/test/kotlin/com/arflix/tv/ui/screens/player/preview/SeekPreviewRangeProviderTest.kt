@@ -31,6 +31,104 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class SeekPreviewRangeProviderTest {
+    @Test fun `playback cache hit supplies bytes without another network range`() = runBlocking {
+        var calls = 0
+        var cacheReads = 0
+        var networkBytes = 0L
+        val data = ByteArray(RANGE_CHUNK_BYTES) { 42 }
+        val client = client { request ->
+            calls++
+            response(request, 200, ByteArray(0), "Content-Length" to data.size.toString())
+        }
+        val playback = SeekPreviewPlaybackBytes { url, start, length ->
+            cacheReads++
+            assertEquals(upstream, url)
+            assertEquals(0L, start)
+            assertEquals(data.size, length)
+            data
+        }
+        HttpRangeReader(client, upstream, emptyMap(), playback) { networkBytes += it }.use { reader ->
+            assertEquals(data.size.toLong(), reader.size())
+            assertArrayEquals(byteArrayOf(42, 42), reader.read(50, 2))
+            assertArrayEquals(byteArrayOf(42, 42), reader.read(70, 2))
+        }
+        assertEquals(1, calls) // Size HEAD only. No GET.
+        assertEquals(0L, networkBytes)
+        assertEquals(1, cacheReads)
+    }
+
+    @Test fun `known playback length and cached bytes require no HTTP requests`() = runBlocking {
+        val playback = object : SeekPreviewPlaybackBytes {
+            override fun size(url: String) = 100L
+            override fun read(url: String, position: Long, length: Int) = ByteArray(length) { 5 }
+        }
+        HttpRangeReader(client { error("Playback cache hit must not open network") }, upstream,
+            emptyMap(), playback).use { reader ->
+            assertEquals(100L, reader.size())
+            assertArrayEquals(byteArrayOf(5), reader.read(99, 1))
+        }
+    }
+    @Test fun `speculative network budget is bounded and foreground can use its own budget`() = runBlocking {
+        val chunk = ByteArray(RANGE_CHUNK_BYTES) { 7 }
+        val client = client { request ->
+            val start = request.header("Range")!!.substringAfter("bytes=").substringBefore('-').toLong()
+            response(request, 206, chunk, "Content-Range" to "bytes $start-${start + chunk.size - 1}/${10L * chunk.size}",
+                "Content-Length" to chunk.size.toString())
+        }
+        HttpRangeReader(client, upstream, emptyMap()).use { reader ->
+            reader.beginBudget(2L * RANGE_CHUNK_BYTES)
+            assertEquals(7, reader.read(0, 1)[0].toInt())
+            assertEquals(7, reader.read(RANGE_CHUNK_BYTES.toLong(), 1)[0].toInt())
+            expectFailure { reader.read(2L * RANGE_CHUNK_BYTES, 1) }
+            // Playback is not involved; a later user-requested preview gets a fresh bounded budget.
+            reader.beginBudget()
+            assertEquals(7, reader.read(2L * RANGE_CHUNK_BYTES, 1)[0].toInt())
+        }
+    }
+
+    @Test fun `range first proxy preparation preserves zero network playback cache hits`() = runBlocking {
+        val playback = object : SeekPreviewPlaybackBytes {
+            override fun size(url: String) = 100L
+            override fun read(url: String, position: Long, length: Int) = ByteArray(length) { 5 }
+        }
+        SeekPreviewRangeProxy(HttpRangeReader(client { error("Cached preparation must not open network") },
+            upstream, emptyMap(), playback)).use { proxy ->
+            proxy.prepare()
+            assertEquals(100L, proxy.contentLength)
+        }
+    }
+
+    @Test fun `range reads reuse redirected location and refresh expired links`() = runBlocking {
+        val hosts = mutableListOf<String>()
+        val requests = mutableListOf<Request>()
+        var resolutions = 0
+        val chunk = ByteArray(RANGE_CHUNK_BYTES) { 9 }
+        val client = client { request ->
+            hosts += request.url.host
+            requests += request
+            if (request.url.host == "cdn1.test") response(request, 403)
+            else {
+                val finalRequest = if (request.url.host == "media.test") {
+                    resolutions++
+                    request.newBuilder().url("https://cdn$resolutions.test/movie.mkv")
+                        .removeHeader("Authorization").build()
+                } else request
+                val start = request.header("Range")!!.substringAfter("bytes=").substringBefore('-').toLong()
+                response(finalRequest, 206, chunk, "Content-Range" to "bytes $start-${start + chunk.size - 1}/${10L * chunk.size}",
+                    "Content-Length" to chunk.size.toString())
+            }
+        }
+        HttpRangeReader(client, upstream, mapOf("Authorization" to "test-fixture")).use { reader ->
+            reader.read(0, 1)
+            reader.read(RANGE_CHUNK_BYTES.toLong(), 1)
+            reader.read(2L * RANGE_CHUNK_BYTES, 1)
+        }
+        assertEquals(listOf("media.test", "cdn1.test", "media.test", "cdn2.test"), hosts)
+        assertNull(requests[1].header("Authorization"))
+        assertNull(requests[3].header("Authorization"))
+        assertEquals("test-fixture", requests[2].header("Authorization"))
+    }
+
     private val upstream = "https://media.test/large.mkv"
     private fun response(request: Request, code: Int, bytes: ByteArray = ByteArray(0), vararg headers: Pair<String, String>): Response =
         Response.Builder().request(request).protocol(Protocol.HTTP_1_1).code(code).message("fixture")
@@ -55,7 +153,7 @@ class SeekPreviewRangeProviderTest {
             assertEquals(4L, reader.size())
             assertArrayEquals(byteArrayOf(2, 3), reader.read(1, 2))
             assertEquals(2, requested.size)
-            assertEquals("bytes=0-524287", requested.last().header("Range"))
+            assertEquals("bytes=0-${RANGE_CHUNK_BYTES - 1}", requested.last().header("Range"))
         }
     }
 
@@ -171,6 +269,21 @@ class SeekPreviewRangeProviderTest {
             assertTrue(cookie.get())
             assertTrue(encoding.get())
         } finally { server.stop() }
+    }
+
+    @Test
+    fun `proxy discovers length with one validated range even when HEAD is unsupported`() = runBlocking {
+        val methods = mutableListOf<String>()
+        val upstreamClient = client { request ->
+            methods.add(request.method)
+            if (request.method == "HEAD") response(request, 405, ByteArray(0))
+            else response(request, 206, ByteArray(32), "Content-Range" to "bytes 0-31/32", "Content-Length" to "32")
+        }
+        SeekPreviewRangeProxy(HttpRangeReader(upstreamClient, upstream, emptyMap())).use { proxy ->
+            proxy.prepare()
+            assertEquals(32L, proxy.contentLength)
+            assertEquals(listOf("GET"), methods)
+        }
     }
 
     @Test

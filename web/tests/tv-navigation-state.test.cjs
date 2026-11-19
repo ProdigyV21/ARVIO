@@ -14,7 +14,7 @@ test('TV snapshots belong to both the playlist configuration and account/profile
 
 test('a docked player does not disable guide keyboard navigation', () => {
   let expanded = false;
-  const { playerIsOpen } = load('lib/tvNav.ts', { './hoverParity': { enterKbdNav() {} } }, {
+  const { playerIsOpen } = load('lib/tvNav.ts', { './hoverParity': { enterKbdNav() {} }, './deviceClass': load('lib/deviceClass.ts') }, {
     document: { querySelector: selector => {
       assert.equal(selector, '.player-overlay:not(.player-docked)');
       return expanded ? {} : null;
@@ -35,7 +35,7 @@ test('live player follows position-only layout changes and closes once when the 
     useState(initial) { const index = states.length; states.push(initial); return [initial, value => { states[index] = typeof value === 'function' ? value(states[index]) : value; }]; },
     useEffect(fn) { effects.push(fn); }
   };
-  const { useLivePlayerDock } = load('components/player/useLivePlayerDock.ts', { react: hooks }, {
+  const { useLivePlayerDock } = load('components/player/useLivePlayerDock.ts', { react: hooks, '@/lib/liveZap': { consumeKeepLivePlayerExpanded: () => false } }, {
     performance: { now: () => now },
     Element,
     requestAnimationFrame: fn => { frames.set(++frameId, fn); return frameId; },

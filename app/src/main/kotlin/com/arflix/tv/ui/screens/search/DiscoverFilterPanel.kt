@@ -372,7 +372,7 @@ private fun PanelRangeBar(bar: PanelBar) {
             modifier = Modifier
                 .fillMaxWidth()
                 .height(8.dp)
-                .background(Color.White.copy(alpha = 0.08f), RoundedCornerShape(4.dp))
+                .background(Color.White.copy(alpha = 0.08f), RoundedCornerShape(8.dp))
         ) {
             listOf(before to false, filled to true, after to false).forEach { (share, isFilled) ->
                 Box(
@@ -381,7 +381,7 @@ private fun PanelRangeBar(bar: PanelBar) {
                         .height(8.dp)
                         .background(
                             if (isFilled) Color.White.copy(alpha = 0.88f) else Color.Transparent,
-                            RoundedCornerShape(4.dp)
+                            RoundedCornerShape(8.dp)
                         )
                 )
             }
@@ -460,7 +460,7 @@ private fun PanelListValue(
     onPick: () -> Unit
 ) {
     val accent = resolveAccentColor(fallback = Color.White)
-    val shape = RoundedCornerShape(6.dp)
+    val shape = RoundedCornerShape(8.dp)
     val background = when {
         isVisuallyFocused -> Color.White.copy(alpha = 0.16f)
         option.isSelected -> Color.White.copy(alpha = 0.92f)

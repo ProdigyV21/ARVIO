@@ -1,13 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="player_subtitle_hearing_sync">מסנכרן כתוביות לפי שמיעה…</string>
-    <string name="player_audio_sync_listening">אין כתובית מאומתת — מסנכרן אותה לפי השמע…</string>
+    <string name="player_audio_sync_listening">אין כתוביות מאומתות — מסנכרן אותן לפי השמע…</string>
     <string name="player_audio_sync_model_downloading">מוריד מודל זיהוי דיבור (%1$s MB) לסנכרון כתוביות מהיר יותר…</string>
-    <string name="player_audio_sync_live_only">אין קריאה מוקדמת של שמע %1$s במכשיר הזה, מסנכרן מהשמע המתנגן (איטי יותר)</string>
+    <string name="player_audio_sync_live_only">אין תצוגה מקדימה קדימה עבור שמע %1$s במכשיר זה, הסנכרון מתבצע משמע חי (איטי יותר)</string>
     <string name="player_audio_sync_withdrawn">לא ניתן היה לאשר את סנכרון הכתוביות, התזמון המקורי שוחזר</string>
     <string name="player_audio_sync_estimated">מסנכרן כתוביות לשמע (%1$s), מכוונן…</string>
     <string name="player_audio_sync_synced">סנכרון הכתוביות אושר (%1$s)</string>
     <string name="player_audio_sync_synced_rate">סנכרון הכתוביות אושר (%1$s, קצב הפריימים תוקן)</string>
     <string name="player_audio_sync_adjusted">תזמון הכתוביות השתנה, סונכרן מחדש (%1$s)</string>
-    <string name="player_audio_sync_unsteady">סנכרון השמע לא יציב — נשאר התזמון הנוכחי של הכתוביות</string>
+    <string name="player_audio_sync_unsteady">סנכרון השמע לא יציב — נשמר תזמון הכתוביות הנוכחי</string>
 </resources>

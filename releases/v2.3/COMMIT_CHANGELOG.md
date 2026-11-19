@@ -1,0 +1,91 @@
+# ARVIO 2.3 commit changelog
+
+Complete history since v2.2, including merge commits and intermediate reversions.
+
+- 0f01f6cb7 fix(auth): clear every piece of account data on sign-out and restart
+- 59c8af02f fix(simkl): gate playback sync on activities and persist checkpoints
+- 00c2073f1 fix(auth): clear Discord and SIMKL V2 logins on sign-out, off the main thread
+- 2deb6b1d1 Merge pull request #804 from silentbil/fix/sign-out-clears-account-data
+- 29ac05a9d Improve trial checkout recovery and bounded payment attribution
+- 5e169960e Handle checkout return focus before effect installation
+- f29af0b5d Guard campaign source across subscription entry points
+- 2192f435a Merge pull request #805 from ProdigyV21/codex/trial-payment-attribution-20261013
+- 3d13ff012 feat(live-tv): pick subtitles and audio on live channels
+- 5c6932c8e fix(live-tv): find muxed subtitles, recover stalled streams, tidy HUD focus
+- aa464b5a0 fix(iptv): load the guide a playlist declares itself, clean pasted addresses
+- a1dcf3053 fix(home): rebuild Favorite TV after switching IPTV playlists
+- f8f2f97bd fix(live-tv): keep the subtitle/audio list focused when the HUD hides
+- b77e96c70 Replace Sentry with Firebase diagnostics and opt-in analytics
+- f8e3d0667 fix(live-tv): offer every DVB subtitle language on IPTV HLS channels
+- 160517f61 Merge remote-tracking branch 'upstream/main' into fix/live-tv-subtitles
+- 68742f8e3 fix(sources): keep source-list focus on the row, not the source
+- 0f0a0606b Merge pull request #807 from silentbil/fix/source-list-initial-focus
+- 2db4eab69 Merge remote-tracking branch 'upstream/main' into fix/live-tv-subtitles
+- b5e508470 fix(live-tv): address review of subtitle/audio tracks and HUD layout
+- dd38d5d37 Merge pull request #806 from silentbil/fix/live-tv-subtitles
+- 57afc0333 feat(home): Netflix-style TV Home
+- 57f978c7d fix(player): keep live streams out of Continue Watching
+- 943dd1ea1 add rating
+- 97fd1f535 Merge pull request #808 from silentbil/feature/netflix-home
+- bc4cb41a2 feat(trailers): bring back in-app trailer playback
+- 0ae9ba8c8 feat(home): add watchlist row and hold-Back return to start
+- fc5a0bd97 fix(simkl): coalesce forced activity checks and preserve read backoff
+- b8535eebc feat(trailers): official player for the billboard and Details
+- 208c028bb Merge remote-tracking branch 'upstream/main' into feature/restore-in-app-trailers
+- 869cb225b feat(library): reuse collection spotlight while browsing titles
+- 62257eed4 Merge pull request #809 from silentbil/feature/restore-in-app-trailers
+- 379b043b5 Merge remote-tracking branch 'origin/main' into codex/library-collection-layout
+- a417ae4c0 fix(library): fade preview artwork into black with balanced padding
+- fd9b86910 fix(home): restore startup continue watching and retain focused artwork
+- bb9a0a9ce fix(home): smooth Netflix card expansion and artwork blending
+- 5ad3987b5 fix(home): coordinate card morph scrolling and prefer HD trailers
+- 51168c763 fix(home): smooth vertical rails and unify native trailer autoplay
+- 9f423c772 fix(home): short, correct descriptions; more of it on Details
+- 119df43d2 Merge pull request #810 from silentbil/feature/short-descriptions
+- 6a3590f91 Merge remote-tracking branch 'origin/main' into codex/netflix-card-morph
+- 9853a0edc fix(sources): keep the recently played chip for picked sources, per episode
+- 9fa2768c5 fix(trailers): resolve native HD with cached anonymous guest sessions
+- 9ee9132a9 Merge pull request #811 from silentbil/fix/recent-source-chip
+- 5832d36bd Simplify membership handoff and correct bounded payment diagnostics
+- 029fc3742 Refresh bounded payment recovery on genuine late returns
+- 40bc1faa2 Exercise late payment recovery and visibility-before-focus ordering
+- afd7c1b29 Isolate checkout state and telemetry across account changes
+- ded6269ec Keep mobile payment recovery compact and accessible
+- e7c0eae3a Merge payment-flow simplification and tracking corrections
+- 01d92f9fd feat(tv): publish episode artwork and clearlogos to launcher Continue Watching
+- 7892d7d88 fix(tv): refine settings focus and responsiveness, align library rows
+- 0c6004631 Merge remote-tracking branch 'origin/main' into codex/netflix-card-morph
+- 28ff501f9 test(settings): compare focus restoration at the same pixel position
+- 5a5c3ba00 fix(home): keep trailer card clearlogos compact and sharp
+- 1ea5bd28c feat(profiles): real kids profiles with age-rated content
+- 4f470bb53 feat(lists): add titles to your Trakt and MDBList lists
+- 1403bb75b fix
+- 53a2478f8 fix(profiles): stop a device with an outdated list from deleting profiles
+- 0d80a1c39 fix(kids): address review - parent PIN, newest-edit profile merge, gated Details, filter-aware paging
+- dda334e15 fix(sync): make Trakt and Simkl continue watching resilient
+- 1c90e2059 Merge pull request #813 from silentbil/feature/kids-profile
+- abb9e96e2 Merge remote-tracking branch 'upstream/main' into feature/add-to-list
+- df91d86af fix(lists): address review - profile-safe Home reload, MDBList paging, per-item results
+- 06ad8dce9 feat(site): showcase ARVIO promo in README and homepage
+- 8724eeb2f feat(web): replace trials with paid-only feature preview
+- 17f1ed5ab Merge remote-tracking branch 'origin/main' into codex/paid-only-web-20261023
+- f141a4a8c Merge pull request #814 from silentbil/feature/add-to-list
+- 8cc323241 test(web): verify paid-only public production flow safely
+- 36cfb6f20 Merge pull request #816 from ProdigyV21/codex/paid-only-web-20261023
+- b1cd4f087 fix(site): play the promo in the homepage hero
+- 8c5555448 Merge latest main while preserving the hero video placement
+- e65aa981d docs: refresh README and lead with the ARVIO tour
+- 55c854a50 build: pin R8 9.5.28 to fix a release-only VerifyError in PlayerScreen
+- 7de2ba0de feat(youtube): YouTube collection rows
+- 7b66d37f1 feat(web): show and play YouTube collection rows
+- 16a561f8d Revert direct push of YouTube collection commits
+- f1594cbf9 build: pin R8 9.5.28 to fix a release-only VerifyError in PlayerScreen
+- 7d2fe9011 feat(youtube): YouTube collection rows
+- e9506562e feat(web): show and play YouTube collection rows
+- ff921e830 fix(youtube): protect kids collections and preserve playback progress
+- 650c47da7 fix(web): keep legacy progress payloads schema-compatible
+- efd4682ca Merge pull request #819 from silentbil/feature/youtube-collection
+- 7b7d8e401 fix(player): keep PlayerScreen under 256 registers to stop the release VerifyError
+- 3169de990 Merge pull request #824 from silentbil/fix/player-verifyerror
+
+- Release preparation: version 2.3 (321), one-time Home/trailer defaults migration, regression tests and release documentation.

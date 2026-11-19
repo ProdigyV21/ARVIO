@@ -13,10 +13,15 @@ import com.arflix.tv.data.model.DrmInfo
 import com.arflix.tv.data.model.IptvNowNext
 import com.arflix.tv.data.model.IptvProgram
 import com.arflix.tv.data.model.IptvSnapshot
+import com.arflix.tv.data.model.MediaType
 import com.arflix.tv.data.model.StalkerVodLink
 import com.arflix.tv.data.model.StreamBehaviorHints
 import com.arflix.tv.data.model.StreamSource
 import com.arflix.tv.R
+import com.arflix.tv.network.IptvAccountAvailability
+import com.arflix.tv.network.IptvAccountUsage
+import com.arflix.tv.network.IptvProviderAccount
+import com.arflix.tv.network.withIptvAccountCheckGuard
 import com.arflix.tv.network.withIptvProviderRequestGuard
 import com.arflix.tv.network.iptvProviderCooldownMs
 import com.arflix.tv.util.IPTV_VOD_SEARCH_ENABLED_KEY
@@ -34,6 +39,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
@@ -169,7 +175,7 @@ private const val LargeListMemoryChannelLimit = 240
 private const val LargeListMemoryGuideLimit = 512
 private const val LargeListMemoryFavoriteGuideLimit = 256
 internal const val IPTV_GROUP_ORDER_SCHEMA = 3
-internal const val MAX_IPTV_PLAYLISTS = 5
+internal const val MAX_IPTV_PLAYLISTS = 10
 
 internal fun normalizeIptvSortOrder(value: String?): String = when (value?.trim()?.lowercase()) {
     "number" -> "number"
@@ -335,7 +341,9 @@ data class IptvPlaylistEntry(
     // NEW FIELDS: Selective Import
     val importLiveTv: Boolean? = true,
     val importVod: Boolean? = true,
-    val importSeries: Boolean? = true
+    val importSeries: Boolean? = true,
+    val epgEnabled: Boolean? = true,
+    val catchupEnabled: Boolean? = true
 )
 
 /**
@@ -381,8 +389,56 @@ data class IptvCloudProfileState(
     val groupOrderSchema: Int = 0,
     val sortOrder: String = "provider",
     val playlists: List<IptvPlaylistEntry> = emptyList(),
-    val tvSession: IptvTvSessionState = IptvTvSessionState()
+    val tvSession: IptvTvSessionState = IptvTvSessionState(),
+    /**
+     * Manual channel order inside a category, set from ARVIO Web Settings:
+     * `"<playlistId>|<group>"` -> channel ids, listed channels first. Channels
+     * that are not listed keep the configured sort order after them.
+     */
+    val channelOrder: Map<String, List<String>> = emptyMap(),
+    /**
+     * Category display names set in ARVIO Web Settings: `"<playlistId>|<group>"`
+     * -> name. Keys use the playlist's own group name, like [hiddenGroups] and
+     * [channelOrder]; only the label shown in Live TV changes.
+     */
+    val groupNames: Map<String, String> = emptyMap()
 )
+
+/** Longest category display name kept (matches ARVIO Web). */
+internal const val MAX_IPTV_GROUP_NAME_LENGTH = 60
+
+/**
+ * Drops keys without a playlist part, blank names and names equal to the
+ * playlist's own; collapses whitespace. Tolerates Gson nulls from older payloads.
+ */
+internal fun normalizeIptvGroupNames(raw: Map<String, String>?): Map<String, String> {
+    if (raw.isNullOrEmpty()) return emptyMap()
+    return buildMap {
+        raw.forEach { (key, value) ->
+            @Suppress("SENSELESS_COMPARISON", "UNNECESSARY_SAFE_CALL")
+            val trimmedKey = key?.trim().orEmpty()
+            if ('|' !in trimmedKey) return@forEach
+            @Suppress("UNNECESSARY_SAFE_CALL")
+            val name = value?.replace(Regex("\\s+"), " ")?.trim()?.take(MAX_IPTV_GROUP_NAME_LENGTH).orEmpty()
+            if (name.isNotEmpty() && name != trimmedKey.substringAfter('|')) put(trimmedKey, name)
+        }
+    }
+}
+
+/** Drops blank keys/ids and keys without a playlist part; tolerates Gson nulls from older payloads. */
+internal fun normalizeIptvChannelOrder(raw: Map<String, List<String>>?): Map<String, List<String>> {
+    if (raw.isNullOrEmpty()) return emptyMap()
+    return buildMap {
+        raw.forEach { (key, ids) ->
+            @Suppress("SENSELESS_COMPARISON", "UNNECESSARY_SAFE_CALL")
+            val trimmedKey = key?.trim().orEmpty()
+            if ('|' !in trimmedKey) return@forEach
+            @Suppress("UNNECESSARY_SAFE_CALL")
+            val cleaned = ids?.mapNotNull { it?.trim()?.takeIf(String::isNotBlank) }?.distinct().orEmpty()
+            if (cleaned.isNotEmpty()) put(trimmedKey, cleaned)
+        }
+    }
+}
 
 data class IptvTvSessionState(
     val lastChannelId: String = "",
@@ -397,7 +453,9 @@ class IptvRepository @Inject constructor(
     @ApplicationContext private val context: Context,
     private val okHttpClient: OkHttpClient,
     private val profileManager: ProfileManager,
-    private val invalidationBus: CloudSyncInvalidationBus
+    private val invalidationBus: CloudSyncInvalidationBus,
+    private val partnerDeliveryProvider: dagger.Lazy<PartnerDeliveryRepository>? = null,
+    private val authRepositoryProvider: dagger.Lazy<AuthRepository>? = null
 ) {
     private val gson = Gson()
     private val loadMutex = Mutex()
@@ -1051,6 +1109,16 @@ class IptvRepository @Inject constructor(
             .callTimeout(12, TimeUnit.SECONDS)
             .build()
     }
+    /** A panel's bad answer about the account must not defer the stream that is about to play. */
+    private val xtreamAccountCheckHttpClient: OkHttpClient by lazy {
+        okHttpClient.newBuilder()
+            .withIptvAccountCheckGuard()
+            .connectTimeout(6, TimeUnit.SECONDS)
+            .readTimeout(10, TimeUnit.SECONDS)
+            .writeTimeout(6, TimeUnit.SECONDS)
+            .callTimeout(12, TimeUnit.SECONDS)
+            .build()
+    }
     private val xtreamGuideHttpClient: OkHttpClient by lazy {
         okHttpClient.newBuilder()
             .withIptvProviderRequestGuard()
@@ -1101,7 +1169,26 @@ class IptvRepository @Inject constructor(
         val discoveredEpgUrls: List<String> = emptyList()
     )
 
-    fun observeConfig(): Flow<IptvConfig> =
+    fun observeConfig(): Flow<IptvConfig> {
+        if (!com.arflix.tv.BuildConfig.PARTNER_MANAGEMENT_ENABLED) return observePersonalConfig()
+        val partnerDelivery = partnerDeliveryProvider?.get() ?: return observePersonalConfig()
+        return combine(
+            observePersonalConfig(), partnerDelivery.deliveries
+        ) { personal, delivery ->
+            if (delivery == null || delivery.playlists.isEmpty()) personal else {
+                val personalLists = personal.playlists.ifEmpty {
+                    if (personal.m3uUrl.isBlank()) emptyList() else listOf(
+                        IptvPlaylistEntry("list_1", "List 1", personal.m3uUrl, personal.epgUrl)
+                    )
+                }
+                val lists = personalLists + delivery.playlists
+                personal.copy(playlists = lists, m3uUrl = lists.first().m3uUrl, epgUrl = lists.first().epgUrl)
+            }
+        }.distinctUntilChanged()
+    }
+
+    /** Personal settings only: used by editing screens and cloud snapshot writers. */
+    fun observePersonalConfig(): Flow<IptvConfig> =
         profileManager.activeProfileId.combine(context.settingsDataStore.data) { _, prefs ->
             val playlists = decodePlaylists(prefs[playlistsKey()].orEmpty())
             val primary = playlists.firstOrNull()
@@ -1147,7 +1234,10 @@ class IptvRepository @Inject constructor(
      * answer (offline, HTML page, or the request guard deferred it) - which is
      * not the same as "answered without details".
      */
-    suspend fun fetchAccountInfo(playlist: IptvPlaylistEntry): IptvAccountInfo? {
+    suspend fun fetchAccountInfo(playlist: IptvPlaylistEntry): IptvAccountInfo? =
+        fetchXtreamAccountInfo(playlist, xtreamLookupHttpClient)
+
+    private suspend fun fetchXtreamAccountInfo(playlist: IptvPlaylistEntry, client: OkHttpClient): IptvAccountInfo? {
         val fingerprint = IptvAccountInfoParser.fingerprint(playlist)
         val now = System.currentTimeMillis()
         // An independently configured EPG feed can belong to a different account.
@@ -1160,7 +1250,7 @@ class IptvRepository @Inject constructor(
             ?.build()
             ?.toString()
             ?: return IptvAccountInfoParser.unavailable(fingerprint, now)
-        val body: JsonObject? = requestJson(url, JsonObject::class.java, client = xtreamLookupHttpClient)
+        val body: JsonObject? = requestJson(url, JsonObject::class.java, client = client)
         return IptvAccountInfoParser.parseXtream(body?.toString(), fingerprint, System.currentTimeMillis())
     }
 
@@ -1193,6 +1283,9 @@ class IptvRepository @Inject constructor(
     /** Drops entries whose source no longer exists. */
     suspend fun retainAccountInfo(sourceIds: Set<String>) {
         context.settingsDataStore.edit { prefs ->
+            val limits = decodeConnectionLimits(prefs[connectionLimitsKey()])
+            val retainedLimits = limits.filterKeys { it in sourceIds }
+            if (retainedLimits.size != limits.size) writeConnectionLimits(prefs, retainedLimits)
             val current = decodeAccountInfo(prefs[accountInfoKey()])
             val retained = current.filterKeys { it in sourceIds }
             if (retained.size == current.size) return@edit
@@ -1212,6 +1305,275 @@ class IptvRepository @Inject constructor(
             ).type
             gson.fromJson<Map<String, IptvAccountInfo>>(raw, type)
         }.getOrNull().orEmpty()
+    }
+
+    /** What each saved source's settings row shows. */
+    fun observeConnectionLimits(): Flow<Map<String, IptvConnectionLimitState>> =
+        observeConfig().combine(context.settingsDataStore.data) { config, prefs ->
+            val sources = iptvLimitSources(config)
+            val limits = decodeConnectionLimits(prefs[connectionLimitsKey()])
+            val info = decodeAccountInfo(prefs[accountInfoKey()])
+            sources.associate { source ->
+                source.id to IptvConnectionLimitState(
+                    setting = storedIptvConnectionLimit(limits[source.id], source.limitFingerprint),
+                    effectiveLimit = iptvPolicyFor(source.primaryAccount, sources, limits, info)?.effectiveLimit
+                )
+            }
+        }.distinctUntilChanged()
+
+    /**
+     * Moves one saved source to its next limit. Device-local on purpose, like
+     * [saveAccountInfo]: it touches neither the source entry nor the cloud snapshot, so
+     * nothing reloads. Stepping inside the edit keeps two quick presses from landing on one value.
+     */
+    suspend fun stepConnectionLimit(sourceId: String) {
+        val fingerprint = savedSourceLimitFingerprint(sourceId) ?: return
+        context.settingsDataStore.edit { prefs ->
+            val limits = decodeConnectionLimits(prefs[connectionLimitsKey()])
+            val next = storedIptvConnectionLimit(limits[sourceId], fingerprint).next()
+            writeConnectionLimits(
+                prefs,
+                if (next == IptvConnectionLimit.AUTO) limits - sourceId
+                else limits + (sourceId to storedIptvConnectionLimitEntry(next, fingerprint))
+            )
+        }
+    }
+
+    /** The limit chosen while adding a source, stored once its save has given it an id; device-local like [stepConnectionLimit]. */
+    suspend fun saveConnectionLimit(sourceId: String, limit: IptvConnectionLimit) {
+        val fingerprint = savedSourceLimitFingerprint(sourceId) ?: return
+        context.settingsDataStore.edit { prefs ->
+            val limits = decodeConnectionLimits(prefs[connectionLimitsKey()])
+            writeConnectionLimits(
+                prefs,
+                if (limit == IptvConnectionLimit.AUTO) limits - sourceId
+                else limits + (sourceId to storedIptvConnectionLimitEntry(limit, fingerprint))
+            )
+        }
+    }
+
+    /** Read from the stored entry, which saving may have rewritten from what was typed. */
+    private suspend fun savedSourceLimitFingerprint(sourceId: String): String? {
+        val config = observePersonalConfig().first()
+        return config.playlists.firstOrNull { it.id == sourceId }?.let(::iptvConnectionLimitFingerprint)
+            ?: config.stalkerPortals.firstOrNull { it.id == sourceId }?.let(::iptvConnectionLimitFingerprint)
+    }
+
+    internal suspend fun streamPolicyFor(channel: IptvChannel): IptvStreamPolicy? =
+        resolveChannelStreamPolicy(channel)?.limit
+
+    internal suspend fun resolveChannelStreamPolicy(channel: IptvChannel): ResolvedIptvChannelPolicy? = withContext(Dispatchers.IO) {
+        val config = observeConfig().first()
+        val account = iptvChannelAccount(channel, config) ?: return@withContext null
+        val prefs = context.settingsDataStore.data.first()
+        ResolvedIptvChannelPolicy(iptvPolicyFor(
+            account,
+            iptvLimitSources(config),
+            decodeConnectionLimits(prefs[connectionLimitsKey()]),
+            decodeAccountInfo(prefs[accountInfoKey()])
+        ))
+    }
+
+    /** Null for every source that is not IPTV VOD, before anything is read. */
+    internal suspend fun streamPolicyFor(vodStream: StreamSource): IptvStreamPolicy? {
+        if (!IptvVodSourceIds.isIptvVodAddonId(vodStream.addonId)) return null
+        return withContext(Dispatchers.IO) {
+            val config = observeConfig().first()
+            val prefs = context.settingsDataStore.data.first()
+            iptvPolicyFor(
+                iptvVodAccount(vodStream, config),
+                iptvLimitSources(config),
+                decodeConnectionLimits(prefs[connectionLimitsKey()]),
+                decodeAccountInfo(prefs[accountInfoKey()])
+            )
+        }
+    }
+
+    /**
+     * A null policy also covers an unresolvable owner, which stays out of warm-ups; only
+     * a resolved account whose entries chose No limit re-enables them.
+     */
+    internal suspend fun isExplicitlyUnlimited(vodStream: StreamSource): Boolean {
+        if (!IptvVodSourceIds.isIptvVodAddonId(vodStream.addonId)) return false
+        return withContext(Dispatchers.IO) {
+            val config = observeConfig().first()
+            val account = iptvVodAccount(vodStream, config) ?: return@withContext false
+            val limits = decodeConnectionLimits(context.settingsDataStore.data.first()[connectionLimitsKey()])
+            iptvConnectionLimitFor(account, iptvLimitSources(config), limits) == IptvConnectionLimit.NO_LIMIT
+        }
+    }
+
+    /**
+     * Fetches the allowance once, in the background, when a user-started Xtream play finds
+     * none stored for these credentials, so upgraded users need not visit settings. At most
+     * once per process per source; the caller never waits for it.
+     */
+    internal fun bootstrapAccountAllowance(sourceId: String): kotlinx.coroutines.Job = iptvCacheScope.launch {
+        val playlist = observeConfig().first().playlists.firstOrNull { it.id == sourceId } ?: return@launch
+        if (iptvM3uAccount(playlist)?.kind != IptvProviderAccount.Kind.XTREAM) return@launch
+        val stored = decodeAccountInfo(context.settingsDataStore.data.first()[accountInfoKey()])[sourceId]
+        val fingerprint = IptvAccountInfoParser.fingerprint(playlist)
+        if (stored?.sourceFingerprint == fingerprint) return@launch
+        // Source ids are per profile and reused, so the login is part of what was already asked.
+        if (!accountAllowanceBootstraps.add("$sourceId|$fingerprint")) return@launch
+        fetchXtreamAccountInfo(playlist, xtreamAccountCheckHttpClient)?.let { saveAccountInfo(sourceId, it) }
+    }
+
+    private val accountAllowanceBootstraps = ConcurrentHashMap.newKeySet<String>()
+
+    /**
+     * The panel's live slot count for an account, never persisted; Auto remembers it in memory for
+     * a minute. Null means unknown, including when the guard defers it.
+     */
+    internal suspend fun fetchAccountUsage(account: IptvProviderAccount): IptvAccountUsage? {
+        val latest = IptvAccountAvailability.latestUsage
+        // Forgotten first, so a check cut short by its timeout also leaves no answer behind.
+        latest.record(account, null)
+        if (account.kind != IptvProviderAccount.Kind.XTREAM) return null
+        val config = observeConfig().first()
+        val playlist = config.playlists.ifEmpty { activePlaylists(config) }.firstOrNull { iptvM3uAccount(it) == account } ?: return null
+        val creds = resolveXtreamCredentials(playlist.m3uUrl) ?: return null
+        val url = "${creds.baseUrl}/player_api.php".toHttpUrlOrNull()
+            ?.newBuilder()
+            ?.addQueryParameter("username", creds.username)
+            ?.addQueryParameter("password", creds.password)
+            ?.build()
+            ?.toString()
+            ?: return null
+        val body: JsonObject? = requestJson(url, JsonObject::class.java, client = xtreamAccountCheckHttpClient)
+        return IptvAccountInfoParser.parseXtreamAvailability(body?.toString()).also { latest.record(account, it) }
+    }
+
+    /** One configured playlist or portal as the limit policy sees it. */
+    private class IptvLimitSource(
+        val id: String,
+        val limitFingerprint: String,
+        val infoFingerprint: String,
+        /** Every account its streams can count against; an EPG login can differ from the M3U one. */
+        val streamAccounts: Set<IptvProviderAccount>,
+        val primaryAccount: IptvProviderAccount?,
+        /** The account its stored [IptvAccountInfo] describes. */
+        val infoAccount: IptvProviderAccount?,
+    )
+
+    private fun iptvLimitSources(config: IptvConfig): List<IptvLimitSource> =
+        config.playlists.ifEmpty { activePlaylists(config) }.map { playlist ->
+            val m3uAccount = iptvM3uAccount(playlist)
+            val playlistAccount = iptvPlaylistAccount(playlist)
+            IptvLimitSource(
+                id = playlist.id,
+                limitFingerprint = iptvConnectionLimitFingerprint(playlist),
+                infoFingerprint = IptvAccountInfoParser.fingerprint(playlist),
+                streamAccounts = setOfNotNull(m3uAccount, playlistAccount),
+                primaryAccount = playlistAccount ?: m3uAccount,
+                infoAccount = m3uAccount
+            )
+        } + config.stalkerPortals.map { portal ->
+            val account = IptvProviderAccount.stalker(portal.portalUrl, portal.macAddress)
+            IptvLimitSource(
+                id = portal.id,
+                limitFingerprint = iptvConnectionLimitFingerprint(portal),
+                infoFingerprint = IptvAccountInfoParser.fingerprint(portal),
+                streamAccounts = setOfNotNull(account),
+                primaryAccount = account,
+                infoAccount = account
+            )
+        }
+
+    private fun iptvConnectionLimitFor(
+        account: IptvProviderAccount,
+        sources: List<IptvLimitSource>,
+        limits: Map<String, Map<String, String>>,
+    ): IptvConnectionLimit = strictestIptvConnectionLimit(
+        sources.filter { account in it.streamAccounts }
+            .map { storedIptvConnectionLimit(limits[it.id], it.limitFingerprint) }
+    )
+
+    private fun iptvPolicyFor(
+        account: IptvProviderAccount?,
+        sources: List<IptvLimitSource>,
+        limits: Map<String, Map<String, String>>,
+        info: Map<String, IptvAccountInfo>,
+    ): IptvStreamPolicy? {
+        if (account == null) return null
+        val allowance = sources.filter { account in it.streamAccounts }
+            .mapNotNull { reliableIptvAllowance(info[it.id], it.infoFingerprint, it.infoAccount, account) }
+            .minOrNull()
+        return iptvStreamPolicy(
+            account, iptvConnectionLimitFor(account, sources, limits), allowance, IptvAccountAvailability.latestUsage.fresh(account)
+        )
+    }
+
+    /** Null means no owner: the stream stays untagged, as it is today. Never reads the URL that plays. */
+    private fun iptvChannelAccount(channel: IptvChannel, config: IptvConfig): IptvProviderAccount? {
+        if (channel.id.startsWith("stalker:")) {
+            val portal = StalkerPortalSupport.portalForChannel(channel.id, config.stalkerPortals) ?: return null
+            return IptvProviderAccount.stalker(portal.portalUrl, portal.macAddress)
+        }
+        val ownerId = StalkerPortalSupport.playlistIdFromChannelId(channel.id)
+        val playlist = config.playlists.ifEmpty { activePlaylists(config) }.firstOrNull { it.id == ownerId } ?: return null
+        return if (channel.xtreamStreamId != null) iptvPlaylistAccount(playlist) else iptvM3uAccount(playlist)
+    }
+
+    private fun iptvVodAccount(stream: StreamSource, config: IptvConfig): IptvProviderAccount? {
+        val markerPortalId = stream.url?.let(StalkerVodLink::parseMarker)?.portalId
+        val ownerId = stream.iptvSourceId ?: markerPortalId ?: return null
+        return if (stream.addonId.trim().lowercase(Locale.US) == IptvVodSourceIds.STALKER) {
+            config.stalkerPortals.firstOrNull { it.id == ownerId }
+                ?.let { IptvProviderAccount.stalker(it.portalUrl, it.macAddress) }
+        } else {
+            config.playlists.ifEmpty { activePlaylists(config) }.firstOrNull { it.id == ownerId }
+                ?.let(::iptvPlaylistAccount)
+        }
+    }
+
+    /** The login Xtream API channels and VOD URLs are built with, which may come from the EPG field. */
+    private fun iptvPlaylistAccount(playlist: IptvPlaylistEntry): IptvProviderAccount? {
+        val (loginUrl, creds) = (playlist.allEpgUrls() + playlist.m3uUrl)
+            .firstNotNullOfOrNull { url -> resolveXtreamCredentials(url)?.let { url to it } } ?: return null
+        return if (hasExplicitXtreamLogin(normalizeStoredIptvUrl(loginUrl))) {
+            IptvProviderAccount.xtream(creds.baseUrl, creds.username, creds.password)
+        } else {
+            iptvM3uAccount(playlist)
+        }
+    }
+
+    /** A numeric path tail is only a guess at a login, so such a list counts as plain M3U. */
+    private fun iptvM3uAccount(playlist: IptvPlaylistEntry): IptvProviderAccount? {
+        val url = normalizeStoredIptvUrl(playlist.m3uUrl)
+        val creds = resolveXtreamCredentials(url).takeIf { hasExplicitXtreamLogin(url) }
+        return if (creds != null) IptvProviderAccount.xtream(creds.baseUrl, creds.username, creds.password)
+        else IptvProviderAccount.m3u(url)
+    }
+
+    private fun hasExplicitXtreamLogin(url: String): Boolean {
+        val parsed = url.toHttpUrlOrNull() ?: return false
+        val inQuery = listOf("username", "user", "uname").any { !parsed.queryParameter(it).isNullOrBlank() } &&
+            listOf("password", "pass", "pwd").any { !parsed.queryParameter(it).isNullOrBlank() }
+        val segments = parsed.pathSegments
+        return inQuery || (segments.size >= 4 && segments.first().lowercase(Locale.US) in setOf("live", "movie", "series"))
+    }
+
+    private fun connectionLimitsKey(): Preferences.Key<String> =
+        profileManager.profileStringKey("iptv_connection_limits")
+
+    // Plain maps, not a class: release builds rename the fields of unkept classes, and a
+    // setting must still read after an update.
+    private fun decodeConnectionLimits(raw: String?): Map<String, Map<String, String>> {
+        if (raw.isNullOrBlank()) return emptyMap()
+        return runCatching {
+            val entry = TypeToken.getParameterized(Map::class.java, String::class.java, String::class.java).type
+            val type = TypeToken.getParameterized(Map::class.java, String::class.java, entry).type
+            gson.fromJson<Map<String, Map<String, String>>>(raw, type)
+        }.getOrNull().orEmpty()
+    }
+
+    private fun writeConnectionLimits(
+        prefs: androidx.datastore.preferences.core.MutablePreferences,
+        limits: Map<String, Map<String, String>>,
+    ) {
+        if (limits.isEmpty()) prefs.remove(connectionLimitsKey())
+        else prefs[connectionLimitsKey()] = gson.toJson(limits)
     }
 
     /**
@@ -1235,6 +1597,18 @@ class IptvRepository @Inject constructor(
         profileManager.activeProfileId.combine(context.settingsDataStore.data) { _, prefs ->
             decodeGroupOrder(prefs)
         }
+
+    /** Manual channel order per category (`playlistId|group` -> channel ids), set from ARVIO Web. */
+    fun observeChannelOrder(): Flow<Map<String, List<String>>> =
+        profileManager.activeProfileId.combine(context.settingsDataStore.data) { _, prefs ->
+            decodeChannelOrder(prefs[channelOrderKey()].orEmpty())
+        }.distinctUntilChanged()
+
+    /** Category display names (`playlistId|group` -> name), set from ARVIO Web. */
+    fun observeGroupNames(): Flow<Map<String, String>> =
+        profileManager.activeProfileId.combine(context.settingsDataStore.data) { _, prefs ->
+            decodeGroupNames(prefs[groupNamesKey()].orEmpty())
+        }.distinctUntilChanged()
 
     fun observeVodSearchEnabled(): Flow<Boolean> =
         context.settingsDataStore.data.map { prefs ->
@@ -1325,9 +1699,10 @@ class IptvRepository @Inject constructor(
     suspend fun savePlaylists(playlists: List<IptvPlaylistEntry>) {
         val profileId = profileManager.getProfileIdSync()
         val previousConfig = observeConfig().first()
-        val normalized = playlists.mapIndexed { index, item ->
+        val normalized = repairIptvPlaylistIds(playlists.filterNot { it.id.startsWith("partner-") }.mapIndexed { index, item ->
             normalizePlaylistEntry(item, index)
-        }.filterNotNull().take(MAX_IPTV_PLAYLISTS)
+        }.filterNotNull())
+        require(normalized.size <= MAX_IPTV_PLAYLISTS) { "Maximum of $MAX_IPTV_PLAYLISTS IPTV playlists reached" }
         val primary = normalized.firstOrNull()
         if (normalized == previousConfig.playlists) return
         val nextConfig = previousConfig.copy(
@@ -1473,12 +1848,7 @@ class IptvRepository @Inject constructor(
      */
     suspend fun resolveStalkerStreamUrl(channelId: String?, command: String): String? {
         val config = observeConfig().first()
-        val portals = config.stalkerPortals
-        if (portals.isEmpty()) return null
-        val portalId = channelId?.let { portalIdFromChannelId(it) }
-        val portal = portalId
-            ?.let { id -> portals.firstOrNull { it.id == id } }
-            ?: portals.first()
+        val portal = StalkerPortalSupport.portalForChannel(channelId, config.stalkerPortals) ?: return null
         if (portal.portalUrl.isBlank() || portal.macAddress.isBlank()) return null
         val stalker = getOrCreateStalkerApi(portal)
         return stalker?.resolveStreamUrl(command)
@@ -1689,7 +2059,9 @@ class IptvRepository @Inject constructor(
             // Selective import settings default to true for existing playlists
             importLiveTv = playlist.importLiveTv ?: true,
             importVod = playlist.importVod ?: true,
-            importSeries = playlist.importSeries ?: true
+            importSeries = playlist.importSeries ?: true,
+            epgEnabled = playlist.epgEnabled ?: true,
+            catchupEnabled = playlist.catchupEnabled ?: true
         )
     }
 
@@ -1890,7 +2262,12 @@ class IptvRepository @Inject constructor(
     }
 
     fun getCatchupUrlCandidates(channel: IptvChannel, program: IptvProgram): List<String> {
-        if (program.catchupAvailable == false) return emptyList()
+        if (program.catchupAvailable == false || channel.catchupType == "none") return emptyList()
+        if (channel.id.startsWith("partner-") && partnerDeliveryProvider != null) {
+            val playlist = partnerDeliveryProvider.get().activeDelivery()?.playlists
+                ?.firstOrNull { channel.id.startsWith("${it.id}:") }
+            if (playlist == null || playlist.catchupEnabled == false || playlist.epgEnabled == false) return emptyList()
+        }
         val startUnix = program.startUtcMillis / 1000L
         val endUnix = program.endUtcMillis / 1000L
         val nowUnix = System.currentTimeMillis() / 1000L
@@ -2259,12 +2636,15 @@ class IptvRepository @Inject constructor(
             prefs.remove(groupOrderKey())
             prefs.remove(groupOrderSchemaKey())
             prefs.remove(tvSessionKey())
+            prefs.remove(channelOrderKey())
+            prefs.remove(groupNamesKey())
             IptvCloudFields.stamp(prefs, profileId, org.json.JSONObject()
                 .put("playlists", org.json.JSONArray()).put("m3uUrl", "").put("epgUrl", "")
                 .put("stalkerPortals", org.json.JSONArray()).put("stalkerPortalUrl", "").put("stalkerMacAddress", "")
                 .put("favoriteGroups", org.json.JSONArray()).put("favoriteChannels", org.json.JSONArray())
                 .put("hiddenGroups", org.json.JSONArray()).put("lockedGroups", org.json.JSONArray())
-                .put("groupOrder", org.json.JSONArray()).put("groupOrderSchema", IPTV_GROUP_ORDER_SCHEMA))
+                .put("groupOrder", org.json.JSONArray()).put("groupOrderSchema", IPTV_GROUP_ORDER_SCHEMA)
+                .put("channelOrder", org.json.JSONObject()).put("groupNames", org.json.JSONObject()))
         }
         groupOrderLocallyDirty = true
         cachedStalkerApis = emptyMap()
@@ -2811,7 +3191,10 @@ class IptvRepository @Inject constructor(
                                     .map { channel ->
                                         channel.copy(
                                             id = "${playlist.id}:${channel.id}",
-                                            group = channel.group
+                                            group = channel.group,
+                                            catchupDays = if (playlist.catchupEnabled == false) 0 else channel.catchupDays,
+                                            catchupType = if (playlist.catchupEnabled == false) "none" else channel.catchupType,
+                                            catchupSource = if (playlist.catchupEnabled == false) null else channel.catchupSource
                                         )
                                     }
                             } catch (error: Throwable) {
@@ -2992,7 +3375,7 @@ class IptvRepository @Inject constructor(
                     for ((index, candidate) in epgCandidatesToTry.withIndex()) {
                         if (candidate.providerFallback && candidate.playlistId in indexedXmlPlaylists) continue
                         val epgUrl = candidate.url
-                        val candidateChannels = channelsForScopedEpgCandidate(candidate, xmlChannels)
+                        val candidateChannels = channelsForScopedEpgCandidate(candidate, xmlChannels, config)
                         if (candidateChannels.isEmpty()) continue
                         val pct = (90 + ((index * 8) / epgCandidatesToTry.size.coerceAtLeast(1))).coerceIn(90, 98)
                         onProgress(IptvLoadProgress(context.getString(R.string.iptv_progress_loading_full_epg, index + 1, epgCandidatesToTry.size), pct))
@@ -3791,23 +4174,11 @@ class IptvRepository @Inject constructor(
             } else {
                 channelIds
             }
-            val channels = channelsForEpgRefresh(requested)
+            val channels = channelsForEpgRefresh(requested).filter { isGuideAllowed(config, it) }
             System.err.println("[EPG-Refresh] refreshEpgForChannels: requested=${requested.size} resolved=${channels.size}")
             if (channels.isEmpty()) return@withContext null
 
-            val activePlaylistById = activePlaylists(config).associateBy { it.id }
-            val fallbackCreds = resolveXtreamCredentials(config)
-            val channelsByCredentials = LinkedHashMap<XtreamCredentials, MutableList<IptvChannel>>()
-            for (channel in channels) {
-                val playlistId = channel.id.substringBefore(':', missingDelimiterValue = "")
-                    .takeIf { it.isNotBlank() }
-                val playlistCreds = playlistId
-                    ?.let { activePlaylistById[it] }
-                    ?.let { resolveXtreamCredentials(it) }
-                val creds = playlistCreds ?: fallbackCreds ?: continue
-                if (resolveXtreamStreamId(channel) == null) continue
-                channelsByCredentials.getOrPut(creds) { mutableListOf() }.add(channel)
-            }
+            val channelsByCredentials = groupXtreamChannelsByCredentials(config, channels)
             val allChannelsByCredentials = groupXtreamChannelsByCredentials(
                 config,
                 (cachedChannels + channels).distinctBy { it.id }
@@ -3948,27 +4319,17 @@ class IptvRepository @Inject constructor(
                 }
             }
 
-            val missingXmlChannels = channels.filter { channel ->
-                !hasProgramData(mergedNowNext[channel.id])
-            }
-            val hasXtreamRequestedChannels = channelsByCredentials.isNotEmpty()
-            var xmlFallback: Map<String, IptvNowNext> = emptyMap()
-            var isXmlCached = false
-            if (missingXmlChannels.isNotEmpty() && !preferFullCatchupHistory && !hasXtreamRequestedChannels) {
-                val result = fetchVisibleXmlEpgForChannels(config, missingXmlChannels)
-                xmlFallback = result.first
-                isXmlCached = result.second
-                if (xmlFallback.isNotEmpty()) {
-                    mergedNowNext.putAll(xmlFallback)
-                    System.err.println(
-                        "[EPG-Refresh] XMLTV visible fallback added ${xmlFallback.size} channels"
-                    )
+            var indexedXmlChannels = emptySet<String>()
+            if (!preferFullCatchupHistory) {
+                val xtreamIds = channelsByCredentials.values.flatten().mapTo(HashSet()) { it.id }
+                val missingXmlChannels = channels.filter { !hasProgramData(mergedNowNext[it.id]) }
+                if (missingXmlChannels.isNotEmpty()) {
+                    val result = fetchVisibleXmlEpgForChannels(config, missingXmlChannels, xtreamIds)
+                    indexedXmlChannels = result.alreadyIndexed.filterTo(HashSet()) { !hasProgramData(mergedNowNext[it]) }
+                    result.guide.forEach { (id, guide) ->
+                        if (!hasProgramData(mergedNowNext[id])) mergedNowNext[id] = guide
+                    }
                 }
-            } else if (missingXmlChannels.isNotEmpty() && hasXtreamRequestedChannels) {
-                System.err.println(
-                    "[EPG-Refresh] Skipping XMLTV visible fallback for Xtream channels; " +
-                        "missing=${missingXmlChannels.size}"
-                )
             }
             if (mergedNowNext.isEmpty()) return@withContext null
 
@@ -3981,11 +4342,7 @@ class IptvRepository @Inject constructor(
             cachedNowNext.putAll(mergedForCache)
             cachedEpgAt = System.currentTimeMillis()
 
-            val toPersist = if (isXmlCached && xmlFallback.isNotEmpty()) {
-                mergedForCache.filterKeys { it !in xmlFallback.keys }
-            } else {
-                mergedForCache
-            }
+            val toPersist = if (indexedXmlChannels.isEmpty()) mergedForCache else mergedForCache.filterKeys { it !in indexedXmlChannels }
             if (toPersist.isNotEmpty()) {
                 persistEpgIndexChannels(config, toPersist, cachedEpgAt)
             }
@@ -4011,19 +4368,25 @@ class IptvRepository @Inject constructor(
             }
     }
 
+    private data class VisibleXmlGuide(val guide: Map<String, IptvNowNext>, val alreadyIndexed: Set<String>)
+
     private suspend fun fetchVisibleXmlEpgForChannels(
         config: IptvConfig,
-        channels: List<IptvChannel>
-    ): Pair<Map<String, IptvNowNext>, Boolean> {
-        if (channels.isEmpty()) return Pair(emptyMap(), false)
+        channels: List<IptvChannel>,
+        xtreamIds: Set<String>,
+    ): VisibleXmlGuide {
+        if (channels.isEmpty()) return VisibleXmlGuide(emptyMap(), emptySet())
         var candidates = resolveScopedEpgCandidates(config)
-        if (candidates.isEmpty()) {
+        if (candidates.none { candidate ->
+                channelsForScopedEpgCandidate(candidate, channels, config).any { !candidate.providerFallback || it.id !in xtreamIds }
+            }) {
             // No guide known yet: the playlist may name one in its #EXTM3U line, which is
             // never read when the channels come from the store instead of a playlist parse.
-            discoverEmbeddedEpgSourcesIfNeeded(activePlaylists(config))
+            val missingPlaylists = channels.mapTo(HashSet()) { it.id.substringBefore(':', missingDelimiterValue = "") }
+            discoverEmbeddedEpgSourcesIfNeeded(activePlaylists(config).filter { it.id in missingPlaylists })
             candidates = resolveScopedEpgCandidates(config)
         }
-        if (candidates.isEmpty()) return Pair(emptyMap(), false)
+        if (candidates.isEmpty()) return VisibleXmlGuide(emptyMap(), emptySet())
 
         val playlistKey = channels
             .asSequence()
@@ -4046,7 +4409,7 @@ class IptvRepository @Inject constructor(
             System.err.println(
                 "[EPG-Refresh] Skipping XMLTV visible fallback for ${(cooldownUntil - nowMs) / 1000}s"
             )
-            return Pair(emptyMap(), false)
+            return VisibleXmlGuide(emptyMap(), emptySet())
         }
         visibleXmlEpgCooldownUntil[cooldownKey] = nowMs + 90_000L
 
@@ -4056,14 +4419,21 @@ class IptvRepository @Inject constructor(
         val guideChannels = smallListChannelsForGuide()
             ?.let { all -> (channels + all).distinctBy { it.id } }
             ?: channels
-        val visibleCandidates = candidates.take(2)
-        for ((index, candidate) in visibleCandidates.withIndex()) {
-            val candidateChannels = channelsForScopedEpgCandidate(candidate, guideChannels)
-            if (candidateChannels.isEmpty()) continue
-            System.err.println(
-                "[EPG-Refresh] XMLTV visible fallback ${index + 1}/${visibleCandidates.size} " +
-                    "for ${candidateChannels.size} channels"
-            )
+        val pending = channels.associateByTo(LinkedHashMap()) { it.id }
+        val guide = LinkedHashMap<String, IptvNowNext>()
+        val indexed = HashSet<String>()
+        val attempts = HashMap<String?, Int>()
+        for (candidate in candidates) {
+            if (pending.isEmpty()) break
+            val count = attempts.getOrDefault(candidate.playlistId, 0)
+            if (count >= 2) continue
+            val requested = channelsForScopedEpgCandidate(candidate, pending.values.toList(), config)
+                .filter { !candidate.providerFallback || it.id !in xtreamIds }
+            if (requested.isEmpty()) continue
+            val candidateChannels = channelsForScopedEpgCandidate(candidate, guideChannels, config)
+                .filter { !candidate.providerFallback || it.id !in xtreamIds }
+            attempts[candidate.playlistId] = count + 1
+            System.err.println("[EPG-Refresh] XMLTV fallback for ${requested.size} missing channels")
             var isCached = false
             val parsed = runCatching {
                 guideRequestBudget.request(candidate.url) {
@@ -4073,7 +4443,7 @@ class IptvRepository @Inject constructor(
                             fetchAndParseEpg(
                                 candidate.url,
                                 candidateChannels,
-                                notModifiedCheckChannels = channelsForScopedEpgCandidate(candidate, channels),
+                                notModifiedCheckChannels = requested,
                             ) { jobContext.ensureActive() }
                         }
                     }
@@ -4096,14 +4466,16 @@ class IptvRepository @Inject constructor(
                 System.err.println("[EPG-Refresh] XMLTV visible fallback failed: ${error.message}")
             }.getOrDefault(emptyMap())
 
-            if (parsed.isNotEmpty() && hasAnyProgramData(parsed)) {
-                visibleXmlEpgCooldownUntil[cooldownKey] = System.currentTimeMillis() + 30_000L
-                return Pair(parsed, isCached)
+            parsed.forEach { (id, data) ->
+                if (hasProgramData(data) && guide.putIfAbsent(id, data) == null) {
+                    if (isCached) indexed.add(id)
+                    pending.remove(id)
+                }
             }
         }
 
-        visibleXmlEpgCooldownUntil[cooldownKey] = System.currentTimeMillis() + 5 * 60_000L
-        return Pair(emptyMap(), false)
+        visibleXmlEpgCooldownUntil[cooldownKey] = System.currentTimeMillis() + if (guide.isEmpty()) 5 * 60_000L else 30_000L
+        return VisibleXmlGuide(guide, indexed)
     }
 
     /** Every channel of the active list when it is at most [LargeIptvListChannelCount], else null. */
@@ -4455,12 +4827,12 @@ class IptvRepository @Inject constructor(
         if (raw.isBlank()) return emptyList()
         return runCatching {
             val type = TypeToken.getParameterized(List::class.java, IptvPlaylistEntry::class.java).type
-            gson.fromJson<List<IptvPlaylistEntry>>(raw, type)
+            repairIptvPlaylistIds(gson.fromJson<List<IptvPlaylistEntry>>(raw, type)
                 ?.mapIndexed { index, playlist ->
                     normalizePlaylistEntry(playlist, index)
                 }
                 ?.filterNotNull()
-                ?: emptyList()
+                ?: emptyList())
         }.getOrDefault(emptyList())
     }
 
@@ -4527,6 +4899,12 @@ class IptvRepository @Inject constructor(
         profileManager.profileStringKeyFor(profileId, "iptv_group_order_schema")
     private fun playlistsKeyFor(profileId: String): Preferences.Key<String> =
         profileManager.profileStringKeyFor(profileId, "iptv_playlists_json")
+    private fun channelOrderKey(): Preferences.Key<String> = profileManager.profileStringKey("iptv_channel_order")
+    private fun channelOrderKeyFor(profileId: String): Preferences.Key<String> =
+        profileManager.profileStringKeyFor(profileId, "iptv_channel_order")
+    private fun groupNamesKey(): Preferences.Key<String> = profileManager.profileStringKey("iptv_group_names")
+    private fun groupNamesKeyFor(profileId: String): Preferences.Key<String> =
+        profileManager.profileStringKeyFor(profileId, "iptv_group_names")
     private fun tvSessionKey(): Preferences.Key<String> = profileManager.profileStringKey("iptv_tv_session")
     private fun tvSessionKeyFor(profileId: String): Preferences.Key<String> =
         profileManager.profileStringKeyFor(profileId, "iptv_tv_session")
@@ -4648,6 +5026,26 @@ class IptvRepository @Inject constructor(
         }.getOrDefault(emptyList())
     }
 
+    private fun decodeChannelOrder(raw: String): Map<String, List<String>> {
+        if (raw.isBlank()) return emptyMap()
+        return runCatching {
+            val type = TypeToken.getParameterized(
+                Map::class.java,
+                String::class.java,
+                TypeToken.getParameterized(List::class.java, String::class.java).type,
+            ).type
+            normalizeIptvChannelOrder(gson.fromJson<Map<String, List<String>>>(raw, type))
+        }.getOrDefault(emptyMap())
+    }
+
+    private fun decodeGroupNames(raw: String): Map<String, String> {
+        if (raw.isBlank()) return emptyMap()
+        return runCatching {
+            val type = TypeToken.getParameterized(Map::class.java, String::class.java, String::class.java).type
+            normalizeIptvGroupNames(gson.fromJson<Map<String, String>>(raw, type))
+        }.getOrDefault(emptyMap())
+    }
+
     private fun decodeTvSessionState(prefs: Preferences): IptvTvSessionState =
         decodeTvSessionState(prefs[tvSessionKey()].orEmpty())
 
@@ -4704,6 +5102,8 @@ class IptvRepository @Inject constructor(
         val orderSchema = prefs[groupOrderSchemaKeyFor(safeProfileId)]?.toIntOrNull() ?: 0
         val playlistsRaw = prefs[playlistsKeyFor(safeProfileId)].orEmpty()
         val tvSessionRaw = prefs[tvSessionKeyFor(safeProfileId)].orEmpty()
+        val channelOrderRaw = prefs[channelOrderKeyFor(safeProfileId)].orEmpty()
+        val groupNamesRaw = prefs[groupNamesKeyFor(safeProfileId)].orEmpty()
         val playlists = decodePlaylists(playlistsRaw)
         val stalkerPortals = readStalkerPortalsFor(prefs, safeProfileId)
         val validSourceIds = buildSet {
@@ -4749,7 +5149,9 @@ class IptvRepository @Inject constructor(
             groupOrderSchema = IPTV_GROUP_ORDER_SCHEMA,
             sortOrder = normalizeIptvSortOrder(prefs[sortOrderKeyFor(safeProfileId)]),
             playlists = playlists,
-            tvSession = decodeTvSessionState(tvSessionRaw)
+            tvSession = decodeTvSessionState(tvSessionRaw),
+            channelOrder = decodeChannelOrder(channelOrderRaw),
+            groupNames = decodeGroupNames(groupNamesRaw)
         )
     }
 
@@ -4777,9 +5179,9 @@ class IptvRepository @Inject constructor(
             importedStalkerPortals,
             MAX_STALKER_PORTALS,
         )
-        val normalizedPlaylists = state.playlists.mapIndexed { index, playlist ->
+        val normalizedPlaylists = repairIptvPlaylistIds(state.playlists.mapIndexed { index, playlist ->
             normalizePlaylistEntry(playlist, index)
-        }.filterNotNull().take(MAX_IPTV_PLAYLISTS)
+        }.filterNotNull().take(MAX_IPTV_PLAYLISTS))
         val effectivePlaylists = normalizedPlaylists.ifEmpty {
             if (normalizedM3u.isBlank()) emptyList() else listOf(
                 IptvPlaylistEntry(
@@ -4812,6 +5214,10 @@ class IptvRepository @Inject constructor(
             .takeIf { state.groupOrderSchema >= IPTV_GROUP_ORDER_SCHEMA }
             .orEmpty()
             .let(::normalizeCloudGroupKeys)
+        val normalizedChannelOrder = normalizeIptvChannelOrder(runCatching { state.channelOrder }.getOrNull())
+        // Same Portal 1 migration as the other category keys.
+        val normalizedGroupNames = normalizeIptvGroupNames(runCatching { state.groupNames }.getOrNull())
+            .mapKeys { (key, _) -> StalkerPortalSupport.migrateLegacyPlaylistGroupKey(key) }
         val normalizedFavoriteChannels = state.favoriteChannels
             .map(StalkerPortalSupport::migrateLegacyChannelId)
             .filter { it.isNotBlank() }
@@ -4861,6 +5267,10 @@ class IptvRepository @Inject constructor(
             } else {
                 prefs.remove(tvSessionKeyFor(safeProfileId))
             }
+            if (normalizedChannelOrder.isEmpty()) prefs.remove(channelOrderKeyFor(safeProfileId))
+            else prefs[channelOrderKeyFor(safeProfileId)] = gson.toJson(normalizedChannelOrder)
+            if (normalizedGroupNames.isEmpty()) prefs.remove(groupNamesKeyFor(safeProfileId))
+            else prefs[groupNamesKeyFor(safeProfileId)] = gson.toJson(normalizedGroupNames)
         }
         if (preservedConcurrentEdit) return true
         groupOrderLocallyDirty = false
@@ -4909,12 +5319,13 @@ class IptvRepository @Inject constructor(
             System.err.println("IptvRepository: Xtream catalog unavailable; falling back to M3U: ${error.message}")
         }
     }
-    return fetchAndParseM3uWithRetries(playlist.m3uUrl, onProgress)
+    return fetchAndParseM3uWithRetries(playlist.m3uUrl, onProgress, playlist.epgEnabled != false)
 }
 
     private suspend fun fetchAndParseM3uWithRetries(
         url: String,
-        onProgress: (IptvLoadProgress) -> Unit
+        onProgress: (IptvLoadProgress) -> Unit,
+        discoverGuide: Boolean = true
     ): List<IptvChannel> {
         val normalizedUrl = normalizeStoredIptvUrl(url)
         var lastError: Throwable? = null
@@ -4923,7 +5334,7 @@ class IptvRepository @Inject constructor(
             onProgress(IptvLoadProgress("Connecting to playlist (attempt ${attempt + 1}/$maxAttempts)...", 5))
             runCatching {
                 withTimeoutOrNull(90_000L) {
-                    fetchAndParseM3uOnce(normalizedUrl, onProgress)
+                    fetchAndParseM3uOnce(normalizedUrl, onProgress, discoverGuide = discoverGuide)
                 } ?: throw IllegalStateException(context.getString(R.string.iptv_playlist_timeout))
             }.onSuccess { channels ->
                 if (channels.isNotEmpty()) return channels
@@ -4965,6 +5376,16 @@ class IptvRepository @Inject constructor(
         @SerializedName("tv_archive_duration") val tvArchiveDuration: Int? = null
     )
 
+    data class VodCatalogSeed(
+        val mediaType: MediaType,
+        val tmdbId: Int?,
+        val imdbId: String?,
+        val title: String,
+        val year: Int?,
+        val categoryId: String?,
+        val addedEpochSec: Long
+    )
+
     private data class XtreamVodStream(
         @SerializedName("stream_id") val streamId: Int? = null,
         val name: String? = null,
@@ -4972,15 +5393,18 @@ class IptvRepository @Inject constructor(
         @SerializedName("container_extension") val containerExtension: String? = null,
         @SerializedName(value = "imdb", alternate = ["imdb_id", "imdbid"]) val imdb: String? = null,
         @SerializedName(value = "tmdb", alternate = ["tmdb_id", "tmdbid"]) val tmdb: String? = null,
-        @SerializedName("category_id") val categoryId: String? = null
+        @SerializedName("category_id") val categoryId: String? = null,
+        @SerializedName("added") val added: String? = null
     )
 
     private data class XtreamSeriesItem(
         @SerializedName(value = "series_id", alternate = ["seriesid", "id"]) val seriesId: Int? = null,
         val name: String? = null,
+        val year: String? = null,
         @SerializedName(value = "imdb", alternate = ["imdb_id", "imdbid"]) val imdb: String? = null,
         @SerializedName(value = "tmdb", alternate = ["tmdb_id", "tmdbid"]) val tmdb: String? = null,
-        @SerializedName("category_id") val categoryId: String? = null
+        @SerializedName("category_id") val categoryId: String? = null,
+        @SerializedName("last_modified") val lastModified: String? = null
     )
 
     private data class XtreamSeriesEpisode(
@@ -5994,13 +6418,14 @@ class IptvRepository @Inject constructor(
      */
     private data class XtreamVodProvider(
         val creds: XtreamCredentials,
-        val name: String
+        val name: String,
+        val sourceId: String
     )
 
     private fun xtreamProvidersForVodImport(config: IptvConfig): List<XtreamVodProvider> =
         activeVodPlaylists(config)
             .mapNotNull { playlist ->
-                resolveXtreamCredentials(playlist)?.let { XtreamVodProvider(it, playlist.name.trim()) }
+                resolveXtreamCredentials(playlist)?.let { XtreamVodProvider(it, playlist.name.trim(), playlist.id) }
             }
             // Dedupe on the credentials alone, exactly as before: two playlist
             // entries pointing at the same account are one provider, and the
@@ -6010,7 +6435,7 @@ class IptvRepository @Inject constructor(
     private fun xtreamProvidersForSeriesImport(config: IptvConfig): List<XtreamVodProvider> =
         activeSeriesPlaylists(config)
             .mapNotNull { playlist ->
-                resolveXtreamCredentials(playlist)?.let { XtreamVodProvider(it, playlist.name.trim()) }
+                resolveXtreamCredentials(playlist)?.let { XtreamVodProvider(it, playlist.name.trim(), playlist.id) }
             }
             .distinctBy { it.creds }
 
@@ -6104,7 +6529,7 @@ class IptvRepository @Inject constructor(
                         // Stamped here rather than deeper down on purpose: every
                         // source in this batch came from this one provider, and
                         // the disk cache below never has to know about names.
-                        .map { it.withIptvProvider(provider.name) }
+                        .map { it.withIptvProvider(provider.name).copy(iptvSourceId = provider.sourceId) }
                 }
             // Additive second provider: each Stalker portal is searched on its
             // own, and a failing portal never removes Xtream results.
@@ -6121,7 +6546,7 @@ class IptvRepository @Inject constructor(
                             originalTitle = originalTitle
                         )
                     }.getOrDefault(emptyList())
-                        .map { it.withIptvProvider(portal.name) }
+                        .map { it.withIptvProvider(portal.name).copy(iptvSourceId = portal.id) }
                 }
             sortVodSources(xtreamSources + stalkerSources)
         }
@@ -7182,7 +7607,7 @@ class IptvRepository @Inject constructor(
                             allowNetwork = allowNetwork
                         )
                     }.getOrDefault(emptyList())
-                        .map { it.withIptvProvider(provider.name) }
+                        .map { it.withIptvProvider(provider.name).copy(iptvSourceId = provider.sourceId) }
                 }
             // Additive second provider, exactly as on the movie path: each
             // Stalker portal is searched on its own, and a failing portal never
@@ -7208,7 +7633,7 @@ class IptvRepository @Inject constructor(
                         // Stamped before the partial list is published, not after:
                         // this path reports each portal's result as it arrives, so
                         // a later stamp would show the first batch without a name.
-                        .map { it.withIptvProvider(portal.name) }
+                        .map { it.withIptvProvider(portal.name).copy(iptvSourceId = portal.id) }
                         .also { found ->
                             completedSources.addAll(found)
                             onSources(sortVodSources(completedSources))
@@ -7255,6 +7680,7 @@ class IptvRepository @Inject constructor(
                     addonName = "IPTV Series VOD",
                     addonId = IptvVodSourceIds.XTREAM,
                     quality = inferQualityFrom(seriesName, sourceName),
+                    rawLabel = seriesName,
                     size = "",
                     url = streamUrl
                 )
@@ -8382,7 +8808,8 @@ class IptvRepository @Inject constructor(
 
     private fun resolveScopedEpgCandidates(config: IptvConfig): List<ScopedEpgCandidate> {
         restoreDiscoveredEpgUrlsFromCache(config)
-        val allLists = activePlaylists(config)
+        val allLists = activePlaylists(config).filter { it.importLiveTv != false && it.epgEnabled != false }
+        if (allLists.isEmpty()) return emptyList()
         return buildList {
             allLists.forEach { list ->
                 list.allEpgUrls().forEach { add(ScopedEpgCandidate(it, list.id)) }
@@ -8403,12 +8830,19 @@ class IptvRepository @Inject constructor(
 
     private fun channelsForScopedEpgCandidate(
         candidate: ScopedEpgCandidate,
-        channels: List<IptvChannel>
+        channels: List<IptvChannel>,
+        config: IptvConfig
     ): List<IptvChannel> {
         val playlistId = candidate.playlistId?.trim().orEmpty()
-        if (playlistId.isBlank()) return channels
         val prefix = "$playlistId:"
-        return channels.filter { channel -> channel.id.startsWith(prefix) }
+        return channels.filter { channel -> isGuideAllowed(config, channel) &&
+            (playlistId.isBlank() || channel.id.startsWith(prefix)) }
+    }
+
+    internal fun isGuideAllowed(config: IptvConfig, channel: IptvChannel): Boolean {
+        val playlist = config.playlists.firstOrNull { channel.id.startsWith("${it.id}:") }
+        return playlist?.let { it.enabled && it.importLiveTv != false && it.epgEnabled != false }
+            ?: !channel.id.startsWith("partner-")
     }
 
     private fun groupXtreamChannelsByCredentials(
@@ -8416,16 +8850,21 @@ class IptvRepository @Inject constructor(
         channels: List<IptvChannel>
     ): LinkedHashMap<XtreamCredentials, MutableList<IptvChannel>> {
         val activePlaylistById = activePlaylists(config).associateBy { it.id }
-        val fallbackCreds = resolveXtreamCredentials(config)
+        val legacyCreds by lazy { resolveXtreamCredentials(config) }
+        val playlistCredentials = HashMap<String, XtreamCredentials?>()
         val result = LinkedHashMap<XtreamCredentials, MutableList<IptvChannel>>()
         channels.forEach { channel ->
+            if (!isGuideAllowed(config, channel)) return@forEach
             if (resolveXtreamStreamId(channel) == null) return@forEach
             val playlistId = channel.id.substringBefore(':', missingDelimiterValue = "")
                 .takeIf { it.isNotBlank() }
-            val playlistCreds = playlistId
-                ?.let { activePlaylistById[it] }
-                ?.let { resolveXtreamCredentials(it) }
-            val creds = playlistCreds ?: fallbackCreds ?: return@forEach
+            val playlistCreds = playlistId?.let { id ->
+                if (id !in playlistCredentials) playlistCredentials[id] = activePlaylistById[id]?.let { resolveXtreamCredentials(it) }
+                playlistCredentials[id]
+            }
+            // Do not borrow credentials from an unrelated enabled playlist for a plain M3U row.
+            val creds = playlistCreds ?: resolveXtreamCredentials(channel.streamUrl)
+                ?: channel.id.takeIf { it.startsWith("xtream:") }?.let { legacyCreds } ?: return@forEach
             result.getOrPut(creds) { mutableListOf() }.add(channel)
         }
         return result
@@ -8443,7 +8882,7 @@ class IptvRepository @Inject constructor(
     private suspend fun discoverEmbeddedEpgSourcesIfNeeded(playlists: List<IptvPlaylistEntry>) {
         if (discoveredM3uEpgUrls.isNotEmpty()) return
         val candidates = playlists.filter { playlist ->
-            playlist.m3uUrl.isNotBlank() &&
+            playlist.importLiveTv != false && playlist.epgEnabled != false && playlist.m3uUrl.isNotBlank() &&
                 playlist.allEpgUrls().isEmpty() &&
                 resolveXtreamCredentials(playlist) == null &&
                 playlist.m3uUrl !in embeddedEpgHeadersRead
@@ -8668,6 +9107,7 @@ class IptvRepository @Inject constructor(
         url: String,
         onProgress: (IptvLoadProgress) -> Unit,
         client: OkHttpClient = iptvHttpClient,
+        discoverGuide: Boolean = true,
     ): List<IptvChannel> {
         val startedAt = System.currentTimeMillis()
         // The in-memory channel list may be capped. Until a complete per-playlist
@@ -8714,7 +9154,7 @@ class IptvRepository @Inject constructor(
                 throw IllegalStateException(context.getString(R.string.iptv_m3u_failed, response.code) + " " + detail)
             }
             onProgress(IptvLoadProgress("Parsing channels...", 78))
-            val channels = parseM3u(stream, onProgress)
+            val channels = parseM3u(stream, onProgress, discoverGuide)
             System.err.println(
                 "[IPTV-Timing] playlist fetch+parse channels=${channels.size} " +
                     "in ${System.currentTimeMillis() - startedAt}ms"
@@ -9997,7 +10437,8 @@ class IptvRepository @Inject constructor(
 
     private fun parseM3u(
         input: InputStream,
-        onProgress: (IptvLoadProgress) -> Unit
+        onProgress: (IptvLoadProgress) -> Unit,
+        discoverGuide: Boolean = true
     ): List<IptvChannel> {
         val channels = mutableListOf<IptvChannel>()
         val seenChannelIds = HashSet<String>()
@@ -10013,7 +10454,7 @@ class IptvRepository @Inject constructor(
                 if (line.isEmpty()) continue
 
                 if (line.startsWith("#EXTM3U", ignoreCase = true)) {
-                    extractM3uDeclaredEpgUrls(line)
+                    if (discoverGuide) extractM3uDeclaredEpgUrls(line)
                         .forEach { discoveredM3uEpgUrls.add(it) }
                     continue
                 }
@@ -11545,7 +11986,9 @@ class IptvRepository @Inject constructor(
                 playlist.enabled.toString(),
                 (playlist.importLiveTv ?: true).toString(),
                 (playlist.importVod ?: true).toString(),
-                (playlist.importSeries ?: true).toString()
+                (playlist.importSeries ?: true).toString(),
+                (playlist.epgEnabled ?: true).toString(),
+                (playlist.catchupEnabled ?: true).toString()
             ).joinToString("|")
         }
         val raw = listOf(
@@ -11574,7 +12017,9 @@ class IptvRepository @Inject constructor(
                 playlist.enabled.toString(),
                 (playlist.importLiveTv ?: true).toString(),
                 (playlist.importVod ?: true).toString(),
-                (playlist.importSeries ?: true).toString()
+                (playlist.importSeries ?: true).toString(),
+                (playlist.epgEnabled ?: true).toString(),
+                (playlist.catchupEnabled ?: true).toString()
             ).joinToString("|")
         }
         val raw = listOf(
@@ -12166,6 +12611,152 @@ class IptvRepository @Inject constructor(
         val creds = xtreamCredentialsForSeriesImport(config).firstOrNull() ?: return emptyList()
         return loadXtreamSeriesCategoriesInternal(creds, allowNetwork = false)
             .mapNotNull { it.toInfoOrNull() }
+    }
+
+    /**
+     * Returns recently added Xtream VOD movies and/or series as lightweight catalog seeds
+     * for on-device client delegation (`vod:recent`, `vod:categories`).
+     */
+    suspend fun getDelegatedVodCatalogSeeds(
+        mediaType: MediaType? = null,
+        categoryFilter: String? = null,
+        allowNetwork: Boolean = true
+    ): List<VodCatalogSeed> = withContext(Dispatchers.IO) {
+        val config = observeConfig().first()
+        val filterNorm = categoryFilter?.trim()?.lowercase(Locale.US)?.takeIf { it.isNotBlank() }
+        val results = mutableListOf<VodCatalogSeed>()
+
+        if (mediaType != MediaType.TV) {
+            val movieCreds = xtreamCredentialsForVodImport(config)
+            for (creds in movieCreds) {
+                val streams = runCatching { getXtreamVodStreams(creds, allowNetwork = allowNetwork, fast = true) }
+                    .getOrDefault(emptyList())
+                if (streams.isEmpty()) continue
+                val matchingCategoryIds = if (filterNorm != null) {
+                    loadXtreamVodCategoriesInternal(creds, allowNetwork = allowNetwork)
+                        .filter { cat ->
+                            cat.categoryId?.trim()?.lowercase(Locale.US) == filterNorm ||
+                                cat.categoryName?.trim()?.lowercase(Locale.US)?.contains(filterNorm) == true
+                        }
+                        .mapNotNull { it.categoryId?.trim() }
+                        .toSet()
+                } else emptySet()
+
+                for (item in streams) {
+                    val catId = item.categoryId?.trim()
+                    if (filterNorm != null && catId != filterNorm && catId !in matchingCategoryIds) continue
+                    val rawTitle = item.name?.trim().orEmpty()
+                    if (rawTitle.isBlank()) continue
+                    val tmdb = normalizeTmdbId(item.tmdb)?.toIntOrNull()?.takeIf { it > 0 }
+                    val imdb = normalizeImdbId(item.imdb)?.takeIf { it != IptvIdSentinels.IMDB_NONE }
+                    val added = item.added?.trim()?.toLongOrNull() ?: (item.streamId?.toLong() ?: 0L)
+                    results += VodCatalogSeed(
+                        mediaType = MediaType.MOVIE,
+                        tmdbId = tmdb,
+                        imdbId = imdb,
+                        title = rawTitle,
+                        year = parseYear(item.year ?: rawTitle),
+                        categoryId = catId,
+                        addedEpochSec = added
+                    )
+                }
+            }
+        }
+
+        if (mediaType != MediaType.MOVIE) {
+            val seriesCreds = xtreamCredentialsForSeriesImport(config)
+            for (creds in seriesCreds) {
+                val series = runCatching { getXtreamSeriesList(creds, allowNetwork = allowNetwork, fast = true) }
+                    .getOrDefault(emptyList())
+                if (series.isEmpty()) continue
+                val matchingCategoryIds = if (filterNorm != null) {
+                    loadXtreamSeriesCategoriesInternal(creds, allowNetwork = allowNetwork)
+                        .filter { cat ->
+                            cat.categoryId?.trim()?.lowercase(Locale.US) == filterNorm ||
+                                cat.categoryName?.trim()?.lowercase(Locale.US)?.contains(filterNorm) == true
+                        }
+                        .mapNotNull { it.categoryId?.trim() }
+                        .toSet()
+                } else emptySet()
+
+                for (item in series) {
+                    val catId = item.categoryId?.trim()
+                    if (filterNorm != null && catId != filterNorm && catId !in matchingCategoryIds) continue
+                    val rawTitle = item.name?.trim().orEmpty()
+                    if (rawTitle.isBlank()) continue
+                    val tmdb = normalizeTmdbId(item.tmdb)?.toIntOrNull()?.takeIf { it > 0 }
+                    val imdb = normalizeImdbId(item.imdb)?.takeIf { it != IptvIdSentinels.IMDB_NONE }
+                    val added = item.lastModified?.trim()?.toLongOrNull() ?: (item.seriesId?.toLong() ?: 0L)
+                    results += VodCatalogSeed(
+                        mediaType = MediaType.TV,
+                        tmdbId = tmdb,
+                        imdbId = imdb,
+                        title = rawTitle,
+                        year = parseYear(item.year ?: rawTitle),
+                        categoryId = catId,
+                        addedEpochSec = added
+                    )
+                }
+            }
+        }
+
+        results
+            .sortedByDescending { it.addedEpochSec }
+            .distinctBy { seed ->
+                when {
+                    seed.tmdbId != null -> "${seed.mediaType.name}:tmdb:${seed.tmdbId}"
+                    !seed.imdbId.isNullOrBlank() -> "${seed.mediaType.name}:imdb:${seed.imdbId}"
+                    else -> "${seed.mediaType.name}:title:${normalizeLookupText(seed.title)}"
+                }
+            }
+    }
+
+    /**
+     * Checks whether a title is present in the profile's connected Xtream VOD / Series catalogs.
+     */
+    suspend fun hasVodMatch(
+        mediaType: MediaType,
+        tmdbId: Int?,
+        imdbId: String?,
+        title: String,
+        year: Int? = null
+    ): Boolean = withContext(Dispatchers.IO) {
+        val config = observeConfig().first()
+        val normTmdb = normalizeTmdbId(tmdbId)
+        val normImdb = normalizeImdbId(imdbId)?.takeIf { it != IptvIdSentinels.IMDB_NONE }
+        val canonicalTitle = toCanonicalTitleKey(normalizeLookupText(title))
+
+        if (mediaType == MediaType.MOVIE) {
+            for (creds in xtreamCredentialsForVodImport(config)) {
+                val vod = runCatching { getXtreamVodStreams(creds, allowNetwork = true, fast = true) }
+                    .getOrDefault(emptyList())
+                if (vod.isEmpty()) continue
+                val index = ensureVodCatalogIndex(vod)
+                if (!normTmdb.isNullOrBlank() && index.tmdbMap.containsKey(normTmdb)) return@withContext true
+                if (!normImdb.isNullOrBlank() && index.imdbMap.containsKey(normImdb)) return@withContext true
+                if (canonicalTitle.isNotBlank() && index.canonicalTitleMap.containsKey(canonicalTitle)) {
+                    val candidates = index.canonicalTitleMap[canonicalTitle].orEmpty().map { index.items[it] }
+                    if (year == null || candidates.any { parseYear(it.year ?: it.name.orEmpty()) in listOf(null, year, year - 1, year + 1) }) {
+                        return@withContext true
+                    }
+                }
+            }
+            return@withContext false
+        }
+
+        for (creds in xtreamCredentialsForSeriesImport(config)) {
+            val series = runCatching { getXtreamSeriesList(creds, allowNetwork = true, fast = true) }
+                .getOrDefault(emptyList())
+            for (item in series) {
+                if (!normTmdb.isNullOrBlank() && normalizeTmdbId(item.tmdb) == normTmdb) return@withContext true
+                if (!normImdb.isNullOrBlank() && normalizeImdbId(item.imdb) == normImdb) return@withContext true
+                if (canonicalTitle.isNotBlank()) {
+                    val itemCanonical = toCanonicalTitleKey(normalizeLookupText(item.name.orEmpty()))
+                    if (itemCanonical == canonicalTitle) return@withContext true
+                }
+            }
+        }
+        false
     }
 
     private fun XtreamVodCategoryWire.toInfoOrNull(): XtreamVodCategoryInfo? {

@@ -5,5 +5,6 @@
   "Completed": "Завршено",
   "Dropped": "Напуштено",
   "Silo: use the Jellyfin-compatible address. Optional profile: username#ProfileName. Protected profile: password#PIN.": "Silo: користите адресу компатибилну са Jellyfin-ом. Опциони профил: username#ProfileName. Заштићени профил: password#PIN.",
-  "None of your enabled addons provide playback sources.": "Ниједан од ваших омогућених додатака не пружа изворе за репродукцију."
+  "None of your enabled addons provide playback sources.": "Ниједан од ваших омогућених додатака не пружа изворе за репродукцију.",
+  "Uncategorized": "Без категорије"
 }

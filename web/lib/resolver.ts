@@ -1,4 +1,5 @@
 import { config } from "./config";
+import { currentStreamTicket } from "./streamTicket";
 import type { InstalledAddon, MediaItem, StreamSource } from "./types";
 
 type ResolverEvent =
@@ -6,6 +7,18 @@ type ResolverEvent =
   | { type: "batch"; addonId?: string; addonName?: string; batch?: StreamSource[]; streams?: StreamSource[] }
   | { type: "final"; cached?: boolean; streams?: StreamSource[] }
   | { type: "error"; error?: string };
+
+function normalizeStreamLabels(stream: StreamSource): StreamSource {
+  const hints = stream.behaviorHints;
+  return {
+    ...stream,
+    source: typeof stream.source === "string" ? stream.source : "",
+    addonName: typeof stream.addonName === "string" ? stream.addonName : "Source",
+    description: typeof stream.description === "string" ? stream.description : null,
+    size: typeof stream.size === "string" ? stream.size : undefined,
+    behaviorHints: hints && { ...hints, filename: typeof hints.filename === "string" ? hints.filename : null }
+  };
+}
 
 export async function getResolverStreamsProgressive(
   addons: InstalledAddon[],
@@ -29,7 +42,7 @@ export async function getResolverStreamsProgressive(
   if (!response.body || contentType.includes("application/json")) {
     const payload = (await response.json()) as ResolverEvent;
     if (payload.type === "error") throw new Error(payload.error ?? "Resolver failed");
-    const streams = payload.type === "final" ? payload.streams ?? [] : [];
+    const streams = payload.type === "final" ? payload.streams?.map(normalizeStreamLabels) ?? [] : [];
     if (streams.length) onUpdate?.(streams, streams);
     return streams;
   }
@@ -50,18 +63,18 @@ export async function getResolverStreamsProgressive(
       if (!event) continue;
       if (event.type === "error") throw new Error(event.error ?? "Resolver failed");
       if (event.type === "batch") {
-        latest = event.streams ?? latest;
-        onUpdate?.(latest, event.batch ?? []);
+        latest = event.streams?.map(normalizeStreamLabels) ?? latest;
+        onUpdate?.(latest, event.batch?.map(normalizeStreamLabels) ?? []);
       }
       if (event.type === "final") {
-        latest = event.streams ?? latest;
+        latest = event.streams?.map(normalizeStreamLabels) ?? latest;
       }
     }
   }
 
   if (buffer.trim()) {
     const event = parseEvent(buffer);
-    if (event?.type === "final") latest = event.streams ?? latest;
+    if (event?.type === "final") latest = event.streams?.map(normalizeStreamLabels) ?? latest;
   }
 
   return latest;
@@ -74,7 +87,16 @@ export function resolverMediaUrl(url: string, headers?: Record<string, string>) 
   if (headers && Object.keys(headers).length > 0) {
     endpoint.searchParams.set("h", btoa(JSON.stringify(headers)));
   }
+  withStreamTicket(endpoint);
   return endpoint.toString();
+}
+
+// The relay can be limited to Premium members (STREAM_TICKET_SECRET on the
+// worker); the ticket rides on every /media URL, and the worker passes it on
+// to playlist segments.
+function withStreamTicket(endpoint: URL) {
+  const ticket = currentStreamTicket();
+  if (ticket) endpoint.searchParams.set("t", ticket);
 }
 
 /** Relay only a selected source that explicitly requires browser-controlled headers. */
@@ -113,6 +135,7 @@ export function resolverDownloadUrl(url: string, filename: string) {
   endpoint.searchParams.set("url", url);
   endpoint.searchParams.set("dl", "1");
   endpoint.searchParams.set("filename", filename);
+  withStreamTicket(endpoint);
   return endpoint.toString();
 }
 

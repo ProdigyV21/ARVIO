@@ -52,7 +52,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Playlist exceeds the size limit" }, { status: 502, headers: { "cache-control": "no-store" } });
     }
     const rewritten = rewriteMode === "0" ? text : rewriteMode === "worker"
-      ? rewritePlaylistToWorker(text, new URL(response.headers.get("x-arvio-final-url") ?? target), input.searchParams.get("headers"))
+      ? rewritePlaylistToWorker(text, new URL(response.headers.get("x-arvio-final-url") ?? target), input.searchParams.get("headers"), input.searchParams.get("t"))
       : rewriteMode === "direct" || !ALLOW_MEDIA_PROXY ? rewritePlaylistToAbsolute(text, new URL(response.headers.get("x-arvio-final-url") ?? target)) : rewritePlaylist(text, new URL(response.headers.get("x-arvio-final-url") ?? target), request);
     const headers = new Headers();
     headers.set("content-type", contentType.includes("mpegurl") ? contentType : "application/vnd.apple.mpegurl");
@@ -220,7 +220,11 @@ function rewritePlaylist(text: string, baseUrl: URL, request: NextRequest) {
   }).join("\n");
 }
 
-function rewritePlaylistToWorker(text: string, baseUrl: URL, headersParam: string | null) {
+function rewritePlaylistToWorker(text: string, baseUrl: URL, headersParam: string | null, streamTicket: string | null = null) {
+  // The Premium stream ticket (see resolver-worker STREAM_TICKET_SECRET) rides
+  // along to child playlists and every segment URL.
+  // v1 (HMAC) and v2 (ECDSA, the default) tickets; anything else is dropped.
+  const ticket = streamTicket && /^v[12]\.[\w.-]{10,400}$/.test(streamTicket) ? streamTicket : null;
   // Hybrid hop for providers that block Cloudflare-originated fetches (e.g. CF
   // error 1003 on the playlist host): this Netlify function fetches the small
   // manifest, while heavy segment traffic is rewritten to the resolver worker.
@@ -243,11 +247,13 @@ function rewritePlaylistToWorker(text: string, baseUrl: URL, headersParam: strin
       params.set("url", absolute.toString());
       if (headersParam) params.set("headers", headersParam);
       params.set("rewrite", "worker");
+      if (ticket) params.set("t", ticket);
       return `/api/proxy?${params.toString()}`;
     }
     const proxied = new URL(`${resolverUrl}/media`);
     proxied.searchParams.set("url", absolute.toString());
     if (headersParam) proxied.searchParams.set("h", headersParam);
+    if (ticket) proxied.searchParams.set("t", ticket);
     return proxied.toString();
   };
 

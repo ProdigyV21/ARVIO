@@ -24,6 +24,18 @@
   force = true
 
 [[redirects]]
+  from = "/companion"
+  to = "/"
+  status = 301
+  force = true
+
+[[redirects]]
+  from = "/companion/*"
+  to = "/"
+  status = 301
+  force = true
+
+[[redirects]]
   from = "/go/premium"
   to = "/premium-redirect.html"
   status = 200

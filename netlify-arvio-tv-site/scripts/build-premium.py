@@ -15,7 +15,6 @@ keys = {
     'sync': 'Same profiles, libraries and watch progress',
     'play': 'Browser playback and one-click VLC',
     'free': 'Android and TV app remains completely free',
-    'join': 'Subscribe on Ko-fi',
     'explore': 'Discover',
     'period': '/ month',
     'notice': 'ARVIO is a media hub for sources you configure. Catalog entries do not grant viewing rights. Connect only services and media you are authorized to use.',
@@ -24,6 +23,9 @@ keys = {
 }
 hosting = json.loads((site / 'scripts/premium-hosting.json').read_text(encoding='utf-8'))
 membership_terms = json.loads((site / 'scripts/premium-membership-terms.json').read_text(encoding='utf-8'))
+# Product copy for hosted ARVIO Web (plans, refund promise, explore mode). Locales without
+# a translation fall back per key to English; 'open' falls back to the localized 'explore'.
+offer_copy = json.loads((site / 'scripts/premium-offer-copy.json').read_text(encoding='utf-8'))
 manifest = json.loads((root / 'web/lib/i18n/manifest.json').read_text())
 languages = json.loads((root / 'web/lib/i18n/languages.json').read_text(encoding='utf-8'))
 languages.append({'code': 'en-GB', 'label': 'English (UK)'})
@@ -89,7 +91,6 @@ self_host_copy = {
 feature_copy = {
     'en': {
         'hosting': 'Live TV. Your favourite sources. Your ARVIO, in a browser. We handle the hosting — you enjoy the setup you already love.',
-        'coffee': 'Buy the developer a monthly coffee. Get ARVIO Web hosted 24/7 in return — no server to set up or maintain. Your support keeps ARVIO growing.',
         'tv': 'Live TV in your browser',
         'tvBody': 'Bring your own IPTV service. Browse the programme guide and play supported channels right in ARVIO Web.',
         'download': 'Your sources. Ready to download.',
@@ -98,12 +99,10 @@ feature_copy = {
         'serverBody': 'Bring your Jellyfin, Plex, Emby or Silo library into the same familiar interface.',
         'sportsBody': 'Explore sports events and find sources from your connected services.',
         'free': 'Android & TV stay free. Self-hosting stays free.',
-        'join': 'Get Premium on Ko-fi',
     },
     'nl': {
         'intro': 'Neem je ARVIO mee naar Windows, Mac, iPhone, iPad en smart-tv-browsers. Je profielen, bibliotheken, add-ons en kijkvoortgang blijven verbonden via ARVIO Cloud.',
         'hosting': 'Live-tv. Jouw favoriete bronnen. Jouw ARVIO, in de browser. Wij regelen de hosting — jij geniet van je vertrouwde setup.',
-        'coffee': 'Trakteer de ontwikkelaar elke maand op een kop koffie. Krijg er 24/7 gehost ARVIO Web voor terug — zonder zelf een server te beheren. Jouw steun laat ARVIO groeien.',
         'tv': 'Live-tv in je browser',
         'tvBody': 'Koppel je eigen IPTV-dienst. Bekijk de tv-gids en speel ondersteunde zenders rechtstreeks af in ARVIO Web.',
         'download': 'Jouw bronnen. Klaar om te downloaden.',
@@ -112,11 +111,14 @@ feature_copy = {
         'serverBody': 'Breng je Jellyfin-, Plex-, Emby- of Silo-bibliotheek samen in dezelfde vertrouwde interface.',
         'sportsBody': 'Ontdek sportevenementen en vind bronnen via je gekoppelde diensten.',
         'free': 'Android en tv blijven gratis. Zelf hosten ook.',
-        'join': 'Neem Premium via Ko-fi',
         'play': 'Afspelen in je browser of openen in VLC',
         'sync': 'Je profielen, bibliotheken en kijkvoortgang blijven verbonden',
     },
 }
+# Per-locale copy written or reviewed by native speakers (scripts/premium-native-copy.json),
+# keyed by the page's language code (de-DE, fr-FR, ...).
+native_path = site / 'scripts/premium-native-copy.json'
+native_copy = json.loads(native_path.read_text(encoding='utf-8')) if native_path.exists() else {}
 data = {}
 for entry in languages:
     code = entry['code']
@@ -127,7 +129,7 @@ for entry in languages:
     translations = {key: normalized.get(value.lower(), value) for key, value in keys.items()}
     # The main copy must never silently fall back to English.
     if base != 'en':
-        for key in ('intro', 'sync', 'play', 'free', 'join', 'period', 'notice', 'explore'):
+        for key in ('intro', 'sync', 'play', 'free', 'period', 'notice', 'explore'):
             assert keys[key].lower() in normalized, (code, key)
             assert isinstance(normalized[keys[key].lower()], str) and normalized[keys[key].lower()].strip(), (code, key)
     translations['explore'] = ('Explore' if base == 'en' else translations['explore']) + ' ARVIO Web'
@@ -138,7 +140,6 @@ for entry in languages:
     translations['membershipTerms'] = membership_terms.get(locale, membership_terms.get(base))
     assert translations['membershipTerms'], ('Missing membership terms', code)
     translations.update({
-        'coffee': translations['hosting'],
         'tvBody': translations['play'],
         'libraryBody': translations['sync'],
         'serverBody': 'Jellyfin · Plex · Emby · Silo',
@@ -146,6 +147,11 @@ for entry in languages:
     })
     if base in ('en', 'nl'):
         translations.update(feature_copy[base])
+    offer = offer_copy.get(locale) or offer_copy.get(code) or offer_copy.get(base) or {}
+    for key, english in offer_copy['en'].items():
+        translations[key] = offer.get(key) or (translations['explore'] if key == 'open' and base != 'en' else english)
+    # Reviewed native copy for the localized Premium pages wins over everything above.
+    translations.update(native_copy.get(code, {}))
     data[code] = {'label': entry['label'], **translations}
 required_copy = set(re.findall(r'data-copy="([A-Za-z]+)"', (out / 'index.html').read_text(encoding='utf-8')))
 for code, copy in data.items():

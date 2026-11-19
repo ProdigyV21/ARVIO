@@ -4,10 +4,16 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const siteRoot = path.resolve(__dirname, '..');
+// Languages generated from scripts/guide-locales/*.json (see generate-localized-guides.mjs).
+const extraLocales = fs.readdirSync(path.join(siteRoot, 'scripts/guide-locales')).filter((name) => name.endsWith('.json'))
+  .map((name) => JSON.parse(fs.readFileSync(path.join(siteRoot, 'scripts/guide-locales', name), 'utf8')));
+const englishSlugs = { hub: '/android-tv-media-hub/', jellyfin: '/jellyfin-android-tv/', servers: '/plex-emby-jellyfin/', sources: '/debrid-usenet-android-tv/',
+  tracking: '/trakt-simkl-sync/', live: '/live-tv-epg/', subtitles: '/ai-subtitles-android-tv/', firetv: '/fire-tv-media-player/', web: '/arvio-web/' };
 const origin = 'https://arvio.tv';
 const routes = [
   { route: '/android-tv-media-hub/', pt: '/pt-br/central-midia-android-tv/', es: '/es/centro-multimedia-android-tv/', updated: '2026-10-04' },
-  { route: '/arvio-web/', pt: '/pt-br/arvio-web/', es: '/es/arvio-web/', updated: '2026-10-04' },
+  { route: '/arvio-web/', pt: '/pt-br/arvio-web/', es: '/es/arvio-web/', updated: '2026-10-24' },
+  { route: '/arvio-iphone-ipad/', updated: '2026-10-24' },
   { route: '/fire-tv-media-player/', pt: '/pt-br/arvio-fire-tv/', es: '/es/arvio-fire-tv/', updated: '2026-10-04' },
   { route: '/jellyfin-android-tv/', pt: '/pt-br/jellyfin-android-tv/', es: '/es/jellyfin-android-tv/', updated: '2026-10-08' },
   { route: '/plex-emby-jellyfin/', pt: '/pt-br/plex-emby-jellyfin/', es: '/es/plex-emby-jellyfin/', updated: '2026-10-08' },
@@ -132,8 +138,12 @@ for (const { route, canonical, pt, es, updated } of pages) {
     const alternates = links.filter((node) => node.attrs.hreflang);
     // An English-only page may omit hreflang, or declare only itself and
     // x-default. Never manufacture alternate URLs for untranslated content.
+    const extra = Object.fromEntries(extraLocales.flatMap((data) => {
+      const key = Object.keys(englishSlugs).find((name) => englishSlugs[name] === route);
+      return key && data.slugs[key] ? [[data.locale.hreflang, origin + data.slugs[key]]] : [];
+    }));
     const expected = pt && es
-      ? { en: canonical, 'pt-BR': origin + pt, es: origin + es, 'x-default': canonical }
+      ? { en: canonical, 'pt-BR': origin + pt, es: origin + es, ...extra, 'x-default': canonical }
       : alternates.length ? { en: canonical, 'x-default': canonical } : {};
     assert.deepEqual(alternates.map((node) => node.attrs.hreflang).sort(), Object.keys(expected).sort(), 'Exactly one alternate per language');
     for (const alternate of alternates) {

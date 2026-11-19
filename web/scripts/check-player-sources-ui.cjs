@@ -9,10 +9,10 @@ const { chromium } = require('@playwright/test');
 
 const root = path.resolve(__dirname, '..');
 const evidence = path.resolve(root, '../artifacts/player-sources-ui');
-const styles = ['globals.css', 'premium.css', 'tv-guide.css', 'source-setup.css'];
+const { APP_SHEETS: styles } = require('./app-styles.cjs');
 
 function jsxWithClass(file, className) {
-  const source = ts.createSourceFile(file, fs.readFileSync(path.join(root, file), 'utf8'), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const source = ts.createSourceFile(file, require('../tests/sources.cjs').sourceOf(file), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
   const matches = [];
   function visit(node) {
     if (ts.isJsxElement(node) && node.openingElement.attributes.properties.some(attr =>
@@ -76,7 +76,7 @@ async function main() {
     `, resolveDir: root, loader: 'tsx' },
     bundle: true, write: false, jsx: 'automatic', define: { 'process.env.NODE_ENV': '"test"' },
   });
-  const files = new Map(styles.map(name => ['/' + name, { type: 'text/css', data: fs.readFileSync(path.join(root, 'app', name)) }]));
+  const files = new Map(styles.map(name => ['/' + name, { type: 'text/css', data: fs.readFileSync(path.join(root, name)) }]));
   files.set('/app.js', { type: 'text/javascript', data: bundle.outputFiles[0].contents });
   files.set('/backdrop.jpg', { type: 'image/jpeg', data: fs.readFileSync(path.join(root, '../app/src/androidTest/assets/library/157336-backdrop.jpg')) });
   const server = http.createServer((req, res) => {

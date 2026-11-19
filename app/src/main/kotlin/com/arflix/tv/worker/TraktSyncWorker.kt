@@ -5,6 +5,7 @@ import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.arflix.tv.data.repository.TraktRepository
 import com.arflix.tv.data.repository.TraktSyncService
+import com.arflix.tv.data.repository.SyncResult
 import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn
 import dagger.hilt.android.EntryPointAccessors
@@ -57,12 +58,13 @@ class TraktSyncWorker(
         val syncMode = inputData.getString(INPUT_SYNC_MODE) ?: SYNC_MODE_INCREMENTAL
 
         return try {
-            when (syncMode) {
+            val syncResult = when (syncMode) {
                 SYNC_MODE_FULL -> deps.traktSyncService().performFullSync()
                 else -> deps.traktSyncService().performIncrementalSync()
             }
-            Result.success()
+            workResult(syncResult, runAttemptCount)
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
             if (runAttemptCount < 3) {
                 Result.retry()
             } else {
@@ -72,4 +74,10 @@ class TraktSyncWorker(
     }
 
     // TraktSyncService handles the sync pipeline.
+}
+
+internal fun workResult(result: SyncResult, attempts: Int): androidx.work.ListenableWorker.Result = when {
+    result is SyncResult.Success -> androidx.work.ListenableWorker.Result.success()
+    result is SyncResult.Error && !result.reconnectRequired && attempts < 3 -> androidx.work.ListenableWorker.Result.retry()
+    else -> androidx.work.ListenableWorker.Result.failure()
 }

@@ -1,4 +1,5 @@
 "use client";
+import "@/app/collections.css";
 
 import { useEffect, useState } from "react";
 import { FolderOpen } from "lucide-react";

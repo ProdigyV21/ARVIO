@@ -200,7 +200,15 @@ fun ContinueWatchingCard(
             overflow = TextOverflow.Ellipsis,
         )
 
-        val meta = episodeInfo ?: item.year.takeIf { it.isNotBlank() }
+        // Standardized: episode info (S1:E5) when available, else "{type} · {year}".
+        val meta = episodeInfo ?: item.year.takeIf { it.isNotBlank() }?.let { year ->
+            val typeLabel = when (item.mediaType) {
+                MediaType.TV -> stringResource(R.string.series)
+                MediaType.MOVIE -> stringResource(R.string.movie)
+                else -> ""
+            }.takeIf { it.isNotBlank() }
+            if (typeLabel != null) "$typeLabel · $year" else year
+        }
         if (meta != null) {
             Text(
                 text = meta,

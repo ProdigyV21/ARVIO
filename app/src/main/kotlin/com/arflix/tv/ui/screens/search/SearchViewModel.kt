@@ -2,6 +2,9 @@ package com.arflix.tv.ui.screens.search
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.arflix.tv.BuildConfig
+import com.arflix.tv.data.api.YouTubeKidsCorpus
+import com.arflix.tv.data.api.YouTubeSearchApi
 import com.arflix.tv.data.model.MediaItem
 import com.arflix.tv.data.model.MediaType
 import com.arflix.tv.data.model.Category
@@ -144,25 +147,78 @@ data class SearchUiState(
     // AI
     val aiInterpretation: String? = null,
     val aiResults: List<MediaItem> = EMPTY_MEDIA_ITEMS,
-    val isAiSearch: Boolean = false
+    val isAiSearch: Boolean = false,
+    /** The YouTube row of the current query; it only searches when its button is pressed. */
+    val youTube: YouTubeSearch = YouTubeSearch()
 ) {
     /**
-     * Rows or grid: the media type alone is not a filter (it is always set), and neither is the
-     * sort order — sorting five browse rows that each have their own sort would mean nothing.
-     * Everything else switches the rows over to the filtered grid.
+     * The default view keeps its themed browse rows. A non-default sort opens the grid so the
+     * requested order applies to one list, even without a genre or another narrowing filter.
      */
     val hasDiscoverFilters: Boolean
         get() = selectedGenres.isNotEmpty() || rating.isSet || decade != null || year != null ||
-            certification != null || language != null || hideWatched
+            certification != null || language != null || hideWatched || sortOption != SortOption.POPULAR
 }
+
+enum class YouTubeSearchStatus { IDLE, LOADING, LOADED, FAILED }
+
+/** The on-demand YouTube results of [query] (see [YouTubeSearchApi]). */
+data class YouTubeSearch(
+    val query: String = "",
+    val status: YouTubeSearchStatus = YouTubeSearchStatus.IDLE,
+    val videos: List<MediaItem> = EMPTY_MEDIA_ITEMS
+)
 
 @HiltViewModel
 class SearchViewModel @Inject constructor(
     private val mediaRepository: MediaRepository,
     private val traktRepository: TraktRepository,
     private val recentSearchRepository: RecentSearchRepository,
-    private val kidsContentFilter: KidsContentFilter
+    private val kidsContentFilter: KidsContentFilter,
+    private val youTubeSearchApi: YouTubeSearchApi = YouTubeSearchApi()
 ) : ViewModel() {
+
+    /** False in Play builds: the YouTube button never shows there. */
+    val youTubeSearchAvailable: Boolean = BuildConfig.YOUTUBE_SEARCH_AVAILABLE
+    private var youTubeJob: Job? = null
+
+    /**
+     * Searches YouTube for the current query: the one place this screen ever asks YouTube
+     * anything, and only because the viewer pressed the button. A kids profile searches
+     * YouTube Kids at the tier of its age level instead.
+     */
+    fun searchYouTube() {
+        if (!youTubeSearchAvailable) return
+        val query = _uiState.value.query.trim()
+        if (query.isEmpty()) return
+        val current = _uiState.value.youTube
+        if (current.query == query && current.status == YouTubeSearchStatus.LOADING) return
+        val corpus = kidsContentFilter.state.value.level?.let(YouTubeKidsCorpus::forLevel)
+        youTubeJob?.cancel()
+        _uiState.update { it.copy(youTube = YouTubeSearch(query, YouTubeSearchStatus.LOADING)) }
+        youTubeJob = viewModelScope.launch {
+            val result = try {
+                // Kids profiles: YouTube Kids at the profile's tier, never regular YouTube.
+                val videos = com.arflix.tv.data.repository.YouTubeSource.search(
+                    query, corpus, youTubeSearchApi::search
+                )
+                YouTubeSearch(query, YouTubeSearchStatus.LOADED, mediaRepository.youTubeSearchItems(videos))
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                android.util.Log.w("SearchViewModel", "YouTube search failed: ${e.message}")
+                YouTubeSearch(query, YouTubeSearchStatus.FAILED)
+            }
+            // A query typed meanwhile has its own (still unpressed) button.
+            _uiState.update { if (it.query.trim() == query) it.copy(youTube = result) else it }
+        }
+    }
+
+    private fun resetYouTubeFor(query: String) {
+        if (_uiState.value.youTube.query == query.trim()) return
+        youTubeJob?.cancel()
+        _uiState.update { it.copy(youTube = YouTubeSearch()) }
+    }
 
     val kidsFilterState: StateFlow<KidsContentFilter.State> = kidsContentFilter.state
 
@@ -240,7 +296,7 @@ class SearchViewModel @Inject constructor(
                 val oneYearAgo = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(cal.time)
 
                 // Each row brings its own sort and vote floor — that is what makes it a row and
-                // not a slice of the grid, so the sort chip deliberately does not reach here.
+                // not a slice of the grid. A non-default sort opens the grid instead.
                 //
                 // The rows stay on the any-release window on purpose (B34): "New Releases" asks
                 // what turned up in the last 90 days, and a film that just landed on a platform
@@ -271,7 +327,7 @@ class SearchViewModel @Inject constructor(
                 }
                 categories.forEach { cat -> cat.items.forEach { mediaRepository.cacheItem(it) } }
                 val isWatched = watchedMatcher()
-                _uiState.value = _uiState.value.copy(discoverCategories = markWatched(categories, isWatched), isDiscoverLoading = false)
+                _uiState.update { it.copy(discoverCategories = markWatched(categories, isWatched), isDiscoverLoading = false) }
                 // Fetch logos for top items in each row (background, non-blocking)
                 launch(Dispatchers.IO) {
                     val slots = Semaphore(3)
@@ -294,7 +350,7 @@ class SearchViewModel @Inject constructor(
                 }
             } catch (e: CancellationException) { throw e }
             catch (_: Exception) {
-                _uiState.value = _uiState.value.copy(isDiscoverLoading = false)
+                _uiState.update { it.copy(isDiscoverLoading = false) }
             }
         }
     }
@@ -395,7 +451,7 @@ class SearchViewModel @Inject constructor(
     ): List<MediaItem> =
         mediaRepository.discoverTv(
             genres = genres,
-            sortBy = request.sort,
+            sortBy = if (request.sort == "primary_release_date.desc") "first_air_date.desc" else request.sort,
             minVoteCount = request.minVotes,
             page = request.page,
             year = request.year,
@@ -734,8 +790,7 @@ class SearchViewModel @Inject constructor(
         val state = _uiState.value
         if (state.sortOption == sort) return
         _uiState.value = state.copy(sortOption = sort)
-        // The sort order only reaches the grid; the browse rows each carry their own.
-        if (state.hasDiscoverFilters) applyDiscoverSelection()
+        applyDiscoverSelection()
     }
 
     fun setRating(rating: RatingFilter) {
@@ -799,6 +854,7 @@ class SearchViewModel @Inject constructor(
         if (!state.hasDiscoverFilters) return
         _uiState.value = state.copy(
             selectedGenres = emptyList(),
+            sortOption = SortOption.POPULAR,
             rating = RatingFilter(),
             decade = null,
             year = null,
@@ -818,7 +874,8 @@ class SearchViewModel @Inject constructor(
         if (newQuery == _uiState.value.query) return
         searchJob?.cancel()
         activeSearchQuery = null
-        _uiState.value = _uiState.value.copy(query = newQuery, isAiSearch = false, aiInterpretation = null, aiResults = EMPTY_MEDIA_ITEMS)
+        resetYouTubeFor(newQuery)
+        _uiState.update { it.copy(query = newQuery, isAiSearch = false, aiInterpretation = null, aiResults = EMPTY_MEDIA_ITEMS) }
         if (newQuery.trim().isEmpty()) {
             clearSearch()
             return
@@ -826,10 +883,10 @@ class SearchViewModel @Inject constructor(
         filterDebounceJob?.cancel()
         discoverJob?.cancel()
         cancelGridLoad()
-        _uiState.value = _uiState.value.copy(isLoading = true, isDiscoverLoading = false,
+        _uiState.update { it.copy(isLoading = true, isDiscoverLoading = false,
             isGridLoading = false, isGridLoadingMore = false, error = null, results = EMPTY_MEDIA_ITEMS,
             movieResults = EMPTY_MEDIA_ITEMS, tvResults = EMPTY_MEDIA_ITEMS,
-            personResults = EMPTY_CATEGORIES, cardLogoUrls = EMPTY_LOGO_URLS)
+            personResults = EMPTY_CATEGORIES, cardLogoUrls = EMPTY_LOGO_URLS) }
         debounceSearch()
     }
 

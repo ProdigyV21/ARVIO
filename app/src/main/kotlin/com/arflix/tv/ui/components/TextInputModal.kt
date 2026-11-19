@@ -203,7 +203,7 @@ fun TextInputModal(
             Column(
                 modifier = Modifier
                     .width(500.dp)
-                    .background(Color(0xFF1A1A1A), RoundedCornerShape(20.dp))
+                    .background(BackgroundElevated, RoundedCornerShape(16.dp))
                     .padding(32.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {

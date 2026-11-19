@@ -8,6 +8,13 @@ const LEGACY_TRAKT_TOKEN_KEY = "arvio.web.trakt.token";
 const TRAKT_PROGRESS_CACHE_KEY = "arvio.web.trakt.progressCache.v3";
 const TRAKT_PROGRESS_TTL_MS = 15 * 60 * 1000;
 
+// OAuth pending/expired/denied, rate limits and other API rejections are final
+// responses. Retrying them through a blocked server hides the actual result.
+function canFallbackFromTraktError(error: unknown): boolean {
+  const status = (error as { status?: number })?.status;
+  return status === undefined || status >= 500;
+}
+
 export interface TraktDeviceCode {
   device_code: string;
   user_code: string;
@@ -108,7 +115,20 @@ export class TraktClient {
   }
 
   async pollDeviceToken(code: string): Promise<TraktToken> {
-    const response = await this.exchangeDeviceToken(code);
+    const response = await this.exchangeDeviceToken(code).catch(error => {
+      const messages: Record<number, string> = {
+        400: "Trakt has not approved this device yet.",
+        404: "This Trakt code is invalid. Get a new code and try again.",
+        409: "This Trakt code has already been used. Get a new code and try again.",
+        410: "This Trakt code has expired. Get a new code and try again.",
+        418: "Trakt authorization was declined. Get a new code to try again.",
+        429: "Trakt is temporarily limiting requests. Please wait before trying again."
+      };
+      if (error instanceof HttpError && messages[error.status]) {
+        throw new HttpError(error.status, messages[error.status], error.retryAfter);
+      }
+      throw error;
+    });
     return {
       access_token: response.access_token,
       refresh_token: response.refresh_token,
@@ -118,19 +138,18 @@ export class TraktClient {
 
   private async exchangeDeviceToken(code: string) {
     type TokenResponse = { access_token: string; refresh_token: string; expires_in: number };
-    // Trakt Cloudflare-blocks our Netlify backend's egress IP, so the token
-    // exchange goes direct from the browser (which Trakt does not block). This
-    // needs the client secret; it is already shipped in the public Android app,
-    // so exposing it here is not a new disclosure.
+    // Legacy custom deployments can configure direct exchange. Hosted builds
+    // leave this unset and exchange tokens through the server.
     if (config.traktClientSecret) {
       try {
-        return await jsonRequest<TokenResponse>("https://api.trakt.tv/oauth/device/token", {
+        return await this.directTrakt<TokenResponse>("/oauth/device/token", {
           method: "POST",
           headers: { "content-type": "application/json", "trakt-api-version": "2" },
           body: JSON.stringify({ code, client_id: config.traktClientId, client_secret: config.traktClientSecret })
         });
-      } catch {
-        // fall through to the backend proxy
+      } catch (error) {
+        if (!canFallbackFromTraktError(error)) throw error;
+        // Only a transport/service failure may try the backend.
       }
     }
     return this.trakt<TokenResponse>("/oauth/device/token", {
@@ -499,10 +518,7 @@ export class TraktClient {
         } catch (error) {
           // A 401 is an expired/revoked token, not a transport problem — the
           // proxy would fail identically, so let it bubble to the retry below.
-          const status = (error as { status?: number }).status;
-          if (status === 401 || status === 429) throw error;
-          if (status === 404 && /^(search\/tmdb\/\d+|shows\/\d+\/seasons\/\d+)(\?|$)/.test(path.replace(/^\/+/, ""))) throw error;
-          if (path.startsWith("/scrobble/") && [400, 404, 409, 422, 429].includes((error as { status?: number }).status ?? 0)) throw error;
+          if (!canFallbackFromTraktError(error)) throw error;
           return jsonRequest<T>(url.toString(), request);
         }
       }
@@ -596,11 +612,19 @@ export class TraktClient {
     });
     if (!response.ok) {
       const raw = await response.text().catch(() => "");
-      // Carry the status: callers distinguish an expired token (401 → refresh
-      // and retry) from a network-level block (403 → try the proxy instead).
-      throw new HttpError(response.status, raw.includes("Cloudflare") || raw.includes("<html")
-        ? "Trakt is blocking this network request right now."
-        : raw || `Trakt request failed with ${response.status}`);
+      const html = /text\/html/i.test(response.headers.get("content-type") ?? "") || /<!doctype\s+html|<html(?:\s|>)/i.test(raw);
+      if (html && [401, 403].includes(response.status)) {
+        throw new HttpError(503, "Trakt is temporarily blocking this connection. Please try again later.", response.headers.get("retry-after"));
+      }
+      let description: string | undefined;
+      try {
+        const data = JSON.parse(raw);
+        description = data.error_description ?? data.message ?? data.error;
+      } catch { /* Trakt also returns empty/plain-text OAuth errors. */ }
+      throw new HttpError(response.status,
+        html ? "Trakt is temporarily unavailable. Please try again later."
+          : typeof description === "string" ? description : raw.slice(0, 240) || `Trakt request failed with ${response.status}`,
+        response.headers.get("retry-after"));
     }
     if (response.status === 204) return undefined as T;
     return (await response.json()) as T;
@@ -617,7 +641,8 @@ export class TraktClient {
       // A rejected refresh token is not a temporary empty-library result.
       // Clear it so the UI cannot keep advertising Trakt as connected while
       // Continue Watching falls back to a stale snapshot.
-      if (error instanceof HttpError && (error.status === 401 || error.status === 403)) this.setToken(null);
+      if (error instanceof HttpError && error.status === 401 &&
+          this.profileId === profileId && this.token?.refresh_token === token) this.setToken(null);
       throw error;
     }
     finally { if (this.refreshInFlight?.promise === promise) this.refreshInFlight = null; }
@@ -637,17 +662,19 @@ export class TraktClient {
     };
     type RefreshResponse = { access_token: string; refresh_token?: string; expires_in: number };
     let response: RefreshResponse;
-    // Direct to Trakt (Netlify egress is Cloudflare-blocked); backend proxy is
-    // the fallback for environments without the client secret configured.
+    // Keep legacy direct exchange consistent with the normal server flow.
     if (config.traktClientSecret) {
-      response = await jsonRequest<RefreshResponse>("https://api.trakt.tv/oauth/token", {
+      response = await this.directTrakt<RefreshResponse>("/oauth/token", {
         method: "POST",
         headers: { "content-type": "application/json", "trakt-api-version": "2" },
         body: JSON.stringify(body)
-      }).catch(() => this.trakt<RefreshResponse>("/oauth/token", {
-        method: "POST",
-        body: JSON.stringify({ grant_type: "refresh_token", refresh_token: token.refresh_token })
-      }));
+      }).catch(error => {
+        if (!canFallbackFromTraktError(error)) throw error;
+        return this.trakt<RefreshResponse>("/oauth/token", {
+          method: "POST",
+          body: JSON.stringify({ grant_type: "refresh_token", refresh_token: token.refresh_token })
+        });
+      });
     } else {
       response = await this.trakt<RefreshResponse>("/oauth/token", {
         method: "POST",

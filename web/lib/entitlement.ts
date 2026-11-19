@@ -1,4 +1,5 @@
 import { AuthClient } from "./auth";
+import { REGIONAL_YEARLY_URL, regionalYearly } from "./regionalPricing";
 import { config } from "./config";
 import { jsonRequest } from "./http";
 import { loadStored, saveStored } from "./storage";
@@ -13,11 +14,19 @@ import { currentEntitlement } from "./entitlementPolicy";
 
 export interface EntitlementState {
   entitled: boolean;
-  reason: "subscription" | "trial" | "expired" | "none" | "unknown";
+  // "grace": the paid end has passed but a late renewal is still expected;
+  // access continues until graceEndsAt.
+  reason: "subscription" | "grace" | "partner" | "trial" | "expired" | "none" | "unknown";
   status: string;
   source: string | null;
   tier?: string | null;
+  plan?: "monthly" | "yearly" | "partner" | null;
+  organizationName?: string;
   expiresAt: string | null;
+  graceEndsAt?: string | null;
+  // Paid at least once: tells a lapsed member apart from someone who never paid.
+  everPaid?: boolean;
+  startedAt?: string | null;
   trialAvailable: boolean;
   trialDurationDays?: number;
   updatedAt?: string | null;
@@ -91,6 +100,50 @@ export async function linkKofiEmail(auth: AuthClient, kofiEmail: string, code?: 
   });
   if (!state.verificationRequired && key === accountCacheKey(auth)) cache(key, state);
   return state;
+}
+
+export interface ReferralStatus {
+  code: string;
+  link: string;
+  joined: number;
+  rewardsThisYear: number;
+  rewardsLeftThisYear: number;
+  rewardDays: number;
+  maxRewardsPerYear: number;
+}
+
+export function fetchReferralStatus(auth: AuthClient): Promise<ReferralStatus> {
+  return backendRequest<ReferralStatus>(auth, "referral-status", { method: "GET" });
+}
+
+export function claimReferralCode(auth: AuthClient, code: string): Promise<{ ok: boolean; error?: string }> {
+  return backendRequest(auth, "referral-claim", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ code })
+  });
+}
+
+export const EXIT_REASONS = ["too_expensive", "playback_problems", "missing_feature", "only_needed_briefly", "use_android_instead", "other"] as const;
+export type ExitReason = typeof EXIT_REASONS[number];
+
+export function submitExitSurvey(auth: AuthClient, reason: ExitReason, detail = ""): Promise<{ ok: boolean }> {
+  return backendRequest(auth, "premium-exit-survey", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ reason, detail: detail.slice(0, 300) })
+  });
+}
+
+export function fetchStreamTicket(auth: AuthClient): Promise<{ ticket: string; expiresAt: string }> {
+  return backendRequest(auth, "stream-ticket", { method: "GET" });
+}
+
+// The 12-month pass on Ko-fi Shop; empty when the yearly plan is not set up.
+// Visitors from regional-price countries get the 50% discount link instead.
+export function kofiYearlyUrl(): string {
+  if (!config.kofiYearlyUrl) return "";
+  return regionalYearly() ? REGIONAL_YEARLY_URL : config.kofiYearlyUrl;
 }
 
 // URL the paywall's subscribe button opens. Set NEXT_PUBLIC_KOFI_URL to your

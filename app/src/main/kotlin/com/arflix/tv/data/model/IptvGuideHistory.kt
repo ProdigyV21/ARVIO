@@ -39,6 +39,7 @@ internal object IptvGuideHistory {
     private fun programKey(program: IptvProgram) = "${program.startUtcMillis}|${program.endUtcMillis}|${program.title}"
 
     fun canReplay(channel: IptvChannel?, program: IptvProgram, nowMs: Long): Boolean {
+        if (channel?.catchupType == "none") return false
         if (program.catchupAvailable == false || program.startUtcMillis >= nowMs) return false
         if (program.catchupAvailable == true) return true
         val windowMs = days(channel) * DAY_MS
@@ -47,6 +48,7 @@ internal object IptvGuideHistory {
 
     fun days(channel: IptvChannel?, force: Boolean = false): Int {
         if (channel == null) return 0
+        if (channel.catchupType == "none") return 0
         val explicit = channel.catchupDays.coerceIn(0, 7)
         if (explicit > 0) return explicit
         if (!channel.catchupType.isNullOrBlank() || !channel.catchupSource.isNullOrBlank() ||

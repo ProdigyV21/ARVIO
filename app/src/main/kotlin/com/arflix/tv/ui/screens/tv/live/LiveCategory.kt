@@ -2,6 +2,7 @@ package com.arflix.tv.ui.screens.tv.live
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import com.arflix.tv.R
@@ -333,13 +334,39 @@ internal fun prepareGuideChannels(
     sortOrder: String,
     hiddenGroups: Set<String>,
     restrictedGroups: Set<String>,
+    channelOrder: Map<String, List<String>> = emptyMap(),
 ): List<EnrichedChannel> {
     val visible = channels.filterNot {
         isHiddenPlaylistGroup(it, hiddenGroups) || isRestrictedPlaylistGroup(it, restrictedGroups) ||
             (categoryId in setOf("all", "fav", "recent") && it.isAdult)
     }.distinctBy { it.id }
     return if (categoryId == "fav" || categoryId == "recent") visible
-        else sortChannelsByConfiguredOrder(visible, sortOrder)
+        else applyManualChannelOrder(sortChannelsByConfiguredOrder(visible, sortOrder), categoryId, channelOrder)
+}
+
+/**
+ * Manual channel order of a playlist category (set in ARVIO Web Settings):
+ * channels listed for the category's `playlistId|group` key come first, in
+ * that order; every other channel keeps the configured sort order after them.
+ * Only playlist categories (`grp:`) are affected; "All", countries and the
+ * global sections keep the sort order.
+ */
+internal fun applyManualChannelOrder(
+    channels: List<EnrichedChannel>,
+    categoryId: String,
+    channelOrder: Map<String, List<String>>,
+): List<EnrichedChannel> {
+    if (channelOrder.isEmpty() || channels.size < 2 || !categoryId.startsWith("grp:")) return channels
+    val ranks = HashMap<String, Map<String, Int>>()
+    fun rankOf(channel: EnrichedChannel): Int {
+        val key = playlistGroupKey(channelPlaylistId(channel.id), channel.source.group)
+        val rank = ranks.getOrPut(key) {
+            channelOrder[key]?.withIndex()?.associate { (index, id) -> id to index }.orEmpty()
+        }
+        return rank[channel.id] ?: Int.MAX_VALUE
+    }
+    if (channels.none { rankOf(it) != Int.MAX_VALUE }) return channels
+    return channels.sortedBy(::rankOf)
 }
 
 internal fun sortChannelsByConfiguredOrder(
@@ -385,6 +412,26 @@ fun liveCategoryLabel(raw: String): String = when (raw) {
     "Music" -> stringResource(R.string.live_cat_music)
     else -> raw
 }
+
+/**
+ * Category display names set in ARVIO Web Settings (iptvByProfile.groupNames:
+ * `playlistId|group` -> name). Provided by [LiveTvScreen] for the sidebar and
+ * the group home; everything else keeps working on the playlist's own name.
+ */
+val LocalLiveGroupNames = staticCompositionLocalOf<Map<String, String>> { emptyMap() }
+
+/** The name the user gave this playlist category in ARVIO Web, or null (also for non-playlist categories). */
+internal fun customGroupName(category: LiveCategory, names: Map<String, String>): String? {
+    if (names.isEmpty()) return null
+    val playlistId = category.playlistId?.removePrefix("source:")?.takeIf { it.isNotBlank() } ?: return null
+    val group = category.playlistGroupName ?: return null
+    return names[playlistGroupKey(playlistId, group)]
+}
+
+/** The label shown for a category: the user's own name for a playlist category, else [fallback] localized. */
+@Composable
+fun liveCategoryDisplayLabel(category: LiveCategory, fallback: String = category.label): String =
+    customGroupName(category, LocalLiveGroupNames.current) ?: liveCategoryLabel(fallback)
 
 /** Display-localization for [LiveSection.label] section headers. Unknown headers pass through. */
 @Composable

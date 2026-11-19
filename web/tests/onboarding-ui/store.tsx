@@ -10,6 +10,8 @@ let current = {
   toast: ""
 };
 function change(next: Partial<typeof current>) { current = { ...current, ...next }; listeners.forEach(listener => listener()); }
+export function useAppPick(..._keys: string[]) { return useApp(); }
+export function useAppSelector<T>(select: (store: ReturnType<typeof useApp>) => T) { return select(useApp()); }
 export function useApp() {
   const state = useSyncExternalStore(callback => { listeners.add(callback); return () => { listeners.delete(callback); }; }, () => current);
   return { ...state,

@@ -1,5 +1,5 @@
 import { isUncachedDebridStream, parseDebridStream } from "./debrid";
-import { audioDecodableForDevice, isBrowserPlayableStream, isDirectPlayableStream, videoDecodableForDevice } from "./streamCompatibility";
+import { audioDecodableForDevice, isBrowserPlayableStream, isDirectPlayableStream, playbackPlan, videoDecodableForDevice, type PlaybackPlan } from "./streamCompatibility";
 import type { StreamSource } from "./types";
 
 // Shared source ranking — the details source picker, the in-player source
@@ -20,12 +20,47 @@ import type { StreamSource } from "./types";
  */
 export type PlaybackTarget = "browser" | "external";
 
-export function sourcePickerScore(stream: StreamSource, target: PlaybackTarget = "browser") {
+/**
+ * What kind of device the browser runs on.
+ *
+ * "mobile" = phones and tablets (iPhone, iPad, Android touch devices). Their
+ * browsers play a 1080p MP4 instantly but choke on a 60 GB 4K remux: the file
+ * either needs the in-browser remux path (heavy on a phone CPU and battery) or
+ * stalls over cellular/Wi-Fi long before the first frame. Desktop keeps the
+ * quality-first ordering it always had.
+ */
+export type DeviceProfile = "mobile" | "desktop";
+
+let detectedProfile: DeviceProfile | null = null;
+
+export function detectDeviceProfile(nav: { userAgent?: string; maxTouchPoints?: number } | undefined =
+  typeof navigator === "undefined" ? undefined : navigator): DeviceProfile {
+  if (!nav) return "desktop";
+  const ua = nav.userAgent ?? "";
+  if (/iPhone|iPad|iPod|Android|Mobile/i.test(ua)) return "mobile";
+  // iPadOS 13+ reports a desktop Mac user agent but has touch points.
+  if (/Macintosh/.test(ua) && (nav.maxTouchPoints ?? 0) > 1) return "mobile";
+  return "desktop";
+}
+
+function currentDeviceProfile(): DeviceProfile {
+  detectedProfile ??= detectDeviceProfile();
+  return detectedProfile;
+}
+
+const GB = 1_000_000_000;
+
+export function sourcePickerScore(stream: StreamSource, target: PlaybackTarget = "browser", device: DeviceProfile = currentDeviceProfile()) {
   const text = `${stream.quality ?? ""} ${stream.source ?? ""} ${stream.description ?? ""} ${stream.size ?? ""}`.toLowerCase();
+  // Only in-browser playback on a phone/tablet changes the order; an external
+  // player (VLC/Infuse) on the same phone still wants the best release.
+  const mobile = target === "browser" && device === "mobile";
   let score = 0;
-  score += qualityScore(text);
-  score += sizeScore(stream, text);
-  if (text.includes("remux")) score += 180;
+  score += mobile ? mobileQualityScore(text) : qualityScore(text);
+  score += mobile ? mobileSizeScore(stream, text) : sizeScore(stream, text);
+  // A remux is the largest possible file for its resolution — the best pick
+  // for a desktop, the worst for a phone browser.
+  if (text.includes("remux")) score += mobile ? -150 : 180;
   if (text.includes("bluray") || text.includes("blu-ray")) score += 70;
   if (text.includes("web-dl") || text.includes("webrip")) score += 35;
   if (text.includes("hdr10+") || text.includes("dolby vision") || /\bdv\b/i.test(text)) score += 28;
@@ -44,7 +79,9 @@ export function sourcePickerScore(stream: StreamSource, target: PlaybackTarget =
   // free file-hosts (hubcloud/R2/pixeldrain mirrors) frequently don't and die
   // at play time — prefer debrid at equal quality.
   if (parseDebridStream(stream.url)) score += 55;
-  if (isDirectPlayableStream(stream)) score += 3;
+  // On a phone, "plays natively without conversion" is worth more than any
+  // resolution step: the remux/transcode fallbacks are slow and battery-heavy.
+  if (isDirectPlayableStream(stream)) score += mobile ? 260 : 3;
   else if (isBrowserPlayableStream(stream)) score += 2;
   // Decisive, and only for in-browser playback: a source this browser cannot
   // decode never plays here regardless of quality, so it sinks below every
@@ -74,6 +111,30 @@ function qualityScore(text: string) {
   return 180;
 }
 
+// Phones: 1080p is the sweet spot (sharp on any phone/tablet screen, sane
+// bitrate); 4K and above rank below 1080p and 1440p.
+function mobileQualityScore(text: string) {
+  if (text.includes("4320") || text.includes("8k")) return 120;
+  if (text.includes("2160") || text.includes("4k") || text.includes("uhd")) return 240;
+  if (text.includes("1440")) return 380;
+  if (text.includes("1080")) return 420;
+  if (text.includes("720")) return 300;
+  if (text.includes("480")) return 120;
+  return 180;
+}
+
+// Phones: bigger is not better. Reward a normal streaming size, penalise files
+// that will not start quickly or keep up over a mobile connection.
+function mobileSizeScore(stream: StreamSource, text: string) {
+  const bytes = stream.sizeBytes ?? parseSizeBytes(stream.size || text);
+  if (!bytes) return 0;
+  if (bytes > 40 * GB) return -450;
+  if (bytes > 20 * GB) return -300;
+  if (bytes > 12 * GB) return -160;
+  if (bytes >= 1 * GB && bytes <= 8 * GB) return 40;
+  return 0;
+}
+
 function sizeScore(stream: StreamSource, text: string) {
   const bytes = stream.sizeBytes ?? parseSizeBytes(stream.size || text);
   if (!bytes) return 0;
@@ -95,4 +156,45 @@ function parseSizeBytes(value: string) {
   if (unit === "tb") return amount * 1_000_000_000_000;
   if (unit === "gb") return amount * 1_000_000_000;
   return amount * 1_000_000;
+}
+
+type PlanOf = (stream: StreamSource) => Pick<PlaybackPlan, "route" | "method">;
+const METHOD_RANK: Record<PlaybackPlan["method"], number> = { direct: 0, remux: 1, transcode: 2 };
+
+/**
+ * Best-first order for playing in THIS browser: sources that play as they are,
+ * then those that need repackaging, then provider conversion; quality and
+ * debrid preference decide within each method. Autoplay, the details source
+ * picker and the in-player source list all use this one comparator, so "the
+ * next source" means the same thing everywhere.
+ */
+export function compareForBrowser(a: StreamSource, b: StreamSource, planOf: PlanOf = playbackPlan) {
+  return METHOD_RANK[planOf(a).method] - METHOD_RANK[planOf(b).method]
+    || sourcePickerScore(b, "browser") - sourcePickerScore(a, "browser");
+}
+
+export type PlaybackGroups = {
+  /** Plays in this browser (directly or after conversion), best first. */
+  here: StreamSource[];
+  /** No browser route: external players only, quality first. */
+  external: StreamSource[];
+};
+
+/** Split and order a source list into "Plays here" and "External player". */
+export function groupSourcesForPlayback(streams: StreamSource[], planOf: PlanOf = playbackPlan): PlaybackGroups {
+  const here: StreamSource[] = [];
+  const external: StreamSource[] = [];
+  for (const stream of streams) {
+    if (stream.url && planOf(stream).route === "here") here.push(stream);
+    else external.push(stream);
+  }
+  here.sort((a, b) => compareForBrowser(a, b, planOf));
+  external.sort((a, b) => sourcePickerScore(b, "external") - sourcePickerScore(a, "external"));
+  return { here, external };
+}
+
+/** The combined order (plays-here group first) used by every source list. */
+export function orderSourcesForPlayback(streams: StreamSource[], planOf: PlanOf = playbackPlan) {
+  const groups = groupSourcesForPlayback(streams, planOf);
+  return [...groups.here, ...groups.external];
 }

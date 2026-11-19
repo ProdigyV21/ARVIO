@@ -1,10 +1,9 @@
 # ARVIO Web
 
 ARVIO's browser media hub for Windows, macOS, Linux, iPhone, iPad and TV browsers.
-The webapp source is included in this repository. **You can self-host it without
-an ARVIO Premium subscription and use your own API credentials.** The paid
-[hosted service](https://web.arvio.tv) is optional; self-hosting does not grant
-access to that service or include subscriptions/content from third parties.
+The webapp source is included in this repository. **Self-host it on your own
+computer or server with Node.js or Docker Compose and your own API credentials.**
+Media and access to third-party services are not included.
 
 ## Quick Start: Node.js
 
@@ -81,7 +80,7 @@ and troubleshooting are in [SELF-HOSTING.md](docs/SELF-HOSTING.md).
 
 With `NEXT_PUBLIC_SELF_HOSTED=true`, profiles/settings/history stay in that
 browser, TMDB/Trakt/Simkl API routes use your credentials directly, and ARVIO
-Cloud, membership requests and Premium funnel reporting are disabled. A
+Cloud, membership requests and hosted-service analytics are disabled. A
 separately configured resolver remains optional. Built-in catalogs and your
 configured integrations still contact their respective third-party services.
 
@@ -100,7 +99,7 @@ Back up this directory securely; clearing site cookies requires reconnecting SIM
 ## Maintainers: Official Hosted Service
 
 Production `web.arvio.tv` uses the same source with self-hosted mode disabled
-and its existing Cloud and Premium configuration. Do not apply the self-hosted
+and its existing Cloud and access-control configuration. Do not apply the self-hosted
 environment example to the official site.
 
 The deployment workflow is `../.github/workflows/deploy-web.yml`, with

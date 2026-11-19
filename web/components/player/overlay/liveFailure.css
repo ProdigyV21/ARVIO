@@ -1,0 +1,39 @@
+/* Live TV error card: outside players sit below the main actions, as a fallback. */
+.player-error-secondary {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  margin-top: 4px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+  width: 100%;
+}
+.player-error-secondary > small {
+  color: rgba(255, 255, 255, 0.62);
+  font-size: 12px;
+  letter-spacing: 0.02em;
+}
+.player-error-secondary .player-error-external {
+  opacity: 0.86;
+}
+.player-overlay.player-docked .player-error-secondary { display: none; }
+/* The docked Live TV player is small: the heading says what happened, the
+   explanation is clamped (full screen shows all of it). */
+.player-overlay.player-docked .player-error { padding-bottom: 46px; } /* clear the dock's own controls */
+.player-overlay.player-docked .player-error-card { gap: 6px; padding: 10px 12px; }
+.player-overlay.player-docked .player-error .player-error-card > svg { width: 20px; height: 20px; }
+.player-overlay.player-docked .player-error .player-error-card p { font-size: 15px; }
+.player-overlay.player-docked .player-error .player-error-card > span {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  font-size: 12px;
+  line-height: 1.35;
+}
+/* The "allow insecure content" steps are the whole point of that card: show
+   them in full, also in the docked player (scrolling if they don't fit). */
+.player-error-card[data-failure="insecure-media"] > span { max-width: 560px; text-align: start; line-height: 1.45; }
+.player-overlay.player-docked .player-error .player-error-card[data-failure="insecure-media"] > span {
+  display: block; -webkit-line-clamp: unset; overflow: auto; max-height: 9.5em; font-size: 13px;
+}

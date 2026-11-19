@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { safeProxyFetch, withinProxyBudget } from "@/lib/server/safeProxy";
+import { charsetFromContentType, decodeSubtitleBytes, normalizeSubtitleText } from "@/lib/playerSubtitles";
 
 export async function GET(request: NextRequest) {
   if (!withinProxyBudget(request.headers.get("x-nf-client-connection-ip") ?? "local")) {
@@ -21,8 +22,14 @@ export async function GET(request: NextRequest) {
       await response.body?.cancel();
       return NextResponse.json({ error: "Subtitle provider unavailable" }, { status: response.status, headers: { "cache-control": "no-store" } });
     }
-    const text = await response.text();
-    const webvtt = text.trimStart().startsWith("WEBVTT") ? text : srtToVtt(text);
+    // Bytes, not response.text(): legacy subtitle files are windows-125x /
+    // ISO-8859-x without a charset, and a UTF-8 decode turns their accents
+    // into replacement characters. ASS/SSA files are converted to WebVTT.
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    const { text } = decodeSubtitleBytes(bytes, charsetFromContentType(response.headers.get("content-type")));
+    let webvtt: string;
+    try { webvtt = normalizeSubtitleText(text); }
+    catch { return NextResponse.json({ error: "Not a subtitle file" }, { status: 422, headers: { "cache-control": "no-store" } }); }
 
     return new NextResponse(webvtt, {
       headers: {
@@ -37,8 +44,4 @@ export async function GET(request: NextRequest) {
     const timeout = error instanceof Error && ["AbortError", "TimeoutError"].includes(error.name);
     return NextResponse.json({ error: "Subtitle target unavailable or blocked" }, { status: timeout ? 504 : 502, headers: { "cache-control": "no-store" } });
   }
-}
-
-function srtToVtt(input: string) {
-  return `WEBVTT\n\n${input.replace(/\r/g, "").replace(/(\d\d:\d\d:\d\d),(\d\d\d)/g, "$1.$2")}`;
 }

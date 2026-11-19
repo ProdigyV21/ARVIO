@@ -19,10 +19,35 @@ let dolbyVision: DolbyVisionProbeResult | undefined;
 const acknowledgements = new Map<number, () => void>();
 const sleep = () => new Promise<void>((resolve) => setTimeout(resolve, 80));
 
+function httpFailureMessage(status: number) {
+  if (status >= 500) return `The source's server is unavailable (HTTP ${status})`;
+  if (status === 401 || status === 403) return `The host refused this link (HTTP ${status}); it may have expired`;
+  if (status === 404 || status === 410) return `The file is no longer on the host (HTTP ${status})`;
+  return `The host rejected the request (HTTP ${status})`;
+}
+
 async function probeInput(command: Extract<RemuxCommand, { type: "probe" }>) {
   let networkRetries = 0;
+  // IPTV panels count every open request as a connection and register one
+  // for every redirect they issue (#849): read one range at a time, and send
+  // this playback's later reads to the server the panel redirected to. A
+  // target that stops answering is forgotten and the panel asked again.
+  let redirected: string | undefined;
+  const open = async (url: string | URL | Request, init: RequestInit) => {
+    const target = command.iptv && redirected && String(url) === command.url ? redirected : undefined;
+    if (target) {
+      const reused = await fetch(target, init).catch((error) => { if (init.signal?.aborted) throw error; return null; });
+      if (reused && reused.status < 400) return reused;
+      await reused?.body?.cancel().catch(() => undefined);
+      if (redirected === target) redirected = undefined;
+    }
+    const response = await fetch(url, init);
+    if (command.iptv && response.redirected && response.url && String(url) === command.url) redirected = response.url;
+    return response;
+  };
   input = new Input({ formats: ALL_FORMATS, source: new UrlSource(command.url, {
     maxCacheSize: 8 * 1024 * 1024,
+    ...(command.iptv ? { parallelism: 1 } : {}),
     getRetryDelay: (attempts, error) => {
       // UrlSource resumes failed bodies from their last byte but resets its
       // attempt counter there. Cap retries across the entire input, not per range.
@@ -38,10 +63,17 @@ async function probeInput(command: Extract<RemuxCommand, { type: "probe" }>) {
       init?.signal?.addEventListener("abort", abort, { once: true });
       if (init?.signal?.aborted) controller.abort();
       let timer = setTimeout(abort, 15000);
-      const response = await fetch(url, { ...init, signal: controller.signal }).catch((error) => {
+      const response = await open(url, { ...init, signal: controller.signal }).catch((error) => {
         clearTimeout(timer); init?.signal?.removeEventListener("abort", abort); throw error;
       });
       clearTimeout(timer);
+      // Report the host's real answer: a 503 is a server outage, not a
+      // missing range feature.
+      if (response.status >= 400) {
+        await response.body?.cancel();
+        init?.signal?.removeEventListener("abort", abort);
+        throw new Error(httpFailureMessage(response.status));
+      }
       // Range-ignorant hosts otherwise cause UrlSource to cache a whole multi-GB file.
       if (new Headers(init?.headers).has("range") && response.status !== 206) {
         await response.body?.cancel();
@@ -72,7 +104,9 @@ async function probeInput(command: Extract<RemuxCommand, { type: "probe" }>) {
   if (video.codec === "hevc") {
     // The demuxer otherwise discards dvcC/dvvC and incorrectly labels profile 5
     // as ordinary HEVC. Probe only the chosen file, never every source in a list.
-    dolbyVision = await probeDolbyVision(command.url, { headers: command.headers, trackId: video.id });
+    const dolbyVisionUrl = redirected ?? command.url;
+    dolbyVision = await probeDolbyVision(dolbyVisionUrl, { headers: command.headers, trackId: video.id });
+    if (dolbyVision.status === "unknown" && dolbyVisionUrl !== command.url) dolbyVision = await probeDolbyVision(command.url, { headers: command.headers, trackId: video.id });
     if (dolbyVision.status === "present" && !canExtractHdr10BaseLayer(dolbyVision)) {
       videoReason = `Dolby Vision profile ${dolbyVision.config.profile} has no verified browser-safe HDR10 conversion. Choose a non-DV source or an external player.`;
     } else if (dolbyVision.status === "unknown" || (command.expectDolbyVision && dolbyVision.status === "absent")) {

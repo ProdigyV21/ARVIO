@@ -49,6 +49,8 @@ internal fun qualityScoreForAutoPlay(stream: StreamSource): Int {
 }
 
 internal fun matchesAutoplayLimits(stream: StreamSource, minimumQuality: Int, limits: AutoplayLimits): Boolean {
+    // Never picked on its own: playing it only shows the addon's "downloading" video.
+    if (isAwaitingDebridDownload(stream)) return false
     val quality = qualityScoreForAutoPlay(stream)
     if (quality < minimumQuality) return false
     if (limits.qualityScore != Int.MAX_VALUE && (quality == 0 || quality > limits.qualityScore)) return false
@@ -121,6 +123,14 @@ internal fun isAutoPlayableStream(stream: StreamSource): Boolean {
     if (!isDirectStreamUrl(url)) return false
     return !isPendingDebridStream(stream)
 }
+
+/**
+ * A debrid file the service has not downloaded yet. AIOStreams marks it with ⏳ in the source name
+ * ("[RD⏳]", "TB ⏳"); playing it starts the download and shows a short "downloading" video
+ * instead of the film. The user can still pick it by hand to start that download.
+ */
+internal fun isAwaitingDebridDownload(stream: StreamSource): Boolean =
+    (stream.rawLabel ?: stream.source).contains("⏳")
 
 internal fun isPendingDebridStream(stream: StreamSource): Boolean {
     val text = listOfNotNull(stream.source, stream.addonName, stream.quality, stream.url, stream.description)

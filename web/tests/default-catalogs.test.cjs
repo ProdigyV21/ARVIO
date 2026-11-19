@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { load, storage } = require('./load.cjs');
 const { defaultCatalogs, legacyWebDefaultCatalogs, mergeCatalogs, setDefaultCollectionsEnabled,
-  DEFAULT_COLLECTIONS_DISABLED } = load('lib/catalogs.ts');
+  addMissingDefaultCollections, DEFAULT_COLLECTIONS_DISABLED } = load('lib/catalogs.ts');
 const { collectionHomeCatalogs, collectionFolders, collectionMediaTypes } = load('lib/collectionPresentation.ts');
 const plain = value => JSON.parse(JSON.stringify(value));
 const ids = rows => Array.from(rows, row => row.id);
@@ -10,18 +10,19 @@ const fresh = () => plain(defaultCatalogs);
 const legacy = () => plain(legacyWebDefaultCatalogs);
 const custom = { id: 'my-list', name: 'My list', sourceType: 'mdblist', sourceUrl: 'https://mdblist.com/lists/me/list', enabled: true };
 
-test('fresh web defaults contain the same ten catalogs and five collection rails as Android', () => {
+test('fresh web defaults contain the same twelve catalogs and five collection rails as Android', () => {
   const defaults = mergeCatalogs(undefined);
-  assert.equal(defaults.length, 58);
+  assert.equal(defaults.length, 60);
   assert.deepEqual(ids(defaults.filter(c => c.kind === 'STANDARD')), [
     'trending_movies', 'trending_tv', 'trending_anime', 'favorite_tv', 'top10_movies_today',
-    'top10_shows_today', 'just_added', 'top_movies_week', 'new_kdramas', 'coming_soon'
+    'top10_shows_today', 'just_added', 'top_movies_week', 'new_kdramas', 'coming_soon',
+    'wetrakr_recs_shows', 'wetrakr_recs_movies'
   ]);
   const home = collectionHomeCatalogs(defaults);
-  assert.equal(home.length, 15);
+  assert.equal(home.length, 17);
   assert.deepEqual(ids(home).slice(0, 8), ['trending_movies', 'trending_tv', 'trending_anime',
     'collection_rail_featured', 'collection_rail_service', 'collection_rail_genre', 'collection_rail_franchise', 'collection_rail_decade']);
-  assert.equal(new Set(ids(defaults)).size, 58);
+  assert.equal(new Set(ids(defaults)).size, 60);
   for (const id of ['latest_tv', 'action', 'bond', 'tmdb_popular_movies', 'tmdb_popular_tv', 'sports']) {
     assert.ok(!defaults.some(c => c.id === id), `${id} is not a default row`);
   }
@@ -119,4 +120,20 @@ test('default service genre discover and franchise sources load without add-ons'
   assert.ok(calls.some(url => url.searchParams.get('with_runtime.lte') === '120'));
   const films = await api.loadCollectionSource({ kind: 'TMDB_COLLECTION', tmdbCollectionId: 1241 }, 'en-US', []);
   assert.deepEqual(ids(films), [1, 2]);
+});
+
+test('addMissingDefaultCollections appends built-in collections without dropping custom rows', () => {
+  const customPack = { id: 'collection_rail_custom', kind: 'COLLECTION_RAIL', collectionRailKey: 'my_pack', name: 'My Pack', sourceType: 'preinstalled', enabled: true };
+  const existingNetflix = { ...defaultCatalogs.find(c => c.id === 'collection_service_netflix'), enabled: false };
+  const current = [custom, customPack, existingNetflix];
+  const added = addMissingDefaultCollections(current, [DEFAULT_COLLECTIONS_DISABLED, 'collection_service_netflix', 'collection_rail_service', 'collection_row_service']);
+  assert.equal(added.catalogs[0].id, custom.id);
+  assert.equal(added.catalogs[1].id, customPack.id);
+  assert.equal(added.catalogs.find(c => c.id === 'collection_service_netflix').enabled, false, 'existing folder visibility stays intact');
+  assert.equal(added.catalogs.filter(c => c.id === 'collection_service_netflix').length, 1, 'no duplicates');
+  assert.ok(added.catalogs.some(c => c.id === 'collection_rail_service' && c.enabled));
+  assert.ok(!added.hiddenIds.includes(DEFAULT_COLLECTIONS_DISABLED));
+  assert.ok(!added.hiddenIds.includes('collection_row_service'));
+  assert.ok(added.hiddenIds.includes('collection_service_netflix'));
+  assert.equal(mergeCatalogs(added.catalogs, added.hiddenIds).find(c => c.id === 'collection_rail_service').enabled, true);
 });

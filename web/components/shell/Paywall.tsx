@@ -1,8 +1,9 @@
 "use client";
+import "@/app/premium.css";
 import { useTranslation } from "@/lib/i18n";
 
 
-import { BadgeCheck, ExternalLink, Loader2, RefreshCw } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { config } from "@/lib/config";
 import {
@@ -10,32 +11,44 @@ import {
   fetchEntitlement,
   type EntitlementState
 } from "@/lib/entitlement";
-import { authClient, useApp } from "@/lib/store";
+import { authClient, useAppPick } from "@/lib/store";
 import { capturePremiumAttribution, trackPremiumEvent, trackPremiumMilestone, TRIAL_INTENT_KEY } from "@/lib/premiumAnalytics";
 import { currentEntitlement, entitlementCheckDelay } from "@/lib/entitlementPolicy";
 import { EntitlementContext } from "@/lib/entitlementContext";
 import { ENTITLEMENT_REFRESH_EVENT } from "@/lib/entitlement";
 import { MembershipCheckout } from "./MembershipCheckout";
 import { WebFeaturePreview } from "./WebFeaturePreview";
+import { PremiumOffer } from "./PremiumOffer";
+import { MemberNotices } from "./MemberNotices";
+import { setPremiumGate, type PremiumIntent } from "@/lib/premiumGate";
+import { clearStreamTicket, refreshStreamTicket } from "@/lib/streamTicket";
+import { captureReferralCode, claimPendingReferral } from "@/lib/referral";
 
-// A still-valid cached membership survives transient backend errors. Unknown
-// access is retryable, not a free membership or a request to pay again.
+// Explore mode. Signed-in accounts use ARVIO Web freely; Premium is asked for
+// only when they start something that plays (see lib/premiumGate.ts). A
+// still-valid cached membership survives transient backend errors, and access
+// ending mid-film never stops the film: the next play asks again.
 export function EntitlementGate({ children }: { children: React.ReactNode }) {
-  const translateUi = useTranslation();
-  const { auth, signOut, goToLogin } = useApp();
+  const { auth } = useAppPick("auth");
   const accountId = auth?.userId ?? null;
   const [state, setState] = useState<EntitlementState | null>(() => cachedEntitlement(authClient));
   const [status, setStatus] = useState<"loading" | "ready" | "error">(state ? "ready" : "loading");
   const [retry, setRetry] = useState(0);
   const [stateAccountId, setStateAccountId] = useState(accountId);
+  const [offer, setOffer] = useState<{ intent: PremiumIntent; resume?: () => void } | null>(null);
   const lastVerifiedAt = useRef(Date.now());
   const lastRefreshAt = useRef(0);
+
+  // Invite links opened while already signed in.
+  useEffect(() => { if (config.paywallEnabled) captureReferralCode(); }, []);
 
   useEffect(() => {
     if (!config.paywallEnabled) return;
     const cached = cachedEntitlement(authClient);
     setStateAccountId(accountId);
     setState(cached);
+    setOffer(null);
+    clearStreamTicket();
     if (!accountId) {
       setStatus("ready");
       return;
@@ -69,7 +82,7 @@ export function EntitlementGate({ children }: { children: React.ReactNode }) {
           refreshedState = next;
           setState(next);
           setStatus("ready");
-          if ((!next.entitled || next.reason === "trial") && scheduleRetry) {
+          if (!next.entitled && scheduleRetry) {
             if (retryTimer) clearTimeout(retryTimer);
             retryTimer = setTimeout(() => refreshAccess(false), 3000);
           }
@@ -105,42 +118,68 @@ export function EntitlementGate({ children }: { children: React.ReactNode }) {
     };
   }, [accountId, state?.entitled, state?.reason, state?.expiresAt, retry]);
 
-  if (!config.paywallEnabled) return <>{children}</>;
   const access = stateAccountId === accountId ? currentEntitlement(state) : null;
-  if (access?.entitled && (status !== "error" || Date.now() - lastVerifiedAt.current < 6 * 60 * 60_000)) return <EntitlementContext.Provider value={access}>{children}</EntitlementContext.Provider>;
-  if (status === "loading" || stateAccountId !== accountId) {
-    return (
-      <main className="paywall-boot">
-        <Loader2 className="paywall-spinner" size={40} />
-      </main>
-    );
-  }
-  if (status === "error") {
-    return (
-      <main className="paywall">
-        <div className="paywall-card" role="alert">
-          <h1>{translateUi("We could not check your membership")}</h1>
-          <p className="paywall-sub">{translateUi("Your payment status has not changed. Please retry before subscribing again.")}</p>
-          <button className="paywall-trial" onClick={() => setRetry((value) => value + 1)}><RefreshCw size={16} /> {translateUi(" Check access again")}</button>
-          <button className="paywall-link-toggle" onClick={goToLogin}>{translateUi("Reconnect to Cloud")}</button>
-        </div>
-      </main>
-    );
-  }
+  const entitledNow = Boolean(access?.entitled) && (status !== "error" || Date.now() - lastVerifiedAt.current < 6 * 60 * 60_000);
+  const gate = useRef({ entitledNow, accountId });
+  gate.current = { entitledNow, accountId };
 
-  return (
-    <PaywallScreen
+  // Register the gate the store and details screen ask before anything plays.
+  useEffect(() => {
+    if (!config.paywallEnabled) return;
+    setPremiumGate((intent, resume) => {
+      if (gate.current.entitledNow) return true;
+      setOffer({ intent, resume });
+      if (gate.current.accountId) void trackPremiumEvent(authClient, "paywall_view", { entry: `explore_${intent}`, flow_version: "explore_v1" }, true);
+      return false;
+    });
+    return () => setPremiumGate(null);
+  }, []);
+
+  // Paid while the offer was open (or the check finished): continue where the
+  // member left off.
+  useEffect(() => {
+    if (!offer || !entitledNow) return;
+    const resume = offer.resume;
+    setOffer(null);
+    // Fetch the stream ticket first (bounded), so the resumed playback's relay
+    // URLs carry it.
+    let done = false;
+    const go = () => { if (!done) { done = true; resume?.(); } };
+    const timer = setTimeout(go, 2500);
+    void refreshStreamTicket(authClient).finally(() => { clearTimeout(timer); go(); });
+  }, [entitledNow, offer]);
+
+  // Premium stream tickets for the media relay, and invites to claim.
+  useEffect(() => {
+    if (!config.paywallEnabled || !accountId) return;
+    if (!entitledNow) { clearStreamTicket(); return; }
+    void refreshStreamTicket(authClient);
+    // Tabs and home-screen apps stay open for days: keep the ticket fresh.
+    const timer = window.setInterval(() => { void refreshStreamTicket(authClient); }, 6 * 60 * 60 * 1000);
+    return () => window.clearInterval(timer);
+  }, [accountId, entitledNow]);
+  useEffect(() => {
+    if (!config.paywallEnabled || !accountId || status !== "ready" || !access) return;
+    void claimPendingReferral(authClient, Boolean(access.everPaid || access.entitled));
+  }, [accountId, status, access?.everPaid, access?.entitled]);
+
+  if (!config.paywallEnabled) return <>{children}</>;
+  return <EntitlementContext.Provider value={access}>
+    {children}
+    <MemberNotices state={access} account={accountId} />
+    {offer && accountId && <PremiumOffer
+      intent={offer.intent}
       state={access}
-      accountId={accountId}
-      isSignedIn={Boolean(auth)}
+      status={status}
+      account={accountId}
+      onClose={() => setOffer(null)}
+      onRetry={() => setRetry((value) => value + 1)}
       onEntitled={(next) => {
         if (authClient.session?.userId !== accountId) return;
         lastVerifiedAt.current = Date.now(); setStateAccountId(accountId); setState(next); setStatus("ready");
       }}
-      onConnect={goToLogin}
-      onSignOut={signOut}
-    />
-  );
+    />}
+  </EntitlementContext.Provider>;
 }
 
 export function PaywallScreen({
@@ -163,6 +202,7 @@ export function PaywallScreen({
 
   useEffect(() => {
     capturePremiumAttribution();
+    captureReferralCode();
     // Old bookmarks and stored intents must never create a free entitlement.
     try { localStorage.removeItem(TRIAL_INTENT_KEY); } catch { /* storage is optional */ }
     if (!isSignedIn) return;
@@ -170,16 +210,15 @@ export function PaywallScreen({
     void trackPremiumMilestone(authClient, "account_connected");
   }, [isSignedIn, accountId]);
 
+  // Shown to signed-out visitors only: signing in opens ARVIO Web in explore
+  // mode, and Premium is offered when they press Play.
   return (
     <WebFeaturePreview isSignedIn={isSignedIn} expired={expired} onConnect={onConnect} onSignOut={onSignOut} checkout={
-        <MembershipCheckout
-          className="paywall-primary"
-          entry="feature_preview"
-          onEntitled={onEntitled}
-          showEmailHint
-        >
-          <BadgeCheck size={18} /> {isSignedIn ? translateUi("Subscribe on Ko-fi") : translateUi("Connect & get Premium")}<ExternalLink size={15} />
-        </MembershipCheckout>
+        isSignedIn ? <MembershipCheckout className="paywall-primary" entry="feature_preview" onEntitled={onEntitled} showEmailHint>
+          {translateUi("Subscribe on Ko-fi")}
+        </MembershipCheckout> : <button type="button" className="paywall-primary" onClick={onConnect}>
+          {translateUi("Sign in to look around")} <ArrowRight size={15} />
+        </button>
     } />
   );
 }

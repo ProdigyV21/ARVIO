@@ -8,7 +8,9 @@ export type RemuxHandle = {
   destroy: () => void;
 };
 
-type RemuxOptions = { signal?: AbortSignal; onError?: (message: string) => void; expectDolbyVision?: boolean; fallbackUrl?: string };
+type RemuxOptions = { signal?: AbortSignal; onError?: (message: string) => void; expectDolbyVision?: boolean; fallbackUrl?: string;
+  /** An IPTV panel file: one range read at a time, and the panel's redirect reused (see remux.worker.ts). */
+  iptv?: boolean };
 
 export async function probeAndPrepareRemux(
   url: string, requestHeaders?: Record<string, string>, preferredAudioLang?: string,
@@ -100,7 +102,7 @@ async function prepareRemux(
         if (data.type === "probe") finish(data.probe);
         if (data.type === "error") finish(undefined, data.message);
       };
-      send({ type: "probe", url, headers: requestHeaders, audioCodecs, language: preferredAudioLang, expectDolbyVision: options.expectDolbyVision });
+      send({ type: "probe", url, headers: requestHeaders, audioCodecs, language: preferredAudioLang, expectDolbyVision: options.expectDolbyVision, iptv: options.iptv });
     });
     probe.videoPlayable = probe.videoPlayable && !!probe.videoCodec && Mse.isTypeSupported(`video/mp4; codecs="${probe.videoCodec}"`);
     if (!probe.videoPlayable && !probe.videoReason) probe.videoReason = `This browser cannot decode the selected video track (${probe.videoCodec ?? "unknown codec"}).`;

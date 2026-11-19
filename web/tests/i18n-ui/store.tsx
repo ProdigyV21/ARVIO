@@ -5,6 +5,8 @@ export const defaultSettings = (window as any).fixtureDefaults;
 export const authClient = {session:null};
 const Context = createContext<any>(null);
 export const useApp = () => useContext(Context);
+export const useAppPick = (..._keys: string[]) => useApp();
+export const useAppSelector = (select: (store: any) => unknown) => select(useApp());
 export function FixtureStore({children}: {children:ReactNode}) {
   const [settings, setSettings] = useState({...defaultSettings, ...library.settings, language:'es-ES'});
   const [section, setSection] = useState('watchlist');

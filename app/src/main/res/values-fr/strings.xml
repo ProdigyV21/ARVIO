@@ -179,6 +179,7 @@
     <string name="frame_rate_desc">Désactivé, fluide ou toujours</string>
     <string name="quality_filters_desc">Exclure des niveaux de qualité sur cet appareil</string>
     <string name="card_layout_desc">Cartes paysage ou affiche</string>
+    <string name="card_layout_netflix_exception_desc">Sans effet sur les rangées standard de l’accueil façon Netflix</string>
     <string name="ui_mode_desc">Forcer TV, tablette ou téléphone</string>
     <string name="skip_profile_desc">Charge auto. le dernier profil utilisé au redémarrage</string>
     <string name="oled_black_background_desc">Utilisez des fonds noir pur pour les écrans OLED</string>
@@ -240,7 +241,7 @@
     <string name="ai_remove_hi_title">Retirer le texte pour malentendants</string>
     <string name="ai_remove_hi_desc">Supprimez les marqueurs pour malentendants [entre crochets] avant la traduction</string>
     <string name="ai_api_key_title">Clé API</string>
-    <string name="ai_api_key_desc">Saisissez manuellement votre clé API Groq ou Gemini</string>
+    <string name="ai_api_key_desc">Saisissez manuellement votre clé API Groq, Gemini ou Claude</string>
     <string name="ai_scan_qr_title">Scanner un QR code pour définir la clé</string>
     <string name="ai_scan_qr_desc">Ouvrez un navigateur sur votre téléphone pour saisir la clé API</string>
     <string name="ai_groq_disclaimer">Offre gratuite Groq : ~30 requêtes/min</string>
@@ -253,7 +254,7 @@
     <string name="ai_api_key_dialog_subtitle_gemini">Saisissez votre clé API Gemini</string>
     <string name="ai_key_saved_title">Clé API enregistrée</string>
     <string name="ai_key_saved_subtitle">La traduction IA est prête à l’emploi</string>
-    <string name="ai_qr_scan_hint">Scannez avec votre téléphone — choisissez Groq ou Gemini</string>
+    <string name="ai_qr_scan_hint">Scannez avec votre téléphone — choisissez Groq, Gemini ou Claude</string>
     <string name="smooth_scrolling">Défilement plus fluide</string>
     <string name="smooth_scrolling_desc">Utilisez des transitions fluides premium dans les rangées d’affiches</string>
 
@@ -524,14 +525,13 @@
     <string name="settings_test">Tester</string>
     <string name="settings_cd_qr_code">QR code</string>
     <string name="settings_cd_drag_reorder">Glisser pour réordonner</string>
-    <string name="settings_cd_manage_categories">Gérer les catégories</string>
     <string name="settings_progress_format">%1$s (%2$d%%)</string>
     <string name="settings_refreshing_channels_epg">Actualisation des chaînes et de l’EPG…</string>
     <string name="settings_reload_playlists_now">Recharger les playlists maintenant</string>
     <string name="settings_reload_playlist_epg_now">Recharger la playlist et l’EPG maintenant</string>
     <string name="settings_no_playlists_configured">Aucune playlist configurée</string>
     <string name="settings_remove_playlists_epg">Retirez les playlists, l’EPG et les favoris</string>
-    <string name="settings_add_iptv_lists_hint">Ajoutez jusqu’à 3 listes IPTV M3U / Xtream avec des noms</string>
+    <string name="settings_add_iptv_lists_hint">Ajoutez jusqu’à 10 listes IPTV M3U / Xtream avec des noms</string>
     <string name="settings_create_another_iptv">Créer une autre liste IPTV</string>
     <string name="settings_badge_full">PLEIN</string>
     <string name="settings_badge_add">AJOUTER</string>
@@ -541,7 +541,7 @@
     <string name="settings_badge_delete">SUPPRIMER</string>
     <string name="settings_n_selected">%1$d sélectionné(s)</string>
     <string name="settings_section_playlists">PLAYLISTS</string>
-    <string name="settings_add_tv_lists_hint">Ajoutez jusqu’à 3 listes TV M3U / Xtream</string>
+    <string name="settings_add_tv_lists_hint">Ajoutez jusqu’à 10 listes TV M3U / Xtream</string>
     <string name="settings_create_another_tv">Créer une autre liste TV</string>
     <string name="settings_badge_full_short">Plein</string>
     <string name="settings_search_lists">Rechercher des listes</string>
@@ -829,6 +829,7 @@
     <string name="component_label_media">Média</string>
     <string name="component_media_logo">Logo %1$s</string>
     <string name="component_badge_new_episode">Nouvel épisode</string>
+    <string name="component_badge_new_episode_short">Nouveau</string>
     <string name="component_ep_left_one">1 ép restant</string>
     <string name="component_eps_left">%1$d ép restants</string>
     <string name="component_season_episode_marker">S%1$d • E%2$d</string>
@@ -1139,4 +1140,15 @@
     <string name="live_menu_hide_category">Masquer la catégorie</string>
     <string name="live_menu_unhide_category">Afficher la catégorie</string>
     <string name="ratings">Notes des Épisodes</string>
+
+    <!-- Type on the phone (QR in TV text dialogs) -->
+    <string name="phone_input_button">Utiliser le téléphone</string>
+    <string name="phone_input_button_hide">Masquer le code du téléphone</string>
+    <string name="phone_input_qr_title">📱 Depuis le téléphone</string>
+    <string name="phone_input_qr_hint">Scannez pour le saisir ou le coller sur votre téléphone.</string>
+    <string name="phone_input_page_hint">Ce que vous envoyez s’affiche sur la TV. Appuyez sur OK pour l’enregistrer.</string>
+    <string name="phone_input_page_send">Envoyer à la TV</string>
+    <string name="phone_input_page_sent">Envoyé ✓ — appuyez sur OK sur la TV.</string>
+    <string name="phone_input_page_not_sent">Non envoyé</string>
+    <string name="phone_input_page_expired">Ce code a expiré — scannez à nouveau le QR code sur la TV.</string>
 </resources>

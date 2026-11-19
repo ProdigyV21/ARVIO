@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { Tv } from "lucide-react";
 import { useTranslation } from "@/lib/i18n";
-import { useApp } from "@/lib/store";
+import { useAppPick } from "@/lib/store";
 import type { IptvChannel } from "@/lib/types";
 import { RailScroller } from "./RailScroller";
 
@@ -12,7 +12,7 @@ const GUIDE_CHANNELS = 16;
 
 /** Home row of the profile's favorite IPTV channels (Android "Favorite TV"). */
 export function FavoriteTvRail({ title }: { title?: string }) {
-  const { favoriteTvChannels, iptvSnapshot, loadIptvGuide, playChannel } = useApp();
+  const { favoriteTvChannels, iptvSnapshot, loadIptvGuide, playChannel } = useAppPick("favoriteTvChannels", "iptvSnapshot", "loadIptvGuide", "playChannel");
   const label = title || "Favorite TV";
   // The guide only applies to a loaded playlist; the saved copy shows channels alone.
   const playlistLoaded = Boolean((iptvSnapshot.allChannels ?? iptvSnapshot.channels).length);

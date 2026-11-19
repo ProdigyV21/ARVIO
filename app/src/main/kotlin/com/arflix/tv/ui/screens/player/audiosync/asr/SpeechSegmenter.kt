@@ -6,9 +6,19 @@ import com.arflix.tv.ui.screens.player.audiosync.SpeechAnalyzer
 /**
  * Cuts the analysed 16 kHz audio into speech segments using the Silero probabilities that are
  * already being computed, so the recogniser only ever sees dialogue: no silence, music-only
- * stretches or effects. Segments are at most [MAX_SEGMENT_FRAMES] long so words come back quickly.
+ * stretches or effects. Segments are at most [maxSegmentFrames] long so words come back quickly.
  */
 internal class SpeechSegmenter(
+    /**
+     * Longest segment in 32 ms frames. Live subtitles keep this short (about 5 s): a line can only
+     * be translated once its segment has ended, so it bounds how far ahead playback must be held.
+     */
+    private val maxSegmentFrames: Int = MAX_SEGMENT_FRAMES,
+    /**
+     * Past this length, a segment also ends at the first chunk whose speech probability dips below
+     * [DIP_THRESHOLD], a pause between words, so long speech is not cut mid-word at the hard limit.
+     */
+    private val softMaxSegmentFrames: Int = maxSegmentFrames,
     private val onSegment: (startFrame: Int, samples: FloatArray) -> Unit,
 ) : SpeechAnalyzer.ChunkListener {
     private val chunk = SileroVad.CHUNK_SAMPLES
@@ -42,7 +52,8 @@ internal class SpeechSegmenter(
         }
         append(chunk)
         if (speech) lastSpeechFrame = frame
-        if (frame - lastSpeechFrame > HANGOVER_FRAMES || bufferFrames >= MAX_SEGMENT_FRAMES) finish()
+        val dip = bufferFrames >= softMaxSegmentFrames && probability < DIP_THRESHOLD
+        if (frame - lastSpeechFrame > HANGOVER_FRAMES || bufferFrames >= maxSegmentFrames || dip) finish()
     }
 
     @Synchronized
@@ -75,11 +86,12 @@ internal class SpeechSegmenter(
 
     companion object {
         private const val SPEECH_THRESHOLD = 0.5f
+        private const val DIP_THRESHOLD = 0.7f
         private const val PREROLL_FRAMES = 3
         private const val TAIL_FRAMES = 4
         private const val HANGOVER_FRAMES = 8
         private const val MIN_SPEECH_FRAMES = 6
         /** 12 s. */
-        private const val MAX_SEGMENT_FRAMES = 375
+        const val MAX_SEGMENT_FRAMES = 375
     }
 }

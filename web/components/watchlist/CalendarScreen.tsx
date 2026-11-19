@@ -1,8 +1,9 @@
 "use client";
+import "@/app/calendar.css";
 
-import { CalendarDays, ChevronLeft, ChevronRight } from "lucide-react";
+import { CalendarDays, ChevronLeft, ChevronRight, LayoutGrid, List } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent } from "react";
-import { useApp, authClient, traktClient } from "@/lib/store";
+import { authClient, traktClient, useAppPick } from "@/lib/store";
 import { useTranslation } from "@/lib/i18n";
 import { pullCloudWatchlist } from "@/lib/cloud";
 import { applyPendingWatchlist } from "@/lib/watchlistOutbox";
@@ -14,10 +15,12 @@ import { loadCalendar, type CalendarRead, type CalendarResult } from "@/lib/cale
 import { calendarConnectionFingerprint, mergeCalendarRefresh, readCalendarSnapshot, saveCalendarSnapshot } from "@/lib/calendarSnapshot";
 import { CALENDAR_KIND_LABELS, CALENDAR_SOURCE_LABELS, calendarDate, calendarEpisodeLabel, calendarMonthDays, calendarPreviewTitles, calendarRegion, calendarTime, parseCalendarDate, shiftCalendarMonth, type CalendarRelease, type CalendarSource } from "@/lib/calendar";
 import { CalendarSourceMenu } from "./CalendarSourceMenu";
+import { agendaDays } from "@/lib/calendarAgenda";
 import type { MediaItem } from "@/lib/types";
 
 type SourceFilter = "all" | CalendarSource;
-const views = new Map<string, { month: string; selected: string; source: SourceFilter }>();
+type CalendarLayout = "month" | "agenda";
+const views = new Map<string, { month: string; selected: string; source: SourceFilter; layout?: CalendarLayout }>();
 
 function SourceMark({ source }: { source: CalendarSource }) {
   return <span className={`calendar-source-mark ${source}`} aria-hidden="true"><img src={source === "arvio" ? "/arvio-icon-192.png" : `/logos/calendar_${source}.${source === "trakt" ? "svg" : "png"}`} alt="" /></span>;
@@ -36,18 +39,20 @@ function ReleaseCard({ release, locale, onOpen }: { release: CalendarRelease; lo
 }
 
 export function CalendarScreen() {
-  const { auth, activeProfile } = useApp();
+  const { auth, activeProfile } = useAppPick("auth", "activeProfile");
   return <CalendarContent key={`${auth?.userId ?? "local"}:${activeProfile?.id ?? "default"}`} />;
 }
 
 function CalendarContent() {
   const translateUi = useTranslation();
-  const { watchlist, auth, activeProfile, traktConnected, simklConnected, mdblistConnected, settings, openDetails } = useApp();
+  const { watchlist, auth, activeProfile, traktConnected, simklConnected, mdblistConnected, settings, openDetails } = useAppPick("watchlist", "auth", "activeProfile", "traktConnected", "simklConnected", "mdblistConnected", "settings", "openDetails");
   const scope = `${auth?.userId ?? "local"}:${activeProfile?.id ?? "default"}`;
   const saved = views.get(scope);
   const [month, setMonth] = useState(() => parseCalendarDate(saved?.month) ?? new Date());
   const [selected, setSelected] = useState(() => saved?.selected ?? calendarDate(new Date()));
   const [source, setSource] = useState<SourceFilter>(saved?.source ?? "all");
+  // Phones open on the list: a 7-column month grid has no room for titles there.
+  const [layout, setLayout] = useState<CalendarLayout>(() => saved?.layout ?? (typeof window !== "undefined" && window.matchMedia?.("(max-width: 680px)").matches ? "agenda" : "month"));
   const [loading, setLoading] = useState(true);
   const [retry, setRetry] = useState(0);
   const retryResult = useRef<CalendarResult | null>(null);
@@ -72,7 +77,7 @@ function CalendarContent() {
   const [loaded, setLoaded] = useState<{ key: string; value: CalendarResult | null }>(() => ({ key: snapshotKey, value: cached }));
   const result = loaded.key === snapshotKey ? loaded.value : cached;
   useEffect(() => { if (source !== "all" && !sources.includes(source)) setSource("all"); }, [source, sources]);
-  useEffect(() => { views.set(scope, { month: calendarDate(month), selected, source }); if (views.size > 12) views.delete(views.keys().next().value!); }, [scope, month, selected, source]);
+  useEffect(() => { views.set(scope, { month: calendarDate(month), selected, source, layout }); if (views.size > 12) views.delete(views.keys().next().value!); }, [scope, month, selected, source, layout]);
   useEffect(() => {
     const controller = new AbortController();
     const initial = readCalendarSnapshot(snapshotKey);
@@ -124,6 +129,13 @@ function CalendarContent() {
   const unavailableSource = result && (source === "all" ? result.failedSources.length > 0 : result.failedSources.includes(source));
   const incompleteSource = Boolean(result && (unavailableSource || result.failedTitles > 0 &&
     (source === "all" || result.failedTitleKeys?.some(key => key.startsWith(`${source}:`) || result.sourceTitleIds?.[source]?.includes(key)))));
+  const goToday = () => {
+    const now = new Date();
+    setMonth(new Date(now.getFullYear(), now.getMonth(), 1, 12));
+    setSelected(calendarDate(now));
+    if (layout === "month") focusDate.current = calendarDate(now);
+  };
+  const agenda = useMemo(() => agendaDays(releases, monthPrefix), [releases, monthPrefix]);
   const moveMonth = (step: number) => {
     const next = new Date(month.getFullYear(), month.getMonth() + step, 1, 12);
     next.setDate(Math.min(selectedDate.getDate(), new Date(next.getFullYear(), next.getMonth() + 1, 0).getDate()));
@@ -157,9 +169,24 @@ function CalendarContent() {
   return <section className="library-calendar" style={{ "--calendar-weeks": days.length / 7 } as CSSProperties} aria-label={translateUi("Release calendar")} aria-busy={loading}>
     <div className="calendar-toolbar">
       <div className="calendar-month-controls"><button aria-label={translateUi("Previous month")} onClick={() => moveMonth(-1)}><ChevronLeft /></button><h1>{month.toLocaleDateString(locale, { month: "long", year: "numeric" })}</h1><button aria-label={translateUi("Next month")} onClick={() => moveMonth(1)}><ChevronRight /></button></div>
+      <div className="calendar-view-controls">
+        <button type="button" className="calendar-today" onClick={goToday} disabled={selected === today && monthPrefix === today.slice(0, 7)}>{translateUi("Today")}</button>
+        <div className="calendar-layout-toggle" role="radiogroup" aria-label={translateUi("Calendar view")}>
+          <button type="button" role="radio" aria-checked={layout === "month"} aria-label={translateUi("Month")} title={translateUi("Month")} onClick={() => setLayout("month")}><LayoutGrid size={18} aria-hidden /></button>
+          <button type="button" role="radio" aria-checked={layout === "agenda"} aria-label={translateUi("List")} title={translateUi("List")} onClick={() => setLayout("agenda")}><List size={18} aria-hidden /></button>
+        </div>
+      </div>
       <CalendarSourceMenu value={source} sources={sources} counts={{ ...result?.sourceTitleCounts, ...(result ? { all: result.titleCount } : {}) }} onChange={setSource} />
       {source === "all" && <div className="calendar-source-legend">{sources.map(id => <span key={id} aria-label={CALENDAR_SOURCE_LABELS[id]}><SourceMark source={id} />{id !== "simkl" && CALENDAR_SOURCE_LABELS[id]}</span>)}</div>}
     </div>
+    {layout === "agenda" ? <div className="calendar-agenda" aria-busy={selectedLoading}>
+      {agenda.map(({ date, entries }) => { const day = parseCalendarDate(date)!; return <section key={date} className={`calendar-agenda-day ${date === today ? "is-today" : ""}`} aria-label={day.toLocaleDateString(locale, { weekday: "long", day: "numeric", month: "long" })}>
+        <h2><span>{day.toLocaleDateString(locale, { weekday: "short" })}</span><strong>{day.getDate()}</strong>{date === today && <em>{translateUi("Today")}</em>}</h2>
+        <div className="calendar-agenda-list">{entries.map(release => <ReleaseCard key={release.id} release={release} locale={locale} onOpen={openDetails} />)}</div>
+      </section>; })}
+      {!agenda.length && !loading && <div className="calendar-empty"><CalendarDays size={24} /><span>{incompleteSource ? translateUi("Release schedule incomplete") : emptySource ? (source === "all" ? translateUi("Add movies and series to your watchlists to see their releases here.") : translateUi("Add movies and series to this watchlist to see their releases here.")) : translateUi("No releases this month.")}</span></div>}
+      {!agenda.length && loading && <p className="calendar-loading-announcement" role="status">{translateUi("Loading watchlist releases…")}</p>}
+    </div> : <>
     <div className="calendar-weekdays" aria-hidden="true">{days.slice(0, 7).map(day => <span key={day.getDay()}><span className="calendar-weekday-full">{day.toLocaleDateString(locale, { weekday: "long" })}</span><span className="calendar-weekday-short">{day.toLocaleDateString(locale, { weekday: "short" })}</span></span>)}</div>
     <div className="calendar-month-grid" ref={grid} role="grid" aria-label={month.toLocaleDateString(locale, { month: "long", year: "numeric" })} aria-busy={selectedLoading}>
       {Array.from({ length: days.length / 7 }, (_, week) => <div className="calendar-week" role="row" key={week}>{days.slice(week * 7, week * 7 + 7).map(day => {
@@ -175,11 +202,12 @@ function CalendarContent() {
       })}</div>)}
     </div>
     {selectedLoading && <p className="calendar-loading-announcement" role="status">{translateUi("Loading watchlist releases…")}</p>}
+    </>}
     {result && (result.failedSources.length > 0 || result.failedTitles > 0) && <div className="calendar-status calendar-partial" role="status"><span>{result.failedSources.length ? `${translateUi("Could not load")}: ${result.failedSources.map(id => CALENDAR_SOURCE_LABELS[id]).join(", ")}. ` : ""}{result.failedTitles > 0 ? translateUi("Some release details unavailable") : ""}</span><button ref={retryButton} disabled={loading} onKeyDown={returnToDay} onClick={() => { retryResult.current = result; setRetry(value => value + 1); }}>{translateUi("Retry")}</button></div>}
-    <div className="calendar-selected-heading"><h2>{selectedDate.toLocaleDateString(locale, { weekday: "long", day: "numeric", month: "long" })}</h2><span>{selectedLoading && !selectedReleases.length ? translateUi("Finding your releases…") : translateUi("{value0} releases", { value0: selectedReleases.length })}</span></div>
+    {layout === "month" && <><div className="calendar-selected-heading"><h2>{selectedDate.toLocaleDateString(locale, { weekday: "long", day: "numeric", month: "long" })}</h2><span>{selectedLoading && !selectedReleases.length ? translateUi("Finding your releases…") : translateUi("{value0} releases", { value0: selectedReleases.length })}</span></div>
     <div className="calendar-release-row" ref={cards} onKeyDown={returnToDay}>
       {selectedReleases.map(release => <ReleaseCard key={release.id} release={release} locale={locale} onOpen={openDetails} />)}
       {!selectedReleases.length && !selectedLoading && <div className="calendar-empty"><CalendarDays size={24} /><span>{incompleteSource ? translateUi("Release schedule incomplete") : emptySource ? (source === "all" ? translateUi("Add movies and series to your watchlists to see their releases here.") : translateUi("Add movies and series to this watchlist to see their releases here.")) : translateUi("No scheduled releases for this day.")}</span>{nextRelease && <button className="calendar-next-release" onClick={() => chooseDay(parseCalendarDate(nextRelease.date)!, true)}>{translateUi("Next release")}</button>}</div>}
-    </div>
+    </div></>}
   </section>;
 }

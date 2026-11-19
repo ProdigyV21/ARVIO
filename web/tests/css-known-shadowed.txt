@@ -1,0 +1,46 @@
+# Already dead before the stylesheet split (see css-cascade-order.test.cjs).
+# These globals.css declarations already lost to the screen sheet rule when
+# everything was one stylesheet: cleanup candidates, not regressions. Do not
+# add new lines; move the override next to its base rule instead.
+.detail-actions .primary { font-size } @ app/globals.css < components/details/details.css
+.detail-actions .primary { min-height } @ app/globals.css < components/details/details.css
+.detail-actions .primary { padding-inline } @ app/globals.css < components/details/details.css
+.detail-actions .secondary { font-size } @ app/globals.css < components/details/details.css
+.detail-actions .secondary { min-height } @ app/globals.css < components/details/details.css
+.detail-actions .secondary { padding-inline } @ app/globals.css < components/details/details.css
+.detail-actions { gap } @ app/globals.css < components/details/details.css
+.detail-actions { grid-template-columns } @ app/globals.css < components/details/details.css
+.detail-section h3 { font-weight } @ app/globals.css < components/details/details.css
+.episode-row { background } @ app/globals.css < components/details/details.css
+.episode-row { border } @ app/globals.css < components/details/details.css
+.episode-row { border-radius } @ app/globals.css < components/details/details.css
+.episode-row { box-shadow } @ app/globals.css < components/details/details.css
+.episode-row { display } @ app/globals.css < components/details/details.css
+.episode-row { gap } @ app/globals.css < components/details/details.css
+.episode-row { padding } @ app/globals.css < components/details/details.css
+.episode-row { transition } @ app/globals.css < components/details/details.css
+.episodes-section.detail-wide .episode-row { min-height } @ app/globals.css < components/details/details.css
+.hero-actions .primary { font-size } @ app/globals.css < app/home.css
+.hero-actions .primary { min-height } @ app/globals.css < app/home.css
+.hero-actions .secondary { font-size } @ app/globals.css < app/home.css
+.hero-actions .secondary { min-height } @ app/globals.css < app/home.css
+.hero-actions { gap } @ app/globals.css < app/home.css
+.hero-meta > span { backdrop-filter } @ app/globals.css < app/home.css
+.hero-meta > span { background } @ app/globals.css < app/home.css
+.hero-meta > span { border } @ app/globals.css < app/home.css
+.hidden-groups .secondary { font-size } @ app/globals.css < components/livetv/livetv.css
+.profile-dialog { border-radius } @ app/globals.css < components/profile/profiles.css
+.profile-pick:focus-visible .avatar-tile { box-shadow } @ app/globals.css < components/profile/profiles.css
+.review-card { background } @ app/globals.css < components/details/details.css
+.review-card { border } @ app/globals.css < components/details/details.css
+.review-card { border-radius } @ app/globals.css < components/details/details.css
+.search-hero input { background } @ app/globals.css < app/search.css
+.search-hero input { border } @ app/globals.css < app/search.css
+.search-hero input { box-shadow } @ app/globals.css < app/search.css
+.search-hero input { font-size } @ app/globals.css < app/search.css
+.search-hero input { min-height } @ app/globals.css < app/search.css
+.search-hero input:focus { box-shadow } @ app/globals.css < app/search.css
+.search-hero { display } @ app/globals.css < app/search.css
+.search-hero { gap } @ app/globals.css < app/search.css
+.search-hero { min-height } @ app/globals.css < app/search.css
+.search-hero { padding } @ app/globals.css < app/search.css

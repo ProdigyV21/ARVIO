@@ -1,56 +1,30 @@
 "use client";
+import "./addons.css";
 import { useTranslation } from "@/lib/i18n";
 
+import { Server, Tv } from "lucide-react";
+import { useAppPick } from "@/lib/store";
+import { requestSourceSettings, sourceSetupState } from "@/lib/sourceSetup";
+import { AddonManager } from "./AddonManager";
 
-import { Plus, Server, Sparkles, Tv } from "lucide-react";
-import { useState } from "react";
-import { useApp } from "@/lib/store";
-import { addonProvidesStreams, requestSourceSettings, sourceSetupState } from "@/lib/sourceSetup";
-
-function resourceLabel(resources: unknown) {
-  if (!Array.isArray(resources)) return "manifest";
-  const names = resources.map((resource) => {
-    if (typeof resource === "string") return resource;
-    if (resource && typeof resource === "object") {
-      const name = (resource as { name?: unknown }).name;
-      return typeof name === "string" ? name : "";
-    }
-    return "";
-  }).filter(Boolean);
-  return names.join(", ") || "manifest";
-}
-
+/**
+ * The one addon manager (install with preview, enable/disable, order,
+ * configure, remove). Open it with `setSection("addons")` from anywhere.
+ */
 export function AddonsScreen() {
   const translateUi = useTranslation();
-  const { addons, addonsReady, settings, setSection, installAddon, removeAddon, setToast } = useApp();
-  const [url, setUrl] = useState("");
-  const [installing, setInstalling] = useState(false);
+  const { addons, addonsReady, settings, setSection } = useAppPick("addons", "addonsReady", "settings", "setSection");
   const sources = sourceSetupState(addons, settings);
   const openSettings = (target: "homeserver" | "tv") => {
     requestSourceSettings(target);
     setSection("settings");
   };
-  const install = async () => {
-    if (!url.trim()) {
-      setToast("Enter an addon manifest URL first.");
-      return;
-    }
-    setInstalling(true);
-    try {
-      await installAddon(url.trim());
-      setUrl("");
-      setToast("Addon installed.");
-    } catch (error) {
-      setToast(error instanceof Error ? error.message : "Could not install addon.");
-    } finally {
-      setInstalling(false);
-    }
-  };
   return (
-    <div className="screen has-section-heading">
+    <div className="screen has-section-heading addons-screen">
       <section className="section-heading">
         <p className="eyebrow">{translateUi("Sources")}</p>
         <h2>{translateUi("Addons")}</h2>
+        <p className="addons-intro">{translateUi("Addons supply catalogs, sources and subtitles. They are shared by every profile and every ARVIO app on your account.")}</p>
       </section>
       {addonsReady && !sources.hasOnDemand && <section className="source-setup-panel" aria-labelledby="addon-setup-title">
         <h3 id="addon-setup-title">{translateUi("Connect your media sources")}</h3>
@@ -61,27 +35,7 @@ export function AddonsScreen() {
           <button type="button" className="secondary" onClick={() => openSettings("tv")}><Tv size={17} />{translateUi("Live TV")}</button>
         </div>
       </section>}
-      <label htmlFor="addon-manifest-url" className="addon-install-label">{translateUi("Addon settings")}</label>
-      <form className="inline-form wide" onSubmit={(event) => { event.preventDefault(); if (!installing) void install(); }}>
-        <input id="addon-manifest-url" value={url} onChange={(event) => setUrl(event.target.value)} autoCapitalize="none" autoCorrect="off" spellCheck={false} inputMode="url" placeholder={translateUi("https://addon.example.com/manifest.json")} />
-        <button type="submit" className="primary" disabled={installing || !url.trim()}><Plus size={18} /> {installing ? translateUi("Installing...") : translateUi("Install")}</button>
-      </form>
-      <p className="addon-install-help">{translateUi("Install Stremio-compatible addons by URL above.")}</p>
-      <div className="addon-grid">
-        {addons.map((addon) => (
-          <article className="addon-tile" key={addon.id}>
-            <Sparkles size={24} />
-            <h3>{addon.name}</h3>
-            <p>{addon.description || addon.manifestUrl}</p>
-            <div className="chips">
-              <span>{addon.version}</span>
-              <span>{resourceLabel(addon.resources)}</span>
-              {addonProvidesStreams(addon) && <span>{translateUi("Streams")}</span>}
-            </div>
-            <button type="button" className="secondary" onClick={() => void removeAddon(addon).catch(error => setToast(error instanceof Error ? error.message : "Could not remove addon."))}>{translateUi("Remove")}</button>
-          </article>
-        ))}
-      </div>
+      <AddonManager />
     </div>
   );
 }

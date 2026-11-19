@@ -40,6 +40,7 @@ exclude it. Compose injects its values at runtime.
 3. **SIMKL:** register a new AUTH V2 app in [SIMKL developer settings](https://simkl.com/settings/developer/) using the public mobile/desktop/browser type. Set `SIMKL_V2_CLIENT_ID`; new PIN connections use PKCE and need no client secret. Keep `SIMKL_CLIENT_ID` only for existing V1 connections during migration. Custom-list contents require SIMKL PRO/VIP; ARVIO Premium does not provide that entitlement.
 4. **MDBList:** paste your personal key in the app's Accounts settings, not a public environment variable.
 5. **Telegram:** obtain application credentials at [my.telegram.org](https://my.telegram.org). The browser client embeds the application ID/hash. Never substitute a bot token, account password, one-time code or session string; account authorization happens separately in the app.
+6. **WeTrakr:** register your own public application with WeTrakr and set `WETRAKR_CLIENT_ID` to its app key. Device-code sign-in needs no client secret. Restart the server after changing this value. Each browser/device connects separately; ARVIO Cloud syncs routing preferences, not rotating WeTrakr credentials. Source installs store encrypted browser sessions in `.data/wetrakr-sessions` (override with `WETRAKR_SESSION_DIR`); Compose mounts a persistent volume there. Preserve that directory when replacing a container.
 
 Addons, debrid, IPTV and home servers are configured through the app. Their own
 fees, availability and rules still apply. Only connect content you are entitled

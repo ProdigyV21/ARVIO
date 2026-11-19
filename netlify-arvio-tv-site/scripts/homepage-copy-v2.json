@@ -7,14 +7,6 @@
   ["Collections, home servers, live TV, sports, addons, debrid and Telegram. Connect your own sources.", "Coleções, servidores domésticos, TV ao vivo, esportes, addons, debrid e Telegram. Conecte suas próprias fontes.", "Colecciones, servidores domésticos, TV en vivo, deportes, addons, debrid y Telegram. Conecta tus propias fuentes."],
   ["Download video", "Baixar vídeo", "Descargar vídeo"],
   ["ARVIO includes no media or third-party subscriptions.", "O ARVIO não inclui conteúdo nem assinaturas de terceiros.", "ARVIO no incluye contenidos ni suscripciones de terceros."],
-  ["Get Premium · $2.99/mo", "Premium · US$ 2,99/mês", "Premium · 2,99 $/mes"],
-  ["A monthly coffee for the developer. 24/7 hosted ARVIO Web for you.", "Um café mensal para o desenvolvedor. ARVIO Web hospedado 24/7 para você.", "Un café al mes para el desarrollador. ARVIO Web alojado 24/7 para ti."],
-  ["Monthly membership. Cancel anytime through Ko-fi.", "Assinatura mensal. Cancele a qualquer momento pelo Ko-fi.", "Suscripción mensual. Cancela cuando quieras a través de Ko-fi."],
-  ["See Premium benefits & try it free", "Veja os benefícios do Premium e teste grátis", "Descubre las ventajas de Premium y pruébalo gratis"],
-  ["A coffee for the dev.", "Um café para o dev.", "Un café para el dev."],
-  ["Your ARVIO, hosted.", "Seu ARVIO, hospedado.", "Tu ARVIO, alojado."],
-  ["$2.99/month. 24/7 hosted ARVIO Web.", "US$ 2,99/mês. ARVIO Web hospedado 24/7.", "2,99 $/mes. ARVIO Web alojado 24/7."],
-  ["Buy the developer a monthly coffee and get hosted ARVIO Web in return. Enjoy your setup on iPhone, iPad and desktop — without running a server. Your support keeps ARVIO growing.", "Ofereça um café mensal ao desenvolvedor e receba o ARVIO Web hospedado em troca. Use sua configuração no iPhone, iPad e computador — sem manter um servidor. Seu apoio faz o ARVIO crescer.", "Invita al desarrollador a un café cada mes y recibe ARVIO Web alojado a cambio. Disfruta de tu configuración en iPhone, iPad y ordenador — sin mantener un servidor. Tu apoyo ayuda a ARVIO a crecer."],
   [
     "Skip to content",
     "Ir para o conteúdo",
@@ -41,9 +33,9 @@
     "Descargar ARVIO"
   ],
   [
-    "ARVIO 2.0 IS HERE",
-    "O ARVIO 2.0 CHEGOU",
-    "ARVIO 2.0 YA ESTÁ AQUÍ"
+    "ARVIO 2.3.1 IS HERE",
+    "O ARVIO 2.3.1 CHEGOU",
+    "ARVIO 2.3.1 YA ESTÁ AQUÍ"
   ],
   [
     "Your media.",
@@ -51,14 +43,14 @@
     "Tu contenido."
   ],
   [
-    "Beautifully",
-    "Tudo bem",
-    "Todo bien"
+    "Free and",
+    "Grátis e de",
+    "Gratis y de"
   ],
   [
-    "connected.",
-    "conectado.",
-    "conectado."
+    "open source.",
+    "código aberto.",
+    "código abierto."
   ],
   [
     "Your libraries, live TV and discoveries.",
@@ -416,11 +408,6 @@
     "Tus perfiles, bibliotecas y progreso"
   ],
   [
-    "A monthly coffee that supports development",
-    "Um café mensal que apoia o desenvolvimento",
-    "Un café al mes que apoya el desarrollo"
-  ],
-  [
     "Explore Premium",
     "Conhecer o Premium",
     "Descubrir Premium"
@@ -496,11 +483,6 @@
     "¿ARVIO es realmente gratis?"
   ],
   [
-    "Yes. The Android and TV app is free and open source. You can also self-host ARVIO Web for free. Premium is the optional hosted web app membership that helps support the project.",
-    "Sim. O app para Android e TV é gratuito e de código aberto. Você também pode hospedar o ARVIO Web por conta própria de graça. O Premium é a assinatura opcional do web app hospedado que ajuda a apoiar o projeto.",
-    "Sí. La app para Android y TV es gratis y de código abierto. También puedes alojar ARVIO Web por tu cuenta gratis. Premium es la suscripción opcional a la web app alojada que ayuda a apoyar el proyecto."
-  ],
-  [
     "Does ARVIO include movies or channels?",
     "O ARVIO inclui filmes ou canais?",
     "¿ARVIO incluye películas o canales?"
@@ -516,24 +498,9 @@
     "¿Puedo usarlo en iPhone o iPad?"
   ],
   [
-    "Use ARVIO Web in your browser. You can self-host it or choose Premium for hosting handled by ARVIO. Playback depends on your browser and connected source.",
-    "Use o ARVIO Web no navegador. Você pode hospedar por conta própria ou escolher o Premium para que o ARVIO cuide da hospedagem. A reprodução depende do navegador e da fonte conectada.",
-    "Usa ARVIO Web en tu navegador. Puedes alojarlo tú o elegir Premium para que ARVIO gestione el alojamiento. La reproducción depende del navegador y de la fuente conectada."
-  ],
-  [
     "How can I support ARVIO?",
     "Como posso apoiar o ARVIO?",
     "¿Cómo puedo apoyar a ARVIO?"
-  ],
-  [
-    "Support development with a",
-    "Apoie o desenvolvimento com um",
-    "Apoya el desarrollo con un"
-  ],
-  [
-    "monthly coffee on Ko-fi",
-    "café mensal no Ko-fi",
-    "café mensual en Ko-fi"
   ],
   [
     ", contribute on",
@@ -726,11 +693,6 @@
     "App gratis para Android y TV"
   ],
   [
-    "Optional Premium",
-    "Premium opcional",
-    "Premium opcional"
-  ],
-  [
     "Premium brings ARVIO to your browser. We host it. You support its future.",
     "O Premium leva o ARVIO ao seu navegador. Nós hospedamos. Você apoia o futuro do projeto.",
     "Premium lleva ARVIO a tu navegador. Nosotros lo alojamos. Tú apoyas su futuro."
@@ -766,8 +728,263 @@
     "Ver ventajas de Premium"
   ],
   [
-    "The APK is free. Premium is your choice.",
-    "O APK é grátis. O Premium é sua escolha.",
-    "El APK es gratis. Premium es tu elección."
+    "Free APK",
+    "APK grátis",
+    "APK gratis"
+  ],
+  [
+    "Open ARVIO Web",
+    "Abrir o ARVIO Web",
+    "Abrir ARVIO Web"
+  ],
+  [
+    "Get the free app",
+    "Baixe o app grátis",
+    "Descarga la app gratis"
+  ],
+  [
+    "Free app for Android & TV",
+    "App grátis para Android e TV",
+    "App gratis para Android y TV"
+  ],
+  [
+    "Use ARVIO on this device",
+    "Usar o ARVIO neste aparelho",
+    "Usar ARVIO en este dispositivo"
+  ],
+  [
+    "ARVIO Web for iPhone, iPad, Mac and PC",
+    "ARVIO Web para iPhone, iPad, Mac e PC",
+    "ARVIO Web para iPhone, iPad, Mac y PC"
+  ],
+  [
+    "$2.99/month, or $20 for 12 months.",
+    "US$ 2,99/mês ou US$ 20 por 12 meses.",
+    "2,99 $/mes o 20 $ por 12 meses."
+  ],
+  [
+    "See plans and what’s included",
+    "Veja os planos e o que está incluído",
+    "Ver planes y qué incluye"
+  ],
+  [
+    "ARVIO on your iPhone, iPad and laptop.",
+    "O ARVIO no seu iPhone, iPad e notebook.",
+    "ARVIO en tu iPhone, iPad y portátil."
+  ],
+  [
+    "No server to run.",
+    "Sem servidor para manter.",
+    "Sin servidor que mantener."
+  ],
+  [
+    "Hosted ARVIO Web. Sign in with your ARVIO account and pick up where you left off.",
+    "ARVIO Web hospedado. Entre com sua conta ARVIO e continue de onde parou.",
+    "ARVIO Web alojado. Inicia sesión con tu cuenta ARVIO y sigue donde lo dejaste."
+  ],
+  [
+    "Profiles, watchlist and progress synced through ARVIO Cloud",
+    "Perfis, Minha Lista e progresso sincronizados pelo ARVIO Cloud",
+    "Perfiles, Mi lista y progreso sincronizados con ARVIO Cloud"
+  ],
+  [
+    "Live TV with the programme guide",
+    "TV ao vivo com guia de programação",
+    "TV en vivo con guía de programación"
+  ],
+  [
+    "Downloads on desktop",
+    "Downloads no computador",
+    "Descargas en el ordenador"
+  ],
+  [
+    "Preview ARVIO Web for free. Premium is required for playback.",
+    "Explore o ARVIO Web de graça. O Premium é necessário para reproduzir.",
+    "Explora ARVIO Web gratis. Necesitas Premium para reproducir."
+  ],
+  [
+    "ARVIO Premium plans",
+    "Planos do ARVIO Premium",
+    "Planes de ARVIO Premium"
+  ],
+  [
+    "Monthly",
+    "Mensal",
+    "Mensual"
+  ],
+  [
+    "$2.99",
+    "US$ 2,99",
+    "2,99 $"
+  ],
+  [
+    "$20",
+    "US$ 20",
+    "20 $"
+  ],
+  [
+    "/ month",
+    "/ mês",
+    "/ mes"
+  ],
+  [
+    "Cancel anytime",
+    "Cancele quando quiser",
+    "Cancela cuando quieras"
+  ],
+  [
+    "Best value · save 44%",
+    "Melhor custo-benefício · economize 44%",
+    "Mejor precio · ahorra un 44 %"
+  ],
+  [
+    "12-month pass",
+    "Passe de 12 meses",
+    "Pase de 12 meses"
+  ],
+  [
+    "once",
+    "pagamento único",
+    "pago único"
+  ],
+  [
+    "One payment, no automatic renewal",
+    "Um pagamento, sem renovação automática",
+    "Un solo pago, sin renovación automática"
+  ],
+  [
+    "Doesn't work on your device?",
+    "Não funciona no seu aparelho?",
+    "¿No funciona en tu dispositivo?"
+  ],
+  [
+    "Message us",
+    "Fale com a gente",
+    "Escríbenos"
+  ],
+  [
+    "within 7 days for a full refund.",
+    "em até 7 dias e devolvemos todo o valor.",
+    "en un plazo de 7 días y te devolvemos el importe íntegro."
+  ],
+  [
+    "Already a member?",
+    "Já é membro?",
+    "¿Ya eres miembro?"
+  ],
+  [
+    "Manage membership on Ko-fi",
+    "Gerenciar assinatura no Ko-fi",
+    "Gestionar la suscripción en Ko-fi"
+  ],
+  [
+    "The Android and TV app is free.",
+    "O app para Android e TV é grátis.",
+    "La app para Android y TV es gratis."
+  ],
+  [
+    "Your membership supports development.",
+    "Sua assinatura apoia o desenvolvimento.",
+    "Tu suscripción apoya el desarrollo."
+  ],
+  [
+    "Yes. The Android and TV app is free and open source. You can also self-host ARVIO Web for free. Premium is hosted ARVIO Web for iPhone, iPad, Mac and PC: $2.99/month, or $20 for 12 months.",
+    "Sim. O app para Android e TV é gratuito e de código aberto. Você também pode hospedar o ARVIO Web por conta própria de graça. O Premium é o ARVIO Web hospedado para iPhone, iPad, Mac e PC: US$ 2,99/mês ou US$ 20 por 12 meses.",
+    "Sí. La app para Android y TV es gratuita y de código abierto. También puedes alojar ARVIO Web tú mismo gratis. Premium es ARVIO Web alojado para iPhone, iPad, Mac y PC: 2,99 $/mes o 20 $ por 12 meses."
+  ],
+  [
+    "Yes, with ARVIO Web in Safari. Sign in with your ARVIO account and add it to your Home Screen. Playback depends on your browser and connected source.",
+    "Sim, com o ARVIO Web no Safari. Entre com sua conta ARVIO e adicione-o à Tela de Início. A reprodução depende do navegador e da fonte conectada.",
+    "Sí, con ARVIO Web en Safari. Inicia sesión con tu cuenta ARVIO y añádelo a la pantalla de inicio. La reproducción depende del navegador y de la fuente conectada."
+  ],
+  [
+    "Read the iPhone and iPad guide",
+    "Leia o guia para iPhone e iPad (em inglês)",
+    "Lee la guía para iPhone y iPad (en inglés)"
+  ],
+  [
+    "Choose",
+    "Escolha o",
+    "Elige"
+  ],
+  [
+    "if you want hosted ARVIO Web, contribute on",
+    "se quiser o ARVIO Web hospedado, contribua no",
+    "si quieres ARVIO Web alojado, contribuye en"
+  ],
+  [
+    "Premium",
+    "Premium",
+    "Premium"
+  ],
+  ["Sponsors", "Patrocinadores", "Patrocinadores"],
+  ["PARTNER WITH ARVIO", "SEJA PARCEIRO DO ARVIO", "COLABORA CON ARVIO"],
+  ["We're looking for sponsors.", "Estamos buscando patrocinadores.", "Buscamos patrocinadores."],
+  ["Help support independent development and introduce your brand to our media and home-server community.", "Apoie o desenvolvimento independente e apresente sua marca à nossa comunidade de mídia e servidores domésticos.", "Apoya el desarrollo independiente y presenta tu marca a nuestra comunidad de multimedia y servidores domésticos."],
+  ["Explore sponsorship", "Conheça as oportunidades (em inglês)", "Ver oportunidades (en inglés)"],
+  [
+    "Choose monthly",
+    "Escolher plano mensal",
+    "Elegir plan mensual"
+  ],
+  [
+    "Get 12 months",
+    "Obter 12 meses",
+    "Obtener 12 meses"
+  ],
+  [
+    "Preview ARVIO Web",
+    "Explorar o ARVIO Web",
+    "Explorar ARVIO Web"
+  ],
+  [
+    "Both plans include hosted ARVIO Web. Connect your own sources; no media is included.",
+    "Os dois planos incluem o ARVIO Web hospedado para você. Conecte suas próprias fontes; nenhum conteúdo de mídia está incluído.",
+    "Ambos planes incluyen ARVIO Web alojado para ti. Conecta tus propias fuentes; no se incluye contenido multimedia."
+  ],
+  [
+    "Next: sign in to ARVIO, then pay on Ko-fi using the same email.",
+    "Próximo passo: entre no ARVIO e pague no Ko-fi usando o mesmo e-mail.",
+    "Siguiente paso: inicia sesión en ARVIO y paga en Ko-fi con el mismo correo electrónico."
+  ],
+  [
+    "Save 44% compared with 12 monthly payments ($35.88).",
+    "Economize 44% em relação a 12 pagamentos mensais (US$ 35,88).",
+    "Ahorra un 44 % frente a 12 pagos mensuales (35,88 $)."
+  ],
+  [
+    "Regional price · save 72%",
+    "Preço regional · economize 72%",
+    "Precio regional · ahorra un 72 %"
+  ],
+  [
+    "50% off the regular $20 pass. Save 72% compared with 12 monthly payments ($35.88).",
+    "50% de desconto sobre o passe normal de US$ 20. Economize 72% em relação a 12 pagamentos mensais (US$ 35,88).",
+    "50 % de descuento sobre el pase habitual de 20 $. Ahorra un 72 % frente a 12 pagos mensuales (35,88 $)."
+  ],
+  [
+    "$2.99/month, or $10 for 12 months in your region.",
+    "US$ 2,99/mês ou US$ 10 por 12 meses na sua região.",
+    "2,99 $/mes o 10 $ por 12 meses en tu región."
+  ],
+  [
+    "See Premium plans",
+    "Ver planos Premium",
+    "Ver planes Premium"
+  ],
+  [
+    "Explore ARVIO Web",
+    "Explorar o ARVIO Web",
+    "Explorar ARVIO Web"
+  ],
+  [
+    "Monthly membership. Cancel anytime through Ko-fi.",
+    "Assinatura mensal. Cancele a qualquer momento pelo Ko-fi.",
+    "Suscripción mensual. Cancela cuando quieras a través de Ko-fi."
+  ],
+  [
+    "View ARVIO source on GitHub",
+    "Ver o código do ARVIO no GitHub",
+    "Ver el código de ARVIO en GitHub"
   ]
 ]

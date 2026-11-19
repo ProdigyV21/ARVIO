@@ -5,6 +5,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 const ts = require('typescript');
 const { load, storage } = require('./load.cjs');
+const { sourceOf, storeSource } = require('./sources.cjs');
 
 const cw = load('lib/continueWatching.ts');
 const availability = load('lib/episodeAvailability.ts');
@@ -26,7 +27,7 @@ function deferred() {
 // Execute the production store callback; rendering and external services are fixtures.
 function extracted(name, globals) {
   const filename = path.resolve(__dirname, '../lib/store.tsx');
-  const source = ts.createSourceFile(filename, fs.readFileSync(filename, 'utf8'), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const source = ts.createSourceFile(filename, storeSource(), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
   let match;
   const visit = (node) => {
     if (ts.isFunctionDeclaration(node) && node.name?.text === name) match = node;
@@ -35,7 +36,7 @@ function extracted(name, globals) {
   };
   visit(source);
   assert.ok(match, name);
-  const code = ts.transpileModule(`module.exports = (${match.getText(source)});`, {
+  const code = ts.transpileModule(`module.exports = (${match.getText(source).replace(/^export /, '')});`, {
     compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS }
   }).outputText;
   const module = { exports: {} };
@@ -58,6 +59,7 @@ function harness(options = {}) {
   const tracker = { setProfile() {}, restoreSession: async () => {}, isConnected: true, hiddenProgressShowIds: options.hidden ?? (async () => new Set()), continueWatchingActivity: options.activity ?? (async () => null) };
   const noop = () => {};
   const globals = {
+    managed: { applySettings: value => value },
     episodeAvailabilityKey: availability.episodeAvailabilityKey,
     validateContinueWatchingEpisodes: availability.createEpisodeValidator(options.episodeLookup ?? (async () => ({ exists: true, airDate: '2020-01-01' }))),
     ...cw, activeProfileId: 'a', activeProfileIdRef: { current: 'a' },
@@ -67,7 +69,7 @@ function harness(options = {}) {
     traktActivityRef: { current: null }, continueWatchingActivitySignature: load('lib/traktActivity.ts').continueWatchingActivitySignature,
     settingsRef: { current: { disabledAddonIds: [], catalogs: [], hiddenCatalogIds: [] } },
     addonsRef: { current: [] }, lastSyncedSettingsRef: { current: null },
-    traktClient: tracker, mdblistClient: tracker, simklClient: tracker,
+    traktClient: tracker, mdblistClient: tracker, simklClient: tracker, weTrakrClient: tracker,
     loadTrackingPreferences: () => ({}), setTrackingPreferences: noop,
     setTraktConnected: noop, setMdblistConnected: noop, setSimklConnected: noop,
     setAddonsReady: value => state.ready.push(value), setBusy: value => state.busy.push(value), setAddons: noop, setCatalogConfigs: noop,

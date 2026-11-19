@@ -1,12 +1,12 @@
 "use client";
 
 import { useEffect } from "react";
-import { authClient, useApp } from "@/lib/store";
+import { authClient, useAppPick } from "@/lib/store";
 import { trackPremiumDaily } from "@/lib/premiumAnalytics";
 import { sourceSetupState } from "@/lib/sourceSetup";
 
 export function PremiumUsage() {
-  const { auth, activeProfile, addons, addonsReady, settings } = useApp();
+  const { auth, activeProfile, addons, addonsReady, settings } = useAppPick("auth", "activeProfile", "addons", "addonsReady", "settings");
   const configured = sourceSetupState(addons, settings).hasAny;
   useEffect(() => {
     if (!auth || !activeProfile) return;

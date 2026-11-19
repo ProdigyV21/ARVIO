@@ -181,6 +181,7 @@
     <string name="frame_rate_desc">Desligado, Suave ou Sempre</string>
     <string name="quality_filters_desc">Excluir faixas de qualidade neste dispositivo</string>
     <string name="card_layout_desc">Cards em formato horizontal ou pôster</string>
+    <string name="card_layout_netflix_exception_desc">Não se aplica às fileiras comuns da tela inicial no estilo Netflix</string>
     <string name="ui_mode_desc">Forçar modo TV, Tablet ou Celular</string>
     <string name="skip_profile_desc">Carregar automaticamente o último perfil usado após reiniciar</string>
     <string name="oled_black_background_desc">Usar fundos pretos puros no app para telas OLED</string>
@@ -250,7 +251,7 @@
     <string name="ai_remove_hi_title">Remover descrições para deficientes auditivos</string>
     <string name="ai_remove_hi_desc">Remover marcadores entre colchetes [som] antes da tradução</string>
     <string name="ai_api_key_title">Chave de API</string>
-    <string name="ai_api_key_desc">Digite sua chave de API da Groq ou Gemini manualmente</string>
+    <string name="ai_api_key_desc">Digite sua chave de API da Groq, Gemini ou Claude manualmente</string>
     <string name="ai_scan_qr_title">Escanear código QR para definir chave</string>
     <string name="ai_scan_qr_desc">Abra um navegador no celular para inserir a chave de API</string>
     <string name="ai_groq_disclaimer">Plano gratuito Groq: ~30 requisições/min</string>
@@ -263,7 +264,7 @@
     <string name="ai_api_key_dialog_subtitle_gemini">Insira sua chave de API do Gemini</string>
     <string name="ai_key_saved_title">Chave de API salva</string>
     <string name="ai_key_saved_subtitle">A tradução por IA está pronta para uso</string>
-    <string name="ai_qr_scan_hint">Escaneie com seu celular — escolha Groq ou Gemini</string>
+    <string name="ai_qr_scan_hint">Escaneie com seu celular — escolha Groq, Gemini ou Claude</string>
     <string name="smooth_scrolling">Rolagem mais suave</string>
     <string name="smooth_scrolling_desc">Usar transições suaves premium ao navegar pelas fileiras de pôsteres</string>
 
@@ -564,14 +565,13 @@
     <string name="settings_test">Testar</string>
     <string name="settings_cd_qr_code">Código QR</string>
     <string name="settings_cd_drag_reorder">Arraste para reordenar</string>
-    <string name="settings_cd_manage_categories">Gerenciar categorias</string>
     <string name="settings_progress_format">%1$s (%2$d%%)</string>
     <string name="settings_refreshing_channels_epg">Atualizando canais e EPG...</string>
     <string name="settings_reload_playlists_now">Recarregar listas agora</string>
     <string name="settings_reload_playlist_epg_now">Recarregar lista e EPG agora</string>
     <string name="settings_no_playlists_configured">Nenhuma lista configurada</string>
     <string name="settings_remove_playlists_epg">Remover listas, EPG e favoritos</string>
-    <string name="settings_add_iptv_lists_hint">Adicione até 3 listas IPTV M3U / Xtream com nomes</string>
+    <string name="settings_add_iptv_lists_hint">Adicione até 10 listas IPTV M3U / Xtream com nomes</string>
     <string name="settings_create_another_iptv">Criar outra lista IPTV</string>
     <string name="settings_badge_full">CHEIO</string>
     <string name="settings_badge_add">ADICIONAR</string>
@@ -610,7 +610,7 @@
     <string name="settings_iptv_order_provider">Ordem do provedor</string>
     <string name="settings_iptv_order_number">Número do canal</string>
     <string name="settings_iptv_order_name">Alfabética (A-Z)</string>
-    <string name="settings_add_tv_lists_hint">Adicione até 3 listas de TV M3U / Xtream</string>
+    <string name="settings_add_tv_lists_hint">Adicione até 10 listas de TV M3U / Xtream</string>
     <string name="settings_create_another_tv">Criar outra lista de TV</string>
     <string name="settings_badge_full_short">Cheio</string>
     <string name="settings_search_lists">Buscar listas</string>
@@ -761,11 +761,10 @@
     <string name="settings_stalker_configured">Configurado</string>
     <string name="settings_stalker_not_configured">Não configurado</string>
     <string name="settings_stalker_remove">Remover portal</string>
-    <string name="settings_cd_manage_stalker_categories">Gerenciar categorias Stalker</string>
     <string name="settings_cd_edit_stalker_config">Editar portal Stalker</string>
     <string name="settings_section_stalker_portals">PORTAIS STALKER</string>
     <string name="settings_add_stalker_portal_button">Adicionar portal Stalker</string>
-    <string name="settings_stalker_add_hint">Adicione até 3 portais Stalker / Ministra</string>
+    <string name="settings_stalker_add_hint">Adicione até 10 portais Stalker / Ministra</string>
     <string name="settings_stalker_create_another">Adicionar outro portal Stalker</string>
     <string name="settings_stalker_portal_name_label">Nome do portal</string>
     <string name="settings_stalker_portal_name_placeholder">ex: Portal 1</string>
@@ -774,7 +773,7 @@
     <string name="settings_cd_move_stalker_down">Mover portal Stalker para baixo</string>
     <string name="settings_cd_remove_stalker_portal">Remover portal Stalker</string>
     <string name="settings_stalker_rename_title">Renomear portal</string>
-    <string name="settings_stalker_max_reached">Limite máximo de 3 portais Stalker atingido</string>
+    <string name="settings_stalker_max_reached">Limite máximo de 10 portais Stalker atingido</string>
     <string name="settings_ua_default">Padrão</string>
     <string name="settings_enter_field">Digite %1$s...</string>
     <string name="settings_clock_12h">12 horas</string>
@@ -1087,6 +1086,7 @@
     <string name="component_label_media">Mídia</string>
     <string name="component_media_logo">Logotipo de %1$s</string>
     <string name="component_badge_new_episode">Novo episódio</string>
+    <string name="component_badge_new_episode_short">Novo</string>
     <string name="component_ep_left_one">1 ep restante</string>
     <string name="component_eps_left">%1$d eps restantes</string>
     <string name="component_season_episode_marker">T%1$d • E%2$d</string>
@@ -1551,4 +1551,33 @@
     <string name="settings_stalker_desc">Portal Ministra / Stalker com autenticação por endereço MAC.</string>
     <string name="settings_content_to_import">Conteúdo a importar</string>
     <string name="settings_label_m3u_url">URL da lista M3U</string>
+
+    <!-- Live TV AI subtitles -->
+    <string name="live_ai_subtitles">Legendas IA</string>
+    <string name="live_ai_subs_preparing">Preparando legendas… %1$d s</string>
+    <string name="live_ai_subs_no_key">As legendas IA precisam de uma chave de API do Google Gemini (Configurações → Legendas IA)</string>
+    <string name="live_ai_subs_invalid_key">Legendas IA: a chave de API do Gemini foi rejeitada</string>
+    <string name="live_ai_subs_quota">Legendas IA em pausa: quota do Gemini atingida</string>
+    <string name="live_ai_subs_offline">Legendas IA: sem conexão com a internet</string>
+    <string name="live_ai_subs_unsupported">Legendas IA não suportadas neste canal</string>
+    <string name="live_ai_subs_memory_capped">Não dá para atrasar este canal o suficiente; algumas legendas podem chegar atrasadas</string>
+    <string name="live_ai_subs_title">Legendas IA na TV ao vivo</string>
+    <string name="live_ai_subs_desc">Adiciona legendas IA ao menu de legendas dos canais ao vivo: o Gemini transcreve e traduz para o idioma de legendas do perfil. A TV ao vivo é atrasada alguns segundos para as linhas aparecerem na hora certa.</string>
+    <string name="live_ai_subs_key_valid">A chave de API do Gemini funciona</string>
+    <string name="live_ai_subs_key_rejected">O Gemini rejeitou esta chave de API</string>
+    <string name="live_ai_subs_key_unchecked">Não foi possível verificar a chave (sem conexão?)</string>
+    <string name="live_ai_subs_needs_key">Adicione primeiro uma chave de API do Google Gemini</string>
+    <string name="live_ai_subs_auto_title">Traduzir automaticamente ao iniciar um canal</string>
+    <string name="live_ai_subs_auto_desc">Cada canal começa com legendas IA, sem escolher no menu de legendas</string>
+
+    <!-- Type on the phone (QR in TV text dialogs) -->
+    <string name="phone_input_button">Usar o celular</string>
+    <string name="phone_input_button_hide">Ocultar código do celular</string>
+    <string name="phone_input_qr_title">📱 Pelo celular</string>
+    <string name="phone_input_qr_hint">Escaneie para digitar ou colar no celular.</string>
+    <string name="phone_input_page_hint">O que você enviar aparece na TV. Aperte OK lá para salvar.</string>
+    <string name="phone_input_page_send">Enviar para a TV</string>
+    <string name="phone_input_page_sent">Enviado ✓ — aperte OK na TV.</string>
+    <string name="phone_input_page_not_sent">Não enviado</string>
+    <string name="phone_input_page_expired">Este código expirou — escaneie o QR code na TV de novo.</string>
 </resources>

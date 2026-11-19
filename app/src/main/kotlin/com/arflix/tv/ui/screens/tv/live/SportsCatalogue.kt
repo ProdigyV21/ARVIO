@@ -103,13 +103,37 @@ private fun participantKeys(name: String?, sport: GuideSport): List<String> {
     return (listOf(key, short) + footballAliases.firstOrNull { short in it }.orEmpty()).distinct().filter { it.length >= 3 }
 }
 
+private const val FIXTURE_MATCH_HOUR_MS = 3_600_000L
+private const val FIXTURE_MATCH_WINDOW_MS = 2 * FIXTURE_MATCH_HOUR_MS
+
+/** Narrow participant matching by time without changing source order or match rules. */
+internal class SportsGuideTimeIndex(guide: List<SportsGuideEvent>) {
+    private val buckets = guide.withIndex().groupBy {
+        it.value.sport to Math.floorDiv(it.value.programme.startUtcMillis, FIXTURE_MATCH_HOUR_MS)
+    }
+
+    fun matching(sport: GuideSport, startsAt: Long, includes: (SportsGuideEvent) -> Boolean): List<SportsGuideEvent> {
+        val start = Math.floorDiv(startsAt - FIXTURE_MATCH_WINDOW_MS, FIXTURE_MATCH_HOUR_MS)
+        val end = Math.floorDiv(startsAt + FIXTURE_MATCH_WINDOW_MS, FIXTURE_MATCH_HOUR_MS)
+        val matches = ArrayList<IndexedValue<SportsGuideEvent>>()
+        for (bucket in start..end) {
+            for (entry in buckets[sport to bucket].orEmpty()) {
+                if (kotlin.math.abs(entry.value.programme.startUtcMillis - startsAt) <= FIXTURE_MATCH_WINDOW_MS &&
+                    includes(entry.value)) matches.add(entry)
+            }
+        }
+        return matches.sortedBy { it.index }.map { it.value }
+    }
+}
+
 internal fun buildSportsCatalogue(guide: List<SportsGuideEvent>, artwork: List<SportsEventArtwork>, channels: List<IptvChannel>, now: Long,
     zone: ZoneId = ZoneId.systemDefault()): List<SportsGuideEvent> {
     val fixtures = artwork.filter { it.fixture != null && it.startsAt != null }
     if (fixtures.isEmpty()) return attachSportsArtwork(guide, artwork)
     val byIdentity = guide.groupBy { "${it.sport}|${it.identity}" }
-    val guideTitles = guide.associate { it.id to " ${sportsArtworkKey(it.title)} " }
-    val bySport = guide.groupBy { it.sport }
+    val guideTitles = HashMap<String, String>()
+    val guideQualifiers = HashMap<String, String>()
+    val timeIndex = SportsGuideTimeIndex(guide)
     val byChannel = channels.groupBy { sportsChannelKey(it.name) }
     val broadcasterMatches = hashMapOf<Pair<String, String>, List<IptvChannel>>()
     val used = hashSetOf<String>()
@@ -122,12 +146,18 @@ internal fun buildSportsCatalogue(guide: List<SportsGuideEvent>, artwork: List<S
         val home = participantKeys(item.homeTeam, sport)
         val away = participantKeys(item.awayTeam, sport)
         // Both complete participant names must be present; a league or one team is not enough.
-        val candidates = if (home.isNotEmpty() && away.isNotEmpty() && home.none { it in away })
-            bySport[sport].orEmpty().filter { event -> home.any { guideTitles.getValue(event.id).contains(" $it ") } && away.any { guideTitles.getValue(event.id).contains(" $it ") } }
-            else emptyList()
+        val candidates = if (home.isNotEmpty() && away.isNotEmpty() && home.none { it in away }) {
+            val homeTerms = home.map { " $it " }
+            val awayTerms = away.map { " $it " }
+            timeIndex.matching(sport, start) { event ->
+                val title = guideTitles.getOrPut(event.id) { " ${sportsArtworkKey(event.title)} " }
+                homeTerms.any { title.contains(it) } && awayTerms.any { title.contains(it) }
+            }
+        } else emptyList()
+        val qualifier = sportsQualifierKey("${item.title} ${fixture.league.orEmpty()}")
         val matches = (byIdentity["$sport|${sportsEventIdentity(item.title)}"].orEmpty() + candidates).distinctBy { it.id }.filter { event ->
-            event.id !in used && kotlin.math.abs(event.programme.startUtcMillis - start) <= 2 * 3600_000L &&
-                sportsQualifierKey("${event.title} ${event.competition.orEmpty()}") == sportsQualifierKey("${item.title} ${fixture.league.orEmpty()}") &&
+            event.id !in used && kotlin.math.abs(event.programme.startUtcMillis - start) <= FIXTURE_MATCH_WINDOW_MS &&
+                guideQualifiers.getOrPut(event.id) { sportsQualifierKey("${event.title} ${event.competition.orEmpty()}") } == qualifier &&
                 (fixture.qualifier == null || "${event.title} ${event.competition.orEmpty()}".contains(fixture.qualifier, true)) &&
                 (event.competition == null || fixture.league == null || leagueKey(event.competition) == leagueKey(fixture.league))
         }

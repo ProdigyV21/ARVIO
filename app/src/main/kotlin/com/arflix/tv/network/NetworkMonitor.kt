@@ -60,6 +60,14 @@ class NetworkMonitor @Inject constructor(
         get() = checkNetworkConnectivity()
 
     /**
+     * True for any network with internet capability, validated or not, so a LAN-only
+     * setup still counts while a reconnect waits for a network.
+     */
+    val hasActiveNetwork: Boolean
+        get() = connectivityManager.getNetworkCapabilities(connectivityManager.activeNetwork)
+            ?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) == true
+
+    /**
      * Flow that emits when network connectivity changes.
      * Emits true when connected, false when disconnected.
      * Only emits distinct values (no duplicates).

@@ -1,10 +1,13 @@
 "use client";
+import "@/app/collections.css";
 
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from '@/lib/i18n';
 import { getCollectionPreview, getCardProviders, getLogoUrl } from '@/lib/tmdb';
 import { getImdbRating } from '@/lib/imdbRatings';
-import { IMDB_LOGO, serviceClearLogo } from '@/lib/serviceLogos';
+import { canonicalServiceName, serviceClearLogo } from '@/lib/serviceLogos';
+import { formatRuntime } from '@/lib/mediaFormat';
+import { ImdbLogo } from './CardBits';
 import { mediaPreviewKey, mergeMediaPreview } from '@/lib/mediaPreview';
 import type { MediaItem } from '@/lib/types';
 
@@ -30,7 +33,8 @@ export function useCollectionPreview(preview: MediaItem | undefined, language: s
         id > 0 ? getCardProviders(reference).catch(() => []) : []
       ]);
       const item = mergeMediaPreview(preview, details);
-      const serviceLogos = services.map(serviceClearLogo).filter((url): url is string => Boolean(url));
+      // "Netflix" and "Netflix Standard with Ads" share one clearlogo: show it once.
+      const serviceLogos = [...new Set(services.map(serviceClearLogo).filter((url): url is string => Boolean(url)))];
       if (!cancelled) setHero({ key: cacheKey, item, logo, rating: null, services: serviceLogos });
       const rating = await getImdbRating(item.mediaType, item.imdbId).catch(() => null);
       if (!cancelled) {
@@ -46,8 +50,10 @@ export function useCollectionPreview(preview: MediaItem | undefined, language: s
   return { item: preview ? mergeMediaPreview(preview, metadata?.item) : undefined, metadata };
 }
 
-export function CollectionPreview({ preview, language, fallbackTitle = '', fallbackOverview, fallbackArtwork }: {
+export function CollectionPreview({ preview, language, fallbackTitle = '', fallbackOverview, fallbackArtwork, hideService }: {
   preview?: MediaItem; language: string; fallbackTitle?: string; fallbackOverview?: string | null; fallbackArtwork?: string | null;
+  /** The collection's own service (its badge is implied by the page). */
+  hideService?: string;
 }) {
   const t = useTranslation();
   const { item, metadata } = useCollectionPreview(preview, language);
@@ -63,9 +69,11 @@ export function CollectionPreview({ preview, language, fallbackTitle = '', fallb
         ? <img src={metadata.logo} alt={item?.title} onError={() => setFailedLogo(metadata.logo)} />
         : <h2>{item?.title || fallbackTitle}</h2>}</div>
       <div className="collection-spotlight-facts">
-        {metadata?.services.slice(0, 2).map(url => <img key={url} src={url} alt="" className="collection-service" />)}
-        {metadata?.rating ? <span className="collection-imdb"><img src={IMDB_LOGO} alt="IMDb" />{metadata.rating}</span> : item?.rating && <span>{!item.isHomeServer && 'TMDB '}{item.rating}</span>}
-        {item?.year && <span>{item.year}</span>}{item?.duration && <span>{item.duration}</span>}{budget && <span>{t('Budget')} {budget}</span>}
+        {metadata?.services.filter(url => !hideService || url !== serviceClearLogo(canonicalServiceName(hideService))).slice(0, 2)
+          .map(url => <img key={url} src={url} alt="" className="collection-service" />)}
+        {/* The real IMDb rating only, like cards and the billboard (never TMDB's score under it). */}
+        {metadata?.rating ? <span className="collection-imdb"><ImdbLogo height={16} />{metadata.rating}</span> : item?.isHomeServer && item.rating ? <span>{item.rating}</span> : null}
+        {item?.year && <span>{item.year}</span>}{formatRuntime(item?.duration) && <span>{formatRuntime(item?.duration)}</span>}{budget && <span>{t('Budget')} {budget}</span>}
       </div>
       <p>{item?.overview || fallbackOverview}</p>
     </section>

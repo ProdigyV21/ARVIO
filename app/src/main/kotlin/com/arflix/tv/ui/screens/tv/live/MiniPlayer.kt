@@ -147,6 +147,7 @@ fun MiniPlayerRow(
     modifier: Modifier = Modifier,
     focusedProgrammeProvider: (() -> Pair<EnrichedChannel, IptvProgram>?)? = null,
     focusedChannelProvider: (() -> Pair<EnrichedChannel, IptvNowNext?>?)? = null,
+    videoOnly: Boolean = false,
 ) {
     val drawerTranslation = LocalLiveDrawerTranslation.current
     // Read rapidly changing programme focus here, not in the surrounding guide.
@@ -159,6 +160,12 @@ fun MiniPlayerRow(
     val infoVariantCount = if (infoChannel?.id == channel?.id) variantCount else 1
     val onInfoVariants = onOpenVariants.takeIf { infoChannel?.id == channel?.id }
     val drawerDirection = if (LocalLayoutDirection.current == LayoutDirection.Rtl) 1f else -1f
+    if (videoOnly) {
+        VideoCard(exoPlayer = exoPlayer, channel = channel, compact = true, playerActive = playerActive,
+            onFullscreenClick = onFullscreenClick, onVideoBoundsPositioned = onVideoBoundsPositioned,
+            modifier = modifier.fillMaxWidth())
+        return
+    }
     if (landscapeCompact) {
         val spec = landscapePhoneMiniPlayerSpec()
         Row(
@@ -436,7 +443,7 @@ private fun LiveBug(modifier: Modifier = Modifier) {
     )
     Row(
         modifier = modifier
-            .clip(RoundedCornerShape(6.dp))
+            .clip(RoundedCornerShape(8.dp))
             .background(Color(0xAA000000))
             .padding(horizontal = 8.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -539,7 +546,7 @@ private fun ChannelIdentityRow(
             Box(
                 modifier = Modifier
                     .size(48.dp)
-                    .clip(RoundedCornerShape(10.dp))
+                    .clip(RoundedCornerShape(12.dp))
                     .background(LiveColors.Panel),
             )
             Text(
@@ -555,7 +562,7 @@ private fun ChannelIdentityRow(
 private fun SourceBadge(count: Int, onOpenVariants: (() -> Unit)?) {
     Box(
         modifier = Modifier
-            .clip(RoundedCornerShape(4.dp))
+            .clip(RoundedCornerShape(8.dp))
             .background(LiveColors.Panel)
             .then(if (onOpenVariants != null) Modifier.clickable { onOpenVariants() } else Modifier)
             .padding(horizontal = 6.dp, vertical = 2.dp),
@@ -570,7 +577,7 @@ private fun QualityBadge(q: Quality) {
     if (q == Quality.UNKNOWN) return
     Box(
         modifier = Modifier
-            .clip(RoundedCornerShape(4.dp))
+            .clip(RoundedCornerShape(8.dp))
             .background(LiveColors.Panel)
             .padding(horizontal = 6.dp, vertical = 2.dp),
     ) {
@@ -583,7 +590,7 @@ private fun QualityBadge(q: Quality) {
 private fun LangBadge(text: String) {
     Box(
         modifier = Modifier
-            .clip(RoundedCornerShape(4.dp))
+            .clip(RoundedCornerShape(8.dp))
             .background(LiveColors.Panel)
             .padding(horizontal = 6.dp, vertical = 2.dp),
     ) {

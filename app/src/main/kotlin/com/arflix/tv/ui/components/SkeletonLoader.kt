@@ -38,6 +38,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.unit.sp
 import com.arflix.tv.util.LocalDeviceType
+import com.arflix.tv.ui.theme.BackgroundCard
+import com.arflix.tv.ui.theme.BackgroundElevated
+import com.arflix.tv.ui.theme.BorderLight
 import androidx.tv.foundation.lazy.list.TvLazyRow
 
 /**
@@ -62,9 +65,9 @@ object ShimmerState {
 
         return Brush.linearGradient(
             colors = listOf(
-                Color(0xFF151520),
-                Color(0xFF1F1F2A),
-                Color(0xFF151520)
+                BackgroundCard,
+                BackgroundElevated,
+                BackgroundCard
             ),
             start = Offset(translateAnim - 500f, 0f),
             end = Offset(translateAnim, 0f)
@@ -112,14 +115,14 @@ fun SkeletonPosterCard(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(16.dp),
-            shape = RoundedCornerShape(4.dp)
+            shape = RoundedCornerShape(8.dp)
         )
         Spacer(modifier = Modifier.height(4.dp))
         SkeletonBox(
             modifier = Modifier
                 .width(80.dp)
                 .height(12.dp),
-            shape = RoundedCornerShape(4.dp)
+            shape = RoundedCornerShape(8.dp)
         )
     }
 }
@@ -143,14 +146,14 @@ fun SkeletonMediaCard(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(14.dp),
-            shape = RoundedCornerShape(4.dp)
+            shape = RoundedCornerShape(8.dp)
         )
         Spacer(modifier = Modifier.height(4.dp))
         SkeletonBox(
             modifier = Modifier
                 .width(60.dp)
                 .height(10.dp),
-            shape = RoundedCornerShape(4.dp)
+            shape = RoundedCornerShape(8.dp)
         )
     }
 }
@@ -168,21 +171,21 @@ fun SkeletonCastCard(
     ) {
         SkeletonBox(
             modifier = Modifier.size(80.dp),
-            shape = RoundedCornerShape(40.dp) // Circle
+            shape = CircleShape // Circle
         )
         Spacer(modifier = Modifier.height(8.dp))
         SkeletonBox(
             modifier = Modifier
                 .width(70.dp)
                 .height(12.dp),
-            shape = RoundedCornerShape(4.dp)
+            shape = RoundedCornerShape(8.dp)
         )
         Spacer(modifier = Modifier.height(4.dp))
         SkeletonBox(
             modifier = Modifier
                 .width(50.dp)
                 .height(10.dp),
-            shape = RoundedCornerShape(4.dp)
+            shape = RoundedCornerShape(8.dp)
         )
     }
 }
@@ -205,14 +208,14 @@ fun SkeletonEpisodeCard(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(14.dp),
-            shape = RoundedCornerShape(4.dp)
+            shape = RoundedCornerShape(8.dp)
         )
         Spacer(modifier = Modifier.height(4.dp))
         SkeletonBox(
             modifier = Modifier
                 .width(80.dp)
                 .height(10.dp),
-            shape = RoundedCornerShape(4.dp)
+            shape = RoundedCornerShape(8.dp)
         )
     }
 }
@@ -234,7 +237,7 @@ fun SkeletonCategoryRow(
                 .width(150.dp)
                 .height(20.dp)
                 .padding(start = if (isMobile) 16.dp else 0.dp),
-            shape = RoundedCornerShape(4.dp)
+            shape = RoundedCornerShape(8.dp)
         )
         Spacer(modifier = Modifier.height(16.dp))
 
@@ -296,7 +299,7 @@ fun SkeletonDetailsHero(
                     modifier = Modifier
                         .width(80.dp)
                         .height(28.dp),
-                    shape = RoundedCornerShape(6.dp)
+                    shape = RoundedCornerShape(8.dp)
                 )
             }
         }
@@ -307,7 +310,7 @@ fun SkeletonDetailsHero(
             modifier = Modifier
                 .width(500.dp)
                 .height(60.dp),
-            shape = RoundedCornerShape(4.dp)
+            shape = RoundedCornerShape(8.dp)
         )
         Spacer(modifier = Modifier.height(24.dp))
 
@@ -382,7 +385,7 @@ fun SkeletonDetailsPage(
                                 modifier = Modifier
                                     .width(70.dp)
                                     .height(20.dp),
-                                shape = RoundedCornerShape(4.dp)
+                                shape = RoundedCornerShape(8.dp)
                             )
                         }
                     }
@@ -393,7 +396,7 @@ fun SkeletonDetailsPage(
                         modifier = Modifier
                             .width(160.dp)
                             .height(14.dp),
-                        shape = RoundedCornerShape(4.dp)
+                        shape = RoundedCornerShape(8.dp)
                     )
                 }
             }
@@ -433,9 +436,9 @@ fun SkeletonDetailsPage(
 
                 // Description overview (3 lines)
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    SkeletonBox(modifier = Modifier.fillMaxWidth().height(12.dp), shape = RoundedCornerShape(2.dp))
-                    SkeletonBox(modifier = Modifier.fillMaxWidth(0.95f).height(12.dp), shape = RoundedCornerShape(2.dp))
-                    SkeletonBox(modifier = Modifier.fillMaxWidth(0.6f).height(12.dp), shape = RoundedCornerShape(2.dp))
+                    SkeletonBox(modifier = Modifier.fillMaxWidth().height(12.dp), shape = RoundedCornerShape(8.dp))
+                    SkeletonBox(modifier = Modifier.fillMaxWidth(0.95f).height(12.dp), shape = RoundedCornerShape(8.dp))
+                    SkeletonBox(modifier = Modifier.fillMaxWidth(0.6f).height(12.dp), shape = RoundedCornerShape(8.dp))
                 }
 
                 if (isTV) {
@@ -446,7 +449,7 @@ fun SkeletonDetailsPage(
                                 modifier = Modifier
                                     .width(85.dp)
                                     .height(36.dp),
-                                shape = RoundedCornerShape(6.dp)
+                                shape = RoundedCornerShape(8.dp)
                             )
                         }
                     }
@@ -509,12 +512,12 @@ fun SkeletonMobileHeroBanner(
     compactContent: Boolean = false,
     modifier: Modifier = Modifier
 ) {
-    val bannerShape = RoundedCornerShape(24.dp)
+    val bannerShape = RoundedCornerShape(16.dp)
     Box(
         modifier = modifier
             .clip(bannerShape)
-            .background(Color(0xFF141419))
-            .border(width = 1.dp, color = Color(0xFF2B2B2B), shape = bannerShape)
+            .background(BackgroundCard)
+            .border(width = 1.dp, color = BorderLight, shape = bannerShape)
     ) {
         SkeletonBox(
             modifier = Modifier.fillMaxSize(),
@@ -534,19 +537,19 @@ fun SkeletonMobileHeroBanner(
                 modifier = Modifier
                     .fillMaxWidth(0.65f)
                     .height(if (compactContent) 24.dp else 32.dp),
-                shape = RoundedCornerShape(6.dp)
+                shape = RoundedCornerShape(8.dp)
             )
             SkeletonBox(
                 modifier = Modifier
                     .fillMaxWidth(0.40f)
                     .height(14.dp),
-                shape = RoundedCornerShape(4.dp)
+                shape = RoundedCornerShape(8.dp)
             )
             SkeletonBox(
                 modifier = Modifier
                     .fillMaxWidth(0.25f)
                     .height(12.dp),
-                shape = RoundedCornerShape(4.dp)
+                shape = RoundedCornerShape(8.dp)
             )
         }
     }

@@ -1,5 +1,6 @@
 // Local regression fixture: production subtitle effects/menu, cross-origin media and relay.
 const assert = require('node:assert/strict');
+const { appCss } = require('./app-styles.cjs');
 const fs = require('node:fs');
 const path = require('node:path');
 const http = require('node:http');
@@ -31,7 +32,7 @@ async function main() {
   });
   await new Promise(resolve => relay.listen(0, '127.0.0.1', resolve));
   const relayOrigin = `http://127.0.0.1:${relay.address().port}`;
-  const source = ts.createSourceFile('PlayerOverlay.tsx', fs.readFileSync(path.join(root, 'components/player/PlayerOverlay.tsx'), 'utf8'), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const source = ts.createSourceFile('PlayerOverlay.tsx', require('../tests/sources.cjs').playerSource(), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
   const player = source.statements.find(node => ts.isFunctionDeclaration(node) && node.name.text === 'VideoPlayer');
   const statements = player.body.statements.map(node => node.getText(source));
   const take = predicate => {
@@ -99,7 +100,7 @@ async function main() {
     }
     createRoot(document.getElementById('root')).render(<Fixture />);
   ` }, bundle: true, write: false, jsx: 'automatic', define: { 'process.env.NODE_ENV': '"test"' } });
-  const css = fs.readFileSync(path.join(root, 'app/globals.css'));
+  const css = appCss(root);
   const server = http.createServer((req, res) => {
     if (req.url === '/app.js') { res.setHeader('Content-Type', 'text/javascript'); res.end(bundle.outputFiles[0].contents); }
     else if (req.url === '/styles.css') { res.setHeader('Content-Type', 'text/css'); res.end(css); }

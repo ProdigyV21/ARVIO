@@ -184,8 +184,10 @@ export async function buildHomeServerCatalogConfigs(
   const generated: CatalogConfig[] = [];
 
   for (const server of servers) {
+    // Servers and libraries switched off in Settings (synced with Android) get no Home row.
+    if (server.enabled === false) continue;
     for (const collection of server.collections ?? []) {
-      if (!collection.id || !isVideoCollectionType(collection.type)) continue;
+      if (!collection.id || !isVideoCollectionType(collection.type) || collection.enabled === false) continue;
       const identity = await homeServerCatalogIdentity(server, collection);
       const existing = savedById.get(identity.id) ?? savedBySourceRef.get(identity.sourceRef);
       const title = existing?.name || existing?.title || `${server.name} - ${collection.name}`;
@@ -1072,6 +1074,27 @@ async function plexMetadataSources(server: HomeServerConfig, meta: PlexMetadata)
 
 function usableServers(servers: HomeServerConfig[]): HomeServerConfig[] {
   return servers.filter((s) => s.enabled && s.url && (s.type === "plex" ? Boolean(s.token) : true));
+}
+
+/** Catalogue availability is a title lookup, not a request to prepare playback. */
+export async function hasHomeServerTitleMatch(
+  servers: HomeServerConfig[],
+  target: MatchTarget,
+  mediaType: "movie" | "tv"
+): Promise<boolean> {
+  const matches = await Promise.all(usableServers(servers).map(async (server) => {
+    try {
+      if (server.type === "plex") {
+        return (await plexFindMetadataMatches(server, target, [mediaType === "tv" ? 2 : 1])).length > 0;
+      }
+      const session = await ensureSession(server);
+      if (!session) return false;
+      return (await jellyfinFindItems(server, session, target, mediaType === "tv" ? "Series" : "Movie")).length > 0;
+    } catch {
+      return false;
+    }
+  }));
+  return matches.some(Boolean);
 }
 
 export async function resolveHomeServerMovieSources(

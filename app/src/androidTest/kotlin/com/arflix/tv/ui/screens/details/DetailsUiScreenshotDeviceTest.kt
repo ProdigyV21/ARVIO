@@ -64,7 +64,7 @@ class DetailsUiScreenshotDeviceTest {
             CompositionLocalProvider(LocalDeviceType provides if (tv) DeviceType.TV else DeviceType.PHONE) {
                 ArflixTvTheme {
                     DetailsScreen(MediaType.TV, 45790, viewModel = model,
-                        onNavigateToPlayer = { _, _, _, _, _, _, _, _ -> }, onNavigateToDetails = { _, _ -> }, onBack = {})
+                        onNavigateToPlayer = { _, _, _, _, _, _, _, _, _ -> }, onNavigateToDetails = { _, _ -> }, onBack = {})
                 }
             }
         }

@@ -1,4 +1,5 @@
 import type { CatalogConfig } from "./types";
+import { isYouTubeCatalogRef } from "./youtubeCollection";
 import bundledDefaults from "./defaultCatalogs.json";
 
 // Exported from MediaRepository.buildPreinstalledDefaults; checked by the APK tests.
@@ -98,6 +99,7 @@ function normalizedSourceType(value: unknown): CatalogConfig["sourceType"] {
   if (raw === "addon") return "addon";
   if (raw === "home-server" || raw === "homeserver") return "home-server";
   if (raw === "template") return "template";
+  if (raw === "youtube") return "youtube";
   if (raw === "tmdb") return "tmdb";
   return "preinstalled";
 }
@@ -114,7 +116,8 @@ function normalizedCatalog(catalog: CatalogConfig): CatalogConfig {
     id: String(catalog.id).trim(),
     name: String(catalog.name ?? catalog.title).trim(),
     title: String(catalog.name ?? catalog.title).trim(),
-    sourceType: normalizedSourceType(catalog.sourceType),
+    // Android recognizes its YouTube row by the sourceRef as well; an unknown type must not hide it.
+    sourceType: isYouTubeCatalogRef(catalog.sourceRef) ? "youtube" : normalizedSourceType(catalog.sourceType),
     layout: normalizedLayout(catalog),
     enabled: catalog.enabled !== false
   };
@@ -168,6 +171,29 @@ export function setDefaultCollectionsEnabled(catalogs: CatalogConfig[], hiddenId
   const hidden = updateHiddenCatalogIds(next, hiddenIds.filter(id => id !== DEFAULT_COLLECTIONS_DISABLED));
   if (!enabled) hidden.push(DEFAULT_COLLECTIONS_DISABLED);
   return { catalogs: next, hiddenIds: hidden };
+}
+
+/**
+ * Append missing built-in collections (rails + folders) without removing or
+ * resetting custom lists, addon rows or imported collections.
+ */
+export function addMissingDefaultCollections(catalogs: CatalogConfig[], hiddenIds: string[]) {
+  const existingIds = new Set(catalogs.map(catalog => catalog.id));
+  const missing = defaultCatalogs
+    .filter(catalog => defaultCollectionIds.has(catalog.id) && !existingIds.has(catalog.id))
+    .map(catalog => normalizedCatalog({ ...catalog, enabled: true }));
+  const missingIds = new Set<string>();
+  for (const catalog of missing) {
+    missingIds.add(catalog.id);
+    const key = catalog.collectionRailKey || catalog.collectionGroup;
+    if (key && String(catalog.kind).toUpperCase() === "COLLECTION_RAIL") {
+      missingIds.add(`collection_row_${key.toLowerCase()}`);
+    }
+  }
+  return {
+    catalogs: [...catalogs, ...missing],
+    hiddenIds: hiddenIds.filter(id => id !== DEFAULT_COLLECTIONS_DISABLED && !missingIds.has(id))
+  };
 }
 
 export function updateHiddenCatalogIds(catalogs: CatalogConfig[], hiddenIds: string[] = []) {

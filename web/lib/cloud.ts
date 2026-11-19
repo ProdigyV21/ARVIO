@@ -1,3 +1,5 @@
+import { repairIptvPlaylistIds } from "./iptvPlaylistIdentity";
+import { loadNavigationVisibility, normalizedHiddenNavigationSections } from "./navigationVisibility";
 import type { AuthClient } from "./auth";
 import { mergeAddonChanges, recordAddonChanges, type AddonChanges } from "./addonChanges";
 import { mergeWatchlistChanges, mergeWatchlistItems, watchlistChangesStorageKey, watchlistKey, type CloudWatchlistItem as AndroidWatchlistItem, type WatchlistChanges } from "./watchlistChanges";
@@ -5,10 +7,17 @@ import { loadStored, saveStored } from "./storage";
 import { config, hasNetlifyBackendUrl } from "./config";
 import { parseHomeServerConnectionJson, serializeHomeServerConnectionJson } from "./homeserver";
 import { jsonRequest } from "./http";
+import { findNextEpisode, type SeasonEpisodesLookup } from "./nextEpisode";
+import { discardPendingProgress, flushProgressOutbox, installProgressRetry, pendingProgress, queueProgress, type ProgressItem, type ProgressOperation, type ProgressSendResult } from "./progressOutbox";
 import { mergeTvSessions, normalizeTvSession } from "./iptvSession";
 import { normalizeIptvPlaylist as normalizeRuntimeIptvPlaylist } from "./iptv";
+import { normalizeGroupNames } from "./iptvGroups";
+import { legacyStalkerFields, mergeStalkerPortalEdits, migrateIptvCloudState, migrateLegacyStalkerChannelIds, migrateLegacyStalkerKeys, normalizeStalkerPortals, portalsFromCloud } from "./stalkerPortals";
+import type { StalkerPortalEntry } from "./types";
 import { tmdbImageUrl } from "./mediaImages";
+import { applyRowLayoutModes, normalizedRowLayoutModes } from "./homeRows";
 import type { TraktToken } from "./trakt";
+import { isYouTubeItem } from "./youtubeCollection";
 import type { SimklToken } from "./simkl";
 import type { TrackingPreferences, TrackingReadMode } from "./sync";
 import type { AppSettings, InstalledAddon, IptvPlaylistEntry, MediaItem, Profile, QualityFilterConfig, WatchHistoryEntry } from "./types";
@@ -29,6 +38,8 @@ interface AccountSyncPullResponse {
 }
 
 interface AndroidContinueWatchingItem {
+  addonNativeId?: string | null;
+  addonNativeAddonId?: string | null;
   id?: number;
   title?: string;
   mediaType?: string;
@@ -37,6 +48,8 @@ interface AndroidContinueWatchingItem {
   durationSeconds?: number;
   season?: number | null;
   episode?: number | null;
+  displaySeason?: number | null;
+  displayEpisode?: number | null;
   episodeTitle?: string | null;
   backdropPath?: string | null;
   episodeStillPath?: string | null;
@@ -44,6 +57,8 @@ interface AndroidContinueWatchingItem {
   streamKey?: string | null;
   streamAddonId?: string | null;
   streamTitle?: string | null;
+  isUpNext?: boolean;
+  releaseDate?: string | null;
   updatedAtMs?: number;
 }
 
@@ -54,12 +69,18 @@ interface AndroidIptvProfileState {
   playlists?: IptvPlaylistEntry[];
   stalkerPortalUrl?: string;
   stalkerMacAddress?: string;
+  /** Android's portal list (StalkerPortalEntry[]); authoritative when it has entries. */
+  stalkerPortals?: unknown[];
   favoriteChannels?: string[];
   favoriteGroups?: string[];
   hiddenGroups?: string[];
   groupOrder?: string[];
   groupOrderSchema?: number;
   sortOrder?: string;
+  /** { "<playlistId>|<group>": [channel ids…] } — manual channel order inside a category. */
+  channelOrder?: Record<string, string[]>;
+  /** { "<playlistId>|<group>": "<display name>" } — category names set by the user. */
+  groupNames?: Record<string, string>;
 }
 
 function canUseBackendSync(auth: AuthClient) {
@@ -220,7 +241,7 @@ function normalizeIptvPlaylist(value: unknown, fallbackId: string): IptvPlaylist
   const id = stringValue(raw.id) || fallbackId;
   const name = stringValue(raw.name) || "Cloud IPTV";
   const epgUrl = stringValue(raw.epgUrl ?? raw.epg_url ?? raw.xmltvUrl ?? raw.xmltv_url);
-  return normalizeRuntimeIptvPlaylist({
+  const normalized = normalizeRuntimeIptvPlaylist({
     id,
     name,
     m3uUrl,
@@ -228,15 +249,33 @@ function normalizeIptvPlaylist(value: unknown, fallbackId: string): IptvPlaylist
     epgUrls: stringArray(raw.epgUrls ?? raw.epg_urls),
     enabled: raw.enabled !== false
   }, Number(fallbackId.match(/\d+$/)?.[0] ?? 1) - 1);
+  if (!normalized) return null;
+  // Android's per-playlist import switches. Carried through so a web edit of
+  // the playlist list does not quietly turn VOD/series import back on.
+  for (const flag of ["importLiveTv", "importVod", "importSeries"] as const) {
+    if (typeof raw[flag] === "boolean") normalized[flag] = raw[flag] as boolean;
+  }
+  return normalized;
+}
+
+/** iptvByProfile.<id>.channelOrder → only string lists under `playlist|group` keys. */
+export function normalizeChannelOrder(value: unknown): Record<string, string[]> {
+  const result: Record<string, string[]> = {};
+  for (const [key, refs] of Object.entries(objectRecord(value))) {
+    if (!key.includes("|")) continue;
+    const list = [...new Set(stringArray(refs))];
+    if (list.length) result[key] = list;
+  }
+  return result;
 }
 
 function normalizeIptvPlaylists(value: unknown, fallbackPrefix: string): IptvPlaylistEntry[] {
   const values = arrayValue(value);
-  return values.length
+  return repairIptvPlaylistIds(values.length
     ? values
         .map((playlist, index) => normalizeIptvPlaylist(playlist, `${fallbackPrefix}-${index + 1}`))
         .filter((playlist): playlist is IptvPlaylistEntry => Boolean(playlist))
-    : [];
+    : []);
 }
 
 function dedupeIptvPlaylists(playlists: IptvPlaylistEntry[]) {
@@ -253,8 +292,38 @@ function androidSubtitleSize(size: number | string | undefined) {
   if (typeof size === "string") return size;
   if (!Number.isFinite(size)) return "Medium";
   if (Number(size) <= 85) return "Small";
-  if (Number(size) >= 130) return "Large";
+  if (Number(size) >= 160) return "Extra Large";
+  if (Number(size) >= 125) return "Large";
   return "Medium";
+}
+
+// Android stores the AI model as its enum name. Older web builds wrote
+// "groq"/"gemini"/"off", which Android does not understand.
+export function androidAiModel(value: AppSettings["aiSubtitleModel"]) {
+  return value === "gemini" ? "GEMINI_FLASH_25" : "GROQ_LLAMA_70B";
+}
+
+export function webAiModel(value: unknown): AppSettings["aiSubtitleModel"] {
+  return String(value ?? "").toLowerCase().includes("gemini") ? "gemini" : "groq";
+}
+
+// Accent colours: the web ids map onto Android's eight named colours.
+const ACCENT_TO_ANDROID: Record<string, string> = {
+  arctic: "White", red: "Red", orange: "Orange", gold: "Yellow", green: "Green", blue: "Blue", indigo: "Indigo", purple: "Violet"
+};
+
+export function androidAccent(value: string) {
+  return ACCENT_TO_ANDROID[value] ?? (Object.values(ACCENT_TO_ANDROID).includes(value) ? value : "White");
+}
+
+export function webAccent(value: unknown) {
+  const raw = String(value ?? "").trim();
+  if (raw in ACCENT_TO_ANDROID) return raw;
+  const lower = raw.toLowerCase();
+  if (lower === "violet" || lower === "purple") return "purple";
+  if (lower === "yellow" || lower === "gold") return "gold";
+  const match = Object.entries(ACCENT_TO_ANDROID).find(([, name]) => name.toLowerCase() === lower);
+  return match ? match[0] : "arctic";
 }
 
 function webSubtitleSize(size: unknown) {
@@ -352,6 +421,15 @@ function webFrameRateMode(value: unknown): AppSettings["frameRateMatchingMode"] 
   }
 }
 
+const ANDROID_MAX_QUALITY = new Set(["Unlimited", "720p", "1080p", "4K"]);
+function webMaxQuality(value: unknown): AppSettings["autoPlayMaxQuality"] {
+  const raw = String(value ?? "").trim().toLowerCase();
+  if (raw === "720p" || raw === "hd") return "720p";
+  if (raw === "1080p" || raw === "fhd" || raw === "fullhd") return "1080p";
+  if (raw === "4k" || raw === "2160p" || raw === "uhd") return "4K";
+  return "Unlimited";
+}
+
 function normalizedDns(value: unknown): AppSettings["dnsProvider"] {
   const raw = String(value ?? "").trim().toLowerCase();
   if (raw.includes("cloudflare")) return "cloudflare";
@@ -413,7 +491,7 @@ function androidProfileSettings(settings: AppSettings) {
     contentLanguage: settings.language || "en-US",
     trailerAutoPlay: settings.trailerAutoPlay,
     trailerSoundEnabled: settings.trailerSound,
-    trailerDelaySeconds: settings.trailerDelaySeconds,
+    trailerDelaySeconds: Math.max(0, Math.min(10, Math.round(Number(settings.trailerDelaySeconds) || 0))),
     trailerInCards: settings.trailerInCards,
     clockFormat: settings.clockFormat,
     showBudget: settings.showBudget,
@@ -431,9 +509,25 @@ function androidProfileSettings(settings: AppSettings) {
     subtitleStylized: settings.subtitleStylized,
     secondarySubtitle: settings.secondarySubtitle || "Off",
     filterSubtitlesByLanguage: settings.filterSubtitlesByLanguage,
+    subtitleFont: settings.subtitleFont || "System",
+    useForcedSubtitles: settings.useForcedSubtitles,
+    showEpisodeRatings: settings.showEpisodeRatings,
+    animeEpisodeStructuring: settings.animeEpisodeStructuring === "standard" ? "standard" : "broadcast",
+    streamSearchMode: settings.streamSearchMode === "sequential" ? "sequential" : "parallel",
+    // Optional on Android: only sent once chosen here, so the app keeps its own value otherwise.
+    ...(settings.netflixHomeStyle !== undefined ? { netflixHomeStyle: settings.netflixHomeStyle } : {}),
+    ...(settings.watchlistOnHome !== undefined ? { watchlistOnHome: settings.watchlistOnHome } : {}),
+    ...(Array.isArray(settings.hiddenNavigationSections) ? { hiddenNavigationSections: normalizedHiddenNavigationSections(settings.hiddenNavigationSections) } : {}),
+    ...(settings.guideRowCount !== undefined ? { guideRowCount: settings.guideRowCount } : {}),
+    ...(settings.autoPlayMaxQuality !== undefined && ANDROID_MAX_QUALITY.has(settings.autoPlayMaxQuality) ? { autoPlayMaxQuality: settings.autoPlayMaxQuality } : {}),
+    ...(settings.autoPlayMaxSizeGb !== undefined ? { autoPlayMaxSizeGb: Math.max(0, Math.min(1024, Math.round(Number(settings.autoPlayMaxSizeGb) || 0))) } : {}),
     homeServerConnectionJson: serializeHomeServerConnectionJson(settings.homeServers),
     torrServerBaseUrl: settings.torrServerBaseUrl || null,
-    catalogueRowLayoutModes: {},
+    ...(settings.catalogueRowLayoutModes !== undefined ? { catalogueRowLayoutModes: settings.catalogueRowLayoutModes } : {}),
+    ...(settings.streamProvidersCustomOrder !== undefined ? { streamProvidersCustomOrder: settings.streamProvidersCustomOrder } : {}),
+    ...(settings.streamIntegrationsMacroOrder !== undefined ? { streamIntegrationsMacroOrder: settings.streamIntegrationsMacroOrder } : {}),
+    ...(settings.streamMacroEnabledMap !== undefined ? { streamMacroEnabledMap: settings.streamMacroEnabledMap } : {}),
+    ...(settings.streamProviderEnabledMap !== undefined ? { streamProviderEnabledMap: settings.streamProviderEnabledMap } : {}),
     cardLayoutMode: settings.cardLayoutMode,
     frameRateMatchingMode: androidFrameRateMode(settings.frameRateMatchingMode),
     autoPlayNext: settings.autoPlayNext,
@@ -452,7 +546,7 @@ function settingsFromAndroidProfile(value: unknown): Partial<AppSettings> {
   if ("contentLanguage" in state) partial.language = String(state.contentLanguage || "en-US");
   if ("trailerAutoPlay" in state) partial.trailerAutoPlay = Boolean(state.trailerAutoPlay);
   if ("trailerSoundEnabled" in state) partial.trailerSound = Boolean(state.trailerSoundEnabled);
-  if ("trailerDelaySeconds" in state) partial.trailerDelaySeconds = Number(state.trailerDelaySeconds) || 2;
+  if ("trailerDelaySeconds" in state) { const delay = Number(state.trailerDelaySeconds); partial.trailerDelaySeconds = Number.isFinite(delay) ? delay : 1; }
   if ("trailerInCards" in state) partial.trailerInCards = Boolean(state.trailerInCards);
   if ("clockFormat" in state) partial.clockFormat = String(state.clockFormat) === "12h" ? "12h" : "24h";
   if ("showBudget" in state) partial.showBudget = Boolean(state.showBudget);
@@ -474,11 +568,19 @@ function settingsFromAndroidProfile(value: unknown): Partial<AppSettings> {
   if ("subtitleAiEnabled" in state) partial.aiSubtitlesEnabled = Boolean(state.subtitleAiEnabled);
   if ("subtitleAiAutoSelect" in state) partial.aiAutoSelect = Boolean(state.subtitleAiAutoSelect);
   if ("subtitleAiApiKey" in state) partial.aiApiKey = String(state.subtitleAiApiKey || "");
-  if ("subtitleAiModel" in state) {
-    const model = String(state.subtitleAiModel || "").toLowerCase();
-    partial.aiSubtitleModel = model === "gemini" ? "gemini" : model === "off" ? "off" : "groq";
-  }
+  if ("subtitleAiModel" in state) partial.aiSubtitleModel = webAiModel(state.subtitleAiModel);
   if ("subtitleStylized" in state) partial.subtitleStylized = Boolean(state.subtitleStylized);
+  if ("subtitleFont" in state && typeof state.subtitleFont === "string" && state.subtitleFont.trim()) partial.subtitleFont = state.subtitleFont.trim();
+  if ("useForcedSubtitles" in state) partial.useForcedSubtitles = Boolean(state.useForcedSubtitles);
+  if ("showEpisodeRatings" in state) partial.showEpisodeRatings = Boolean(state.showEpisodeRatings);
+  if ("animeEpisodeStructuring" in state) partial.animeEpisodeStructuring = String(state.animeEpisodeStructuring).toLowerCase() === "standard" ? "standard" : "broadcast";
+  if ("streamSearchMode" in state) partial.streamSearchMode = String(state.streamSearchMode).toLowerCase() === "sequential" ? "sequential" : "parallel";
+  if (typeof state.netflixHomeStyle === "boolean") partial.netflixHomeStyle = state.netflixHomeStyle;
+  if (typeof state.watchlistOnHome === "boolean") partial.watchlistOnHome = state.watchlistOnHome;
+  if (Array.isArray(state.hiddenNavigationSections)) partial.hiddenNavigationSections = normalizedHiddenNavigationSections(state.hiddenNavigationSections);
+  if (state.guideRowCount !== undefined && state.guideRowCount !== null && Number.isFinite(Number(state.guideRowCount))) partial.guideRowCount = Number(state.guideRowCount);
+  if (state.autoPlayMaxQuality !== undefined && state.autoPlayMaxQuality !== null) partial.autoPlayMaxQuality = webMaxQuality(state.autoPlayMaxQuality);
+  if (state.autoPlayMaxSizeGb !== undefined && state.autoPlayMaxSizeGb !== null && Number.isFinite(Number(state.autoPlayMaxSizeGb))) partial.autoPlayMaxSizeGb = Number(state.autoPlayMaxSizeGb);
   if ("secondarySubtitle" in state) partial.secondarySubtitle = String(state.secondarySubtitle || "");
   if ("filterSubtitlesByLanguage" in state) partial.filterSubtitlesByLanguage = Boolean(state.filterSubtitlesByLanguage);
   if ("homeServerConnectionJson" in state && typeof state.homeServerConnectionJson === "string" && state.homeServerConnectionJson.trim()) {
@@ -494,6 +596,12 @@ function settingsFromAndroidProfile(value: unknown): Partial<AppSettings> {
   if ("autoPlaySingleSource" in state) partial.autoPlaySingleSource = Boolean(state.autoPlaySingleSource);
   if ("autoPlayMinQuality" in state) partial.autoPlayMinQuality = webQuality(state.autoPlayMinQuality);
   if ("torrServerBaseUrl" in state) partial.torrServerBaseUrl = stringValue(state.torrServerBaseUrl);
+  // Source priority (StreamIntegrationRepository). Blank strings mean "not set" on Android.
+  if (typeof state.streamProvidersCustomOrder === "string") partial.streamProvidersCustomOrder = state.streamProvidersCustomOrder;
+  if (typeof state.streamIntegrationsMacroOrder === "string") partial.streamIntegrationsMacroOrder = state.streamIntegrationsMacroOrder;
+  if ("streamMacroEnabledMap" in state) partial.streamMacroEnabledMap = booleanMap(state.streamMacroEnabledMap);
+  if ("streamProviderEnabledMap" in state) partial.streamProviderEnabledMap = booleanMap(state.streamProviderEnabledMap);
+  if ("catalogueRowLayoutModes" in state) partial.catalogueRowLayoutModes = normalizedRowLayoutModes(state.catalogueRowLayoutModes) ?? {};
   if ("qualityFilters" in state) {
     const filters = validQualityFilters(state.qualityFilters);
     partial.qualityFilters = filters;
@@ -502,9 +610,20 @@ function settingsFromAndroidProfile(value: unknown): Partial<AppSettings> {
   return partial;
 }
 
+function booleanMap(value: unknown): Record<string, boolean> {
+  return Object.fromEntries(Object.entries(objectRecord(value)).filter(([key, enabled]) => key.trim() && typeof enabled === "boolean")) as Record<string, boolean>;
+}
+
+/** The portals a synced IPTV profile has, by Android's import rule (the list, else the single-portal fields). */
+function cloudPortals(state: Record<string, unknown>, rootState: RawPayload = {}): StalkerPortalEntry[] {
+  return portalsFromCloud(state.stalkerPortals, state.stalkerPortalUrl ?? rootState.iptvStalkerUrl, state.stalkerMacAddress ?? rootState.iptvStalkerMac);
+}
+
 function iptvFromAndroid(value: unknown, root?: RawPayload): Partial<AppSettings> {
-  const state = objectRecord(value) as AndroidIptvProfileState;
   const rootState = root ?? {};
+  const stalkerPortals = cloudPortals(objectRecord(value), rootState);
+  // Category keys and channel ids of single-portal builds (`stalker|…`) belong to Portal 1, as on Android.
+  const state = migrateIptvCloudState(objectRecord(value), stalkerPortals) as AndroidIptvProfileState;
   const rootSettings = objectRecord(rootState.settings);
   const profilePlaylists = normalizeIptvPlaylists(state.playlists, "cloud-profile");
   const rootSettingsPlaylists = normalizeIptvPlaylists(rootSettings.iptvPlaylists, "cloud-settings");
@@ -528,17 +647,21 @@ function iptvFromAndroid(value: unknown, root?: RawPayload): Partial<AppSettings
     ...rootPlaylists,
     ...legacyPlaylists
   ]);
+  const legacyStalker = legacyStalkerFields(stalkerPortals);
   return {
     iptvPlaylists: playlists,
-    favoriteChannelIds: value !== undefined ? stringArray(state.favoriteChannels) : stringArray(rootState.iptvFavoriteChannels),
+    favoriteChannelIds: value !== undefined ? stringArray(state.favoriteChannels) : migrateLegacyStalkerChannelIds(stringArray(rootState.iptvFavoriteChannels), stalkerPortals),
     iptvTvSession: normalizeTvSession((state as Record<string, unknown>).tvSession),
-    favoriteGroupIds: value !== undefined ? stringArray(state.favoriteGroups) : stringArray(rootState.iptvFavoriteGroups),
+    favoriteGroupIds: value !== undefined ? stringArray(state.favoriteGroups) : migrateLegacyStalkerKeys(stringArray(rootState.iptvFavoriteGroups)),
     hiddenGroupIds: stringArray(state.hiddenGroups),
     lockedIptvGroupIds: stringArray(state.lockedGroups),
     groupOrder: (state.groupOrderSchema ?? 0) >= 3 ? stringArray(state.groupOrder) : [],
+    iptvChannelOrder: normalizeChannelOrder(state.channelOrder),
+    iptvGroupNames: normalizeGroupNames(state.groupNames),
     iptvSortOrder: state.sortOrder === "number" || state.sortOrder === "name" ? state.sortOrder : "provider",
-    iptvStalkerUrl: stringValue(state.stalkerPortalUrl ?? rootState.iptvStalkerUrl),
-    iptvStalkerMac: stringValue(state.stalkerMacAddress ?? rootState.iptvStalkerMac)
+    iptvStalkerPortals: stalkerPortals,
+    iptvStalkerUrl: legacyStalker.stalkerPortalUrl,
+    iptvStalkerMac: legacyStalker.stalkerMacAddress
   };
 }
 
@@ -550,6 +673,8 @@ function androidCwToHistory(item: AndroidContinueWatchingItem, profileId?: strin
   const position = Math.max(0, Number(item.resumePositionSeconds ?? 0));
   const progress = Math.max(0, Math.min(0.99, Number(item.progress ?? 0) / 100));
   return {
+    ...(item.addonNativeId ? { addon_native_id: item.addonNativeId, addon_native_addon_id: item.addonNativeAddonId } : {}),
+    ...(item.isUpNext ? { is_up_next: true, release_date: item.releaseDate || null } : {}),
     user_id: "",
     profile_id: profileId ?? null,
     media_type: mediaType,
@@ -571,16 +696,26 @@ function androidCwToHistory(item: AndroidContinueWatchingItem, profileId?: strin
   };
 }
 
-function historyToAndroidCw(entry: Omit<WatchHistoryEntry, "user_id">): AndroidContinueWatchingItem {
+/**
+ * A web playback checkpoint in Android's ContinueWatchingItem shape. Fields the
+ * web does not know are left null/absent so the merge keeps Android's value
+ * (stream_key, display numbering, release date) for the same episode.
+ */
+function historyToAndroidCw(entry: Omit<WatchHistoryEntry, "user_id">, updatedAtMs = Date.now()): ProgressItem {
+  const isTv = entry.media_type === "tv";
   return {
+    ...(entry.addon_native_id ? { addonNativeId: entry.addon_native_id, addonNativeAddonId: entry.addon_native_addon_id } : {}),
     id: entry.show_tmdb_id,
-    title: entry.title ?? "",
-    mediaType: entry.media_type,
-    progress: Math.round(Math.max(0, Math.min(1, entry.progress)) * 100),
-    resumePositionSeconds: entry.position_seconds ?? 0,
-    durationSeconds: entry.duration_seconds ?? 0,
+    // Android drops rows without a title (sanitizeContinueWatchingItems).
+    title: entry.title?.trim() || entry.episode_title?.trim() || "Untitled",
+    mediaType: isTv ? "tv" : "movie",
+    // 89.6% must not round up to Android's 90% "watched" threshold.
+    progress: Math.min(Math.round(Math.max(0, Math.min(1, entry.progress)) * 100), entry.progress < 0.9 ? 89 : 100),
+    resumePositionSeconds: Math.max(0, Math.round(entry.position_seconds ?? 0)),
+    durationSeconds: Math.max(0, Math.round(entry.duration_seconds ?? 0)),
     season: entry.season ?? null,
     episode: entry.episode ?? null,
+    ...(isTv && entry.season != null && entry.episode != null ? { displaySeason: entry.season, displayEpisode: entry.episode } : {}),
     episodeTitle: entry.episode_title ?? null,
     backdropPath: entry.backdrop_path ?? null,
     episodeStillPath: entry.episode_still_path ?? null,
@@ -588,8 +723,24 @@ function historyToAndroidCw(entry: Omit<WatchHistoryEntry, "user_id">): AndroidC
     streamKey: entry.stream_key ?? null,
     streamAddonId: entry.stream_addon_id ?? null,
     streamTitle: entry.stream_title ?? entry.source ?? null,
-    updatedAtMs: Date.now()
+    isUpNext: false,
+    updatedAtMs
   };
+}
+
+const continueWatchingShowKey = (item: { id?: number; mediaType?: string }) =>
+  `${String(item.mediaType ?? "").toLowerCase()}:${Number(item.id ?? 0)}`;
+
+/** Android keeps one row per show (TraktRepository.saveLocalContinueWatching); the newest wins. */
+function newestPerShow(items: AndroidContinueWatchingItem[]): AndroidContinueWatchingItem[] {
+  const byShow = new Map<string, AndroidContinueWatchingItem>();
+  for (const item of items) {
+    if (!item?.id) continue;
+    const key = continueWatchingShowKey(item);
+    const current = byShow.get(key);
+    if (!current || Number(item.updatedAtMs ?? 0) > Number(current.updatedAtMs ?? 0)) byShow.set(key, item);
+  }
+  return [...byShow.values()];
 }
 
 function androidContinueWatchingItems(root: RawPayload, profileId?: string | null): AndroidContinueWatchingItem[] {
@@ -609,13 +760,10 @@ function androidContinueWatchingItems(root: RawPayload, profileId?: string | nul
     ...arrayValue<AndroidContinueWatchingItem>(root.localContinueWatching),
     ...arrayValue<AndroidContinueWatchingItem>(root.continueWatching)
   ];
-  const seen = new Set<string>();
-  return [...scoped, ...global].filter((item) => {
-    const key = `${item.mediaType ?? ""}:${item.id ?? ""}:${item.season ?? ""}:${item.episode ?? ""}`;
-    if (!item.id || seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
+  // Legacy single-profile lists only fill titles the profile's own list lacks.
+  const own = newestPerShow(scoped);
+  const seen = new Set(own.map(continueWatchingShowKey));
+  return [...own, ...newestPerShow(global).filter((item) => !seen.has(continueWatchingShowKey(item)))];
 }
 
 // A single app refresh calls pullRawPayload five times (payload, trakt token,
@@ -676,15 +824,18 @@ export async function pullRawPayload(auth: AuthClient): Promise<RawPayload> {
   return structuredClone(await promise);
 }
 
-async function writeRawPayload(auth: AuthClient, payload: RawPayload) {
+async function writeRawPayload(auth: AuthClient, payload: RawPayload, baseUpdatedAtMs?: number) {
   if (!auth.session) return;
   payload.userId = auth.session.userId;
   payload.updatedAt = Date.now();
   const userId = auth.session.userId;
   if (canUseBackendSync(auth)) {
+    // baseUpdatedAtMs = when this document was read. The server keeps another
+    // device's Continue Watching rows written after that instead of treating
+    // their absence here as a removal (netlify-auth-site _sync-merge.js).
     const result = await backendRequest<{ accepted?: boolean; reason?: string }>(auth, "account-sync-push", {
       method: "POST",
-      body: JSON.stringify({ payload })
+      body: JSON.stringify(baseUpdatedAtMs ? { payload, baseUpdatedAtMs } : { payload })
     });
     if (result.accepted !== true) {
       invalidateRawPayloadCache();
@@ -714,6 +865,19 @@ async function writeRawPayload(auth: AuthClient, payload: RawPayload) {
  */
 const mutationQueues = new Map<string, Promise<void>>();
 
+/**
+ * Run `run` after this account's queued full-document writes. A progress
+ * checkpoint sent while a full write is between its read and its push would
+ * land first, and the push (whose snapshot lacks the new row) would drop it.
+ */
+async function runInMutationQueue<T>(userId: string, run: () => Promise<T>): Promise<T> {
+  const task = (mutationQueues.get(userId) ?? Promise.resolve()).catch(() => undefined).then(run);
+  const settled = task.then(() => undefined, () => undefined);
+  mutationQueues.set(userId, settled);
+  try { return await task; }
+  finally { if (mutationQueues.get(userId) === settled) mutationQueues.delete(userId); }
+}
+
 export async function mutateCloudPayload(auth: AuthClient, mutator: (root: RawPayload) => void) {
   if (!auth.session) return;
   const userId = auth.session.userId;
@@ -722,10 +886,11 @@ export async function mutateCloudPayload(auth: AuthClient, mutator: (root: RawPa
     // A recent read cache can predate another device's change. Mutations must
     // start from a fresh snapshot, not echo that stale cached account back.
     invalidateRawPayloadCache();
+    const readAt = Date.now();
     const root = await pullRawPayload(auth);
     if (auth.session?.userId !== userId) throw new Error("Account changed before sync completed");
     mutator(root);
-    await writeRawPayload(auth, root);
+    await writeRawPayload(auth, root, readAt);
   });
   mutationQueues.set(userId, task);
   try { await task; }
@@ -745,6 +910,14 @@ export async function pullCloudPayload(auth: AuthClient, profileId?: string | nu
   delete legacySettings.customTmdbApiKey;
   delete legacySettings.customTvdbApiKey;
   delete legacySettings.customTvdbUserPin;
+  // Profile-scoped values: the legacy blob holds whichever profile saved last.
+  delete legacySettings.streamProvidersCustomOrder;
+  delete legacySettings.streamIntegrationsMacroOrder;
+  delete legacySettings.streamMacroEnabledMap;
+  delete legacySettings.streamProviderEnabledMap;
+  delete legacySettings.catalogueRowLayoutModes;
+  delete legacySettings.androidPluginRepositories;
+  delete legacySettings.hiddenNavigationSections;
   const legacyCatalogs = parseNestedJson(root.catalogs);
   const hasProfileCatalogs = Array.isArray(profileCatalogs);
   const effectiveHiddenCatalogs = hiddenCatalogIds ?? (hasProfileCatalogs ? [] : root.hiddenPreinstalledCatalogs ?? legacySettings.hiddenCatalogIds);
@@ -753,7 +926,9 @@ export async function pullCloudPayload(auth: AuthClient, profileId?: string | nu
   // Profile-scoped lists are authoritative, including []. Do not inherit stale
   // visibility flags from the last profile that wrote the legacy settings blob.
   const catalogSettings: Partial<AppSettings> = {
-    ...(hasProfileCatalogs ? { catalogs: profileCatalogs } : Array.isArray(legacyCatalogs) ? { catalogs: legacyCatalogs } : {}),
+    // Card style per row lives in the profile's catalogueRowLayoutModes (Android drops `layout`).
+    ...(hasProfileCatalogs ? { catalogs: applyRowLayoutModes(profileCatalogs, profileSettings.catalogueRowLayoutModes) }
+      : Array.isArray(legacyCatalogs) ? { catalogs: applyRowLayoutModes(legacyCatalogs as AppSettings["catalogs"], profileSettings.catalogueRowLayoutModes) } : {}),
     ...(effectiveHiddenCatalogs !== undefined ? { hiddenCatalogIds: arrayValue<string>(effectiveHiddenCatalogs) } : {}),
     ...(effectiveHiddenAddons !== undefined ? { hiddenAddonCatalogIds: arrayValue<string>(effectiveHiddenAddons) } : {}),
     ...(effectiveHiddenHomeServers !== undefined ? { hiddenHomeServerCatalogIds: arrayValue<string>(effectiveHiddenHomeServers) } : {})
@@ -762,27 +937,48 @@ export async function pullCloudPayload(auth: AuthClient, profileId?: string | nu
   // Android with per-field timestamps), NOT in the legacy `root.settings` blob. Map them so an
   // Android change (accent color, AI subtitles, etc.) is actually visible on web.
   const globalSettings: Partial<AppSettings> = {};
-  if ("accentColor" in root) globalSettings.accentColor = String(root.accentColor ?? "");
+  if ("accentColor" in root) globalSettings.accentColor = webAccent(root.accentColor);
   if ("oledBlackBackground" in root) globalSettings.oledBlack = Boolean(root.oledBlackBackground);
   if ("customUserAgent" in root) globalSettings.customUserAgent = String(root.customUserAgent ?? "");
   if ("skipProfileSelection" in root) globalSettings.skipProfileSelection = Boolean(root.skipProfileSelection);
   if ("subtitleAiEnabled" in root) globalSettings.aiSubtitlesEnabled = Boolean(root.subtitleAiEnabled);
   if ("subtitleAiAutoSelect" in root) globalSettings.aiAutoSelect = Boolean(root.subtitleAiAutoSelect);
   if ("subtitleAiApiKey" in root) globalSettings.aiApiKey = String(root.subtitleAiApiKey ?? "");
-  // The web's model is a small enum ("off"/"groq"/"gemini") while Android stores a full model id —
-  // only adopt the value when it's already in the web's vocabulary (i.e. the web wrote it last).
-  if ("subtitleAiModel" in root) {
-    const model = String(root.subtitleAiModel ?? "");
-    if (model === "off" || model === "groq" || model === "gemini") globalSettings.aiSubtitleModel = model;
-  }
+  // Android stores GROQ_LLAMA_70B / GEMINI_FLASH_25; older web builds wrote groq/gemini/off.
+  if ("subtitleAiModel" in root) globalSettings.aiSubtitleModel = webAiModel(root.subtitleAiModel);
+  if ("subtitleAiFindBestMatch" in root) globalSettings.aiFindBestMatch = Boolean(root.subtitleAiFindBestMatch);
+  if ("subtitlePreloadEnabled" in root) globalSettings.subtitlePreload = root.subtitlePreloadEnabled !== false;
+  if ("dolbyVisionCompatEnabled" in root) globalSettings.dolbyVisionCompat = root.dolbyVisionCompatEnabled !== false;
+  if ("telegramSearchOnClickOnly" in root) globalSettings.telegramSearchOnClickOnly = root.telegramSearchOnClickOnly !== false;
   if ("subtitleRemoveHearingImpaired" in root) globalSettings.removeHearingImpaired = Boolean(root.subtitleRemoveHearingImpaired);
+  // Read only: lets Settings name the TV's plugin repositories in the source list.
+  if (Array.isArray(parseNestedJson(root.pluginRepositories))) {
+    globalSettings.androidPluginRepositories = arrayValue<Record<string, unknown>>(root.pluginRepositories)
+      .map((repo) => ({ id: stringValue(repo?.id), name: stringValue(repo?.name), enabled: repo?.enabled !== false }))
+      .filter((repo) => repo.id);
+  }
+  const enrichedAddons = enrichAddonsWithMetadataCache(
+    unionAddons(arrayValue<InstalledAddon>(profileAddons), arrayValue<InstalledAddon>(root.addons)),
+    objectRecord<Record<string, unknown>>(root.addonMetadataByKey)
+  );
+  if (Array.isArray(catalogSettings.catalogs) && enrichedAddons.length > 0) {
+    catalogSettings.catalogs = enrichCatalogsFromAddons(catalogSettings.catalogs, enrichedAddons);
+  }
   return {
     version: typeof root.version === "number" ? root.version : 1,
     // Union the per-profile scope with the global list. An empty/partial profile
     // scope must never hide the shared library (that was a wipe amplifier).
-    addons: unionAddons(arrayValue<InstalledAddon>(profileAddons), arrayValue<InstalledAddon>(root.addons)),
+    addons: enrichedAddons,
     settings: {
       ...legacySettings,
+      // Explicitly unset, so a profile without them never keeps the previous profile's values.
+      streamProvidersCustomOrder: undefined,
+      streamIntegrationsMacroOrder: undefined,
+      streamMacroEnabledMap: undefined,
+      streamProviderEnabledMap: undefined,
+      catalogueRowLayoutModes: undefined,
+      androidPluginRepositories: undefined,
+      hiddenNavigationSections: loadNavigationVisibility(auth.session?.userId, profileId),
       ...profileSettings,
       ...globalSettings,
       ...iptvSettings,
@@ -792,13 +988,147 @@ export async function pullCloudPayload(auth: AuthClient, profileId?: string | nu
   };
 }
 
-function unionAddons(primary: InstalledAddon[], existing: unknown): InstalledAddon[] {
-  const byKey = new Map<string, InstalledAddon>();
-  for (const addon of [...primary, ...arrayValue<InstalledAddon>(existing)]) {
-    const key = addon?.manifestUrl || addon?.id;
-    if (key && !byKey.has(key)) byKey.set(key, addon);
+function normalizeAddonUrlKey(raw: string | undefined): string {
+  const value = String(raw ?? "").trim().toLowerCase();
+  if (!value) return "";
+  return value.replace(/\/manifest\.json(\?.*)?$/, "$1").replace(/\/+$/, "");
+}
+
+function isConfiguredAddonUrl(raw: string | undefined): boolean {
+  const value = String(raw ?? "").trim();
+  if (!value) return false;
+  try {
+    const parsed = new URL(value);
+    if (parsed.search && parsed.search.length > 1) return true;
+    return parsed.pathname.replace(/\/manifest\.json$/i, "").replace(/^\/+|\/+$/g, "").length > 0;
+  } catch {
+    return value.includes("?");
   }
-  return [...byKey.values()];
+}
+
+function mergeCatalogEntries(primary: unknown, fallback: unknown, allowClear: boolean) {
+  const prim = Array.isArray(primary) ? primary : [];
+  const fb = Array.isArray(fallback) ? fallback : [];
+  if (allowClear && Array.isArray(primary)) return prim;
+  if (!prim.length) return fb;
+  if (!fb.length || allowClear) return prim;
+  const byKey = new Map<string, Record<string, unknown>>();
+  for (const item of fb) {
+    if (!item || typeof item !== "object") continue;
+    const cat = item as Record<string, unknown>;
+    if (cat.id) byKey.set(`${String(cat.type ?? "").toLowerCase()}:${String(cat.id)}`, cat);
+  }
+  return prim.map((item) => {
+    if (!item || typeof item !== "object") return item;
+    const cat = item as Record<string, unknown>;
+    const prev = cat.id ? byKey.get(`${String(cat.type ?? "").toLowerCase()}:${String(cat.id)}`) : undefined;
+    if (!prev) return item;
+    return {
+      ...cat,
+      ...(cat.clientDelegate == null && prev.clientDelegate != null ? { clientDelegate: prev.clientDelegate } : {}),
+      ...(cat.clientFilter == null && prev.clientFilter != null ? { clientFilter: prev.clientFilter } : {})
+    };
+  });
+}
+
+function mergeAddonPair(preferred: InstalledAddon, fallback: InstalledAddon): InstalledAddon {
+  const pSetup = Number(preferred.setupUpdatedAt ?? 0) || 0;
+  const fSetup = Number(fallback.setupUpdatedAt ?? 0) || 0;
+  const setupWinner = fSetup > pSetup ? fallback : preferred;
+  const setupOther = setupWinner === preferred ? fallback : preferred;
+
+  const winnerUrl = setupWinner.manifestUrl;
+  const otherUrl = setupOther.manifestUrl;
+  const keepConfiguredUrl = isConfiguredAddonUrl(otherUrl) && !isConfiguredAddonUrl(winnerUrl) &&
+    Number(setupWinner.setupUpdatedAt ?? 0) <= Number(setupOther.setupUpdatedAt ?? 0);
+
+  const pMeta = Number(preferred.metadataUpdatedAt ?? 0) || 0;
+  const fMeta = Number(fallback.metadataUpdatedAt ?? 0) || 0;
+  const metaWinner = fMeta > pMeta ? fallback : preferred;
+  const metaOther = metaWinner === preferred ? fallback : preferred;
+  const allowClear = Math.max(pMeta, fMeta) > 0 && pMeta !== fMeta;
+
+  const winnerCompat = metaWinner as InstalledAddon & { manifest?: { catalogs?: unknown[]; resources?: unknown[] } };
+  const otherCompat = metaOther as InstalledAddon & { manifest?: { catalogs?: unknown[]; resources?: unknown[] } };
+  const mergedCatalogs = mergeCatalogEntries(winnerCompat.catalogs, otherCompat.catalogs, allowClear);
+  const mergedManifest = winnerCompat.manifest || otherCompat.manifest
+    ? {
+        ...(otherCompat.manifest ?? {}),
+        ...(winnerCompat.manifest ?? {}),
+        catalogs: mergeCatalogEntries(winnerCompat.manifest?.catalogs, otherCompat.manifest?.catalogs, allowClear)
+      }
+    : undefined;
+
+  return {
+    ...setupOther,
+    ...setupWinner,
+    manifestUrl: keepConfiguredUrl ? otherUrl : winnerUrl,
+    ...(keepConfiguredUrl ? { url: otherUrl, transportUrl: otherUrl.replace(/\/manifest\.json$/, "") } : {}),
+    version: metaWinner.version || metaOther.version,
+    description: metaWinner.description ?? metaOther.description,
+    logo: metaWinner.logo ?? metaOther.logo,
+    background: metaWinner.background ?? metaOther.background,
+    catalogs: mergedCatalogs as InstalledAddon["catalogs"],
+    resources: (Array.isArray(winnerCompat.resources) && (allowClear || winnerCompat.resources.length) ? winnerCompat.resources : otherCompat.resources) ?? [],
+    types: Array.isArray(metaWinner.types) && (allowClear || metaWinner.types.length) ? metaWinner.types : metaOther.types,
+    idPrefixes: metaWinner.idPrefixes ?? metaOther.idPrefixes,
+    ...(mergedManifest ? { manifest: mergedManifest } : {}),
+    ...(Math.max(pSetup, fSetup) > 0 ? { setupUpdatedAt: Math.max(pSetup, fSetup) } : {}),
+    ...(Math.max(pMeta, fMeta) > 0 ? { metadataUpdatedAt: Math.max(pMeta, fMeta) } : {})
+  };
+}
+
+function enrichAddonsWithMetadataCache(
+  addons: InstalledAddon[],
+  metadataCache: Record<string, Record<string, unknown>>
+): InstalledAddon[] {
+  if (!metadataCache || !Object.keys(metadataCache).length) return addons;
+  return addons.map((addon) => {
+    const key = normalizeAddonUrlKey(addon.manifestUrl) || addon.id;
+    const cached = metadataCache[key] || metadataCache[addon.id];
+    if (!cached) return addon;
+    const fakeCached = { ...addon, ...cached } as InstalledAddon;
+    return mergeAddonPair(addon, fakeCached);
+  });
+}
+
+function enrichCatalogsFromAddons(catalogs: AppSettings["catalogs"], addons: InstalledAddon[]) {
+  return catalogs.map((catalog) => {
+    if (catalog.sourceType !== "addon" || (catalog.clientDelegate && catalog.clientFilter)) return catalog;
+    const addon = addons.find((a) => a.id === catalog.addonId || a.manifestUrl === catalog.sourceUrl || a.name === catalog.addonName);
+    const catId = catalog.addonCatalogId || catalog.sourceRef || catalog.id;
+    const decl = addon?.catalogs?.find((c) => c.id === catId);
+    if (!decl || (!decl.clientDelegate && !decl.clientFilter)) return catalog;
+    return {
+      ...catalog,
+      ...(catalog.clientDelegate == null && decl.clientDelegate != null ? { clientDelegate: decl.clientDelegate } : {}),
+      ...(catalog.clientFilter == null && decl.clientFilter != null ? { clientFilter: decl.clientFilter } : {})
+    };
+  });
+}
+
+function unionAddons(primary: InstalledAddon[], existing: unknown): InstalledAddon[] {
+  const result: InstalledAddon[] = [];
+  const indexById = new Map<string, number>();
+  const indexByUrl = new Map<string, number>();
+  for (const addon of [...primary, ...arrayValue<InstalledAddon>(existing)]) {
+    if (!addon || (!addon.id && !addon.manifestUrl)) continue;
+    const urlKey = normalizeAddonUrlKey(addon.manifestUrl);
+    let idx = addon.id ? indexById.get(addon.id) : undefined;
+    if (idx === undefined && urlKey) idx = indexByUrl.get(urlKey);
+    if (idx !== undefined) {
+      result[idx] = mergeAddonPair(result[idx], addon);
+      if (result[idx].id) indexById.set(result[idx].id, idx);
+      const mergedUrlKey = normalizeAddonUrlKey(result[idx].manifestUrl);
+      if (mergedUrlKey) indexByUrl.set(mergedUrlKey, idx);
+    } else {
+      const nextIdx = result.length;
+      result.push(addon);
+      if (addon.id) indexById.set(addon.id, nextIdx);
+      if (urlKey) indexByUrl.set(urlKey, nextIdx);
+    }
+  }
+  return result;
 }
 
 export async function saveCloudAddons(
@@ -827,6 +1157,44 @@ export async function saveCloudAddons(
       const scoped = scopedValue<InstalledAddon[]>(root, "addonsByProfile", profileId);
       setScopedValue(root, "addonsByProfile", profileId, applyRemovals(unionAddons(addons, scoped)));
     }
+    const existingMetaCache = objectRecord<Record<string, unknown>>(root.addonMetadataByKey);
+    const nextMetaCache: Record<string, Record<string, unknown>> = { ...existingMetaCache };
+    for (const addon of addons) {
+      const key = normalizeAddonUrlKey(addon.manifestUrl) || addon.id;
+      if (!key) continue;
+      const compat = addon as InstalledAddon & { manifest?: { catalogs?: unknown[]; resources?: unknown[] } };
+      if (compat.manifest || addon.catalogs?.length || addon.resources?.length || addon.metadataUpdatedAt) {
+        const prev = nextMetaCache[key] as {
+          manifest?: { catalogs?: unknown[]; resources?: unknown[] };
+          catalogs?: unknown[];
+          resources?: unknown[];
+          metadataUpdatedAt?: number;
+        } | undefined;
+        const incomingMetaTs = Number(addon.metadataUpdatedAt ?? 0) || 0;
+        const prevMetaTs = Number(prev?.metadataUpdatedAt ?? 0) || 0;
+        if (!prev || incomingMetaTs >= prevMetaTs) {
+          const allowClear = incomingMetaTs > 0 && prevMetaTs > 0 && incomingMetaTs > prevMetaTs;
+          const mergedCatalogs = prev ? mergeCatalogEntries(addon.catalogs, prev.catalogs, allowClear) : addon.catalogs;
+          const mergedManifest = compat.manifest || prev?.manifest
+            ? {
+                ...(prev?.manifest ?? {}),
+                ...(compat.manifest ?? {}),
+                ...(compat.manifest?.catalogs || prev?.manifest?.catalogs
+                  ? { catalogs: mergeCatalogEntries(compat.manifest?.catalogs, prev?.manifest?.catalogs, allowClear) }
+                  : {})
+              }
+            : undefined;
+          const mergedResources = Array.isArray(addon.resources) && (allowClear || addon.resources.length) ? addon.resources : prev?.resources;
+          nextMetaCache[key] = {
+            ...(mergedManifest ? { manifest: mergedManifest } : {}),
+            ...(Array.isArray(mergedCatalogs) ? { catalogs: mergedCatalogs } : {}),
+            ...(Array.isArray(mergedResources) ? { resources: mergedResources } : {}),
+            ...(Math.max(incomingMetaTs, prevMetaTs) > 0 ? { metadataUpdatedAt: Math.max(incomingMetaTs, prevMetaTs) } : {})
+          };
+        }
+      }
+    }
+    if (Object.keys(nextMetaCache).length > 0) root.addonMetadataByKey = nextMetaCache;
     // Set-level timestamp: lets Android tell an intentional "removed everything" from a blank pull,
     // so removing the last add-on(s) from web actually propagates (reconcileAddonsWithCloud).
     root.addonsUpdatedAt = timestamp;
@@ -834,19 +1202,35 @@ export async function saveCloudAddons(
 }
 
 function androidIptvSettings(settings: AppSettings): Record<string, unknown> {
+  // Older apps only read the single-portal fields: they carry the first enabled portal.
+  const legacyStalker = settings.iptvStalkerPortals
+    ? legacyStalkerFields(settings.iptvStalkerPortals)
+    : { stalkerPortalUrl: settings.iptvStalkerUrl, stalkerMacAddress: settings.iptvStalkerMac };
   return {
     m3uUrl: settings.iptvPlaylists[0]?.m3uUrl ?? "",
     epgUrl: settings.iptvPlaylists[0]?.epgUrl ?? "",
     playlists: settings.iptvPlaylists,
-    stalkerPortalUrl: settings.iptvStalkerUrl,
-    stalkerMacAddress: settings.iptvStalkerMac,
+    ...legacyStalker,
+    // Only once known, so a browser that never read the list cannot blank the TV's portals.
+    ...(settings.iptvStalkerPortals !== undefined ? { stalkerPortals: settings.iptvStalkerPortals } : {}),
     favoriteChannels: settings.favoriteChannelIds,
     tvSession: normalizeTvSession(settings.iptvTvSession),
     favoriteGroups: settings.favoriteGroupIds,
     hiddenGroups: settings.hiddenGroupIds,
     groupOrder: settings.groupOrder,
-    sortOrder: settings.iptvSortOrder ?? "provider"
+    sortOrder: settings.iptvSortOrder ?? "provider",
+    // Only once known, so a browser that never read it cannot blank the TV's.
+    ...(settings.iptvChannelOrder !== undefined ? { channelOrder: settings.iptvChannelOrder } : {}),
+    ...(settings.iptvGroupNames !== undefined ? { groupNames: settings.iptvGroupNames } : {})
   };
+}
+
+/** A missing channel order / name map / portal list and an empty one mean the same thing. */
+function sameIptvField(field: string, a: unknown, b: unknown) {
+  if (field === "channelOrder") return sameFieldValue(normalizeChannelOrder(a), normalizeChannelOrder(b));
+  if (field === "groupNames") return sameFieldValue(normalizeGroupNames(a), normalizeGroupNames(b));
+  if (field === "stalkerPortals") return sameFieldValue(normalizeStalkerPortals(a), normalizeStalkerPortals(b));
+  return sameFieldValue(a, b);
 }
 
 function mergeFavoriteEdits(remote: string[], local: string[], baseline: string[]): string[] {
@@ -872,14 +1256,40 @@ function mergeCatalogEdits(remote: AppSettings["catalogs"], local: AppSettings["
   ];
 }
 
-export function mergeIptvSettings(existing: Record<string, unknown>, settings: AppSettings, baseline?: AppSettings | null) {
+export function mergeIptvSettings(cloudState: Record<string, unknown>, settings: AppSettings, baseline?: AppSettings | null) {
   const incoming = androidIptvSettings(settings);
   const base = baseline ? androidIptvSettings(baseline) : null;
+  // What the cloud holds, in the current key shape: a legacy `stalker|…` twin
+  // left in the payload would otherwise bring back what this edit undid.
+  const remotePortals = cloudPortals(cloudState);
+  const existing = migrateIptvCloudState(cloudState, [...(settings.iptvStalkerPortals ?? []), ...remotePortals]);
   const merged = { ...existing };
+  let portalsMerged = false;
   for (const [field, value] of Object.entries(incoming)) {
-    if (base && sameFieldValue(value, base[field])) continue;
+    if (base && sameIptvField(field, value, base[field])) continue;
     if (field === "tvSession") {
       merged[field] = mergeTvSessions(existing[field], value);
+      continue;
+    }
+    if (field === "stalkerPortals") {
+      // Per portal and field, so a portal added or edited on the TV since this browser read the list survives.
+      merged[field] = base ? normalizeStalkerPortals(mergeStalkerPortalEdits(remotePortals, normalizeStalkerPortals(value),
+        normalizeStalkerPortals(base[field]))) : value;
+      portalsMerged = true;
+      continue;
+    }
+    if (field === "channelOrder" || field === "groupNames") {
+      // Per category: only the categories this browser reordered / renamed (or reset) change.
+      const normalize = (input: unknown): Record<string, unknown> => field === "channelOrder" ? normalizeChannelOrder(input) : normalizeGroupNames(input);
+      const local = normalize(value);
+      const previous = base ? normalize(base[field]) : {};
+      const next = base ? normalize(existing[field]) : {};
+      for (const key of new Set([...Object.keys(local), ...Object.keys(previous)])) {
+        if (base && sameFieldValue(local[key], previous[key])) continue;
+        if (local[key] !== undefined) next[key] = local[key];
+        else delete next[key];
+      }
+      merged[field] = next;
       continue;
     }
     if (field === "groupOrder") {
@@ -903,6 +1313,8 @@ export function mergeIptvSettings(existing: Record<string, unknown>, settings: A
       ? mergeFavoriteEdits(stringArray(existing[field]), stringArray(value), stringArray(base[field]))
       : value;
   }
+  // Older apps read the single-portal fields: they follow the merged list.
+  if (portalsMerged) Object.assign(merged, legacyStalkerFields(merged.stalkerPortals as StalkerPortalEntry[]));
   return merged;
 }
 
@@ -932,7 +1344,7 @@ export async function saveCloudSettings(
     //    timestamp when the web actually changed the field vs its baseline; otherwise leave the
     //    (freshly read-modify-written) cloud value so a phone's newer change survives.
     const globalFields: Array<[string, unknown, unknown]> = [
-      ["accentColor", settings.accentColor, baseline?.accentColor],
+      ["accentColor", androidAccent(settings.accentColor), baseline ? androidAccent(baseline.accentColor) : undefined],
       ["oledBlackBackground", settings.oledBlack, baseline?.oledBlack],
       ["skipProfileSelection", settings.skipProfileSelection, baseline?.skipProfileSelection],
       ["customUserAgent", settings.customUserAgent, baseline?.customUserAgent],
@@ -940,16 +1352,26 @@ export async function saveCloudSettings(
       ["subtitleAiEnabled", settings.aiSubtitlesEnabled, baseline?.aiSubtitlesEnabled],
       ["subtitleAiAutoSelect", settings.aiAutoSelect, baseline?.aiAutoSelect],
       ["subtitleAiApiKey", settings.aiApiKey, baseline?.aiApiKey],
-      ["subtitleAiModel", settings.aiSubtitleModel, baseline?.aiSubtitleModel],
+      ["subtitleAiModel", androidAiModel(settings.aiSubtitleModel), baseline ? androidAiModel(baseline.aiSubtitleModel) : undefined],
+      ["subtitleAiFindBestMatch", settings.aiFindBestMatch, baseline?.aiFindBestMatch],
+      ["subtitlePreloadEnabled", settings.subtitlePreload, baseline?.subtitlePreload],
+      ["dolbyVisionCompatEnabled", settings.dolbyVisionCompat, baseline?.dolbyVisionCompat],
+      ["telegramSearchOnClickOnly", settings.telegramSearchOnClickOnly, baseline?.telegramSearchOnClickOnly],
       ["subtitleRemoveHearingImpaired", settings.removeHearingImpaired, baseline?.removeHearingImpaired]
     ];
+    // Older web builds wrote "gemini"/"groq"/"off" and "gold"/"purple"/"arctic", which Android
+    // cannot read and keeps echoing back. Rewrite those in Android's vocabulary on the next save.
+    const legacyRoot = (key: string) =>
+      (key === "subtitleAiModel" && typeof root.subtitleAiModel === "string" && !["GROQ_LLAMA_70B", "GEMINI_FLASH_25"].includes(root.subtitleAiModel)) ||
+      // Only the web's own accent ids; an unknown value (e.g. a hex colour) is left as it is.
+      (key === "accentColor" && typeof root.accentColor === "string" && root.accentColor in ACCENT_TO_ANDROID);
     for (const [rootKey, newVal, baseVal] of globalFields) {
-      if (!baseline || !sameFieldValue(newVal, baseVal)) {
+      if (!baseline || !sameFieldValue(newVal, baseVal) || legacyRoot(rootKey)) {
         root[rootKey] = newVal;
         bumpFieldTs(root, `g:${rootKey}`, changedAt);
       }
     }
-    root.focusBorderColor = settings.accentColor; // mirror of accentColor (not a merge key)
+    root.focusBorderColor = root.accentColor ?? androidAccent(settings.accentColor); // mirror of accentColor (not a merge key)
 
     // ── Root legacy flat mirrors: only OLD Android clients read these (current clients read
     //    profileSettingsById below). Kept for backward compat; not timestamp-managed.
@@ -1008,13 +1430,23 @@ export async function saveCloudSettings(
       const merged: Record<string, unknown> = { ...existing };
       // Fields the web doesn't genuinely own (always sends empty) — never write them, so they can't
       // wipe a phone's value. defaultSubtitle keeps its own timestamp logic (handled below).
-      const skip = new Set(["catalogueRowLayoutModes", "subtitleUsageJson", "defaultSubtitle", "subtitleSettingsUpdatedAt"]);
+      const skip = new Set(["subtitleUsageJson", "defaultSubtitle", "subtitleSettingsUpdatedAt"]);
+      // Map-valued fields: Android only ever adds or overwrites entries on import,
+      // so merge over the cloud's map instead of replacing rows another device set.
+      const unionFields = new Set(["catalogueRowLayoutModes", "streamMacroEnabledMap", "streamProviderEnabledMap"]);
       for (const field of Object.keys(newProfile)) {
         if (skip.has(field)) continue;
         if (!baseProfile || !sameFieldValue(newProfile[field], baseProfile[field])) {
-          merged[field] = newProfile[field];
+          merged[field] = unionFields.has(field)
+            ? { ...objectRecord(existing[field]), ...objectRecord(newProfile[field]) }
+            : newProfile[field];
           bumpFieldTs(root, `p:${profileId}:${field}`, changedAt);
         }
+      }
+      // Android applies trailerAutoPlay / netflixHomeStyle only from payloads that declare the
+      // current home presentation (HomePresentationMigration).
+      if (["trailerAutoPlay", "netflixHomeStyle"].some((field) => field in newProfile && (!baseProfile || !sameFieldValue(newProfile[field], baseProfile[field])))) {
+        merged.homePresentationVersion = Math.max(1, Number(merged.homePresentationVersion) || 0);
       }
       // defaultSubtitle uses Android's own subtitleSettingsUpdatedAt LWW — assert it only when the
       // web actually changed it, bumping that timestamp so Android adopts it.
@@ -1029,7 +1461,7 @@ export async function saveCloudSettings(
       const newIptv = androidIptvSettings(settings);
       const baseIptv = baseline ? androidIptvSettings(baseline) : null;
       for (const [field, value] of Object.entries(newIptv)) {
-        if (!baseIptv || !sameFieldValue(value, baseIptv[field])) {
+        if (!baseIptv || !sameIptvField(field, value, baseIptv[field])) {
           bumpFieldTs(root, `i:${profileId}:${field}`, changedAt);
         }
       }
@@ -1093,7 +1525,7 @@ export async function pullCloudProfiles(auth: AuthClient): Promise<CloudProfiles
   };
 }
 
-export type CloudTrackingProvider = "NONE" | "TRAKT" | "MDBLIST" | "SIMKL";
+export type CloudTrackingProvider = "NONE" | "TRAKT" | "MDBLIST" | "SIMKL" | "WETRAKR";
 export type CloudTrackingDomain = "routing" | "trakt" | "simkl" | "mdblist";
 
 export interface CloudTrackingSelection {
@@ -1115,7 +1547,7 @@ export interface CloudTrackingSnapshot extends CloudTrackingSelection {
 
 function normalizeCloudTrackingProvider(value: unknown): CloudTrackingProvider | null {
   const normalized = typeof value === "string" ? value.trim().toUpperCase() : "";
-  return normalized === "NONE" || normalized === "TRAKT" || normalized === "MDBLIST" || normalized === "SIMKL"
+  return normalized === "NONE" || normalized === "TRAKT" || normalized === "MDBLIST" || normalized === "SIMKL" || normalized === "WETRAKR"
     ? normalized
     : null;
 }
@@ -1123,7 +1555,7 @@ function normalizeCloudTrackingProvider(value: unknown): CloudTrackingProvider |
 function normalizeTrackingReadMode(value: unknown, fallback: TrackingReadMode): TrackingReadMode {
   const normalized = typeof value === "string" ? value.trim().toLowerCase() : "";
   return normalized === "auto" || normalized === "trakt" || normalized === "simkl" ||
-    normalized === "both" || normalized === "mdblist" ? normalized : fallback;
+    normalized === "both" || normalized === "wetrakr" || normalized === "mdblist" ? normalized : fallback;
 }
 
 function readCloudTraktToken(root: RawPayload, profileId: string): TraktToken | null {
@@ -1213,7 +1645,7 @@ export async function pullCloudTrackingSelection(
         ? "MDBLIST"
         : "NONE";
   const requestedProvider = explicitProvider ?? inferredProvider;
-  const provider: CloudTrackingProvider = requestedProvider === "TRAKT" && traktToken
+  const provider: CloudTrackingProvider = requestedProvider === "WETRAKR" ? "WETRAKR" : requestedProvider === "TRAKT" && traktToken
     ? "TRAKT"
     : requestedProvider === "SIMKL" && simklToken
       ? "SIMKL"
@@ -1221,7 +1653,7 @@ export async function pullCloudTrackingSelection(
         ? "MDBLIST"
         : "NONE";
   const storedProviderCount = Number(Boolean(traktToken)) + Number(Boolean(simklToken)) + Number(Boolean(hasMdbList));
-  const defaultMode: TrackingReadMode = provider === "TRAKT"
+  const defaultMode: TrackingReadMode = provider === "WETRAKR" ? "wetrakr" : provider === "TRAKT"
       ? "trakt"
       : provider === "SIMKL"
         ? "simkl"
@@ -1239,6 +1671,7 @@ export async function pullCloudTrackingSelection(
     continueWatchingReadMode: normalizeTrackingReadMode(selection.continueWatchingReadMode, defaultMode),
     watchedReadMode: normalizeTrackingReadMode(selection.watchedReadMode, defaultMode),
     writeToTrakt: typeof selection.writeToTrakt === "boolean" ? selection.writeToTrakt : Boolean(traktToken),
+    writeToWeTrakr: typeof selection.writeToWeTrakr === "boolean" ? selection.writeToWeTrakr : undefined,
     writeToSimkl: typeof selection.writeToSimkl === "boolean" ? selection.writeToSimkl : Boolean(simklToken)
   };
   const hasCloudState = explicitProvider !== null || storedProviderCount > 0;
@@ -1343,6 +1776,7 @@ export async function saveCloudTrackingSelection(
         watchedReadMode: preferences.watchedReadMode.toUpperCase(),
         writeToTrakt: preferences.writeToTrakt,
         writeToSimkl: preferences.writeToSimkl,
+        writeToWeTrakr: preferences.writeToWeTrakr,
         updatedAt
       });
     }
@@ -1590,6 +2024,10 @@ function isLiveOnlyAddon(addon: InstalledAddon): boolean {
 }
 
 export function isLiveStreamOrSportsItem(item: {
+  addonNativeId?: string | null;
+  addonNativeAddonId?: string | null;
+  addon_native_id?: string | null;
+  addon_native_addon_id?: string | null;
   mediaType?: string | null;
   media_type?: string | null;
   id?: number | string | null;
@@ -1608,6 +2046,10 @@ export function isLiveStreamOrSportsItem(item: {
   if (mediaType && mediaType !== "movie" && mediaType !== "tv") {
     return true;
   }
+  if (id < 0 && isYouTubeItem({
+    id, addonNativeId: item.addonNativeId ?? item.addon_native_id,
+    addonNativeAddonId: item.addonNativeAddonId ?? item.addon_native_addon_id
+  })) return false;
   if (!id || id <= 0) {
     return true;
   }
@@ -1625,11 +2067,185 @@ export function isLiveStreamOrSportsItem(item: {
   return false;
 }
 
+// ── Continue Watching progress (parity with Android TraktRepository/PlayerViewModel) ──
+
+/** Android Constants.MIN_PROGRESS_THRESHOLD (3%) or 60 s played: shorter plays are accidental taps. */
+const MIN_PROGRESS = 0.03;
+const MIN_POSITION_SECONDS = 60;
+/** Android Constants.WATCHED_THRESHOLD (90%). */
+const WATCHED_PROGRESS = 0.9;
+const PROGRESS_ENDPOINT = "account-sync-progress";
+// Set NEXT_PUBLIC_ARVIO_PROGRESS_ENDPOINT=false to send every checkpoint through
+// the full-document write (the behaviour before account-sync-progress existed).
+const progressEndpointEnabled = process.env.NEXT_PUBLIC_ARVIO_PROGRESS_ENDPOINT !== "false";
+const ENDPOINT_MISSING_KEY = "arvio.web.progressEndpointMissing.v1";
+const ENDPOINT_RECHECK_MS = 60 * 60_000;
+const COMPLETION_REPEAT_MS = 30 * 60_000;
+const recentCompletions = new Map<string, number>();
+
+function progressEndpointAvailable() {
+  if (!progressEndpointEnabled) return false;
+  const missingAt = Number(loadStored<number>(ENDPOINT_MISSING_KEY, 0)) || 0;
+  return !missingAt || Date.now() - missingAt > ENDPOINT_RECHECK_MS;
+}
+
+/** Same row rules as the server (account-sync-progress), for the full-document fallback. */
+function applyProgressOperationToRoot(root: RawPayload, operation: ProgressOperation) {
+  const { profileId } = operation;
+  if (deletedProfileIds(root).includes(profileId)) return;
+  const byProfile = objectRecord<unknown>(root.localContinueWatchingByProfile);
+  const current = arrayValue<AndroidContinueWatchingItem>(byProfile[profileId]);
+  const updatedAt = (row: AndroidContinueWatchingItem) => Number(row.updatedAtMs ?? 0) || 0;
+  const sameEpisode = (row: AndroidContinueWatchingItem, season?: number | null, episode?: number | null) =>
+    (row.season ?? null) === (season ?? null) && (row.episode ?? null) === (episode ?? null);
+  if (operation.op === "remove") {
+    const key = continueWatchingShowKey(operation.match);
+    const exact = operation.match.mediaType === "tv" && operation.match.season != null && operation.match.episode != null;
+    byProfile[profileId] = current.filter((row) => continueWatchingShowKey(row) !== key ||
+      updatedAt(row) > operation.updatedAtMs ||
+      (exact && !sameEpisode(row, operation.match.season, operation.match.episode)));
+    root.localContinueWatchingByProfile = byProfile;
+    return;
+  }
+  const { item } = operation;
+  const key = continueWatchingShowKey(item);
+  const sameShow = current.filter((row) => continueWatchingShowKey(row) === key);
+  if (sameShow.some((row) => updatedAt(row) > item.updatedAtMs)) return;
+  const previous = sameShow.find((row) => sameEpisode(row, item.season, item.episode)) as Record<string, unknown> | undefined;
+  const merged: Record<string, unknown> = { ...(previous ?? {}) };
+  for (const [field, value] of Object.entries(item)) {
+    if (value === undefined) continue;
+    if (value !== null || !previous || previous[field] == null) merged[field] = value;
+  }
+  byProfile[profileId] = [merged as AndroidContinueWatchingItem, ...current.filter((row) => continueWatchingShowKey(row) !== key)]
+    .sort((a, b) => updatedAt(b) - updatedAt(a))
+    .slice(0, 50);
+  root.localContinueWatchingByProfile = byProfile;
+  const { showKey, exactKey } = continueWatchingDismissalKeys({
+    id: item.id, mediaType: item.mediaType, seasonNumber: item.season, episodeNumber: item.episode
+  });
+  updateProfileDismissals(root, profileId, (values) => {
+    for (const dismissalKey of [showKey, exactKey]) {
+      if ((values.get(dismissalKey) ?? Infinity) <= item.updatedAtMs) values.delete(dismissalKey);
+    }
+  });
+}
+
+function errorStatus(error: unknown) {
+  const status = Number((error as { status?: unknown } | null)?.status);
+  return Number.isFinite(status) ? status : 0;
+}
+
+async function sendProgressOperation(auth: AuthClient, userId: string, operation: ProgressOperation, keepalive: boolean): Promise<ProgressSendResult | "unreachable"> {
+  if (!progressEndpointAvailable()) return "fallback";
+  // A still-valid token is used as is, so a send started while the page is
+  // being hidden or closed is issued without waiting on a refresh.
+  const session = auth.session;
+  if (!session || session.userId !== userId) throw new Error("Account changed before progress was saved");
+  const token = session.accessToken && session.expiresAt - Date.now() > 60_000 ? session.accessToken : await auth.accessToken();
+  let result: { accepted?: boolean; applied?: boolean; reason?: string } | undefined;
+  try {
+    // text/plain + token in the body keeps this a CORS "simple" request: no
+    // preflight, which keepalive requests on closing pages may not get.
+    result = await jsonRequest<{ accepted?: boolean; applied?: boolean; reason?: string }>(
+      `${config.netlifyBackendUrl.replace(/\/+$/, "")}/${PROGRESS_ENDPOINT}`,
+      {
+        method: "POST",
+        keepalive,
+        headers: { "Content-Type": "text/plain;charset=UTF-8" },
+        body: JSON.stringify({ ...operation, accessToken: token })
+      }
+    );
+  } catch (error) {
+    const status = errorStatus(error);
+    // Backend without this endpoint yet: use the full-document write for a while.
+    if (status === 404 || status === 405) {
+      saveStored(ENDPOINT_MISSING_KEY, Date.now());
+      return "fallback";
+    }
+    // No account document to merge into, or a lost write race: the full write handles both.
+    if (status === 409) return "fallback";
+    // The server rejected this change as malformed; retrying cannot help.
+    if (status === 400 || status === 413) return "drop";
+    // No HTTP status: offline, timed out, or a response the browser hid. A host
+    // without this function answers 404 without CORS headers, which surfaces
+    // here too, so try the full-document write. Offline, that fails as well
+    // and the change stays queued.
+    if (!status) return "unreachable";
+    throw error;
+  }
+  // "applied: false" (an older checkpoint, a deleted profile) is still an answer: nothing to retry.
+  if (result?.accepted !== true) throw new Error(result?.reason || "Progress was not accepted");
+  return "done";
+}
+
+function progressTransport(auth: AuthClient, userId: string) {
+  let unreachable = false;
+  return {
+    send: async (operation: ProgressOperation, options: { keepalive: boolean }): Promise<ProgressSendResult> => {
+      // A send from a closing page cannot wait behind other writes.
+      const result = options.keepalive
+        ? await sendProgressOperation(auth, userId, operation, true)
+        : await runInMutationQueue(userId, () => sendProgressOperation(auth, userId, operation, false));
+      unreachable = result === "unreachable";
+      return unreachable ? "fallback" : result as ProgressSendResult;
+    },
+    fallback: async (operation: ProgressOperation) => {
+      await mutateCloudPayload(auth, (root) => applyProgressOperationToRoot(root, operation));
+      // The account backend answered but the progress endpoint did not: treat it as missing for a while.
+      if (unreachable) saveStored(ENDPOINT_MISSING_KEY, Date.now());
+    },
+    isCurrent: () => auth.session?.userId === userId
+  };
+}
+
+/** Send queued progress now. Failures leave it queued for the next attempt. */
+export function flushPendingProgress(auth: AuthClient): Promise<void> {
+  const userId = auth.session?.userId;
+  if (!userId || !canUseBackendSync(auth)) return Promise.resolve();
+  installProgressRetry(userId, () => { void flushPendingProgress(auth).catch(() => undefined); });
+  return flushProgressOutbox(userId, progressTransport(auth, userId));
+}
+
+/** Overlay unsent local progress onto a cloud read so this device shows what it just watched. */
+function withPendingProgress(items: AndroidContinueWatchingItem[], userId: string, profileId?: string | null) {
+  const pending = pendingProgress(userId).filter((entry) => !profileId || entry.operation.profileId === profileId);
+  if (!pending.length) return items;
+  const byShow = new Map(items.map((item) => [continueWatchingShowKey(item), item]));
+  for (const { operation } of pending) {
+    if (operation.op === "upsert") {
+      const key = continueWatchingShowKey(operation.item);
+      const current = byShow.get(key);
+      if (!current || Number(current.updatedAtMs ?? 0) <= operation.item.updatedAtMs) {
+        const previous = current && (current.season ?? null) === (operation.item.season ?? null) &&
+          (current.episode ?? null) === (operation.item.episode ?? null) ? current : {};
+        const merged: Record<string, unknown> = { ...previous };
+        for (const [field, value] of Object.entries(operation.item)) {
+          if (value !== null && value !== undefined) merged[field] = value;
+        }
+        byShow.set(key, merged as AndroidContinueWatchingItem);
+      }
+    } else {
+      const key = continueWatchingShowKey(operation.match);
+      const current = byShow.get(key);
+      const exact = operation.match.mediaType === "tv" && operation.match.season != null && operation.match.episode != null;
+      if (current && Number(current.updatedAtMs ?? 0) <= operation.updatedAtMs &&
+          (!exact || ((current.season ?? null) === operation.match.season && (current.episode ?? null) === operation.match.episode))) {
+        byShow.delete(key);
+      }
+    }
+  }
+  return [...byShow.values()];
+}
+
 export async function getContinueWatching(auth: AuthClient, profileId?: string | null, addons: InstalledAddon[] = []) {
   if (!auth.session) return [];
   if (canUseBackendSync(auth)) {
+    const userId = auth.session.userId;
+    // Progress saved while offline or while the app was closing goes out now.
+    void flushPendingProgress(auth).catch(() => undefined);
     const root = await pullRawPayload(auth);
-    return androidContinueWatchingItems(root, profileId)
+    return withPendingProgress(androidContinueWatchingItems(root, profileId), userId, profileId)
       .map((item) => androidCwToHistory(item, profileId))
       .filter((item): item is WatchHistoryEntry => Boolean(item))
       .filter((item) => (item.progress ?? 0) < 0.9 && !isLiveStreamOrSportsItem(item, addons))
@@ -1643,43 +2259,99 @@ export async function getContinueWatching(auth: AuthClient, profileId?: string |
   return records.filter((item) => !isLiveStreamOrSportsItem(item, addons));
 }
 
-export async function saveProgress(auth: AuthClient, entry: Omit<WatchHistoryEntry, "user_id">, profileId?: string | null, addons: InstalledAddon[] = []) {
+const defaultSeasonLookup: SeasonEpisodesLookup = async (tvId, season) => {
+  const { getSeasonEpisodes } = await import("./tmdb");
+  return getSeasonEpisodes(tvId, season);
+};
+
+export interface SaveProgressOptions {
+  /** Season episode list used to find the episode after a finished one (defaults to TMDB). */
+  seasonEpisodes?: SeasonEpisodesLookup;
+}
+
+/**
+ * Saves a playback checkpoint the way Android's player does:
+ * - under 3% and under 60 s nothing is saved (an accidental play creates no row);
+ * - one row per show: a new episode replaces the show's previous row;
+ * - at 90% the title is finished: a movie leaves Continue Watching, a TV episode
+ *   is replaced by the next episode as an "up next" row (persistNextEpisodeAfterCompletion);
+ * - stream_key and other fields this browser does not know are kept.
+ * The change is queued durably (progressOutbox) and sent as one small item to
+ * account-sync-progress, falling back to the full-document write.
+ */
+export async function saveProgress(
+  auth: AuthClient,
+  entry: Omit<WatchHistoryEntry, "user_id">,
+  profileId?: string | null,
+  addons: InstalledAddon[] = [],
+  options: SaveProgressOptions = {}
+) {
   if (!auth.session || isLiveStreamOrSportsItem(entry, addons)) return;
   if (canUseBackendSync(auth)) {
-    await mutateCloudPayload(auth, (root) => {
-      const targetProfileId = entry.profile_id ?? profileId ?? "default";
-      const byProfile = objectRecord<unknown>(root.localContinueWatchingByProfile);
-      const current = arrayValue<AndroidContinueWatchingItem>(byProfile[targetProfileId]);
-      const nextItem = historyToAndroidCw({ ...entry, profile_id: targetProfileId });
-      const filtered = current.filter((candidate) => {
-        const sameTitle = candidate.id === nextItem.id && String(candidate.mediaType ?? "").toLowerCase() === nextItem.mediaType;
-        if (!sameTitle) return true;
-        if (nextItem.mediaType !== "tv") return false;
-        return candidate.season !== nextItem.season || candidate.episode !== nextItem.episode;
+    const userId = auth.session.userId;
+    const targetProfileId = entry.profile_id ?? profileId ?? "default";
+    const progress = Math.max(0, Math.min(1, Number(entry.progress) || 0));
+    const position = Math.max(0, Number(entry.position_seconds) || 0);
+    const mediaType = entry.media_type === "tv" ? "tv" : "movie";
+    if (progress < WATCHED_PROGRESS) {
+      if (progress < MIN_PROGRESS && position < MIN_POSITION_SECONDS) return;
+      queueProgress(userId, {
+        profileId: targetProfileId,
+        op: "upsert",
+        item: historyToAndroidCw({ ...entry, profile_id: targetProfileId })
       });
-      byProfile[targetProfileId] = (nextItem.progress ?? 0) >= 90 ? filtered : [nextItem, ...filtered].slice(0, 50);
-      root.localContinueWatchingByProfile = byProfile;
-      if ((nextItem.progress ?? 0) > 0 && (nextItem.progress ?? 0) < 90) {
-        const dismissalItem = {
-          id: entry.show_tmdb_id,
-          mediaType: entry.media_type,
-          seasonNumber: entry.season,
-          episodeNumber: entry.episode
-        };
-        const { showKey, exactKey } = continueWatchingDismissalKeys(dismissalItem);
-        updateProfileDismissals(root, targetProfileId, (values) => {
-          values.delete(showKey);
-          values.delete(exactKey);
-        });
-      }
+      return flushPendingProgress(auth);
+    }
+
+    // Finished. Periodic checkpoints during the credits must not repeat this.
+    const completionKey = `${userId}|${targetProfileId}|${mediaType}:${entry.show_tmdb_id}:${entry.season ?? ""}:${entry.episode ?? ""}`;
+    const completedAt = recentCompletions.get(completionKey) ?? 0;
+    if (Date.now() - completedAt < COMPLETION_REPEAT_MS) return flushPendingProgress(auth);
+    recentCompletions.set(completionKey, Date.now());
+    if (recentCompletions.size > 200) recentCompletions.delete(recentCompletions.keys().next().value!);
+    // Removing the finished title goes out first, so closing the app now still records it.
+    queueProgress(userId, {
+      profileId: targetProfileId,
+      op: "remove",
+      match: { id: entry.show_tmdb_id, mediaType, season: entry.season ?? null, episode: entry.episode ?? null },
+      updatedAtMs: Date.now()
     });
-    return;
+    const removal = flushPendingProgress(auth);
+    if (mediaType !== "tv" || entry.season == null || entry.episode == null) return removal;
+    const next = await findNextEpisode(entry.show_tmdb_id, entry.season, entry.episode, options.seasonEpisodes ?? defaultSeasonLookup)
+      .catch(() => null);
+    if (next && auth.session?.userId === userId) {
+      const item: ProgressItem = {
+        ...(entry.addon_native_id ? { addonNativeId: entry.addon_native_id, addonNativeAddonId: entry.addon_native_addon_id } : {}),
+        id: entry.show_tmdb_id,
+        title: entry.title?.trim() || "Untitled",
+        mediaType: "tv",
+        progress: 0,
+        resumePositionSeconds: 0,
+        durationSeconds: 0,
+        season: next.seasonNumber,
+        episode: next.episodeNumber,
+        displaySeason: next.seasonNumber,
+        displayEpisode: next.episodeNumber,
+        episodeTitle: next.name || null,
+        backdropPath: entry.backdrop_path ?? null,
+        posterPath: entry.poster_path ?? null,
+        isUpNext: true,
+        releaseDate: next.airDate ?? "",
+        updatedAtMs: Date.now()
+      };
+      // Replaces the queued removal if it has not been sent; otherwise follows it.
+      queueProgress(userId, { profileId: targetProfileId, op: "upsert", item });
+    }
+    await removal.catch(() => undefined);
+    return flushPendingProgress(auth);
   }
+  const { addon_native_id: _nativeId, addon_native_addon_id: _nativeAddonId, ...databaseEntry } = entry;
   await auth.supabase("/rest/v1/watch_history", {
     method: "POST",
     headers: { Prefer: "resolution=merge-duplicates" },
     body: JSON.stringify({
-      ...entry,
+      ...databaseEntry,
       user_id: auth.session.userId,
       profile_id: entry.profile_id ?? profileId ?? null,
       paused_at: new Date().toISOString(),
@@ -1703,6 +2375,8 @@ export async function removeContinueWatchingProgress(
   };
 
   if (canUseBackendSync(auth)) {
+    // An unsent checkpoint for this title must not bring the row back later.
+    discardPendingProgress(auth.session.userId, profileId ?? "default", item.mediaType, item.id);
     await mutateCloudPayload(auth, (root) => {
       const targetProfileId = profileId ?? "default";
       for (const key of ["localContinueWatchingByProfile", "continueWatchingByProfile"]) {
@@ -1751,6 +2425,17 @@ export async function saveWatchedState(
 ) {
   if (!auth.session) return;
   const targetProfileId = profileId ?? "default";
+  // Android removeFromLocalContinueWatching: only the watched episode's row goes,
+  // so the "up next" row written for the following episode stays.
+  const isWatchedRow = (candidate: { id?: number; mediaType?: string; season?: number | null; episode?: number | null }) =>
+    candidate.id === item.id && String(candidate.mediaType ?? "").toLowerCase() === item.mediaType &&
+    (item.mediaType !== "tv" || item.seasonNumber == null || candidate.season === item.seasonNumber) &&
+    (item.mediaType !== "tv" || item.episodeNumber == null || candidate.episode === item.episodeNumber);
+  if (watched) {
+    discardPendingProgress(auth.session.userId, targetProfileId, item.mediaType, item.id, {
+      matches: (operation) => operation.op === "upsert" && isWatchedRow(operation.item)
+    });
+  }
   await mutateCloudPayload(auth, (root) => {
     if (item.mediaType === "movie") {
       const byProfile = objectRecord<unknown>(root.localWatchedMoviesByProfile);
@@ -1768,10 +2453,9 @@ export async function saveWatchedState(
     }
 
     if (watched) {
-      const matches = (candidate: AndroidContinueWatchingItem) =>
-        candidate.id === item.id && String(candidate.mediaType ?? "").toLowerCase() === item.mediaType;
       const byProfile = objectRecord<unknown>(root.localContinueWatchingByProfile);
-      byProfile[targetProfileId] = arrayValue<AndroidContinueWatchingItem>(byProfile[targetProfileId]).filter((candidate) => !matches(candidate));
+      byProfile[targetProfileId] = arrayValue<AndroidContinueWatchingItem>(byProfile[targetProfileId])
+        .filter((candidate) => !isWatchedRow(candidate));
       root.localContinueWatchingByProfile = byProfile;
     }
   });

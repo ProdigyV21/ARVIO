@@ -24,12 +24,14 @@ class RemoteSyncManager @Inject constructor(
     private val store: SyncProviderStore,
     private val traktProvider: TraktRemoteProvider,
     private val mdbListProvider: MdbListRemoteProvider,
-    private val simklProvider: SimklRemoteProvider
+    private val simklProvider: SimklRemoteProvider,
+    private val wetrakrProvider: com.arflix.tv.data.repository.wetrakr.WeTrakrRemoteProvider? = null
 ) {
     private fun providerFor(provider: SyncProvider): RemoteSyncProvider? = when (provider) {
         SyncProvider.TRAKT -> traktProvider
         SyncProvider.MDBLIST -> mdbListProvider
         SyncProvider.SIMKL -> simklProvider
+        SyncProvider.WETRAKR -> wetrakrProvider
         SyncProvider.NONE -> null
     }
 
@@ -58,16 +60,26 @@ class RemoteSyncManager @Inject constructor(
         } else {
             readers
         }
-        return connected(candidates).isNotEmpty()
+        // SIMKL's connection check may refresh its token. A failure there must not
+        // hide another healthy tracker (or stop its watchlist write).
+        return candidates.mapNotNull(::providerFor).any { provider ->
+            try {
+                provider.isConnected()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                false
+            }
+        }
     }
 
     // ===== Watchlist =====
 
     suspend fun addToWatchlist(mediaType: MediaType, tmdbId: Int, isAnime: Boolean = false): Boolean =
-        writeResults { it.addToWatchlist(mediaType, tmdbId, isAnime) }
+        writeResults(allowLocalOnly = true) { it.addToWatchlist(mediaType, tmdbId, isAnime) }
 
     suspend fun removeFromWatchlist(mediaType: MediaType, tmdbId: Int, isAnime: Boolean = false): Boolean =
-        writeResults { it.removeFromWatchlist(mediaType, tmdbId, isAnime) }
+        writeResults(allowLocalOnly = true) { it.removeFromWatchlist(mediaType, tmdbId, isAnime) }
 
     suspend fun getWatchlist(): RemoteWatchlistResult? = coroutineScope {
         val providers = connected(store.readProviders(TrackingFeature.WATCHLIST))
@@ -93,12 +105,21 @@ class RemoteSyncManager @Inject constructor(
         )
     }
 
-    private suspend fun writeResults(block: suspend (RemoteSyncProvider) -> Boolean): Boolean = coroutineScope {
-        val providers = connected(store.writeProviders())
+    private suspend fun writeResults(
+        allowLocalOnly: Boolean = false,
+        block: suspend (RemoteSyncProvider) -> Boolean
+    ): Boolean = coroutineScope {
+        val selected = store.writeProviders()
+        // Reading a connected tracker does not require writing to it. When all
+        // writes are intentionally disabled, let the caller persist to ARVIO.
+        if (selected.isEmpty()) return@coroutineScope allowLocalOnly
+        val providers = selected.mapNotNull(::providerFor)
         providers.map { provider ->
             async {
                 try {
-                    block(provider)
+                    // Include token refresh/connection checks in each provider's
+                    // failure boundary so one broken account cannot block another.
+                    provider.isConnected() && block(provider)
                 } catch (e: CancellationException) {
                     throw e
                 } catch (_: Exception) {

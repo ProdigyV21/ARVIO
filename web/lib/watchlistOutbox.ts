@@ -7,13 +7,18 @@ import { mergeWatchlistChanges, watchlistChangesStorageKey, watchlistKey, type W
 type Edit = { id: string; profileId: string; items: MediaItem[]; changes: WatchlistChanges };
 const key = (userId: string) => `arvio.web.watchlistOutbox.v1:${userId}`;
 const running = new Map<string, Promise<void>>();
+// Without an ARVIO account (self-hosted builds, guests) the outbox is the
+// watchlist itself: edits stay under this device-local bucket and are never
+// flushed, so a tracker-less watchlist survives reloads like on Android.
+export const LOCAL_WATCHLIST_USER = 'local-device';
+const ownerOf = (auth: AuthClient) => auth.session?.userId ?? LOCAL_WATCHLIST_USER;
 const issuedAt = new Map<string, number>();
 
 export function prepareWatchlistChange(auth: AuthClient, item: MediaItem, removed: boolean, profileId?: string | null): WatchlistChange | undefined {
-  if (!auth.session || !profileId) return;
+  if (!profileId) return;
   const itemKey = watchlistKey(item.mediaType, item.id);
   if (!itemKey) return;
-  const userId = auth.session.userId;
+  const userId = ownerOf(auth);
   const changesKey = watchlistChangesStorageKey(userId, profileId);
   const pending = loadStored<Edit[]>(key(userId), []).find(edit => edit.profileId === profileId);
   const observed = mergeWatchlistChanges(loadStored<WatchlistChanges>(changesKey, {}), pending?.changes);
@@ -24,11 +29,11 @@ export function prepareWatchlistChange(auth: AuthClient, item: MediaItem, remove
 }
 
 export function queueWatchlistChange(auth: AuthClient, item: MediaItem, removed: boolean, profileId?: string | null, prepared?: WatchlistChange) {
-  if (!auth.session || !profileId) return;
+  if (!profileId) return;
   const itemKey = watchlistKey(item.mediaType, item.id);
   const change = prepared ?? prepareWatchlistChange(auth, item, removed, profileId);
   if (!itemKey || !change) return;
-  const userId = auth.session.userId;
+  const userId = ownerOf(auth);
   const pending = loadStored<Edit[]>(key(userId), []);
   const previous = pending.find(edit => edit.profileId === profileId);
   const changesKey = watchlistChangesStorageKey(userId, profileId);
@@ -50,8 +55,8 @@ export function queueWatchlistChange(auth: AuthClient, item: MediaItem, removed:
 // Apply retained cloud removals and queued edits even when a tracker/cache read
 // races an action or a failed cloud write. Scope every lookup to this account.
 export function applyPendingWatchlist(auth: AuthClient, profileId: string | null | undefined, items: MediaItem[]): MediaItem[] {
-  if (!auth.session || !profileId) return items;
-  const userId = auth.session.userId;
+  if (!profileId) return items;
+  const userId = ownerOf(auth);
   const pending = loadStored<Edit[]>(key(userId), []).find(edit => edit.profileId === profileId);
   const changes = mergeWatchlistChanges(loadStored<WatchlistChanges>(watchlistChangesStorageKey(userId, profileId), {}), pending?.changes);
   const result = new Map<string, MediaItem>();

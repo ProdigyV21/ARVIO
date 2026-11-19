@@ -33,7 +33,7 @@ test('expired, corrupt and long subscription deadlines cannot overflow timers', 
   assert.equal(policy.entitlementCheckDelay(null, now), null);
 });
 function entitlement(disk, request) {
-  return load('lib/entitlement.ts', { './storage': disk, './entitlementPolicy': policy, './config': { config: { netlifyBackendUrl: 'https://backend.invalid' } }, './http': { jsonRequest: request, HttpError: class extends Error {} } });
+  return load('lib/entitlement.ts', { './storage': disk, './entitlementPolicy': policy, './config': { config: { netlifyBackendUrl: 'https://backend.invalid' } }, './http': { jsonRequest: request, HttpError: class extends Error {} }, './regionalPricing': { REGIONAL_YEARLY_URL: '', regionalYearly: () => false } });
 }
 test('cached trials cannot grant access even before their original expiry', () => {
   const disk = storage();

@@ -100,6 +100,34 @@ class CatalogDeletionSyncTest {
         assertTrue(stamps.getLong("c:default:hiddenAddonByProfile") > 0)
     }
 
+    @Test fun reinstallingAddonRestoresOnlyItsOwnDeletedRows() = runBlocking {
+        fun addon(id: String) = com.arflix.tv.data.model.Addon(
+            id = id, name = id, version = "1", description = "", isInstalled = true,
+            type = com.arflix.tv.data.model.AddonType.CUSTOM, url = "https://example.test/$id/manifest.json",
+            manifest = com.arflix.tv.data.model.AddonManifest(
+                id = id, name = id, version = "1",
+                catalogs = listOf(
+                    com.arflix.tv.data.model.AddonCatalog(type = "series", id = "one", name = "One"),
+                    com.arflix.tv.data.model.AddonCatalog(type = "series", id = "two", name = "Two")
+                )
+            )
+        )
+        val reinstalled = addon("example.vod")
+        val other = addon("example.other")
+        repository.syncAddonCatalogs(listOf(reinstalled, other))
+        val rows = repository.getCatalogs().map { it.id }
+        assertEquals(4, rows.size)
+        rows.forEach { repository.removeCustomCatalog(it).getOrThrow() }
+        assertEquals(4, repository.getHiddenAddonCatalogIdsForProfile(profileId).size)
+
+        repository.restoreHiddenAddonCatalogs(reinstalled)
+        repository.syncAddonCatalogs(listOf(reinstalled, other))
+
+        assertEquals(listOf("One", "Two"), repository.getCatalogs().map { it.title })
+        assertEquals(2, repository.getHiddenAddonCatalogIdsForProfile(profileId).size)
+        assertTrue(JSONObject(state.value[tsKey]!!).getLong("c:default:hiddenAddonByProfile") > 0)
+    }
+
     @Test fun staleCloudCannotUnhidePreinstalledCatalog() = runBlocking {
         val defaults = MediaRepository.buildPreinstalledDefaults()
         repository.ensurePreinstalledDefaults(defaults)

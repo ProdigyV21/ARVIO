@@ -23,8 +23,10 @@ import com.arflix.tv.data.repository.HomeServerLibrarySort
 import com.arflix.tv.data.repository.HomeServerRepository
 import com.arflix.tv.data.repository.PersonalListsRepository
 import com.arflix.tv.data.repository.KidsContentFilter
+import com.arflix.tv.data.repository.MdbListAuthUnavailable
 import com.arflix.tv.data.repository.MediaRepository
 import com.arflix.tv.data.repository.ProfileManager
+import com.arflix.tv.data.repository.TraktAuthUnavailable
 import com.arflix.tv.data.repository.TraktRepository
 import com.arflix.tv.data.repository.WatchHistoryEntry
 import com.arflix.tv.data.repository.WatchHistoryRepository
@@ -60,7 +62,8 @@ enum class ToastType {
 enum class TrackerLibraryProvider(val displayName: String) {
     TRAKT("Trakt"),
     SIMKL("Simkl"),
-    MDBLIST("MDBList")
+    MDBLIST("MDBList"),
+    WETRAKR("WeTrakr")
 }
 
 sealed interface WatchlistSourceItem {
@@ -215,6 +218,7 @@ class WatchlistViewModel @Inject constructor(
     private val homeServerRepository: HomeServerRepository,
     private val catalogRepository: CatalogRepository,
     private val watchHistoryRepository: WatchHistoryRepository,
+    private val weTrakr: com.arflix.tv.data.repository.wetrakr.WeTrakrRemoteProvider,
     private val simklAuthManager: SimklAuthManager,
     private val simklSyncService: SimklSyncService,
     private val profileManager: ProfileManager,
@@ -252,6 +256,8 @@ class WatchlistViewModel @Inject constructor(
 
     private val sourceItemsCache = linkedMapOf<String, List<MediaItem>>()
     private val sourcePageStates = mutableMapOf<String, SourcePageState>()
+    /** Bumped to rebuild the tracker lists, e.g. once an unreachable MDBList answers again. */
+    private val trackerListsReload = MutableStateFlow(0)
 
     init {
         // A list edited through "Add to list" must not be shown from this screen's cache.
@@ -260,8 +266,12 @@ class WatchlistViewModel @Inject constructor(
                 val provider = when (list.provider) {
                     PersonalListsRepository.Provider.TRAKT -> TrackerLibraryProvider.TRAKT
                     PersonalListsRepository.Provider.MDBLIST -> TrackerLibraryProvider.MDBLIST
+                    PersonalListsRepository.Provider.WETRAKR -> TrackerLibraryProvider.WETRAKR
                 }
-                val sourceId = WatchlistSourceItem.TrackerList(provider, list.id, list.title).id
+                val listKey = if (list.provider == PersonalListsRepository.Provider.WETRAKR) {
+                    com.arflix.tv.data.repository.wetrakr.WeTrakrLists.LIST_KEY_PREFIX + list.id
+                } else list.id
+                val sourceId = WatchlistSourceItem.TrackerList(provider, listKey, list.title).id
                 sourceItemsCache.remove(sourceId)
                 sourcePageStates.remove(sourceId)
                 if (_uiState.value.selectedSourceId == sourceId) loadActiveSourceItems(forceRefresh = true)
@@ -354,29 +364,76 @@ class WatchlistViewModel @Inject constructor(
 
     private fun observeTrackerLibraries() {
         viewModelScope.launch {
-            profileManager.activeProfileId
-                .combine(traktRepository.isAuthenticated) { profileId, traktConnected ->
-                    profileId to traktConnected
-                }
+            combine(
+                profileManager.activeProfileId,
+                traktRepository.connection,
+                personalListsRepository.mdbListConnection,
+                trackerListsReload
+            ) { profileId, trakt, mdbList, reload ->
+                TrackerConnections(
+                    profileId = profileId,
+                    traktConnected = trakt.connected,
+                    traktReconnectRequired = trakt.reconnectRequired,
+                    mdbListConnected = mdbList.connected,
+                    mdbListReconnectRequired = mdbList.reconnectRequired,
+                    reload = reload
+                )
+            }
                 .distinctUntilChanged()
-                .collectLatest { (_, traktConnected) ->
+                .collectLatest { connections ->
                     sourceLoadJob?.cancel()
                     sourceLoadMoreJob?.cancel()
                     sourceItemsCache.keys.removeAll { it.startsWith("tracker_") }
                     sourcePageStates.keys.removeAll { it.startsWith("tracker_") }
                     currentTrackerLists = emptyList()
                     updateAvailableSources()
-                    refreshTrackerLibraries(traktConnected)
+                    refreshTrackerLibraries(
+                        traktConnected = connections.traktConnected,
+                        traktReconnectRequired = connections.traktReconnectRequired,
+                        mdbListConnected = connections.mdbListConnected
+                    )
                 }
         }
     }
 
-    private suspend fun refreshTrackerLibraries(traktConnected: Boolean) {
+    private data class TrackerConnections(
+        val profileId: String,
+        val traktConnected: Boolean,
+        val traktReconnectRequired: Boolean,
+        val mdbListConnected: Boolean,
+        val mdbListReconnectRequired: Boolean,
+        val reload: Int
+    )
+
+    private suspend fun refreshTrackerLibraries(
+        traktConnected: Boolean,
+        traktReconnectRequired: Boolean = false,
+        mdbListConnected: Boolean = false
+    ) {
         val simklConnected = runCatching { simklAuthManager.isConnected() }.getOrDefault(false)
+        val weTrakrConnected = weTrakr.isConnected()
         val trackerLists = buildList {
-            if (traktConnected) {
-                val personalLists = runCatching { traktRepository.getPersonalLists() }
-                    .getOrDefault(emptyList())
+            if (weTrakrConnected) {
+                listOf("planning" to "Watchlist", "watching" to "Watching", "watched" to "Watched", "hold" to "On hold", "dropped" to "Dropped").forEach { (key, title) ->
+                    add(WatchlistSourceItem.TrackerList(provider = TrackerLibraryProvider.WETRAKR, listKey = key, title = title))
+                }
+                // The user's own WeTrakr lists, after the status lists.
+                runCatching { personalListsRepository.weTrakrLibraryLists() }.getOrDefault(emptyList()).forEach { list ->
+                    add(WatchlistSourceItem.TrackerList(
+                        provider = TrackerLibraryProvider.WETRAKR,
+                        listKey = com.arflix.tv.data.repository.wetrakr.WeTrakrLists.LIST_KEY_PREFIX + list.id,
+                        title = list.name
+                    ))
+                }
+            }
+            // A lost session keeps its Watchlist entry, which then explains that Trakt needs
+            // reconnecting, instead of Trakt silently vanishing from the library.
+            if (traktConnected || traktReconnectRequired) {
+                val personalLists = if (traktConnected) {
+                    runCatching { traktRepository.getPersonalLists() }.getOrDefault(emptyList())
+                } else {
+                    emptyList()
+                }
                 run {
                     add(
                         WatchlistSourceItem.TrackerList(
@@ -399,17 +456,33 @@ class WatchlistViewModel @Inject constructor(
                     }
                 }
             }
-            runCatching { personalListsRepository.mdbListLibraryLists() }.getOrDefault(emptyList())
-                .forEach { list ->
+            if (mdbListConnected) {
+                // An unreadable MDBList keeps one entry that explains why (and retries), instead
+                // of its lists silently vanishing from the library.
+                try {
+                    personalListsRepository.mdbListLibraryLists().forEach { list ->
+                        add(
+                            WatchlistSourceItem.TrackerList(
+                                provider = TrackerLibraryProvider.MDBLIST,
+                                listKey = list.id.toString(),
+                                title = list.title,
+                                urlPath = list.path
+                            )
+                        )
+                    }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    AppLogger.w("WatchlistViewModel", "MDBList lists unavailable: ${e.message}")
                     add(
                         WatchlistSourceItem.TrackerList(
                             provider = TrackerLibraryProvider.MDBLIST,
-                            listKey = list.id.toString(),
-                            title = list.title,
-                            urlPath = list.path
+                            listKey = MDBLIST_STATUS_KEY,
+                            title = "MDBList"
                         )
                     )
                 }
+            }
             if (simklConnected) {
                 SIMKL_LIBRARY_LISTS.forEach { (status, title, titleRes) ->
                     add(
@@ -722,6 +795,16 @@ class WatchlistViewModel @Inject constructor(
         )
     }
 
+    private fun trackerLoadError(provider: TrackerLibraryProvider, error: Throwable): String = when {
+        error is TraktAuthUnavailable && error.reconnectRequired -> context.getString(R.string.trakt_reconnect_required)
+        error is TraktAuthUnavailable -> context.getString(R.string.trakt_library_unavailable)
+        error is MdbListAuthUnavailable && error.reconnectRequired -> context.getString(R.string.mdblist_reconnect_required)
+        error is MdbListAuthUnavailable -> context.getString(R.string.mdblist_library_unavailable)
+        provider == TrackerLibraryProvider.TRAKT -> context.getString(R.string.trakt_library_load_failed)
+        provider == TrackerLibraryProvider.MDBLIST -> context.getString(R.string.mdblist_library_load_failed)
+        else -> error.message ?: context.getString(R.string.watchlist_error_refresh)
+    }
+
     private fun loadActiveSourceItems(forceRefresh: Boolean = false) {
         val activeSource = _uiState.value.selectedSource
         val cacheKey = activeSource.id
@@ -815,14 +898,31 @@ class WatchlistViewModel @Inject constructor(
                         val baseItems = when (activeSource.provider) {
                             TrackerLibraryProvider.TRAKT -> {
                                 if (activeSource.listKey == TRAKT_WATCHLIST_KEY) {
-                                    traktRepository.getWatchlist()
+                                    traktRepository.libraryWatchlist()
                                 } else {
-                                    traktRepository.getPersonalListItems(activeSource.listKey)
+                                    traktRepository.libraryPersonalListItems(activeSource.listKey)
                                 }
                             }
-                            TrackerLibraryProvider.MDBLIST -> activeSource.listKey.toLongOrNull()
-                                ?.let { personalListsRepository.mdbListItems(it) }
-                                .orEmpty()
+                            TrackerLibraryProvider.MDBLIST -> if (activeSource.listKey == MDBLIST_STATUS_KEY) {
+                                // Throws again while MDBList is unreachable; once it answers,
+                                // the real lists replace this entry.
+                                personalListsRepository.mdbListLibraryLists()
+                                trackerListsReload.value++
+                                emptyList()
+                            } else {
+                                activeSource.listKey.toLongOrNull()
+                                    ?.let { personalListsRepository.mdbListItems(it) }
+                                    .orEmpty()
+                            }
+                            TrackerLibraryProvider.WETRAKR -> {
+                                val prefix = com.arflix.tv.data.repository.wetrakr.WeTrakrLists.LIST_KEY_PREFIX
+                                if (activeSource.listKey.startsWith(prefix)) {
+                                    activeSource.listKey.removePrefix(prefix).toLongOrNull()
+                                        ?.let { personalListsRepository.weTrakrListItems(it) }.orEmpty()
+                                } else {
+                                    weTrakr.getLibraryItems(activeSource.listKey, forceRefresh)
+                                }
+                            }
                             TrackerLibraryProvider.SIMKL -> simklSyncService.getLibraryItems(
                                 status = activeSource.listKey,
                                 forceRefresh = forceRefresh
@@ -856,7 +956,7 @@ class WatchlistViewModel @Inject constructor(
                         if (_uiState.value.selectedSourceId == activeSource.id) {
                             _uiState.value = _uiState.value.copy(
                                 isLoading = false,
-                                error = error.message ?: context.getString(R.string.watchlist_error_refresh)
+                                error = trackerLoadError(activeSource.provider, error)
                             )
                         }
                     }
@@ -1461,6 +1561,8 @@ class WatchlistViewModel @Inject constructor(
         private const val LIBRARY_LOGO_INITIAL_PREFETCH = 12
         private const val LIBRARY_CACHE_ENTRY_LIMIT = 12
         private const val TRAKT_WATCHLIST_KEY = "__watchlist__"
+        /** The one MDBList entry shown while its lists cannot be read. */
+        private const val MDBLIST_STATUS_KEY = "__mdblist_status__"
         // The status keys stay English so the Simkl API calls keep working;
         // only the rendered list title is localized.
         private val SIMKL_LIBRARY_LISTS = listOf(

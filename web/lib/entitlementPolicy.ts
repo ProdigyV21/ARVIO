@@ -7,16 +7,24 @@ export function currentEntitlement(state: EntitlementState | null, now = Date.no
     return { ...state, entitled: false, reason: "none", status: "expired", trialAvailable: false, trialDurationDays: 0 };
   }
   if (!state?.entitled || !state.expiresAt) return state;
-  const expiry = Date.parse(state.expiresAt);
+  const expiry = Date.parse(accessEndsAt(state) ?? "");
   if (Number.isFinite(expiry) && expiry > now) return state;
-  return { ...state, entitled: false, reason: "expired", trialAvailable: false };
+  return { ...state, entitled: false, reason: "expired", trialAvailable: false, graceEndsAt: null };
+}
+
+// When access actually stops: the paid end, or the end of the grace period
+// after a renewal that did not come through yet.
+export function accessEndsAt(state: EntitlementState | null): string | null {
+  if (!state) return null;
+  return (state.reason === "grace" || state.reason === "partner") && state.graceEndsAt ? state.graceEndsAt : state.expiresAt;
 }
 
 // Recheck expiry even if the tab stays focused for the whole trial. Cap long
 // deadlines to avoid overflowing browser timers and to notice paid renewals.
 export function entitlementCheckDelay(state: EntitlementState | null, now = Date.now()): number | null {
   if (!state?.entitled) return null;
-  const expiry = state.expiresAt ? Date.parse(state.expiresAt) : Infinity;
+  const end = accessEndsAt(state);
+  const expiry = end ? Date.parse(end) : Infinity;
   return Math.max(1000, Math.min(15 * 60_000, Number.isFinite(expiry) ? expiry - now + 100 : 15 * 60_000));
 }
 

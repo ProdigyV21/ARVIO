@@ -28,7 +28,9 @@ function proxy(respond, env = hosted, lookup) {
 }
 
 function route(relative, api, env = hosted) {
-  return load(relative, { 'next/server': next, '@/lib/server/safeProxy': api }, { process: { env }, Error });
+  // The subtitle route decodes/normalises with the player's own helpers.
+  const subtitles = load('lib/playerSubtitles.ts', { './languages': load('lib/languages.ts') });
+  return load(relative, { 'next/server': next, '@/lib/server/safeProxy': api, '@/lib/playerSubtitles': subtitles }, { process: { env }, Error });
 }
 
 function request(target, params = {}, init) {

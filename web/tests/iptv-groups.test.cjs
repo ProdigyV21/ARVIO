@@ -6,7 +6,7 @@ const channels = [{id:'p:1',group:'A'}, {id:'p:2',group:'B'}, {id:'p:3',group:'B
 const plain = value => JSON.parse(JSON.stringify(value));
 
 test('Groups use provider order, stable playlist identity and include hidden channels', () => {
-  assert.deepEqual(plain(playlistGroups(channels, 'p', [])), [{key:'p|A',name:'A',count:1},{key:'p|B',name:'B',count:2}]);
+  assert.deepEqual(plain(playlistGroups(channels, 'p', [])), [{key:'p|A',name:'A',label:'A',count:1},{key:'p|B',name:'B',label:'B',count:2}]);
   assert.deepEqual(plain(playlistGroups(channels, 'p', ['p|B'])).map(g=>g.name), ['B','A']);
 });
 test('Repeated moves follow identity, preserve other playlists and stop at boundaries', () => {

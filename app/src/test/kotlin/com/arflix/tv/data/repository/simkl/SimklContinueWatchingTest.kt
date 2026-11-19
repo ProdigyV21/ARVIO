@@ -41,6 +41,45 @@ class SimklContinueWatchingTest {
             episode = SimklPlaybackEpisode(season = 1, number = episode)))
     }
 
+    @Test fun importedPauseWithoutRuntimeGetsAPlayableResumePosition() = runBlocking {
+        pause(episode = 3)
+        coEvery { tmdb.getTvSeason(200, 1, any(), any()) } returns TmdbSeasonDetails(
+            seasonNumber = 1, episodes = listOf(TmdbEpisode(episodeNumber = 3, seasonNumber = 1, runtime = 50)))
+        val item = sync.getContinueWatching(true).single()
+        assertEquals(3, item.episode)
+        assertEquals(3000L, item.durationSeconds)
+        assertEquals(1200L, item.resumePositionSeconds)
+        assertFalse(item.isUpNext)
+    }
+
+    @Test fun importedMoviePauseWithoutRuntimeGetsAPlayableResumePosition() = runBlocking {
+        coEvery { api.getPlayback(any(), any()) } returns listOf(SimklPlaybackItem(progress = 40f,
+            movie = SimklMovieRef(ids = SimklIds(tmdb = 500))))
+        coEvery { tmdb.getMovieDetails(500, any(), any(), any()) } returns TmdbMovieDetails(id = 500, runtime = 120)
+        val item = sync.getContinueWatching(true).single()
+        assertEquals(7200L, item.durationSeconds)
+        assertEquals(2880L, item.resumePositionSeconds)
+        sync.getContinueWatching(false)
+        coVerify(exactly = 1) { tmdb.getMovieDetails(500, any(), any(), any()) }
+    }
+
+    @Test fun optionalMovieRuntimeOutageDoesNotHideImportedPause() = runBlocking {
+        coEvery { api.getPlayback(any(), any()) } returns listOf(SimklPlaybackItem(progress = 40f,
+            movie = SimklMovieRef(ids = SimklIds(tmdb = 500))))
+        coEvery { tmdb.getMovieDetails(500, any(), any(), any()) } throws java.io.IOException("offline")
+        val item = sync.getContinueWatching(true).single()
+        assertEquals(40, item.progress)
+        assertEquals(0L, item.resumePositionSeconds)
+    }
+
+    @Test fun importedPauseFallsBackToSeriesRuntimeWhenEpisodeRuntimeIsMissing() = runBlocking {
+        pause(episode = 3)
+        coEvery { tmdb.getTvDetails(200, any(), any(), any()) } returns TmdbTvDetails(
+            id = 200, episodeRunTime = listOf(45))
+        val item = sync.getContinueWatching(true).single()
+        assertEquals(1080L, item.resumePositionSeconds)
+    }
+
     @Test fun watchedPausedEpisodeMustNotOverwriteUpNext() = runBlocking {
         library(); pause()
         val item = sync.getContinueWatching(true).single()

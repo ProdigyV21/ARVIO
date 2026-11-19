@@ -25,7 +25,11 @@
   background: #252830;
   cursor: pointer;
 }
-.actions button:hover { background: #323640; }
+@media (hover: hover) and (pointer: fine) {
+  .actions button:hover {
+    background: #323640;
+  }
+}
 .actions button:focus-visible { outline: 2px solid var(--accent, #ededed); outline-offset: 3px; }
 .spinner { flex-shrink: 0; animation: partner-spin 1s linear infinite; }
 @keyframes partner-spin { to { transform: rotate(360deg); } }

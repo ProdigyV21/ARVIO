@@ -1,0 +1,102 @@
+/* Collection rails and folders, the collection page and "View all". Imported by
+   the components/media collection components. */
+
+/* Imported collection folders keep their own rail and open within a focus-trapped dialog. */
+.custom-collection-tile { flex: 0 0 220px; width: 220px; min-height: 124px; padding: 0; overflow: hidden; border-radius: 8px; color: var(--text); }
+.custom-collection-tile img { width: 100%; aspect-ratio: 16 / 9; object-fit: cover; display: block; }
+.custom-collection-tile span { display: block; padding: 10px; overflow-wrap: anywhere; }
+.custom-collection-tile { display: flex; flex-direction: column; align-self: flex-start; background: var(--bg-card); border: 1px solid var(--line); text-align: start; }
+.custom-collection-tile.is-poster { flex-basis: 160px; width: 160px; }
+.custom-collection-tile.is-poster img, .custom-collection-tile.is-poster .custom-collection-art { aspect-ratio: 2 / 3; }
+.custom-collection-art { width: 100%; aspect-ratio: 16 / 9; display: grid; place-items: center; background: var(--bg-elevated); color: var(--muted); }
+/* Collection tiles react like title cards: the same lift on hover and the
+   same ring, scale and halo on keyboard / remote focus (topnav.css ring). */
+.custom-collection-tile { position: relative; transition: transform 220ms cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 220ms ease, filter 220ms ease; }
+.custom-collection-tile img { transition: transform 260ms ease; }
+@media (hover: hover) and (pointer: fine) {
+  /* Exactly what a title card does under the mouse: lift, soft accent ring,
+     deep shadow, slight brightening and an artwork zoom. */
+  .custom-collection-tile:hover {
+    z-index: 6; transform: translateY(-4px); filter: brightness(1.05);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent, #fff) 76%, transparent), 0 18px 52px rgba(0, 0, 0, 0.58);
+    border-color: transparent;
+  }
+  .custom-collection-tile:hover img { transform: scale(1.045); }
+}
+.custom-collection-tile:focus-visible,
+html.kbd-nav .custom-collection-tile:focus { z-index: 6; transform: scale(1.04); outline: 3px solid #fff; outline-offset: 3px;
+  box-shadow: 0 0 0 7px rgba(0, 0, 0, 0.6), 0 18px 52px rgba(0, 0, 0, 0.58); }
+.custom-collection-tile:focus-visible img,
+html.kbd-nav .custom-collection-tile:focus img { transform: scale(1.06); }
+@media (prefers-reduced-motion: reduce) {
+  .custom-collection-tile, .custom-collection-tile img { transition: none; }
+  .custom-collection-tile:focus-visible, html.kbd-nav .custom-collection-tile:focus, .custom-collection-tile:focus-visible img, html.kbd-nav .custom-collection-tile:focus img { transform: none; }
+}
+.custom-collection-tile span { width: 100%; font-size: 15px; line-height: 1.4; }
+.collection-page { position: fixed; inset: 0; width: 100%; height: 100dvh; max-width: none; max-height: none; margin: 0; padding: 0; border: 0; border-radius: 0; background: #080808; color: #f4f4f4; overflow: hidden; }
+.collection-page::backdrop { background: #080808; }
+.collection-page-body { position: relative; isolation: isolate; display: flex; flex-direction: column; height: 100%; padding: env(safe-area-inset-top) 40px env(safe-area-inset-bottom); }
+.collection-page-backdrop { position: absolute; z-index: -1; inset: 0 0 auto; height: 620px; background-size: cover; background-position: center 25%; pointer-events: none; }
+.collection-page-backdrop::after { content: ''; position: absolute; inset: 0; background: linear-gradient(90deg, #080808 0%, #080808dd 30%, #08080820 85%), linear-gradient(0deg, #080808, transparent 75%); }
+[dir="rtl"] .collection-page-backdrop::after { background-image: linear-gradient(270deg, #080808 0%, #080808dd 30%, #08080820 85%), linear-gradient(0deg, #080808, transparent 75%); }
+.collection-page-header { display: flex; gap: 14px; align-items: center; min-height: 64px; flex-shrink: 0; }
+.collection-page-header h1 { font-size: 18px; font-weight: 500; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.collection-page-header button { flex: 0 0 44px; height: 44px; }
+.collection-spotlight { flex: 0 0 250px; min-height: 0; max-width: 750px; padding: 12px 0 20px; }
+.collection-spotlight h2 { font-size: 32px; line-height: 1.15; margin: 0; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+.collection-spotlight-facts { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; font-size: 14px; min-height: 34px; color: #dedede; }
+.collection-service { max-width: 90px; height: 22px; object-fit: contain; }
+.collection-imdb { display: inline-flex; gap: 6px; align-items: center; }
+.collection-imdb img { width: 38px; height: 20px; object-fit: contain; }
+.collection-spotlight p { font-size: 16px; line-height: 1.5; margin: 12px 0 0; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.collection-tabs { display: flex; gap: 8px; flex-shrink: 0; padding: 0 0 12px; }
+.collection-tabs button { min-height: 44px; padding: 8px 22px; border: 1px solid #ffffff30; border-radius: 6px; background: #151515bb; color: #ddd; font-size: 15px; }
+.collection-tabs button[aria-selected=true] { background: #f4f4f4; color: #101010; border-color: #f4f4f4; }
+.collection-grid-viewport { flex: 1; min-height: 0; overflow: auto; overscroll-behavior: contain; scrollbar-gutter: stable; padding: 6px 4px 0; }
+.collection-virtual-grid { position: relative; width: 100%; }
+.collection-grid-row { position: absolute; top: 0; left: 0; width: 100%; display: grid; gap: 16px; align-items: start; }
+[dir="rtl"] .collection-grid-row { left: auto; right: 0; }
+.collection-grid-row > div { min-width: 0; }
+.collection-grid-row .media-card, .collection-grid-row .media-card.is-poster { width: 100%; min-width: 0; max-width: none; }
+.collection-grid-row .poster { border-radius: 6px; }
+.collection-grid-row .media-card strong { font-size: 15px; line-height: 22px; }
+.collection-grid-row .media-card .card-meta-row { font-size: 12px; }
+.collection-grid-row .media-card:focus-visible .poster { transform: none; outline: 2px solid white; outline-offset: 2px; }
+@media (hover: hover) and (pointer: fine) {
+  .collection-grid-row .media-card:hover .poster {
+    transform: none;
+    outline: 2px solid white;
+    outline-offset: 2px;
+  }
+}
+.collection-load-state { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 90px; gap: 12px; padding-bottom: 20px; }
+.collection-load-state > span, .collection-load-state button { display: flex; align-items: center; gap: 8px; }
+.collection-load-state button { min-height: 44px; padding: 10px 18px; border-radius: 6px; }
+@media (max-width: 600px) {
+  .collection-page-body { padding-left: max(16px, env(safe-area-inset-left)); padding-right: max(12px, env(safe-area-inset-right)); }
+  .collection-page-header { min-height: 52px; gap: 6px; }
+  .collection-page-header h1 { font-size: 16px; }
+  .collection-spotlight { flex-basis: 215px; padding: 4px 0 12px; }
+}
+@media (max-width: 600px) {
+  .collection-spotlight h2 { font-size: 24px; }
+  .collection-spotlight-facts { gap: 6px 12px; font-size: 12px; }
+  .collection-spotlight p { font-size: 14px; line-height: 1.45; margin-top: 8px; }
+  .collection-page-backdrop { height: 500px; }
+  .collection-page-backdrop::after { background: linear-gradient(90deg, #080808d9, #08080860), linear-gradient(0deg, #080808, transparent 90%); }
+  [dir="rtl"] .collection-page-backdrop::after { background-image: linear-gradient(270deg, #080808d9, #08080860), linear-gradient(0deg, #080808, transparent 90%); }
+  .collection-grid-row .media-card strong { font-size: 13px; }
+}
+@media (max-height: 500px) {
+  .collection-page-header { min-height: 44px; }
+  .collection-spotlight { flex-basis: 120px; max-width: 80%; padding: 0 0 6px; }
+}
+@media (max-height: 500px) {
+  .collection-spotlight h2 { font-size: 22px; -webkit-line-clamp: 1; }
+  .collection-spotlight p { -webkit-line-clamp: 1; font-size: 13px; margin-top: 4px; }
+  .collection-tabs { padding-bottom: 4px; }
+}
+.custom-collection-rail > .rail-scroll-shell > .rail-strip { display: flex; gap: 16px; align-items: flex-start; padding-inline-start: 4px; }
+@media (max-width: 600px) {
+  .custom-collection-tile { flex-basis: 180px; width: 180px; }
+  .custom-collection-tile.is-poster { flex-basis: 132px; width: 132px; } }

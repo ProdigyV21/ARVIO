@@ -1,0 +1,286 @@
+/* App-wide foundations (workstream D): crash/offline/update surfaces, the
+   on-screen keyboard, TV focus rings, touch hover guards, iOS input zoom and
+   landscape safe areas. Self-contained on purpose — app/global-error.tsx loads
+   ONLY this sheet, so nothing here may depend on globals.css classes. */
+
+/* ============ Recover screens (error boundaries) ============ */
+.recover-page,
+.recover-body {
+  margin: 0;
+  min-height: 100dvh;
+  background: #000;
+  color: #ededed;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+.recover-page {
+  display: grid;
+  place-items: center;
+  padding: 24px max(24px, env(safe-area-inset-right)) 24px max(24px, env(safe-area-inset-left));
+  box-sizing: border-box;
+}
+.recover-screen {
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+  max-width: 560px;
+  margin: clamp(72px, 14vh, 160px) auto 48px;
+  padding: 32px 24px;
+  text-align: center;
+  color: #ededed;
+}
+.recover-screen-full { margin: 0 auto; }
+.recover-screen > svg { color: #ffcd3c; }
+.recover-screen h2 { margin: 4px 0 0; font-size: 1.5rem; line-height: 1.25; }
+.recover-screen-full h2 { font-size: 1.9rem; }
+.recover-screen p { margin: 0 0 8px; color: #b5b5b5; line-height: 1.5; }
+.recover-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; }
+.recover-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 48px;
+  padding: 0 22px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #ededed;
+  font: inherit;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+}
+.recover-btn-primary { background: #ededed; border-color: #ededed; color: #000; }
+.recover-btn:focus-visible,
+html.kbd-nav .recover-btn:focus { outline: 3px solid #fff; outline-offset: 3px; }
+.recover-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 400;
+  display: grid;
+  place-items: center;
+  background: rgba(0, 0, 0, 0.92);
+}
+
+/* ============ Code-split screen placeholders ============ */
+.screen-loading {
+  display: grid;
+  place-items: center;
+  min-height: 50vh;
+}
+.screen-loading-spinner {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 3px solid rgba(255, 255, 255, 0.18);
+  border-top-color: var(--accent, #ededed);
+  animation: arvio-foundations-spin 800ms linear infinite;
+}
+.player-loading-shell {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: grid;
+  place-items: center;
+  background: #000;
+}
+@keyframes arvio-foundations-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .screen-loading-spinner { animation-duration: 2400ms; }
+}
+
+/* Live regions hold the fixed-position toast; they take no space themselves. */
+.toast-region:empty,
+.update-banner-region:empty { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+
+/* ============ Update banner / Xbox tip / offline ============ */
+.update-banner,
+.xbox-tip,
+.offline-banner {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 130;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: min(640px, calc(100vw - 32px));
+  box-sizing: border-box;
+  padding-top: 10px;
+  padding-inline-end: 10px;
+  padding-bottom: 10px;
+  padding-inline-start: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 14px;
+  background: rgba(18, 18, 18, 0.97);
+  color: #ededed;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.5);
+}
+/* Bottom, above the toast and the phone tab bar — the top is the nav bar. */
+.update-banner { bottom: calc(88px + env(safe-area-inset-bottom)); }
+.xbox-tip { bottom: 24px; padding-inline-start: 16px; }
+.xbox-tip p { margin: 0; line-height: 1.4; }
+.offline-banner { top: max(14px, env(safe-area-inset-top)); padding: 10px 18px; }
+.update-banner button,
+.xbox-tip button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 44px;
+  min-height: 44px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.update-banner .update-banner-reload { padding: 0 16px; background: #ededed; color: #000; font-weight: 600; }
+.offline-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 300;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: #000;
+  color: #ededed;
+  text-align: center;
+}
+.offline-screen > div { display: grid; justify-items: center; gap: 12px; max-width: 480px; }
+.offline-screen h1 { margin: 0; font-size: 1.7rem; }
+.offline-screen p { margin: 0 0 8px; color: #b5b5b5; line-height: 1.5; }
+
+/* ============ On-screen keyboard ============ */
+.osk {
+  position: fixed;
+  left: 50%;
+  bottom: max(24px, env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  z-index: 1000;
+  width: min(900px, calc(100vw - 32px));
+  box-sizing: border-box;
+  padding: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 20px;
+  background: rgba(14, 14, 14, 0.98);
+  color: #ededed;
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.7);
+}
+.osk-preview {
+  display: grid;
+  gap: 4px;
+  margin-bottom: 14px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: #000;
+}
+.osk-preview-label { font-size: 0.8rem; color: #9a9a9a; }
+.osk-preview-value { min-height: 1.6em; font-size: 1.35rem; overflow-wrap: anywhere; }
+.osk-caret { display: inline-block; width: 2px; height: 1.1em; margin-left: 2px; vertical-align: -0.15em; background: var(--accent, #ededed); }
+.osk-grid { display: grid; gap: 8px; }
+.osk-row { display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); gap: 8px; }
+.osk-row-actions { grid-template-columns: 1fr 4fr 1fr 1fr 2fr; }
+.osk-key {
+  min-height: 54px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  background: #222;
+  color: #ededed;
+  font: inherit;
+  font-size: 1.2rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.osk-key.is-active { background: #ededed; color: #000; }
+.osk-key-done { background: #ededed; color: #000; font-weight: 700; }
+.osk-key:focus,
+.osk-key:focus-visible {
+  outline: 4px solid var(--accent, #fff) !important;
+  outline-offset: 2px;
+  transform: scale(1.06);
+}
+
+/* ============ TV: big, always-visible focus rings ============ */
+/* Couch distance: a 3px ring vanishes on a 65" panel. Width only, so bespoke
+   ring colours/offsets from globals.css still apply. */
+html.is-tv *:focus,
+html.is-tv *:focus-visible {
+  outline-width: 4px !important;
+  outline-offset: 4px;
+}
+
+/* ============ Touch-first devices (iPhone, iPad, Apple Vision Pro) ============ */
+/* Sticky hover: every :hover lift, zoom or colour change in the app sheets sits
+   inside `@media (hover: hover) and (pointer: fine)`, so a tap on iPhone, iPad
+   or Vision Pro never leaves a card lifted. Hover REVEALS (play buttons,
+   spoiler text) stay unguarded: a tap is how touch users reach them. Keyboard
+   and remote focus get the same effects through lib/hoverParity. `no-hover`
+   (set before paint, lib/deviceClass.ts) still drives the touch sizing below. */
+
+/* Custom controls announce themselves to pointer/gaze (visionOS highlights
+   elements with a pointer cursor). */
+:where([role="button"], [role="tab"], [role="option"], [role="menuitem"], [role="switch"], summary, label[for], select) {
+  cursor: pointer;
+}
+/* Icon-only controls get a 44px hit area on touch. */
+html.no-hover :where(.player-icon-btn, .icon-button, .home-screen-tip-close, .membership-close) {
+  min-width: 44px;
+  min-height: 44px;
+}
+
+/* iOS zooms the page when a focused control's text is under 16px. With pinch
+   zoom now allowed (no maximumScale), keep the focus-zoom away by flooring
+   form text at 16px on touch: unstyled controls at zero specificity, and the
+   known small ones explicitly. Larger designed sizes are never reduced. */
+:where(html.no-hover) :where(input:not([type="checkbox"], [type="radio"], [type="range"]), select, textarea) {
+  font-size: 16px;
+}
+html.no-hover .library-search input,
+html.no-hover .library-mobile-select select,
+html.no-hover .source-search input,
+html.no-hover .livetv-search input,
+html.no-hover .livetv-manage-add input,
+html.no-hover .search-filters select,
+html.no-hover .premium-exit-detail textarea,
+html.no-hover .premium-invite-link input,
+html.no-hover .tv-sports-row-heading select {
+  font-size: 16px;
+}
+
+/* ============ Landscape safe areas (notched iPhones) ============ */
+/* In landscape the notch/Dynamic Island sits on the LEFT or RIGHT edge; the
+   top bar and player controls only padded for top/bottom insets. env() is 0
+   everywhere else, so these resolve to the existing paddings. */
+@media (orientation: landscape) and (max-height: 600px) {
+  .sidebar {
+    padding-left: max(14px, env(safe-area-inset-left));
+    padding-right: max(14px, env(safe-area-inset-right));
+  }
+  .mobile-header {
+    padding-left: max(16px, env(safe-area-inset-left));
+    padding-right: max(16px, env(safe-area-inset-right));
+  }
+  .player-overlay .player-top {
+    padding-left: max(20px, env(safe-area-inset-left));
+    padding-right: max(20px, env(safe-area-inset-right));
+  }
+  .player-overlay .player-controls {
+    padding-left: max(clamp(20px, 3vw, 48px), env(safe-area-inset-left));
+    padding-right: max(clamp(20px, 3vw, 48px), env(safe-area-inset-right));
+  }
+}
+
+/* ============ Announced-only focus targets ============ */
+/* After a view change (lib/tvNav focusAfterViewChange) and via the skip link,
+   focus lands on the screen's heading or main region so it is announced. They
+   are not controls, so they show no ring (Chrome treats that programmatic
+   focus as :focus-visible and drew a white box round the landing title). */
+h1[tabindex="-1"]:focus,
+h2[tabindex="-1"]:focus,
+main[tabindex="-1"]:focus,
+.content[tabindex="-1"]:focus {
+  outline: none !important;
+}

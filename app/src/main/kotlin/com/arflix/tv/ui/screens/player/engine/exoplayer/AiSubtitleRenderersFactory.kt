@@ -55,6 +55,9 @@ class AiSubtitleRenderersFactory(
     fun blockAudioDecoder(decoderName: String, format: Format?): Boolean =
         audioDecoderFallback.blockIfSupported(decoderName, format)
 
+    fun blockAudioPassthrough(format: Format?): Boolean =
+        audioDecoderFallback.blockPassthroughIfSupported(format)
+
     private val offsetRenderers = mutableListOf<SubtitleOffsetRenderer>()
 
     /**
@@ -112,8 +115,8 @@ class AiSubtitleRenderersFactory(
     ) {
         // EXTENSION_RENDERER_MODE_PREFER exists only for the Amlogic/SEI *video* C2 decoder hang
         // (PlayerScreen preferExtensionDecoder). For AUDIO, FFmpeg-first software-decodes every
-        // E-AC3/TrueHD/DTS stream to PCM — killing AVR bitstream passthrough — and jellyfin-ffmpeg's
-        // TrueHD path fails outright. Always build audio with mode ON: the platform
+        // E-AC3/TrueHD/DTS stream to PCM, losing AVR bitstream passthrough.
+        // Always build audio with mode ON: the platform
         // MediaCodecAudioRenderer (whose DefaultAudioSink auto-detects AVR capabilities and
         // bitstreams via bypass) goes first; FFmpeg stays strictly a fallback for codecs the
         // device can neither passthrough nor decode.
@@ -167,7 +170,9 @@ class AiSubtitleRenderersFactory(
             .setAudioProcessors(arrayOf(capture))
             .build()
         // Sync by hearing: hears the decoded audio where its own look-ahead copy can't be decoded.
-        return com.arflix.tv.ui.screens.player.audiosync.AudioSyncTaps.wrapAudioSink(sink)
+        return audioDecoderFallback.wrapSink(
+            com.arflix.tv.ui.screens.player.audiosync.AudioSyncTaps.wrapAudioSink(sink)
+        )
     }
 
     override fun buildTextRenderers(

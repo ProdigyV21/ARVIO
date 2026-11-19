@@ -29,7 +29,10 @@ jobs:
           cache-dependency-path: ${{ matrix.directory }}/package-lock.json
       - name: Install backend dependencies
         if: matrix.directory == 'netlify-auth-site'
-        run: npm ci --omit=dev --ignore-scripts
+        run: npm ci --ignore-scripts
+      - name: Install Partner dashboard build test dependencies
+        if: matrix.directory == 'netlify-auth-site'
+        run: npm ci --ignore-scripts --prefix ../web
       - name: Install web dependencies
         if: matrix.directory == 'web'
         run: npm ci --ignore-scripts
@@ -43,6 +46,7 @@ jobs:
           node ../netlify-arvio-tv-site/scripts/validate-localized-guides.mjs
           node --test ../netlify-arvio-tv-site/scripts/seo-guides.test.cjs
           node --test ../netlify-arvio-tv-site/scripts/premium-membership.test.cjs
+          node --test ../netlify-arvio-tv-site/scripts/premium-pricing.test.cjs
           node --test ../netlify-arvio-tv-site/scripts/premium-journey.test.cjs
           node --test ../netlify-arvio-tv-site/scripts/crash-report.test.cjs
           node --test ../netlify-arvio-tv-site/scripts/promo-video.test.cjs
@@ -70,7 +74,7 @@ jobs:
         run: cp secrets.defaults.properties secrets.properties
 
       - name: Compile and test
-        run: ./gradlew testSideloadDebugUnitTest --no-daemon
+        run: ./gradlew testSideloadDebugUnitTest --no-daemon -PpartnerManagement=true
 
   signed-apk:
     name: Build signed test APK

@@ -152,7 +152,8 @@ for (const file of ['index.html', 'es/index.html', 'pt-br/index.html']) {
     const html = fs.readFileSync(path.join(root, file), 'utf8');
     assert.match(html, /href="#demo"/);
     assert.match(html, /<video[^>]+controls autoplay muted loop playsinline preload="none"/);
-    assert.match(html, /data-src="\/assets\/promo\/arvio-tour-720p.mp4"/);
+    // Stream the lighter web encode; the download keeps the full-quality file the README links to.
+    assert.match(html, /data-src="\/assets\/promo\/arvio-tour-web.mp4"/);
     assert.match(html, /href="\/assets\/promo\/arvio-tour-720p.mp4" download/);
     assert.match(html, /promo-video.js\?v=2/);
     const hero = html.match(/<section class="hero hero-v2"[^>]*>([\s\S]*?)<\/section>/)?.[1];
@@ -162,6 +163,18 @@ for (const file of ['index.html', 'es/index.html', 'pt-br/index.html']) {
     assert.doesNotMatch(hero, /id="hero-screen"|class="scene-phone"|class="chapter-dock"/);
   });
 }
+
+test('Web encodes stay light enough for the homepage and Premium page', () => {
+  for (const file of ['assets/promo/arvio-tour-web.mp4', 'assets/promo/arvio-premium-poster.webp']) {
+    assert.ok(fs.existsSync(path.join(root, file)), file);
+  }
+  assert.ok(fs.statSync(path.join(root, 'assets/promo/arvio-tour-web.mp4')).size <= 5 * 1024 * 1024);
+  assert.ok(fs.statSync(path.join(root, 'assets/promo/arvio-premium-poster.webp')).size <= 150 * 1024);
+  const premium = fs.readFileSync(path.join(root, 'premium/index.html'), 'utf8');
+  assert.match(premium, /<video id="promo-video"[^>]+controls muted playsinline preload="none"[^>]+src="\/assets\/promo\/arvio-tour-web.mp4"/);
+  assert.doesNotMatch(premium.match(/<video[^>]*>/)[0], /\bautoplay\b/, 'promo-video.js decides on autoplay after checking motion and Save-Data');
+  assert.match(premium, /promo-video.js\?v=2/);
+});
 
 test('README leads with a linked animated preview before downloads and long-form sections', () => {
   const readme = fs.readFileSync(path.join(root, '../README.md'), 'utf8');

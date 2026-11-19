@@ -17,8 +17,8 @@ const { chromium } = require('@playwright/test');
   const fixture = path.resolve(root, '../app/src/androidTest/assets/library');
   const server = http.createServer((req, res) => {
     const file = req.url.split('?')[0];
-    if (file === '/') { res.setHeader('content-type', 'text/html'); res.end('<html><head><meta name="viewport" content="width=device-width,initial-scale=1"/><link rel="stylesheet" href="/globals.css"/><link rel="stylesheet" href="/calendar.css"/><style>.library-test-header{z-index:100;height:74px;position:absolute;top:0;left:0;right:0;display:flex;align-items:center;justify-content:space-between;padding:0 3vw;background:#000;color:#fff}.library-test-header nav,.library-test-header span{display:flex;gap:12px;align-items:center}.library-test-header nav{gap:32px}.library-test-header .active{background:#242426;border-radius:28px;padding:14px 24px}.library-test-avatar{background:#242426;border-radius:50%;padding:12px}.library-test-header svg{width:22px}@media(max-width:650px){.library-test-header{display:none}}</style></head><body><div id="root"></div><script src="/app.js"></script></body></html>'); return; }
-    const location = file === '/app.js' ? path.join(out, 'app.js') : file === '/globals.css' || file === '/calendar.css' ? path.join(root, 'app', file) : file.startsWith('/fixtures/') ? path.join(fixture, path.basename(file)) : path.join(root, 'public', file);
+    if (file === '/') { res.setHeader('content-type', 'text/html'); res.end('<html><head><meta name="viewport" content="width=device-width,initial-scale=1"/><link rel="stylesheet" href="/globals.css"/><link rel="stylesheet" href="/calendar.css"/><link rel="stylesheet" href="/app.css"/><style>.library-test-header{z-index:100;height:74px;position:absolute;top:0;left:0;right:0;display:flex;align-items:center;justify-content:space-between;padding:0 3vw;background:#000;color:#fff}.library-test-header nav,.library-test-header span{display:flex;gap:12px;align-items:center}.library-test-header nav{gap:32px}.library-test-header .active{background:#242426;border-radius:28px;padding:14px 24px}.library-test-avatar{background:#242426;border-radius:50%;padding:12px}.library-test-header svg{width:22px}@media(max-width:650px){.library-test-header{display:none}}</style></head><body><div id="root"></div><script src="/app.js"></script></body></html>'); return; }
+    const location = file === '/app.js' ? path.join(out, 'app.js') : file === '/app.css' ? path.join(out, 'app.css') : file === '/globals.css' || file === '/calendar.css' ? path.join(root, 'app', file) : file.startsWith('/fixtures/') ? path.join(fixture, path.basename(file)) : path.join(root, 'public', file);
     if (!fs.existsSync(location)) { res.statusCode = 404; res.end(); return; }
     res.setHeader('content-type', file.endsWith('.css') ? 'text/css' : file.endsWith('.js') ? 'application/javascript' : file.endsWith('.png') ? 'image/png' : file.endsWith('.jpg') ? 'image/jpeg' : file.endsWith('.svg') ? 'image/svg+xml' : 'application/octet-stream'); fs.createReadStream(location).pipe(res);
   });
@@ -37,6 +37,12 @@ const { chromium } = require('@playwright/test');
       await page.route('**/*', route => route.request().url().startsWith(url) ? route.continue() : route.abort());
       await page.clock.setFixedTime(new Date('2026-10-16T12:00:00Z'));
       await page.goto(url); await page.getByRole('button', { name: 'Calendar', exact: true }).click();
+      if (width < 650) {
+        // Phones open on the list view; the month grid is one tap away.
+        await page.locator('.calendar-agenda .calendar-release-card').first().waitFor();
+        assert.ok(await page.locator('.calendar-agenda-day').count() > 0, 'Phone list view groups releases by day');
+        await page.getByRole('radio', { name: 'Month', exact: true }).click();
+      }
       await page.locator('.calendar-month-grid[aria-busy=false]').waitFor();
       await page.locator('.calendar-release-logo').first().waitFor();
       assert.equal(await page.locator('[role=row]').count(), 5);

@@ -38,6 +38,7 @@ import com.arflix.tv.data.model.StreamIntegrationConfig
 import com.arflix.tv.data.model.StreamIntegrationType
 import com.arflix.tv.data.model.StreamProviderItem
 import com.arflix.tv.data.repository.AuthRepository
+import com.arflix.tv.data.repository.YouTubeCollection
 import com.arflix.tv.data.repository.AuthState
 import com.arflix.tv.data.repository.CatalogDiscoveryRepository
 import com.arflix.tv.data.repository.CatalogRepository
@@ -49,6 +50,8 @@ import com.arflix.tv.data.repository.HomeServerRepository
 import com.arflix.tv.data.repository.PlexPinAuthSession
 import com.arflix.tv.data.repository.IptvAccountInfo
 import com.arflix.tv.data.repository.IptvAccountInfoParser
+import com.arflix.tv.data.repository.IptvConnectionLimit
+import com.arflix.tv.data.repository.IptvConnectionLimitState
 import com.arflix.tv.data.repository.IptvConfig
 import com.arflix.tv.data.repository.IptvRepository
 import com.arflix.tv.data.repository.MAX_STALKER_PORTALS
@@ -76,6 +79,11 @@ import com.arflix.tv.data.repository.TraktSyncService
 import com.arflix.tv.data.repository.WatchlistRepository
 import com.arflix.tv.network.OkHttpProvider
 import com.arflix.tv.data.repository.CatalogException
+import com.arflix.tv.data.repository.KidsContentFilter
+import com.arflix.tv.data.repository.KidsListApprovalSession
+import com.arflix.tv.data.repository.KidsTrustedTitles
+import com.arflix.tv.data.repository.KidsTrustedCatalogs
+import com.arflix.tv.data.model.MediaItem
 import com.arflix.tv.data.repository.SyncProgress
 import com.arflix.tv.data.repository.SyncStatus
 import com.arflix.tv.data.repository.SyncResult
@@ -93,7 +101,8 @@ import com.arflix.tv.util.resolveAppLanguage
 import com.arflix.tv.util.IPTV_EPG_VOD_ACTIONS_ENABLED_KEY
 import com.arflix.tv.util.IPTV_VOD_SEARCH_ENABLED_KEY
 import com.arflix.tv.util.IPTV_FALLBACK_LOGOS_ENABLED_KEY
-import com.arflix.tv.util.settingsDataStore
+import com.arflix.tv.data.repository.effectiveSettingsDataStore as settingsDataStore
+import com.arflix.tv.util.withItemMoved
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -109,6 +118,9 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
@@ -231,12 +243,15 @@ data class SettingsUiState(
     val secondarySubtitle: String = "Off",
     val trailerAutoPlay: Boolean = true,
     val trailerSoundEnabled: Boolean = false,
+    val showAddonStreamDetails: Boolean = false,
     val trailerDelaySeconds: Int = 1,
     /** 0 keeps the fixed row height; 6..10 divides the TV guide into that many rows. */
     val guideRowCount: Int = 0,
     val trailerInCards: Boolean = true,
     val netflixHomeStyle: Boolean = true,
     val watchlistOnHome: Boolean = false,
+    val comingUpOnHome: Boolean = false,
+    val hiddenNavigationSections: Set<String> = emptySet(),
     val showBudget: Boolean = true,
     val showEpisodeRatings: Boolean = false,
     val animeStructuringStyle: AnimeStructuringStyle = AnimeStructuringStyle.BROADCAST,
@@ -245,6 +260,11 @@ data class SettingsUiState(
     // Volume boost in decibels (0 = off, up to 15 dB). Applied via system LoudnessEnhancer
     // attached to the ExoPlayer audio session. Issue #88.
     val volumeBoostDb: Int = 0,
+    // On-disk playback cache (per device, see player/cache/PlaybackCache): the user's size limit,
+    // what it holds now, and the most the free space allows (0 = not measured yet).
+    val playbackCacheLimitGb: Int = com.arflix.tv.player.cache.PlaybackCache.DEFAULT_LIMIT_GB,
+    val playbackCacheUsedBytes: Long = 0L,
+    val playbackCacheMaxBytes: Long = 0L,
     val showLoadingStats: Boolean = true,
     val diagnosticsSharingEnabled: Boolean = true,
     val usageStatisticsEnabled: Boolean = false,
@@ -263,6 +283,9 @@ data class SettingsUiState(
     val historyCount: Int = 0,
     // Trakt
     val isTraktAuthenticated: Boolean = false,
+    val traktReconnectRequired: Boolean = false,
+    /** Stored session exists but Trakt could not confirm it (offline, server error, expired token). */
+    val traktUnavailable: Boolean = false,
     val traktCode: TraktDeviceCode? = null,
     /** Wall clock time the current activation code dies, so the dialog can count down. */
     val traktCodeExpiresAtMillis: Long? = null,
@@ -279,9 +302,17 @@ data class SettingsUiState(
     val mdbListCode: String? = null,
     val mdbListUrl: String? = null,
     val mdbListUsername: String? = null,
+    /** MDBList rejected the stored credential; the user has to connect it again. */
+    val mdbListReconnectRequired: Boolean = false,
+    /** Stored credential exists but MDBList could not confirm it (offline, server error). */
+    val mdbListUnavailable: Boolean = false,
     val showMdbListApiKeyDialog: Boolean = false,
     val mdbListConnecting: Boolean = false,
     // Simkl (alternative remote sync provider)
+    val isWeTrakrConnected: Boolean = false,
+    val weTrakrBusy: Boolean = false,
+    val weTrakrCode: com.arflix.tv.data.repository.wetrakr.WeTrakrDeviceCode? = null,
+    val trackingWriteToWeTrakr: Boolean = false,
     val isSimklConnected: Boolean = false,
     val isSimklAuthStarting: Boolean = false,
     val isSimklPolling: Boolean = false,
@@ -311,6 +342,7 @@ data class SettingsUiState(
     val iptvStalkerPortals: List<StalkerPortalEntry> = emptyList(),
     /** Subscription end and stream limit per playlist / portal id, as last asked. */
     val iptvAccountInfo: Map<String, IptvAccountInfo> = emptyMap(),
+    val iptvConnectionLimits: Map<String, IptvConnectionLimitState> = emptyMap(),
     /** Source ids whose account details are being asked right now. */
     val iptvAccountInfoRefreshing: Set<String> = emptySet(),
     val iptvSortOrder: String = "provider",
@@ -345,11 +377,20 @@ data class SettingsUiState(
     val fallbackChannelLogosEnabled: Boolean = false,
     // App updates
     val isSelfUpdateSupported: Boolean = true,
+    val quietUpdateNotifications: Boolean = false,
     val updateStatus: com.arflix.tv.updater.UpdateStatus = com.arflix.tv.updater.UpdateStatus.Idle,
     val showAppUpdateDialog: Boolean = false,
     val showUnknownSourcesDialog: Boolean = false,
     // Catalogs
     val catalogs: List<CatalogConfig> = emptyList(),
+    val isKidsProfile: Boolean = false,
+    val kidsListApproval: KidsListApprovalUi? = null,
+    /** A parent approving (or un-approving) a whole addon catalog for this kids profile. */
+    val kidsCatalogApproval: KidsCatalogApprovalUi? = null,
+    val pendingYouTubeUrl: String? = null,
+    val youTubeApprovalProfileId: String? = null,
+    val youTubeApprovalError: SettingsMessage? = null,
+    val youTubeApprovalFailures: Int = 0,
     val catalogSearchQuery: String = "",
     val catalogSearchResults: List<CatalogDiscoveryResult> = emptyList(),
     val isCatalogSearching: Boolean = false,
@@ -414,7 +455,31 @@ data class SettingsUiState(
     val streamProviderItems: List<StreamProviderItem> = emptyList(),
     val streamSearchMode: StreamSearchMode = StreamSearchMode.PARALLEL,
     val pluginsCount: Int = 0,
-    val isTelegramConnected: Boolean = false
+    val isTelegramConnected: Boolean = false,
+    val telegramUserName: String? = null
+)
+
+/** See [com.arflix.tv.data.repository.KidsTrustedCatalogs]. */
+data class KidsCatalogApprovalUi(
+    val profileId: String,
+    val catalog: CatalogConfig,
+    val catalogKeys: List<String>,
+    val approved: Boolean,
+    val needsPin: Boolean = false,
+    val pinAttempts: Int = 0,
+    val saving: Boolean = false,
+    val error: SettingsMessage? = null
+)
+
+data class KidsListApprovalUi(
+    val profileId: String,
+    val catalog: CatalogConfig,
+    val needsPin: Boolean = true,
+    val pinAttempts: Int = 0,
+    val loading: Boolean = false,
+    val items: List<MediaItem> = emptyList(),
+    val nextOffset: Int? = null,
+    val error: SettingsMessage? = null
 )
 
 @HiltViewModel
@@ -442,12 +507,16 @@ class SettingsViewModel @Inject constructor(
     private val mdbListRepository: com.arflix.tv.data.repository.MdbListRepository,
     private val syncProviderStore: com.arflix.tv.data.repository.sync.SyncProviderStore,
     private val watchHistoryRepository: com.arflix.tv.data.repository.WatchHistoryRepository,
+    private val weTrakr: com.arflix.tv.data.repository.wetrakr.WeTrakrRepository,
     private val simklAuthManager: com.arflix.tv.data.repository.simkl.SimklAuthManager,
     private val simklSyncService: com.arflix.tv.data.repository.simkl.SimklSyncService,
     private val streamIntegrationRepository: StreamIntegrationRepository,
     private val pluginManager: PluginManager,
     private val telegramRepository: TelegramRepository,
-    private val communityAddonRepository: CommunityAddonRepository
+    private val communityAddonRepository: CommunityAddonRepository,
+    private val traktManualSync: com.arflix.tv.data.repository.TraktManualSync,
+    private val partnerDelivery: dagger.Lazy<com.arflix.tv.data.repository.PartnerDeliveryRepository>? = null,
+    private val kidsContentFilter: KidsContentFilter? = null
 ) : ViewModel() {
     private fun visibleCatalogs(catalogs: List<CatalogConfig>): List<CatalogConfig> {
         return catalogs.filter { config ->
@@ -461,6 +530,32 @@ class SettingsViewModel @Inject constructor(
 
     private val _uiState = MutableStateFlow(SettingsUiState())
     val uiState: StateFlow<SettingsUiState> = _uiState.asStateFlow()
+
+    /**
+     * Whether the active profile is a kids profile, kept apart from [_uiState]: many updates
+     * build a copy of the state around a suspending call and write it back, and such a stale
+     * copy put back `isKidsProfile = false` on a kids profile — hiding its kids-only options
+     * (list and catalog approvals) for good. See [observeProfileChanges], which repairs it.
+     */
+    private val activeProfileIsKids = MutableStateFlow(false)
+    private var kidsListApprovalJob: Job? = null
+    private var kidsListApprovalSession: KidsListApprovalSession? = null
+    private fun managedPermissions() = if (com.arflix.tv.BuildConfig.PARTNER_MANAGEMENT_ENABLED)
+        partnerDelivery?.get()?.activeDelivery()?.permissions else null
+
+    private fun canManage(permission: String): Boolean {
+        val permissions = managedPermissions() ?: return true
+        val allowed = when (permission) {
+            "catalogs" -> permissions.editCatalogs
+            "connections" -> permissions.addConnections
+            "appearance" -> permissions.editAppearance
+            "metadata" -> permissions.editMetadata
+            else -> permissions.editPlayback
+        }
+        if (!allowed) _uiState.value = _uiState.value.copy(
+            toastMessage = SettingsMessage.Raw("This setting is managed by your administrator."), toastType = ToastType.ERROR)
+        return allowed
+    }
     private val preferenceWriter by lazy {
         SettingsPreferenceWriter(context.settingsDataStore, _uiState, viewModelScope,
             profileId = profileManager::getProfileIdSync,
@@ -498,11 +593,13 @@ class SettingsViewModel @Inject constructor(
     private fun autoPlayMinQualityKeyFor(profileId: String) = profileManager.profileStringKeyFor(profileId, "auto_play_min_quality")
     private fun trailerAutoPlayKey() = profileManager.profileBooleanKey("trailer_auto_play")
     private fun trailerSoundEnabledKey() = profileManager.profileBooleanKey("trailer_sound_enabled")
+    private fun addonStreamDetailsKey() = com.arflix.tv.util.addonStreamDetailsKey(profileManager.getProfileIdSync())
     private fun trailerDelayKey() = profileManager.profileStringKey("trailer_delay_seconds")
     private fun guideRowCountKey() = profileManager.profileStringKey("guide_row_count")
     private fun trailerInCardsKey() = profileManager.profileBooleanKey("trailer_in_cards")
     private fun netflixHomeStyleKey() = profileManager.profileBooleanKey(com.arflix.tv.ui.screens.home.NETFLIX_HOME_STYLE_KEY)
     private fun watchlistOnHomeKey() = profileManager.profileBooleanKey(com.arflix.tv.util.WATCHLIST_ON_HOME)
+    private fun comingUpOnHomeKey() = profileManager.profileBooleanKey(com.arflix.tv.ui.screens.home.COMING_UP_ON_HOME)
     private fun showBudgetKey() = profileManager.profileBooleanKey("show_budget_on_home")
     private fun showEpisodeRatingsKey() = profileManager.profileBooleanKey("show_episode_ratings")
     private fun animeStructuringStyleKey() = profileManager.profileStringKey(AnimeStructuringStyle.PREFERENCE_KEY)
@@ -614,6 +711,15 @@ class SettingsViewModel @Inject constructor(
     }
 
     init {
+        // Live TV AI subtitles settings are written by their own rows (LiveAiSubsSettingsRows);
+        // push them to the cloud like every other setting, once they settle.
+        viewModelScope.launch {
+            com.arflix.tv.ui.screens.tv.live.aisubs.LiveAiSubsPrefs.flow(context)
+                .map { listOf(it.enabled, it.autoStart) }
+                .distinctUntilChanged()
+                .drop(1)
+                .collect { syncLocalStateToCloud(silent = true) }
+        }
         _uiState.value = _uiState.value.copy(
             diagnosticsSharingEnabled = DiagnosticsManager.isReportingEnabled(context),
             usageStatisticsEnabled = DiagnosticsManager.isUsageEnabled(context)
@@ -624,6 +730,8 @@ class SettingsViewModel @Inject constructor(
         observeTorrServer()
         observeHomeServer()
         observeSyncState()
+        observeTraktConnection()
+        observeMdbListConnection()
         observeAuthState()
         observeIptvConfig()
         observeIptvGroupPrefs()
@@ -632,6 +740,52 @@ class SettingsViewModel @Inject constructor(
         observeStreamIntegrations()
         initializeUpdaterState()
         checkForAppUpdates(force = false, showNoUpdateFeedback = false)
+        refreshPlaybackCacheInfo()
+    }
+
+    /** Re-reads the playback cache's limit, usage and the space available for it. */
+    fun refreshPlaybackCacheInfo() {
+        viewModelScope.launch {
+            val info = withContext(Dispatchers.IO) {
+                runCatching {
+                    val cache = com.arflix.tv.player.cache.PlaybackCache
+                    cache.get(context)
+                    Triple(cache.limitGb(context), cache.usedBytes(), cache.maxAllowedBytes(context))
+                }.getOrNull()
+            } ?: return@launch
+            _uiState.value = _uiState.value.copy(
+                playbackCacheLimitGb = info.first,
+                playbackCacheUsedBytes = info.second,
+                playbackCacheMaxBytes = info.third
+            )
+        }
+    }
+
+    /** Steps the playback cache size to the next choice that fits the free space, and applies it at once. */
+    fun cyclePlaybackCacheSize() {
+        val state = _uiState.value
+        val next = com.arflix.tv.player.cache.PlaybackCache.nextLimitGb(state.playbackCacheLimitGb, state.playbackCacheMaxBytes)
+        _uiState.value = state.copy(playbackCacheLimitGb = next)
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) {
+                runCatching { com.arflix.tv.player.cache.PlaybackCache.setLimitGb(context, next) }
+            }
+            refreshPlaybackCacheInfo()
+        }
+    }
+
+    /** Deletes everything in the playback cache. */
+    fun clearPlaybackCache() {
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) {
+                runCatching { com.arflix.tv.player.cache.PlaybackCache.clear(context) }
+            }
+            _uiState.value = _uiState.value.copy(
+                toastMessage = SettingsMessage.Res(R.string.playback_cache_cleared),
+                toastType = ToastType.SUCCESS
+            )
+            refreshPlaybackCacheInfo()
+        }
     }
 
     private fun observeIptvGroupPrefs() {
@@ -690,6 +844,16 @@ class SettingsViewModel @Inject constructor(
                 )
             }
         }
+
+        viewModelScope.launch {
+            updatePreferences.quietNotifications.collect { quiet ->
+                _uiState.value = _uiState.value.copy(quietUpdateNotifications = quiet)
+            }
+        }
+    }
+
+    fun setQuietUpdateNotifications(enabled: Boolean) {
+        viewModelScope.launch { updatePreferences.setQuietNotifications(enabled) }
     }
 
     fun setDiagnosticsSharingEnabled(enabled: Boolean) {
@@ -735,12 +899,14 @@ class SettingsViewModel @Inject constructor(
             val autoPlayMaxSizeGb = AutoplayLimits.normalizeSizeGb(prefs[profileManager.profileIntKey("auto_play_max_size_gb")] ?: 0)
             val trailerAutoPlay = prefs[trailerAutoPlayKey()] ?: true
             val trailerSoundEnabled = prefs[trailerSoundEnabledKey()] ?: false
+            val showAddonStreamDetails = prefs[addonStreamDetailsKey()] ?: false
             val trailerDelaySeconds = prefs[trailerDelayKey()]?.toIntOrNull() ?: 1
             val guideRowCount = prefs[guideRowCountKey()]?.toIntOrNull()
                 ?.takeIf { it in 6..10 } ?: 0
             val trailerInCards = prefs[trailerInCardsKey()] ?: true
             val netflixHomeStyle = prefs[netflixHomeStyleKey()] ?: true
             val watchlistOnHome = prefs[watchlistOnHomeKey()] ?: false
+            val comingUpOnHome = prefs[comingUpOnHomeKey()] ?: false
             val spoilerBlurEnabled = prefs[spoilerBlurKey()] ?: false
             val showBudget = prefs[showBudgetKey()] ?: true
             val showEpisodeRatings = prefs[showEpisodeRatingsKey()] ?: false
@@ -842,6 +1008,8 @@ class SettingsViewModel @Inject constructor(
             }
 
             if (profileManager.getProfileIdSync() != loadProfileId) return@launch
+            val traktConnection = traktRepository.connection.first()
+            if (traktConnection.profileId != loadProfileId) return@launch
             val currentState = _uiState.value
             _uiState.value = currentState.copy(
                 defaultSubtitle = defaultSub,
@@ -857,11 +1025,13 @@ class SettingsViewModel @Inject constructor(
                 autoPlayMaxSizeGb = autoPlayMaxSizeGb,
                 trailerAutoPlay = trailerAutoPlay,
                 trailerSoundEnabled = trailerSoundEnabled,
+                showAddonStreamDetails = showAddonStreamDetails,
                 trailerDelaySeconds = trailerDelaySeconds,
                 guideRowCount = guideRowCount,
                 trailerInCards = trailerInCards,
                 netflixHomeStyle = netflixHomeStyle,
                 watchlistOnHome = watchlistOnHome,
+                comingUpOnHome = comingUpOnHome,
                 showBudget = showBudget,
                 showEpisodeRatings = showEpisodeRatings,
                 animeStructuringStyle = animeStructuringStyle,
@@ -884,7 +1054,8 @@ class SettingsViewModel @Inject constructor(
                 spoilerBlurEnabled = spoilerBlurEnabled,
                 isLoggedIn = isLoggedIn,
                 accountEmail = accountEmail,
-                isTraktAuthenticated = isTrakt,
+                isTraktAuthenticated = traktConnection.connected,
+                traktReconnectRequired = traktConnection.reconnectRequired,
                 traktExpiration = traktExpiration,
                 watchlistCount = watchlistCount,
                 historyCount = historyCount,
@@ -895,12 +1066,15 @@ class SettingsViewModel @Inject constructor(
                 mdbListCode = null,
                 mdbListUrl = null,
                 mdbListUsername = null,
+                isWeTrakrConnected = weTrakr.isConnected(),
+                weTrakrBusy = false, weTrakrCode = null,
                 isSimklConnected = isSimkl,
                 simklUsername = null,
                 trackingWatchlistReadMode = trackingPreferences.watchlistReadMode,
                 trackingContinueReadMode = trackingPreferences.continueWatchingReadMode,
                 trackingWatchedReadMode = trackingPreferences.watchedReadMode,
                 trackingWriteToTrakt = trackingPreferences.writeToTrakt == true,
+                trackingWriteToWeTrakr = trackingPreferences.writeToWeTrakr == true,
                 trackingWriteToSimkl = trackingPreferences.writeToSimkl == true,
                 lastSyncTime = null,
                 syncedMovies = 0,
@@ -944,36 +1118,32 @@ class SettingsViewModel @Inject constructor(
         integrationMetadataJob = viewModelScope.launch {
             if (isTraktConnected) {
                 launch {
-                    val username = try {
-                        withTimeoutOrNull(5_000L) { traktRepository.fetchUsername() }
-                    } catch (e: CancellationException) {
-                        throw e
-                    } catch (_: Exception) {
-                        null
-                    }
+                    // A slow answer is not a failure; only a real error marks the session unavailable.
+                    val session = withTimeoutOrNull(5_000L) { traktRepository.checkSession() }
                     if (
                         profileManager.getProfileIdSync() == profileId &&
                         _uiState.value.isTraktAuthenticated
                     ) {
-                        _uiState.value = _uiState.value.copy(traktUsername = username)
+                        _uiState.value = _uiState.value.copy(
+                            traktUsername = session?.getOrNull(),
+                            traktUnavailable = session?.isFailure == true
+                        )
                     }
                 }
             }
 
             if (isMdbListConnected) {
                 launch {
-                    val username = try {
-                        withTimeoutOrNull(5_000L) { mdbListRepository.fetchUsername() }
-                    } catch (e: CancellationException) {
-                        throw e
-                    } catch (_: Exception) {
-                        null
-                    }
+                    // A slow answer is not a failure; only a real error marks the connection unavailable.
+                    val session = withTimeoutOrNull(5_000L) { mdbListRepository.checkSession() }
                     if (
                         profileManager.getProfileIdSync() == profileId &&
                         _uiState.value.isMdbListConnected
                     ) {
-                        _uiState.value = _uiState.value.copy(mdbListUsername = username)
+                        _uiState.value = _uiState.value.copy(
+                            mdbListUsername = session?.getOrNull(),
+                            mdbListUnavailable = session?.isFailure == true
+                        )
                     }
                 }
             }
@@ -1049,9 +1219,31 @@ class SettingsViewModel @Inject constructor(
 
     private fun observeProfileChanges() {
         viewModelScope.launch {
+            kotlinx.coroutines.flow.combine(profileManager.activeProfileId, context.settingsDataStore.data) { profileId, prefs ->
+                com.arflix.tv.util.readHiddenNavigationSections(prefs[com.arflix.tv.util.hiddenNavigationSectionsKey(profileId)])
+            }.distinctUntilChanged().collect { hidden ->
+                _uiState.update { it.copy(hiddenNavigationSections = hidden) }
+            }
+        }
+        viewModelScope.launch {
+            profileRepository.activeProfile.map { it?.isKidsProfile == true }.distinctUntilChanged().collect { isKids ->
+                activeProfileIsKids.value = isKids
+                _uiState.update { it.copy(isKidsProfile = isKids) }
+            }
+        }
+        viewModelScope.launch {
+            // A stale state copy written back must not take the kids flag with it.
+            _uiState.collect { state ->
+                val isKids = activeProfileIsKids.value
+                if (state.isKidsProfile != isKids) _uiState.update { it.copy(isKidsProfile = isKids) }
+            }
+        }
+        viewModelScope.launch {
             profileManager.activeProfileId.collect { profileId ->
                 if (observedProfileId == profileId) return@collect
                 observedProfileId = profileId
+                dismissYouTubeApproval()
+                dismissKidsListApproval()
                 cancelMdbListAuth()
                 hasObservedIptvConfig = false
                 lastObservedIptvConfigSignature = null
@@ -1080,7 +1272,7 @@ class SettingsViewModel @Inject constructor(
 
     private fun observeAddons() {
         viewModelScope.launch {
-            streamRepository.installedAddons.collect { addons ->
+            streamRepository.personalAddons.collect { addons ->
                 runCatching {
                     withContext(Dispatchers.Default) { catalogRepository.syncAddonCatalogs(addons) }
                 }
@@ -1103,7 +1295,7 @@ class SettingsViewModel @Inject constructor(
 
     private fun observeHomeServer() {
         viewModelScope.launch {
-            homeServerRepository.connections.collect { connections ->
+            homeServerRepository.personalConnections.collect { connections ->
                 _uiState.value = _uiState.value.copy(
                     homeServerConnection = connections.firstOrNull(),
                     homeServerConnections = connections
@@ -1135,7 +1327,10 @@ class SettingsViewModel @Inject constructor(
         }
         viewModelScope.launch {
             telegramRepository.authState.collect { authState ->
-                _uiState.value = _uiState.value.copy(isTelegramConnected = authState is TelegramAuthState.Ready)
+                _uiState.value = _uiState.value.copy(
+                    isTelegramConnected = authState is TelegramAuthState.Ready,
+                    telegramUserName = (authState as? TelegramAuthState.Ready)?.firstName?.takeIf { it.isNotBlank() }
+                )
             }
         }
     }
@@ -1153,12 +1348,39 @@ class SettingsViewModel @Inject constructor(
         // Observe sync status
         viewModelScope.launch {
             traktSyncService.isSyncing.collect { isSyncing ->
-                if (_uiState.value.isSyncing != isSyncing) {
-                    _uiState.value = _uiState.value.copy(isSyncing = isSyncing)
+                val busy = isSyncing || manualTrackingSync
+                if (_uiState.value.isSyncing != busy) {
+                    _uiState.value = _uiState.value.copy(isSyncing = busy)
                 }
             }
         }
 
+    }
+
+    private fun observeTraktConnection() {
+        viewModelScope.launch {
+            traktRepository.connection.collect { connection ->
+                if (connection.profileId != profileManager.getProfileIdSync()) return@collect
+                _uiState.value = _uiState.value.copy(
+                    isTraktAuthenticated = connection.connected,
+                    traktReconnectRequired = connection.reconnectRequired,
+                    traktUsername = _uiState.value.traktUsername.takeIf { connection.connected },
+                    traktUnavailable = _uiState.value.traktUnavailable && connection.connected
+                )
+            }
+        }
+    }
+
+    private fun observeMdbListConnection() {
+        viewModelScope.launch {
+            mdbListRepository.connection.collect { connection ->
+                if (connection.profileId != profileManager.getProfileIdSync()) return@collect
+                _uiState.value = _uiState.value.copy(
+                    mdbListReconnectRequired = connection.connected && connection.reconnectRequired,
+                    mdbListUnavailable = _uiState.value.mdbListUnavailable && connection.connected
+                )
+            }
+        }
     }
 
     private fun formatSyncTime(isoTime: String?): String? {
@@ -1353,6 +1575,50 @@ class SettingsViewModel @Inject constructor(
     // ========== App Updates ==========
 
     private var lastManualSyncTimeMs = 0L
+    private var manualTrackingSync = false
+
+    fun forceTraktSync() {
+        val now = System.currentTimeMillis()
+        if (_uiState.value.isSyncing || now - lastManualSyncTimeMs < 10_000L) return
+        lastManualSyncTimeMs = now
+        viewModelScope.launch {
+            val profileId = profileManager.getProfileIdSync()
+            manualTrackingSync = true
+            _uiState.value = _uiState.value.copy(isSyncing = true)
+            try {
+                val result = withContext(Dispatchers.IO) { traktManualSync.sync() }
+                if (profileManager.getProfileIdSync() != profileId) return@launch
+                _uiState.value = when (result) {
+                    is SyncResult.Success -> _uiState.value.copy(
+                        syncedMovies = result.moviesSynced,
+                        syncedEpisodes = result.episodesSynced,
+                        lastSyncTime = formatSyncTime(java.time.Instant.now().toString()),
+                        toastMessage = SettingsMessage.Res(R.string.settings_sync_summary,
+                            listOf(result.moviesSynced, result.episodesSynced)),
+                        toastType = ToastType.SUCCESS
+                    )
+                    is SyncResult.Error -> _uiState.value.copy(
+                        syncProgress = SyncProgress(status = SyncStatus.ERROR, message = result.message),
+                        toastMessage = if (result.reconnectRequired) SettingsMessage.Res(R.string.trakt_reconnect_required)
+                            else SettingsMessage.Res(R.string.sync_failed, listOf(result.message)),
+                        toastType = ToastType.ERROR
+                    )
+                }
+            } catch (error: Exception) {
+                if (error is CancellationException) throw error
+                if (profileManager.getProfileIdSync() == profileId) {
+                    _uiState.value = _uiState.value.copy(
+                        syncProgress = SyncProgress(status = SyncStatus.ERROR, message = error.message.orEmpty()),
+                        toastMessage = SettingsMessage.Res(R.string.sync_failed, listOf(error.message.orEmpty())),
+                        toastType = ToastType.ERROR
+                    )
+                }
+            } finally {
+                manualTrackingSync = false
+                _uiState.value = _uiState.value.copy(isSyncing = traktSyncService.isSyncing.value)
+            }
+        }
+    }
 
     fun syncAllTrackingProviders(silent: Boolean = false) {
         val now = System.currentTimeMillis()
@@ -1365,6 +1631,7 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch(Dispatchers.IO) {
             if (_uiState.value.isSyncing) return@launch
             withContext(Dispatchers.Main) {
+                manualTrackingSync = true
                 _uiState.value = _uiState.value.copy(isSyncing = true)
             }
             try {
@@ -1474,8 +1741,9 @@ class SettingsViewModel @Inject constructor(
                     }
                 }
             } finally {
-                withContext(Dispatchers.Main) {
-                    _uiState.value = _uiState.value.copy(isSyncing = false)
+                withContext(Dispatchers.Main + kotlinx.coroutines.NonCancellable) {
+                    manualTrackingSync = false
+                    _uiState.value = _uiState.value.copy(isSyncing = traktSyncService.isSyncing.value)
                 }
             }
         }
@@ -1660,6 +1928,7 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun setAutoPlayNext(enabled: Boolean) {
+        if (!canManage("playback")) return
         preferenceWriter.save(autoPlayNextKey(), enabled, { it.autoPlayNext }, { state, value -> state.copy(autoPlayNext = value) }) {
             syncLocalStateToCloud(silent = true)
             authRepository.saveAutoPlayNextToProfile(enabled)
@@ -1667,6 +1936,7 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun setAutoPlaySingleSource(enabled: Boolean) {
+        if (!canManage("playback")) return
         preferenceWriter.save(autoPlaySingleSourceKey(), enabled, { it.autoPlaySingleSource }, { state, value -> state.copy(autoPlaySingleSource = value) })
     }
 
@@ -1689,6 +1959,7 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun cycleAutoPlayMinQuality() {
+        if (!canManage("playback")) return
         val current = normalizeAutoPlayMinQuality(_uiState.value.autoPlayMinQuality)
         val maximum = AutoplayLimits(_uiState.value.autoPlayMaxQuality).qualityScore
         val options = listOf("Any", "720p", "1080p", "4K").filter {
@@ -1698,6 +1969,7 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun cycleAutoPlayMaxQuality() {
+        if (!canManage("playback")) return
         val options = AutoplayLimits.qualityOptions
         val next = options[(options.indexOf(_uiState.value.autoPlayMaxQuality) + 1) % options.size]
         val key = profileManager.profileStringKey("auto_play_max_quality")
@@ -1717,6 +1989,7 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun cycleAutoPlayMaxSize() {
+        if (!canManage("playback")) return
         val options = AutoplayLimits.sizeOptionsGb
         val next = options[(options.indexOf(_uiState.value.autoPlayMaxSizeGb) + 1) % options.size]
         val key = profileManager.profileIntKey("auto_play_max_size_gb")
@@ -1760,6 +2033,7 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun setCardLayoutMode(mode: String) {
+        if (!canManage("appearance")) return
         val normalized = normalizeCardLayoutMode(mode)
         viewModelScope.launch {
             context.settingsDataStore.edit { prefs ->
@@ -1810,6 +2084,7 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun setOledBlackBackground(enabled: Boolean) {
+        if (!canManage("appearance")) return
         preferenceWriter.save(com.arflix.tv.util.OLED_BLACK_BACKGROUND_KEY, enabled, { it.oledBlackBackground }, { state, value -> state.copy(oledBlackBackground = value) })
     }
 
@@ -1824,6 +2099,7 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun setFrameRateMatchingMode(mode: String) {
+        if (!canManage("playback")) return
         val normalized = normalizeFrameRateMode(mode)
         preferenceWriter.save(frameRateMatchingModeKey(), normalized, { it.frameRateMatchingMode }, { state, value -> state.copy(frameRateMatchingMode = value) })
     }
@@ -1848,30 +2124,60 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun setSpoilerBlurEnabled(enabled: Boolean) {
+        if (!canManage("appearance")) return
         preferenceWriter.save(spoilerBlurKey(), enabled, { it.spoilerBlurEnabled }, { state, value -> state.copy(spoilerBlurEnabled = value) })
     }
 
     fun setTrailerAutoPlay(enabled: Boolean) {
+        if (!canManage("playback")) return
         preferenceWriter.save(trailerAutoPlayKey(), enabled, { it.trailerAutoPlay }, { state, value -> state.copy(trailerAutoPlay = value) })
     }
 
     fun setTrailerSoundEnabled(enabled: Boolean) {
+        if (!canManage("playback")) return
         preferenceWriter.save(trailerSoundEnabledKey(), enabled, { it.trailerSoundEnabled }, { state, value -> state.copy(trailerSoundEnabled = value) })
     }
 
+    fun setShowAddonStreamDetails(enabled: Boolean) {
+        if (!canManage("playback")) return
+        preferenceWriter.save(addonStreamDetailsKey(), enabled, { it.showAddonStreamDetails }, { state, value -> state.copy(showAddonStreamDetails = value) })
+    }
+
+    fun setNavigationSectionVisible(section: String, visible: Boolean) {
+        if (section !in com.arflix.tv.util.OPTIONAL_NAVIGATION_SECTIONS || !canManage("appearance")) return
+        val hidden = _uiState.value.hiddenNavigationSections.toMutableSet().apply {
+            if (visible) remove(section) else add(section)
+        }
+        preferenceWriter.save(
+            com.arflix.tv.util.hiddenNavigationSectionsKey(profileManager.getProfileIdSync()),
+            com.arflix.tv.util.encodeHiddenNavigationSections(hidden),
+            { com.arflix.tv.util.encodeHiddenNavigationSections(it.hiddenNavigationSections) },
+            { state, value -> state.copy(hiddenNavigationSections = com.arflix.tv.util.readHiddenNavigationSections(value)) }
+        )
+    }
+
     fun setTrailerInCards(enabled: Boolean) {
+        if (!canManage("playback")) return
         preferenceWriter.save(trailerInCardsKey(), enabled, { it.trailerInCards }, { state, value -> state.copy(trailerInCards = value) })
     }
 
     fun setNetflixHomeStyle(enabled: Boolean) {
+        if (!canManage("appearance")) return
         preferenceWriter.save(netflixHomeStyleKey(), enabled, { it.netflixHomeStyle }, { state, value -> state.copy(netflixHomeStyle = value) })
     }
 
     fun setWatchlistOnHome(enabled: Boolean) {
+        if (!canManage("appearance")) return
         preferenceWriter.save(watchlistOnHomeKey(), enabled, { it.watchlistOnHome }, { state, value -> state.copy(watchlistOnHome = value) })
     }
 
+    fun setComingUpOnHome(enabled: Boolean) {
+        if (!canManage("appearance")) return
+        preferenceWriter.save(comingUpOnHomeKey(), enabled, { it.comingUpOnHome }, { state, value -> state.copy(comingUpOnHome = value) })
+    }
+
     fun cycleGuideRowCount() {
+        if (!canManage("appearance")) return
         val next = when (val n = _uiState.value.guideRowCount) {
             in 6..9 -> n + 1
             10 -> 0
@@ -1881,6 +2187,7 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun cycleTrailerDelay() {
+        if (!canManage("playback")) return
         val next = when (_uiState.value.trailerDelaySeconds) {
             0 -> 1
             1 -> 2
@@ -1892,18 +2199,22 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun setShowBudget(enabled: Boolean) {
+        if (!canManage("appearance")) return
         preferenceWriter.save(showBudgetKey(), enabled, { it.showBudget }, { state, value -> state.copy(showBudget = value) })
     }
 
     fun setIptvFavoritesOnHome(enabled: Boolean) {
+        if (!canManage("appearance")) return
         preferenceWriter.save(iptvFavoritesOnHomeKey(), enabled, { it.iptvFavoritesOnHome }, { state, value -> state.copy(iptvFavoritesOnHome = value) })
     }
 
     fun setShowEpisodeRatings(enabled: Boolean) {
+        if (!canManage("appearance")) return
         preferenceWriter.save(showEpisodeRatingsKey(), enabled, { it.showEpisodeRatings }, { state, value -> state.copy(showEpisodeRatings = value) })
     }
 
     fun setAnimeStructuringStyle(style: AnimeStructuringStyle) {
+        if (!canManage("metadata")) return
         viewModelScope.launch {
             context.settingsDataStore.edit { it[animeStructuringStyleKey()] = style.id }
             _uiState.value = _uiState.value.copy(animeStructuringStyle = style)
@@ -1918,6 +2229,7 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun setSmoothScrolling(enabled: Boolean) {
+        if (!canManage("appearance")) return
         preferenceWriter.save(smoothScrollingKey(), enabled, { it.smoothScrolling }, { state, value -> state.copy(smoothScrolling = value) })
     }
 
@@ -1938,6 +2250,7 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun cycleClockFormat() {
+        if (!canManage("appearance")) return
         val next = if (_uiState.value.clockFormat == "24h") "12h" else "24h"
         preferenceWriter.save(clockFormatKey(), next, { it.clockFormat }, { state, value -> state.copy(clockFormat = value) })
     }
@@ -1947,6 +2260,7 @@ class SettingsViewModel @Inject constructor(
      * Order: White → Red → Orange → Yellow → Green → Blue → Indigo → Violet → White
      */
     fun cycleAccentColor() {
+        if (!canManage("appearance")) return
         val colors = listOf("White", "Red", "Orange", "Yellow", "Green", "Blue", "Indigo", "Violet")
         val current = _uiState.value.accentColor
         val nextIndex = (colors.indexOf(current) + 1) % colors.size
@@ -2067,8 +2381,27 @@ class SettingsViewModel @Inject constructor(
 
     fun saveSubtitleAiApiKey(key: String) {
         viewModelScope.launch {
-            context.settingsDataStore.edit { it[subtitleAiApiKeyKey] = key.trim() }
-            _uiState.value = _uiState.value.copy(subtitleAiApiKey = key.trim())
+            // A key's fixed prefix names its provider: follow it, whether the key was typed on the
+            // TV or sent from the phone, so it never sits under the wrong model.
+            val keyModel = com.arflix.tv.ui.screens.player.subtitles.subtitleAiModelForKey(key)
+                ?.takeIf { it != _uiState.value.subtitleAiModel }
+            val leavingGemini = keyModel != null &&
+                _uiState.value.subtitleAiModel == com.arflix.tv.ui.screens.player.subtitles.SubtitleAiModel.GEMINI_FLASH_25
+            context.settingsDataStore.edit {
+                it[subtitleAiApiKeyKey] = key.trim()
+                if (keyModel != null) it[subtitleAiModelKey] = keyModel.name
+            }
+            _uiState.value = _uiState.value.copy(
+                subtitleAiApiKey = key.trim(),
+                subtitleAiModel = keyModel ?: _uiState.value.subtitleAiModel
+            )
+            if (leavingGemini) {
+                // One key slot: live TV AI subtitles and the hearing reference need a Gemini key.
+                _uiState.value = _uiState.value.copy(
+                    toastMessage = SettingsMessage.Res(R.string.ai_model_switched_from_gemini),
+                    toastType = ToastType.INFO
+                )
+            }
             syncLocalStateToCloud(silent = true)
         }
     }
@@ -2087,6 +2420,7 @@ class SettingsViewModel @Inject constructor(
             val server = AiKeyConfigServer.startOnAvailablePort(
                 onKeyReceived = { key ->
                     viewModelScope.launch {
+                        // Also switches the model to the key's provider (see saveSubtitleAiApiKey).
                         saveSubtitleAiApiKey(key)
                         _uiState.value = _uiState.value.copy(
                             aiKeyServerState = _uiState.value.aiKeyServerState.copy(keyReceived = true)
@@ -2196,6 +2530,7 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun setIncludeSpecials(enabled: Boolean) {
+        if (!canManage("playback")) return
         viewModelScope.launch {
             context.settingsDataStore.edit { prefs ->
                 prefs[includeSpecialsKey()] = enabled
@@ -2325,6 +2660,7 @@ class SettingsViewModel @Inject constructor(
     // ========== Addon Management ==========
 
     fun moveStreamIntegrationUp(type: StreamIntegrationType) {
+        if (!canManage("connections")) return
         viewModelScope.launch {
             streamIntegrationRepository.moveIntegrationUp(type)
             syncLocalStateToCloud(silent = true)
@@ -2332,6 +2668,7 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun moveStreamIntegrationDown(type: StreamIntegrationType) {
+        if (!canManage("connections")) return
         viewModelScope.launch {
             streamIntegrationRepository.moveIntegrationDown(type)
             syncLocalStateToCloud(silent = true)
@@ -2339,6 +2676,7 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun toggleStreamIntegration(type: StreamIntegrationType) {
+        if (!canManage("connections")) return
         viewModelScope.launch {
             streamIntegrationRepository.toggleIntegration(type)
             syncLocalStateToCloud(silent = true)
@@ -2346,6 +2684,7 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun moveStreamProviderUp(id: String) {
+        if (!canManage("connections")) return
         viewModelScope.launch {
             streamIntegrationRepository.moveProviderItemUp(id)
             syncLocalStateToCloud(silent = true)
@@ -2353,13 +2692,23 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun moveStreamProviderDown(id: String) {
+        if (!canManage("connections")) return
         viewModelScope.launch {
             streamIntegrationRepository.moveProviderItemDown(id)
             syncLocalStateToCloud(silent = true)
         }
     }
 
+    fun moveStreamProviderBy(id: String, steps: Int) {
+        viewModelScope.launch {
+            if (streamIntegrationRepository.moveProviderItemBy(id, steps)) {
+                syncLocalStateToCloud(silent = true)
+            }
+        }
+    }
+
     fun toggleStreamProvider(id: String) {
+        if (!canManage("connections")) return
         viewModelScope.launch {
             streamIntegrationRepository.toggleProviderItem(id)
             syncLocalStateToCloud(silent = true)
@@ -2367,6 +2716,7 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun setStreamSearchMode(mode: StreamSearchMode) {
+        if (!canManage("playback")) return
         viewModelScope.launch {
             streamIntegrationRepository.setSearchMode(mode)
             syncLocalStateToCloud(silent = true)
@@ -2375,6 +2725,7 @@ class SettingsViewModel @Inject constructor(
 
     @Deprecated("Addon ordering is now managed via StreamIntegrationsScreen.")
     fun moveAddonUp(addonId: String) {
+        if (!canManage("connections")) return
         viewModelScope.launch {
             streamRepository.moveAddonUp(addonId)
         }
@@ -2382,12 +2733,14 @@ class SettingsViewModel @Inject constructor(
 
     @Deprecated("Addon ordering is now managed via StreamIntegrationsScreen.")
     fun moveAddonDown(addonId: String) {
+        if (!canManage("connections")) return
         viewModelScope.launch {
             streamRepository.moveAddonDown(addonId)
         }
     }
 
     fun toggleAddon(addonId: String) {
+        if (!canManage("connections")) return
         viewModelScope.launch {
             val addon = streamRepository.installedAddons.first().firstOrNull { it.id == addonId }
             if (addon != null && addon.needsConfiguration && !addon.isEnabled) {
@@ -2407,6 +2760,7 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun addCustomAddon(url: String) {
+        if (!canManage("connections")) return
         requestAddonInstall(url, fromLink = false)
     }
 
@@ -2417,6 +2771,7 @@ class SettingsViewModel @Inject constructor(
      * first; so does any install that would add a second setup of an addon already installed.
      */
     fun requestAddonInstall(url: String, fromLink: Boolean) {
+        if (!canManage("connections")) return
         addonInstallJob?.cancel()
         addonInstallJob = viewModelScope.launch {
             _uiState.value = _uiState.value.copy(
@@ -2453,6 +2808,7 @@ class SettingsViewModel @Inject constructor(
 
     /** Install the pending addon; [replaceExisting] removes the older setups of it. */
     fun confirmAddonInstall(replaceExisting: Boolean) {
+        if (!canManage("connections")) return
         val pending = _uiState.value.pendingAddonInstall ?: return
         _uiState.value = _uiState.value.copy(pendingAddonInstall = null)
         viewModelScope.launch {
@@ -2474,6 +2830,9 @@ class SettingsViewModel @Inject constructor(
                 val currentAddons = streamRepository.installedAddons.first()
                 val importedCatalogs = addon.manifest?.catalogs?.size ?: 0
                 runCatching {
+                    // Installing is a request to see the addon's rows, including any the
+                    // user deleted under an earlier install of it.
+                    catalogRepository.restoreHiddenAddonCatalogs(addon)
                     catalogRepository.syncAddonCatalogs(currentAddons)
                 }
                 _uiState.value = _uiState.value.copy(
@@ -2525,6 +2884,7 @@ class SettingsViewModel @Inject constructor(
 
     /** Install a community addon straight away: it was picked from a list, not opened from a link. */
     fun installCommunityAddon(entry: CommunityAddon) {
+        if (!canManage("connections")) return
         if (!markCommunityAddonBusy(entry)) return
         viewModelScope.launch {
             try {
@@ -2546,6 +2906,7 @@ class SettingsViewModel @Inject constructor(
 
     /** Remove every installed setup of a community addon. */
     fun uninstallCommunityAddon(entry: CommunityAddon) {
+        if (!canManage("connections")) return
         if (!markCommunityAddonBusy(entry)) return
         viewModelScope.launch {
             try {
@@ -2669,8 +3030,15 @@ class SettingsViewModel @Inject constructor(
             }
         }
         viewModelScope.launch {
+            iptvRepository.observeConnectionLimits().flowOn(Dispatchers.IO).collect { limits ->
+                if (_uiState.value.iptvConnectionLimits != limits) {
+                    _uiState.value = _uiState.value.copy(iptvConnectionLimits = limits)
+                }
+            }
+        }
+        viewModelScope.launch {
             // Parsing stored playlists includes keystore decryption; never do it on the input thread.
-            iptvRepository.observeConfig().distinctUntilChanged().flowOn(Dispatchers.IO).collect { config ->
+            iptvRepository.observePersonalConfig().distinctUntilChanged().flowOn(Dispatchers.IO).collect { config ->
                 val current = _uiState.value
                 val stalkerConfigured = config.stalkerPortals.any { it.portalUrl.isNotBlank() }
                 if (current.iptvM3uUrl != config.m3uUrl || current.iptvEpgUrl != config.epgUrl || current.iptvStalkerPortals != config.stalkerPortals || current.iptvPlaylists != config.playlists || current.iptvSortOrder != config.sortOrder) {
@@ -2732,7 +3100,7 @@ class SettingsViewModel @Inject constructor(
 
     private fun observeCatalogs() {
         viewModelScope.launch {
-            catalogRepository.observeCatalogs().collect { catalogs ->
+            catalogRepository.observePersonalCatalogs().collect { catalogs ->
                 val visible = visibleCatalogs(catalogs)
                 if (_uiState.value.catalogs != visible) {
                     _uiState.value = _uiState.value.copy(catalogs = visible)
@@ -2750,6 +3118,7 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun loadPackManifest(url: String) {
+        if (!canManage("catalogs")) return
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(
                 isPackLoading = true,
@@ -2810,6 +3179,7 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun confirmInstallPack(url: String) {
+        if (!canManage("catalogs")) return
         val manifest = _uiState.value.pendingPackManifest
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(
@@ -2841,6 +3211,7 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun toggleBuiltInCollections() {
+        if (!canManage("catalogs")) return
         viewModelScope.launch {
             val enabled = !catalogRepository.isBuiltInCollectionsEnabled()
             catalogRepository.setBuiltInCollectionsEnabled(enabled)
@@ -2850,6 +3221,7 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun removeCatalogPack(packId: String) {
+        if (!canManage("catalogs")) return
         viewModelScope.launch {
             val result = catalogRepository.removeCatalogPack(packId)
             result.onSuccess {
@@ -2870,10 +3242,16 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun addCatalog(url: String) {
+        if (!canManage("catalogs")) return
         // An addon manifest also brings catalogs, so it is a natural thing to paste
         // here. Install it as an addon rather than rejecting it as a bad catalog URL.
         if (CatalogUrlParser.isStremioManifestUrl(url)) {
             requestAddonInstall(url, fromLink = false)
+            return
+        }
+        // A YouTube video link goes into the profile's own YouTube row.
+        if (YouTubeCollection.videoIdFromUrl(url) != null) {
+            addYouTubeVideo(url)
             return
         }
         viewModelScope.launch {
@@ -2892,6 +3270,212 @@ class SettingsViewModel @Inject constructor(
                     toastMessage = error.orCatalogMessage(
                         SettingsMessage.Res(R.string.catalog_failed_add)
                     ),
+                    toastType = ToastType.ERROR
+                )
+            }
+        }
+    }
+
+    fun addYouTubeVideo(url: String) {
+        if (!canManage("catalogs")) return
+        val profileId = profileManager.getProfileIdSync()
+        viewModelScope.launch {
+            val profile = profileRepository.getActiveProfile()
+            if (profileManager.getProfileIdSync() != profileId) return@launch
+            if (profile?.isKidsProfile == true) {
+                _uiState.value = _uiState.value.copy(
+                    pendingYouTubeUrl = url,
+                    youTubeApprovalProfileId = profileId,
+                    youTubeApprovalError = null
+                )
+            } else {
+                performYouTubeAddition(url, profileId)
+            }
+        }
+    }
+
+    fun requestKidsListApproval(catalog: CatalogConfig) {
+        if (!activeProfileIsKids.value || !KidsTrustedTitles.isTrustedSource(catalog) || !canManage("catalogs")) return
+        dismissKidsListApproval()
+        _uiState.update { it.copy(kidsListApproval = KidsListApprovalUi(profileManager.getProfileIdSync(), catalog)) }
+    }
+
+    fun dismissKidsListApproval() {
+        kidsListApprovalJob?.cancel()
+        kidsListApprovalJob = null
+        kidsListApprovalSession = null
+        _uiState.update { it.copy(kidsListApproval = null) }
+    }
+
+    fun confirmKidsListPin(pin: String) {
+        val request = _uiState.value.kidsListApproval?.takeIf { it.needsPin && !it.loading } ?: return
+        runKidsListApproval(request) {
+            val session = catalogRepository.beginKidsListApproval(request.profileId, request.catalog, pin)
+            kidsListApprovalSession = session
+            loadKidsApprovalPage(session, request.copy(needsPin = false), 0)
+        }
+    }
+
+    fun loadMoreKidsListTitles() {
+        val request = _uiState.value.kidsListApproval?.takeIf { !it.loading } ?: return
+        val session = kidsListApprovalSession ?: return
+        val offset = request.nextOffset ?: return
+        runKidsListApproval(request) { loadKidsApprovalPage(session, request, offset) }
+    }
+
+    private suspend fun loadKidsApprovalPage(session: KidsListApprovalSession, request: KidsListApprovalUi, offset: Int) {
+        catalogRepository.checkKidsListApproval(session)
+        val page = mediaRepository.loadCustomCatalogPage(session.catalog, offset, 24)
+        catalogRepository.checkKidsListApproval(session)
+        _uiState.update { state ->
+            state.copy(kidsListApproval = request.copy(
+                items = (request.items + page.items).distinctBy { it.mediaType to it.id },
+                nextOffset = page.nextOffset?.takeIf { page.hasMore && it > offset },
+                error = null
+            ))
+        }
+    }
+
+    fun approveKidsListTitle(item: MediaItem) {
+        val request = _uiState.value.kidsListApproval?.takeIf { !it.needsPin && !it.loading && item in it.items } ?: return
+        val session = kidsListApprovalSession ?: return
+        val filter = kidsContentFilter ?: return
+        runKidsListApproval(request) {
+            filter.approveListTitle(session, item)
+            kidsListApprovalSession = null
+            _uiState.update { it.copy(
+                kidsListApproval = null,
+                toastMessage = SettingsMessage.Res(R.string.kids_list_title_approved, listOf(item.title)),
+                toastType = ToastType.SUCCESS
+            ) }
+        }
+    }
+
+    private fun runKidsListApproval(request: KidsListApprovalUi, action: suspend () -> Unit) {
+        _uiState.update { it.copy(kidsListApproval = request.copy(loading = true, error = null)) }
+        kidsListApprovalJob = viewModelScope.launch {
+            try {
+                action()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                if (request.needsPin) kidsListApprovalSession = null
+                _uiState.update { it.copy(kidsListApproval = request.copy(
+                    pinAttempts = request.pinAttempts + 1,
+                    error = e.orCatalogMessage(SettingsMessage.Res(R.string.kids_list_approval_unavailable))
+                )) }
+            }
+        }
+    }
+
+    /** Opens the kids approval of an addon catalog row or collection tile (kids profiles only). */
+    fun openKidsCatalogApproval(catalog: CatalogConfig) {
+        if (!activeProfileIsKids.value || !KidsTrustedCatalogs.isApprovable(catalog) || !canManage("catalogs")) return
+        val profileId = profileManager.getProfileIdSync()
+        viewModelScope.launch {
+            val keys = runCatching { mediaRepository.kidsCatalogKeys(catalog) }.getOrDefault(emptyList())
+            if (keys.isEmpty()) {
+                _uiState.update { it.copy(
+                    toastMessage = SettingsMessage.Res(R.string.kids_catalog_unavailable),
+                    toastType = ToastType.ERROR
+                ) }
+                return@launch
+            }
+            val approved = catalogRepository.kidsCatalogApprovals(profileId).containsAll(keys)
+            _uiState.update { it.copy(kidsCatalogApproval = KidsCatalogApprovalUi(profileId, catalog, keys, approved)) }
+        }
+    }
+
+    /** "Approve" / "Remove approval" pressed: the parent PIN comes next. */
+    fun requestKidsCatalogPin() {
+        _uiState.update { state -> state.copy(kidsCatalogApproval = state.kidsCatalogApproval?.copy(needsPin = true, error = null)) }
+    }
+
+    fun dismissKidsCatalogApproval() {
+        _uiState.update { it.copy(kidsCatalogApproval = null) }
+    }
+
+    fun confirmKidsCatalogPin(pin: String) {
+        val request = _uiState.value.kidsCatalogApproval?.takeIf { it.needsPin && !it.saving } ?: return
+        _uiState.update { it.copy(kidsCatalogApproval = request.copy(saving = true, error = null)) }
+        viewModelScope.launch {
+            try {
+                catalogRepository.setKidsCatalogApproval(request.profileId, request.catalogKeys, !request.approved, pin)
+                _uiState.update { it.copy(
+                    kidsCatalogApproval = null,
+                    toastMessage = SettingsMessage.Res(
+                        if (request.approved) R.string.kids_catalog_unapproved_toast else R.string.kids_catalog_approved_toast,
+                        listOf(request.catalog.title)
+                    ),
+                    toastType = ToastType.SUCCESS
+                ) }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _uiState.update { it.copy(kidsCatalogApproval = request.copy(
+                    saving = false,
+                    pinAttempts = request.pinAttempts + 1,
+                    error = e.orCatalogMessage(SettingsMessage.Res(R.string.kids_list_approval_unavailable))
+                )) }
+            }
+        }
+    }
+
+    fun dismissYouTubeApproval() {
+        _uiState.value = _uiState.value.copy(pendingYouTubeUrl = null, youTubeApprovalProfileId = null, youTubeApprovalError = null)
+    }
+
+    fun confirmYouTubeAddition(pin: String) {
+        if (!canManage("catalogs")) return
+        val state = _uiState.value
+        val url = state.pendingYouTubeUrl ?: return
+        val profileId = state.youTubeApprovalProfileId ?: return
+        viewModelScope.launch { performYouTubeAddition(url, profileId, pin) }
+    }
+
+    private suspend fun performYouTubeAddition(url: String, profileId: String, pin: String? = null) {
+        catalogRepository.addYouTubeVideo(url, parentPin = pin, targetProfileId = profileId).onSuccess { (_, title) ->
+            dismissYouTubeApproval()
+            _uiState.value = _uiState.value.copy(
+                toastMessage = SettingsMessage.Res(R.string.settings_catalog_added, listOf(title)),
+                toastType = ToastType.SUCCESS
+            )
+            syncLocalStateToCloud(silent = true)
+        }.onFailure { error ->
+            if (error is CatalogException && error.messageRes == R.string.youtube_parent_approval_required) {
+                _uiState.value = _uiState.value.copy(
+                    youTubeApprovalError = SettingsMessage.Res(error.messageRes),
+                    youTubeApprovalFailures = _uiState.value.youTubeApprovalFailures + 1
+                )
+                return@onFailure
+            }
+            dismissYouTubeApproval()
+            _uiState.value = _uiState.value.copy(
+                toastMessage = error.orCatalogMessage(SettingsMessage.Res(R.string.catalog_failed_add)),
+                toastType = ToastType.ERROR
+            )
+        }
+    }
+
+    internal fun moveYouTubeVideo(catalogId: String, video: YouTubeCollection.Video, delta: Int) {
+        viewModelScope.launch {
+            catalogRepository.moveYouTubeVideo(catalogId, video.id, delta).onSuccess {
+                syncLocalStateToCloud(silent = true)
+            }
+        }
+    }
+
+    internal fun removeYouTubeVideo(catalogId: String, video: YouTubeCollection.Video) {
+        viewModelScope.launch {
+            catalogRepository.removeYouTubeVideo(catalogId, video.id).onSuccess {
+                _uiState.value = _uiState.value.copy(
+                    toastMessage = SettingsMessage.Res(R.string.youtube_video_removed, listOf(video.title)),
+                    toastType = ToastType.SUCCESS
+                )
+                syncLocalStateToCloud(silent = true)
+            }.onFailure { error ->
+                _uiState.value = _uiState.value.copy(
+                    toastMessage = error.orCatalogMessage(SettingsMessage.Res(R.string.catalog_not_found)),
                     toastType = ToastType.ERROR
                 )
             }
@@ -2965,6 +3549,7 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun addDiscoveredCatalog(result: CatalogDiscoveryResult) {
+        if (!canManage("catalogs")) return
         viewModelScope.launch {
             val addResult = catalogRepository.addCustomCatalog(result.sourceUrl)
             addResult.onSuccess { catalog ->
@@ -2988,6 +3573,7 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun updateCatalog(catalogId: String, url: String) {
+        if (!canManage("catalogs")) return
         viewModelScope.launch {
             val result = catalogRepository.updateCustomCatalog(catalogId, url)
             result.onSuccess { catalog ->
@@ -3011,6 +3597,7 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun removeCatalog(catalogId: String) {
+        if (!canManage("catalogs")) return
         viewModelScope.launch {
             val result = catalogRepository.removeCustomCatalog(catalogId)
             result.onSuccess {
@@ -3034,6 +3621,7 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun unpackCatalog(catalogId: String) {
+        if (!canManage("catalogs")) return
         viewModelScope.launch {
             val current = catalogRepository.getCatalogs()
             val index = current.indexOfFirst { it.id == catalogId }
@@ -3058,6 +3646,7 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun renameCatalog(catalogId: String, newTitle: String) {
+        if (!canManage("catalogs")) return
         viewModelScope.launch {
             val success = catalogRepository.renameCatalog(catalogId, newTitle)
             if (success) {
@@ -3067,6 +3656,7 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun moveCatalogUp(catalogId: String) {
+        if (!canManage("catalogs")) return
         viewModelScope.launch {
             catalogRepository.moveCatalogUp(catalogId)
             syncLocalStateToCloud(silent = true)
@@ -3074,13 +3664,23 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun moveCatalogDown(catalogId: String) {
+        if (!canManage("catalogs")) return
         viewModelScope.launch {
             catalogRepository.moveCatalogDown(catalogId)
             syncLocalStateToCloud(silent = true)
         }
     }
 
+    fun moveCatalogBy(catalogId: String, steps: Int) {
+        viewModelScope.launch {
+            if (catalogRepository.moveCatalogBy(catalogId, steps)) {
+                syncLocalStateToCloud(silent = true)
+            }
+        }
+    }
+
     fun saveIptvConfig(m3uUrl: String, epgUrl: String) {
+        if (!canManage("connections")) return
         viewModelScope.launch {
             val trimmedM3u = m3uUrl.trim()
             val trimmedEpg = epgUrl.trim()
@@ -3114,8 +3714,10 @@ class SettingsViewModel @Inject constructor(
         name: String? = null,
         importLiveTv: Boolean = true,
         importVod: Boolean = true,
-        importSeries: Boolean = true
+        importSeries: Boolean = true,
+        connectionLimit: IptvConnectionLimit = IptvConnectionLimit.AUTO
     ) {
+        if (!canManage("connections")) return
         val trimmedUrl = portalUrl.trim().trimEnd('/')
         val trimmedMac = macAddress.trim().uppercase()
         if (trimmedUrl.isBlank() || trimmedMac.isBlank()) {
@@ -3147,7 +3749,7 @@ class SettingsViewModel @Inject constructor(
             importVod = importVod,
             importSeries = importSeries
         )
-        persistStalkerPortals(current + portal)
+        persistStalkerPortals(current + portal, connectionLimit)
     }
 
     /**
@@ -3166,6 +3768,7 @@ class SettingsViewModel @Inject constructor(
         importVod: Boolean? = null,
         importSeries: Boolean? = null
     ) {
+        if (!canManage("connections")) return
         val trimmedUrl = portalUrl.trim().trimEnd('/')
         val trimmedMac = macAddress.trim().uppercase()
         if (trimmedUrl.isBlank() || trimmedMac.isBlank()) {
@@ -3193,6 +3796,7 @@ class SettingsViewModel @Inject constructor(
      * Rename a portal without touching its URL/MAC.
      */
     fun onRenameStalkerPortal(portalId: String, name: String) {
+        if (!canManage("connections")) return
         val trimmed = name.trim()
         if (trimmed.isBlank()) return
         val updated = _uiState.value.iptvStalkerPortals.map { portal ->
@@ -3208,6 +3812,7 @@ class SettingsViewModel @Inject constructor(
 
     /** Enable / disable a portal. */
     fun onToggleStalkerPortal(portalId: String) {
+        if (!canManage("connections")) return
         val updated = _uiState.value.iptvStalkerPortals.map { portal ->
             if (portal.id == portalId) portal.copy(enabled = !portal.enabled) else portal
         }
@@ -3216,6 +3821,7 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun onMoveStalkerPortalUp(portalId: String) {
+        if (!canManage("connections")) return
         val current = _uiState.value.iptvStalkerPortals.toMutableList()
         val idx = current.indexOfFirst { it.id == portalId }
         if (idx <= 0) return
@@ -3225,6 +3831,7 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun onMoveStalkerPortalDown(portalId: String) {
+        if (!canManage("connections")) return
         val current = _uiState.value.iptvStalkerPortals.toMutableList()
         val idx = current.indexOfFirst { it.id == portalId }
         if (idx !in 0 until current.lastIndex) return
@@ -3233,7 +3840,27 @@ class SettingsViewModel @Inject constructor(
         persistStalkerPortals(current)
     }
 
+    fun onMoveStalkerPortalBy(portalId: String, steps: Int) {
+        val current = _uiState.value.iptvStalkerPortals
+        val idx = current.indexOfFirst { it.id == portalId }
+        if (idx < 0) return
+        val updated = current.withItemMoved(idx, (idx + steps).coerceIn(0, current.lastIndex))
+        if (updated == current) return
+        persistStalkerPortals(updated)
+    }
+
+    /** Moves a playlist several places at once - one save, so one reload, for a row dragged on the phone. */
+    fun moveIptvPlaylistBy(playlistId: String, steps: Int) {
+        val current = _uiState.value.iptvPlaylists
+        val idx = current.indexOfFirst { it.id == playlistId }
+        if (idx < 0) return
+        val updated = current.withItemMoved(idx, (idx + steps).coerceIn(0, current.lastIndex))
+        if (updated == current) return
+        saveIptvPlaylists(updated)
+    }
+
     fun onRemoveStalkerPortal(portalId: String) {
+        if (!canManage("connections")) return
         val updated = _uiState.value.iptvStalkerPortals.filterNot { it.id == portalId }
         if (updated == _uiState.value.iptvStalkerPortals) return
         persistStalkerPortals(updated)
@@ -3245,6 +3872,18 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
+    fun removeStalkerPortals(portalIds: Set<String>) {
+        val current = _uiState.value.iptvStalkerPortals
+        val updated = current.filterNot { it.id in portalIds }
+        if (updated != current) persistStalkerPortals(updated)
+    }
+
+    fun removeIptvPlaylists(playlistIds: Set<String>) {
+        val current = _uiState.value.iptvPlaylists
+        val updated = current.filterNot { it.id in playlistIds }
+        if (updated != current) saveIptvPlaylists(updated)
+    }
+
     /**
      * Open the categories dialog for a specific Stalker portal. Each portal has
      * its own independent group set (decision #3) — the portal id is used as
@@ -3254,12 +3893,16 @@ class SettingsViewModel @Inject constructor(
         setIptvSelectedPlaylistId(portalId)
     }
 
-    private fun persistStalkerPortals(portals: List<StalkerPortalEntry>) {
+    private fun persistStalkerPortals(
+        portals: List<StalkerPortalEntry>,
+        newSourceConnectionLimit: IptvConnectionLimit = IptvConnectionLimit.AUTO,
+    ) {
         val previous = _uiState.value.iptvStalkerPortals
         viewModelScope.launch {
             iptvRepository.saveStalkerPortals(portals)
             // Compare what was actually stored: saving normalizes entries.
-            val stored = iptvRepository.observeConfig().first()
+            val stored = iptvRepository.observePersonalConfig().first()
+            saveNewSourceConnectionLimit(previous.map { it.id }, stored.stalkerPortals.map { it.id }, newSourceConnectionLimit)
             onIptvSourcesSaved(
                 changedIds = changedAccountSources(previous, stored.stalkerPortals, { p: StalkerPortalEntry -> p.id }, { p: StalkerPortalEntry -> IptvAccountInfoParser.fingerprint(p) }),
                 playlists = stored.playlists,
@@ -3286,9 +3929,10 @@ class SettingsViewModel @Inject constructor(
     }
 
     /**
-     * Account details are asked only when a source is added or edited, and via
-     * [refreshIptvAccountInfo] - never on start-up or in the background, to keep
-     * the requests a provider sees to the minimum.
+     * Account details are asked when a source is added or edited, via
+     * [refreshIptvAccountInfo], and once per process when a user-started Xtream play
+     * finds none stored ([IptvRepository.bootstrapAccountAllowance]) - never on start-up
+     * or while browsing, to keep the requests a provider sees to the minimum.
      */
     private fun onIptvSourcesSaved(
         changedIds: Set<String>,
@@ -3314,6 +3958,22 @@ class SettingsViewModel @Inject constructor(
         (playlists.map { it.id } + portals.map { it.id }).forEach {
             refreshIptvAccountInfo(it, playlists, portals, automatic = true)
         }
+    }
+
+    /** The row belongs to this device, so unlike a source edit it syncs and reloads nothing. */
+    fun stepIptvConnectionLimit(sourceId: String) {
+        if (!canManage("connections")) return
+        viewModelScope.launch { iptvRepository.stepConnectionLimit(sourceId) }
+    }
+
+    /**
+     * The limit chosen while adding a source goes to the id its save assigned, on this
+     * device only like [stepIptvConnectionLimit]. Auto is the absence of an entry.
+     */
+    private suspend fun saveNewSourceConnectionLimit(previousIds: List<String>, storedIds: List<String>, limit: IptvConnectionLimit) {
+        if (limit == IptvConnectionLimit.AUTO) return
+        val newId = (storedIds - previousIds.toSet()).singleOrNull() ?: return
+        iptvRepository.saveConnectionLimit(newId, limit)
     }
 
     /** "Refresh now" in the edit dialog of a playlist or portal. */
@@ -3389,6 +4049,7 @@ class SettingsViewModel @Inject constructor(
         xtreamUsername: String,
         xtreamPassword: String
     ) {
+        if (!canManage("connections")) return
         val host = sourceOrHost.trim()
         val epg = epgUrl.trim()
         val user = xtreamUsername.trim()
@@ -3414,20 +4075,29 @@ class SettingsViewModel @Inject constructor(
         saveIptvConfig(m3uInput, epgInput)
     }
 
-    fun saveIptvPlaylists(playlists: List<IptvPlaylistEntry>) {
+    fun saveIptvPlaylists(
+        playlists: List<IptvPlaylistEntry>,
+        newSourceConnectionLimit: IptvConnectionLimit = IptvConnectionLimit.AUTO,
+    ) {
+        if (!canManage("connections")) return
+        if (playlists.count { it.m3uUrl.isNotBlank() } > com.arflix.tv.data.repository.MAX_IPTV_PLAYLISTS) {
+            _uiState.value = _uiState.value.copy(toastMessage = SettingsMessage.Res(R.string.settings_iptv_max_reached), toastType = ToastType.ERROR)
+            return
+        }
         val previous = _uiState.value.iptvPlaylists
         viewModelScope.launch {
             iptvRepository.savePlaylists(playlists)
             // Compare what was actually stored: saving rewrites "host user pass"
             // into a get.php address, so the entry as typed never matches a row.
-            val stored = iptvRepository.observeConfig().first()
+            val stored = iptvRepository.observePersonalConfig().first()
+            saveNewSourceConnectionLimit(previous.map { it.id }, stored.playlists.map { it.id }, newSourceConnectionLimit)
             onIptvSourcesSaved(
                 changedIds = changedAccountSources(previous, stored.playlists, { p: IptvPlaylistEntry -> p.id }, { p: IptvPlaylistEntry -> IptvAccountInfoParser.fingerprint(p) }),
                 playlists = stored.playlists,
                 portals = stored.stalkerPortals,
             )
             _uiState.value = _uiState.value.copy(
-                iptvPlaylists = playlists.filter { it.m3uUrl.isNotBlank() }
+                iptvPlaylists = stored.playlists
             )
             syncLocalStateToCloud(silent = true)
             refreshIptv(showToast = true, configured = true, force = true)
@@ -3436,7 +4106,7 @@ class SettingsViewModel @Inject constructor(
 
     fun refreshIptv(showToast: Boolean = true, configured: Boolean = false, force: Boolean = true) {
         viewModelScope.launch {
-            val currentConfig = iptvRepository.observeConfig().first()
+            val currentConfig = iptvRepository.observePersonalConfig().first()
             // Check legacy m3uUrl, multi-playlist entries, and Stalker portals
             val hasPlaylists = currentConfig.playlists.any { it.m3uUrl.isNotBlank() && it.enabled }
             val hasStalker = currentConfig.stalkerPortals.any { it.portalUrl.isNotBlank() }
@@ -3590,6 +4260,7 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun clearIptvConfig() {
+        if (!canManage("connections")) return
         viewModelScope.launch {
             iptvLoadJob?.cancel()
             iptvRepository.clearConfig()
@@ -3609,6 +4280,7 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun removeAddon(addonId: String) {
+        if (!canManage("connections")) return
         viewModelScope.launch {
             streamRepository.removeAddon(addonId)
             val addonsAfterRemove = streamRepository.installedAddons.first()
@@ -3620,6 +4292,7 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun setTorrServerBaseUrl(url: String) {
+        if (!canManage("connections")) return
         viewModelScope.launch {
             streamRepository.setTorrServerBaseUrl(url)
             syncLocalStateToCloud(silent = true)
@@ -3940,6 +4613,7 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun connectHomeServer(serverUrl: String, username: String, password: String, displayName: String = "") {
+        if (!canManage("connections")) return
         if (_uiState.value.isHomeServerConnecting) return
         viewModelScope.launch {
             cancelPlexHomeServerAuth(updateState = false)
@@ -3951,7 +4625,7 @@ class SettingsViewModel @Inject constructor(
             )
             val result = homeServerRepository.connect(serverUrl, username, password, displayName)
             result.onSuccess { connection ->
-                val connections = homeServerRepository.currentConnections()
+                val connections = homeServerRepository.personalConnections.first()
                 _uiState.value = _uiState.value.copy(
                     isHomeServerConnecting = false,
                     homeServerConnection = connection,
@@ -3984,6 +4658,7 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun startPlexHomeServerAuth(serverUrl: String, displayName: String = "") {
+        if (!canManage("connections")) return
         if (_uiState.value.isHomeServerConnecting || _uiState.value.isPlexHomeServerPolling) return
         val trimmedUrl = serverUrl.trim()
 
@@ -4056,7 +4731,7 @@ class SettingsViewModel @Inject constructor(
                 )
                 runCatching {
                     syncHomeServerCatalogsFromConnections()
-                    val connections = homeServerRepository.currentConnections()
+                    val connections = homeServerRepository.personalConnections.first()
                     plexHomeServerUrl = null
                     plexHomeServerDisplayName = null
                     _uiState.value = _uiState.value.copy(
@@ -4156,6 +4831,7 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun disconnectHomeServer() {
+        if (!canManage("connections")) return
         viewModelScope.launch {
             cancelPlexHomeServerAuth(updateState = false)
             homeServerRepository.disconnect()
@@ -4673,6 +5349,8 @@ class SettingsViewModel @Inject constructor(
                 val message: SettingsMessage = when (e) {
                     is retrofit2.HttpException -> if (e.code() == 429) {
                         SettingsMessage.Res(R.string.settings_trakt_rate_limited)
+                    } else if (e.code() in 500..599) {
+                        SettingsMessage.Res(R.string.settings_trakt_unavailable)
                     } else SettingsMessage.Res(
                         R.string.settings_trakt_activation_failed_code,
                         listOf(e.code())
@@ -4745,6 +5423,7 @@ class SettingsViewModel @Inject constructor(
                         trackingContinueReadMode = trackingPreferences.continueWatchingReadMode,
                         trackingWatchedReadMode = trackingPreferences.watchedReadMode,
                         trackingWriteToTrakt = trackingPreferences.writeToTrakt == true,
+                        trackingWriteToWeTrakr = trackingPreferences.writeToWeTrakr == true,
                         trackingWriteToSimkl = trackingPreferences.writeToSimkl == true,
                         toastMessage = SettingsMessage.Res(R.string.settings_trakt_connected_toast),
                         toastType = ToastType.SUCCESS
@@ -4799,7 +5478,11 @@ class SettingsViewModel @Inject constructor(
                     // Only the poll itself is retried (pollForToken also stores the token): once
                     // the token is saved, asking again would report the code as already used.
                     if (!tokenSaved && com.arflix.tv.data.repository.isTransientTraktPollFailure(e)) {
-                        networkFailure = e.message.orMessage(SettingsMessage.Res(R.string.settings_trakt_auth_failed))
+                        networkFailure = if (httpError != null) SettingsMessage.Res(R.string.settings_trakt_unavailable)
+                            else e.message.orMessage(SettingsMessage.Res(R.string.settings_trakt_auth_failed))
+                        pollDelayMs = com.arflix.tv.data.repository.traktRetryDelayMs(
+                            httpError?.response()?.headers()?.get("Retry-After"), maxOf(pollDelayMs, 15_000L)
+                        )
                         continue
                     }
 
@@ -4863,6 +5546,7 @@ class SettingsViewModel @Inject constructor(
                 trackingContinueReadMode = preferences.continueWatchingReadMode,
                 trackingWatchedReadMode = preferences.watchedReadMode,
                 trackingWriteToTrakt = false,
+                trackingWriteToWeTrakr = preferences.writeToWeTrakr == true,
                 trackingWriteToSimkl = preferences.writeToSimkl == true,
                 toastMessage = SettingsMessage.Res(R.string.settings_trakt_disconnected),
                 toastType = ToastType.SUCCESS
@@ -4920,6 +5604,7 @@ class SettingsViewModel @Inject constructor(
                 trackingContinueReadMode = trackingPreferences.continueWatchingReadMode,
                 trackingWatchedReadMode = trackingPreferences.watchedReadMode,
                 trackingWriteToTrakt = trackingPreferences.writeToTrakt == true,
+                trackingWriteToWeTrakr = trackingPreferences.writeToWeTrakr == true,
                 trackingWriteToSimkl = trackingPreferences.writeToSimkl == true,
                 toastMessage = SettingsMessage.Res(R.string.mdblist_connected),
                 toastType = ToastType.SUCCESS
@@ -5023,6 +5708,7 @@ class SettingsViewModel @Inject constructor(
                         trackingContinueReadMode = trackingPreferences.continueWatchingReadMode,
                         trackingWatchedReadMode = trackingPreferences.watchedReadMode,
                         trackingWriteToTrakt = trackingPreferences.writeToTrakt == true,
+                        trackingWriteToWeTrakr = trackingPreferences.writeToWeTrakr == true,
                         trackingWriteToSimkl = trackingPreferences.writeToSimkl == true,
                         toastMessage = SettingsMessage.Res(R.string.mdblist_connected),
                         toastType = ToastType.SUCCESS
@@ -5106,6 +5792,7 @@ class SettingsViewModel @Inject constructor(
                 trackingContinueReadMode = trackingPreferences.continueWatchingReadMode,
                 trackingWatchedReadMode = trackingPreferences.watchedReadMode,
                 trackingWriteToTrakt = trackingPreferences.writeToTrakt == true,
+                trackingWriteToWeTrakr = trackingPreferences.writeToWeTrakr == true,
                 trackingWriteToSimkl = trackingPreferences.writeToSimkl == true,
                 toastMessage = SettingsMessage.Res(R.string.mdblist_disconnected),
                 toastType = ToastType.SUCCESS
@@ -5179,6 +5866,7 @@ class SettingsViewModel @Inject constructor(
                             trackingContinueReadMode = trackingPreferences.continueWatchingReadMode,
                             trackingWatchedReadMode = trackingPreferences.watchedReadMode,
                             trackingWriteToTrakt = trackingPreferences.writeToTrakt == true,
+                            trackingWriteToWeTrakr = trackingPreferences.writeToWeTrakr == true,
                             trackingWriteToSimkl = trackingPreferences.writeToSimkl == true,
                             toastMessage = SettingsMessage.Res(R.string.settings_simkl_connected),
                             toastType = ToastType.SUCCESS
@@ -5236,6 +5924,7 @@ class SettingsViewModel @Inject constructor(
                         trackingContinueReadMode = trackingPreferences.continueWatchingReadMode,
                         trackingWatchedReadMode = trackingPreferences.watchedReadMode,
                         trackingWriteToTrakt = trackingPreferences.writeToTrakt == true,
+                        trackingWriteToWeTrakr = trackingPreferences.writeToWeTrakr == true,
                         trackingWriteToSimkl = trackingPreferences.writeToSimkl == true,
                         toastMessage = SettingsMessage.Res(R.string.settings_simkl_connected),
                         toastType = ToastType.SUCCESS
@@ -5292,6 +5981,45 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
+    private var weTrakrJob: kotlinx.coroutines.Job? = null
+    fun toggleWeTrakr() {
+        val profile = profileManager.getProfileIdSync()
+        val cancel = _uiState.value.weTrakrBusy
+        weTrakrJob?.cancel()
+        weTrakrJob = viewModelScope.launch {
+            try {
+                if (cancel) { weTrakr.cancel(profile); return@launch }
+                if (weTrakr.isConnected(profile)) {
+                    weTrakr.disconnect(profile)
+                    syncProviderStore.onProviderDisconnected(com.arflix.tv.data.repository.sync.SyncProvider.WETRAKR, profile)
+                } else {
+                    _uiState.value = _uiState.value.copy(weTrakrBusy = true)
+                    val code = weTrakr.start(profile)
+                    if (profileManager.getProfileIdSync() != profile) return@launch
+                    _uiState.value = _uiState.value.copy(weTrakrCode = code)
+                    while (System.currentTimeMillis() < code.expiresAt && profileManager.getProfileIdSync() == profile) {
+                        delay(code.interval * 1000)
+                        if (weTrakr.poll(profile)) {
+                            syncProviderStore.onProviderConnected(com.arflix.tv.data.repository.sync.SyncProvider.WETRAKR, profile)
+                            break
+                        }
+                    }
+                    if (!weTrakr.isConnected(profile)) throw com.arflix.tv.data.repository.wetrakr.WeTrakrError(410, "expired_token")
+                }
+            } catch (e: CancellationException) { throw e }
+            catch (e: Exception) {
+                if (profileManager.getProfileIdSync() == profile) _uiState.value = _uiState.value.copy(toastMessage = SettingsMessage.Raw(e.message ?: "WeTrakr unavailable"), toastType = ToastType.ERROR)
+            } finally {
+                if (profileManager.getProfileIdSync() == profile) {
+                    val prefs = syncProviderStore.getTrackingPreferences()
+                    _uiState.value = _uiState.value.copy(weTrakrBusy = false, weTrakrCode = null, isWeTrakrConnected = weTrakr.isConnected(profile),
+                        trackingWriteToWeTrakr = prefs.writeToWeTrakr == true, trackingWatchlistReadMode = prefs.watchlistReadMode,
+                        trackingContinueReadMode = prefs.continueWatchingReadMode, trackingWatchedReadMode = prefs.watchedReadMode)
+                }
+            }
+        }
+    }
+
     fun setTrackingReadMode(
         feature: com.arflix.tv.data.repository.sync.TrackingFeature,
         mode: com.arflix.tv.data.repository.sync.TrackingReadMode
@@ -5314,6 +6042,7 @@ class SettingsViewModel @Inject constructor(
             val preferences = syncProviderStore.getTrackingPreferences()
             _uiState.value = _uiState.value.copy(
                 trackingWriteToTrakt = preferences.writeToTrakt == true,
+                trackingWriteToWeTrakr = preferences.writeToWeTrakr == true,
                 trackingWriteToSimkl = preferences.writeToSimkl == true
             )
             syncLocalStateToCloud(silent = true, force = true)

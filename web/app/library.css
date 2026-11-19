@@ -1,0 +1,235 @@
+/* Library (watchlists, lists, home servers). Imported by
+   components/watchlist/WatchlistScreen.tsx. */
+
+.library-loading { min-height: 38vh; display: grid; place-items: center; color: #fff; }
+.library-loading svg,
+.library-load-more svg { animation: library-spin 900ms linear infinite; }
+.library-load-more { min-height: 76px; display: grid; place-items: center; color: rgba(255, 255, 255, 0.65); }
+
+/* Compact OLED library: one toolbar, one continuous canvas. */
+.screen.oled-library { background:#000; min-height:100dvh; padding:100px 3vw 24px; color:#fff; }
+.oled-library button { color:inherit; font:inherit; cursor:pointer; }
+.oled-library-toolbar { display:flex; align-items:center; justify-content:space-between; gap:20px; margin-bottom:22px; }
+.oled-library-toolbar nav,.oled-library-actions { display:flex; align-items:center; gap:12px; }
+.oled-library-toolbar button,.oled-list-breadcrumb button { display:flex; align-items:center; justify-content:center; gap:10px; border:0; background:transparent; border-radius:9px; padding:13px 17px; white-space:nowrap; }
+.oled-library-toolbar [aria-current],.oled-library-toolbar .oled-filter-button { background:#242426; }
+.oled-library-actions>span { color:#ccc; margin-inline-end:10px; }
+.oled-library button:focus-visible { outline:0; background:var(--accent,#fff); color:#000; }
+.oled-library-body { display:grid; grid-template-columns:minmax(0,1fr); gap:26px; }
+.oled-library-body.with-sources { grid-template-columns:210px minmax(0,1fr); }
+.oled-source-nav { min-width:0; max-height:calc(100dvh - 180px); overflow:auto; scrollbar-width:none; }
+.oled-source-nav p { color:#c7c7cd; margin:10px 10px 10px; font-size:15px; }
+.oled-source-nav small { display:block; color:#96969e; margin-top:6px; }
+.oled-source-nav>div { margin-top:26px; }
+.oled-source-nav button { display:flex; width:100%; align-items:center; gap:12px; border:0; border-radius:8px; padding:13px 12px; background:transparent; text-align:start; margin-bottom:4px; }
+.oled-source-nav button span { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.oled-source-nav button[aria-current] { background:#242426; }
+.oled-source-nav button:focus-visible { background:var(--accent,#fff); color:#000; }
+.oled-source-nav .oled-connect { margin-top:40px; }
+.oled-library-content { min-width:0; }
+.oled-grid-viewport { overflow:auto; height:calc(100dvh - 184px); overscroll-behavior:contain; scrollbar-width:none; padding:5px 5px 28px; }
+.oled-virtual-grid { position:relative; width:100%; }
+.oled-grid-row { position:absolute; top:0; left:0; right:0; display:grid; gap:20px; }
+.oled-library .media-card { width:100%; min-width:0; max-width:none; background:transparent; border:0; }
+.oled-library .media-card .poster { aspect-ratio:16/9; width:100%; height:auto; border-radius:9px; }
+.oled-library .media-card.is-poster .poster { aspect-ratio:2/3; }
+.oled-library .media-card>strong { display:block; font-size:18px; line-height:24px; height:24px; margin-top:8px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.oled-library .media-card .card-meta-row { height:22px; font-size:15px; }
+.oled-library .media-card:focus-visible { background:transparent; color:#fff; }
+.oled-library .media-card:focus-visible .poster { outline:3px solid var(--accent,#fff); outline-offset:2px; }
+.oled-library .media-card:focus-visible { transform:scale(1.015); }
+@media (hover: hover) and (pointer: fine) {
+  .oled-library .media-card:hover {
+    transform:scale(1.015);
+  }
+}
+.oled-library .media-card .card-logo { object-fit:contain; max-width:70%; max-height:35%; }
+.oled-list-breadcrumb { display:flex; align-items:center; gap:20px; margin-bottom:12px; }
+.oled-collections { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:26px 22px; padding-top:8px; }
+.oled-collection { min-width:0; background:transparent; padding:0; border:0; border-radius:8px; text-align:start; }
+.oled-collection-cover { position:relative; background:#111; border-radius:8px; }
+.oled-collection-cover:before { content:""; position:absolute; left:12px; right:12px; top:-5px; height:8px; border-radius:6px; background:#242428; z-index:0; }
+.oled-collection-cover img { width:100%; height:100%; object-fit:cover; border-radius:8px; position:relative; }
+.oled-collection-cover>span { display:grid; place-items:center; height:100%; font-size:48px; color:#555; }
+.oled-collection-caption { display:flex; flex-direction:column; gap:6px; padding:14px 12px; border-radius:0 0 8px 8px; }
+.oled-collection-caption strong { font-size:22px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.oled-collection-caption span { opacity:.72; font-size:17px; }
+.oled-dialog-backdrop { position:fixed; inset:0; z-index:220; background:#0009; display:flex; justify-content:flex-end; }
+.oled-dialog { width:min(420px,100%); height:100%; overflow:auto; background:#0c0c0e; padding:28px; animation:oled-drawer-in 160ms ease-out; }
+.oled-dialog h2 { margin:20px 0 28px; }
+.oled-dialog label { display:flex; flex-direction:column; gap:10px; margin-bottom:24px; }
+.oled-dialog select,.oled-dialog input { background:#242426; color:#fff; border:0; border-radius:8px; padding:14px; font:inherit; width:100%; }
+.oled-dialog button { display:flex; align-items:center; gap:10px; border:0; border-radius:8px; padding:12px 16px; background:#242426; }
+.oled-dialog-close { margin-inline-start:auto; }
+@media(max-width:1100px) {
+  .oled-library-body.with-sources { grid-template-columns:170px minmax(0,1fr); gap:18px; }
+  .oled-collections { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+@media(max-width:650px) {
+ .screen.oled-library { padding:20px 16px calc(90px + env(safe-area-inset-bottom)); }
+ .oled-library-toolbar { flex-wrap:wrap; gap:10px; margin-bottom:12px; }
+ .oled-library-toolbar nav { width:100%; gap:4px; }
+ .oled-library-toolbar nav button { flex:1; padding:12px 8px; font-size:15px; }
+ .oled-library-actions { width:100%; justify-content:flex-end; }
+ .oled-library-actions>span { margin-inline-end:auto; font-size:14px; }
+ .oled-library-body.with-sources { grid-template-columns:minmax(0,1fr); }
+ .oled-source-nav { display:none; }
+ .oled-grid-viewport { height:calc(100dvh - 280px); padding-inline:3px; }
+ .oled-grid-row { gap:12px; }
+ .oled-library .media-card>strong { font-size:14px; }
+ .oled-library .media-card .card-meta-row { font-size:12px; }
+ .oled-collections { grid-template-columns:1fr; gap:20px; }
+ .oled-collection-caption strong { font-size:19px; }
+}
+@media(prefers-reduced-motion:reduce) {
+  .oled-dialog,.oled-library .media-card { animation:none; transition:none; } }
+
+/* TV viewing distance typography, without changing grid geometry. */
+@media(min-width:1200px){
+ .oled-library-toolbar button,.oled-source-nav button{font-size:21px;}
+ .oled-library-actions>span{font-size:19px;}
+ .oled-source-nav p{font-size:17px;}
+ .oled-library .media-card>strong{font-size:21px;}
+ .oled-library .media-card .card-meta-row{font-size:18px;}
+}
+.oled-collection-cover{aspect-ratio:2.2;}
+
+/* Library and Collections share the same persistent preview and continuous artwork. */
+.oled-library-content.has-preview { position:relative; isolation:isolate; display:flex; flex-direction:column; height:calc(100dvh - 184px); min-height:0; }
+.oled-library-content.has-preview .collection-spotlight { flex-basis:230px; padding:16px 6px 18px; max-width:750px; }
+.oled-library-content.has-preview .collection-page-backdrop { height:min(620px,100%); }
+.oled-library-content.has-preview .collection-page-backdrop::after {
+  background:linear-gradient(90deg, #000 0%, #000 25%, #000000e0 40%, #00000073 65%, transparent 92%, #000 100%),
+    linear-gradient(180deg, #000 0%, #00000059 12%, transparent 25%, #0000002e 55%, #000000b8 78%, #000 100%);
+}
+[dir="rtl"] .oled-library-content.has-preview .collection-page-backdrop::after {
+  background-image: linear-gradient(270deg, #000 0%, #000 25%, #000000e0 40%, #00000073 65%, transparent 92%, #000 100%), linear-gradient(180deg, #000 0%, #00000059 12%, transparent 25%, #0000002e 55%, #000000b8 78%, #000 100%);
+}
+.oled-library-content.has-preview .oled-grid-viewport { height:auto; min-height:0; flex:1; }
+@media(max-width:650px) {
+  .oled-library-content.has-preview { height:calc(100dvh - 280px); }
+  .oled-library-content.has-preview .collection-spotlight { flex-basis:195px; padding:12px 3px 12px; }
+  .oled-library-content.has-preview .collection-spotlight-title { height:58px; }
+  .oled-library-content.has-preview .collection-spotlight-title img { max-height:54px; }
+}
+@media(max-height:700px) {
+  .oled-library-content.has-preview .collection-spotlight { flex-basis:155px; padding-bottom:8px; }
+  .oled-library-content.has-preview .collection-spotlight-title { height:44px; }
+  .oled-library-content.has-preview .collection-spotlight-title img { max-height:42px; }
+  .oled-library-content.has-preview .collection-spotlight p { -webkit-line-clamp:2; margin-top:6px; }
+}
+
+/* The calendar shares Library's OLED surface and keeps the artwork as the only cell surface. */
+.oled-calendar-screen .oled-library-toolbar { margin-bottom:10px; }
+@media(min-width:1100px) {
+ .screen.oled-library.oled-calendar-screen { padding-top:74px; }
+}
+@media(max-width:650px) {
+ .oled-calendar-screen .oled-library-toolbar nav { gap:0; }
+ .oled-calendar-screen .oled-library-toolbar nav button { min-height:44px; padding:10px 7px; font-size:13px; }
+}
+
+/* Library toolbar, inline search, source chips, empty states. Imported by WatchlistScreen. */
+
+/* The screen is a grid with a min-height: without align-content:start its
+   rows stretched, so a short (empty) Library spread the toolbar over ~220px. */
+.screen.oled-library { align-content: start; grid-template-columns: minmax(0, 1fr); }
+.oled-library .oled-library-toolbar { min-width: 0; }
+.oled-library .oled-library-actions { min-height: 48px; }
+.oled-library .oled-library-search {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: clamp(180px, 22vw, 320px);
+  min-height: 44px;
+  padding: 0 12px;
+  border-radius: 9px;
+  background: #18181a;
+  color: #bbb;
+}
+.oled-library .oled-library-search:focus-within { box-shadow: 0 0 0 2px var(--accent, #fff); color: #fff; }
+.oled-library .oled-library-search input {
+  flex: 1;
+  min-width: 0;
+  min-height: 40px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none !important;
+  color: #fff;
+  font: inherit;
+  font-size: 15px;
+}
+.oled-library .oled-library-search input::-webkit-search-cancel-button { display: none; }
+.oled-library .oled-library-search .oled-library-search-clear { display: grid; place-items: center; width: 32px; height: 32px; padding: 0; border-radius: 999px; background: #2a2a2d; }
+
+/* Source chips: phones only (the side list serves wider screens). */
+.oled-library .oled-source-chips { display: none; }
+
+.oled-library .watchlist-empty { max-width: 520px; margin: 40px auto; text-align: center; }
+.oled-library .watchlist-empty span { display: block; margin-top: 6px; color: #a6a6ad; line-height: 1.5; }
+.oled-library .watchlist-empty-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; margin-top: 18px; }
+.oled-library .watchlist-empty-actions button,
+.oled-library .watchlist-empty > button { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 18px; border: 0; border-radius: 999px; background: #242426; }
+.oled-library .watchlist-empty-actions button:first-child { background: #fff; color: #000; }
+
+@media (max-width: 650px) {
+  /* The toolbar took ~540px before any title showed: one row of tabs, one
+     compact row of count / search / filters, then a single row of sources. */
+  .screen.oled-library { padding-top: 12px; }
+  .oled-library .oled-library-toolbar { gap: 8px; margin-bottom: 8px; }
+  .oled-library .oled-library-toolbar nav { gap: 2px; overflow-x: auto; scrollbar-width: none; }
+  .oled-library .oled-library-toolbar nav { min-width: 0; }
+  .oled-library .oled-library-toolbar nav button { flex: 1 0 auto; min-height: 44px; padding: 8px 7px; font-size: 13.5px; }
+  .oled-library .oled-library-actions { gap: 8px; min-height: 44px; }
+  .oled-library .oled-library-actions.is-empty { min-height: 0; }
+  .oled-library .oled-library-actions > .oled-library-count { margin-inline-end: 0; flex: 0 0 auto; font-size: 13px; }
+  .oled-library .oled-library-search { flex: 1; width: auto; min-width: 0; }
+  .oled-library .oled-filter-button { padding: 10px 12px; }
+  .oled-library .oled-filter-button span { display: none; }
+  .oled-library .oled-source-chips {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    margin: 0 -16px 10px;
+    padding: 2px 16px;
+    scrollbar-width: none;
+  }
+  .oled-library .oled-source-chips::-webkit-scrollbar { display: none; }
+  .oled-library .oled-source-chips button {
+    flex: 0 0 auto;
+    min-height: 40px;
+    padding: 0 14px;
+    border: 1px solid #2c2c30;
+    border-radius: 999px;
+    background: #121214;
+    font-size: 13.5px;
+    white-space: nowrap;
+  }
+  .oled-library .oled-source-chips button[aria-pressed="true"] { background: #fff; color: #000; border-color: #fff; font-weight: 650; }
+  .oled-library .oled-grid-viewport { height: calc(100dvh - 250px); }
+}
+
+/* Calendar: Today, month/list toggle and the list (agenda) view. */
+.library-calendar .calendar-view-controls { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.library-calendar .calendar-today { min-height: 44px; padding: 0 16px; border: 1px solid #4c535a !important; border-radius: 999px; color: #fff; font: inherit; font-size: 15px; cursor: pointer; }
+.library-calendar .calendar-today:disabled { opacity: 0.45; cursor: default; }
+.library-calendar .calendar-layout-toggle { display: inline-flex; padding: 2px; border: 1px solid #4c535a; border-radius: 999px; }
+.library-calendar .calendar-layout-toggle button { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 999px; color: #c9c9cf; cursor: pointer; }
+.library-calendar .calendar-layout-toggle button[aria-checked="true"] { background: #fff !important; color: #000; }
+.library-calendar .calendar-today:focus-visible,
+.library-calendar .calendar-layout-toggle button:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--accent, #fff); }
+.library-calendar .calendar-agenda { display: grid; gap: 22px; padding: 6px 0 40px; }
+.library-calendar .calendar-agenda-day { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 16px; align-items: start; }
+.library-calendar .calendar-agenda-day h2 { display: grid; justify-items: center; gap: 2px; margin: 0; padding-top: 4px; font-size: 13px; font-weight: 500; color: var(--calendar-muted, #aac5d8); text-transform: uppercase; }
+.library-calendar .calendar-agenda-day h2 strong { font-size: 26px; color: #fff; text-transform: none; }
+.library-calendar .calendar-agenda-day h2 em { font-style: normal; font-size: 11px; color: #000; background: #fff; border-radius: 999px; padding: 1px 8px; text-transform: none; }
+.library-calendar .calendar-agenda-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px; }
+.library-calendar .calendar-agenda-list .calendar-release-card { width: 100% !important; min-width: 0 !important; }
+@media (max-width: 680px) {
+  .library-calendar .calendar-view-controls { order: 3; }
+  .library-calendar .calendar-agenda-day { grid-template-columns: 44px minmax(0, 1fr); gap: 10px; }
+  .library-calendar .calendar-agenda-day h2 strong { font-size: 21px; }
+  .library-calendar .calendar-agenda-list { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+}

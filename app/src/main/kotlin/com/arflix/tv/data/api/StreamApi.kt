@@ -144,7 +144,9 @@ data class StremioCatalog(
     val id: String,
     val name: String? = null,
     val genres: List<String>? = null,
-    val extra: List<StremioCatalogExtra>? = null
+    val extra: List<StremioCatalogExtra>? = null,
+    val clientDelegate: String? = null,
+    val clientFilter: String? = null
 )
 
 data class StremioCatalogExtra(

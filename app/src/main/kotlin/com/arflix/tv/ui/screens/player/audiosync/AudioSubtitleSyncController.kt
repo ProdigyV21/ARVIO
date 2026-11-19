@@ -1052,8 +1052,8 @@ internal class AudioSubtitleSyncController(
         )
         recognizer?.let(engine::setRecognizer)
         asr = engine
-        analyzer.chunkListener = SpeechSegmenter(engine::offerSegment)
-        liveAnalyzer.chunkListener = SpeechSegmenter(engine::offerSegment)
+        analyzer.chunkListener = SpeechSegmenter(onSegment = engine::offerSegment)
+        liveAnalyzer.chunkListener = SpeechSegmenter(onSegment = engine::offerSegment)
         return AudioSyncDecoder(analyzer, liveAnalyzer) { mime ->
             SyncLog.i("look-ahead capture unavailable for $mime; syncing from playback audio instead")
             liveOnly = true

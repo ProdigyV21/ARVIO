@@ -3,6 +3,15 @@
 // the existing spatial-navigation layer (tvNav), A activates, B backs out, and
 // the shoulder buttons seek inside the player.
 //
+// Full map (standard layout; Xbox names):
+//   D-pad / left stick   move focus (repeats while held)
+//   A                    activate; on a text field, open the on-screen keyboard
+//   B                    Back (the shared ladder in tvNav.performBack)
+//   X                    play / pause
+//   Y                    tap: fullscreen · hold ~0.6 s: sources panel
+//   LB / RB              seek −/+ inside the player
+//   View (Select)        in the player: subtitles panel · elsewhere: Back
+//
 // Browsers never turn gamepad input into key events, so this polls the Gamepad
 // API each frame and translates state changes into the SAME synthetic keydowns
 // tvNav and the player overlay already consume. Two subtleties drive the
@@ -17,7 +26,8 @@
 // The poll loop only runs while a pad is connected and the tab is visible.
 
 import { enterKbdNav } from "./hoverParity";
-import { FOCUS_SELECTOR, playerIsOpen } from "./tvNav";
+import { FOCUS_SELECTOR, isTypeableField, performBack, playerIsOpen, requestOnScreenKeyboard } from "./tvNav";
+import { dispatchPlayerCommand } from "./playerCommands";
 
 /** Standard-mapping button indices (w3c.github.io/gamepad/#remapping). */
 const BTN = {
@@ -40,6 +50,8 @@ const DEADZONE = 0.5;
 const REPEAT_DELAY_MS = 400;
 /** …then repeat at this rate. Matches TV remote feel. */
 const REPEAT_INTERVAL_MS = 110;
+/** Holding Y this long opens sources instead of toggling fullscreen. */
+export const LONG_PRESS_MS = 600;
 
 export type Intent =
   | "up"
@@ -51,7 +63,9 @@ export type Intent =
   | "playpause"
   | "fullscreen"
   | "seekBack"
-  | "seekForward";
+  | "seekForward"
+  | "view"
+  | "sources";
 
 /** Which intents auto-repeat while held. Face buttons fire once per press. */
 const REPEATING: ReadonlySet<Intent> = new Set([
@@ -68,7 +82,8 @@ export type PadSnapshot = {
   axes: number[];
 };
 
-export type IntentClock = Map<Intent, number>; // intent -> next allowed fire time
+// intent -> next allowed fire time; "y:down"/"y:long" track the Y long-press.
+export type IntentClock = Map<Intent | "y:down" | "y:long", number>;
 
 /** Read one gamepad into a plain snapshot (also what tests construct). */
 export function snapshotPad(pad: Gamepad): PadSnapshot {
@@ -90,9 +105,11 @@ function wantsIntent(pads: PadSnapshot[], intent: Intent): boolean {
     case "left": return pressed(BTN.DPAD_LEFT) || axis(0) < -DEADZONE;
     case "right": return pressed(BTN.DPAD_RIGHT) || axis(0) > DEADZONE;
     case "accept": return pressed(BTN.A);
-    case "back": return pressed(BTN.B) || pressed(BTN.SELECT);
+    case "back": return pressed(BTN.B);
+    case "view": return pressed(BTN.SELECT);
     case "playpause": return pressed(BTN.X);
-    case "fullscreen": return pressed(BTN.Y);
+    // Y is resolved by press duration in computeFiredIntents.
+    case "fullscreen": case "sources": return false;
     case "seekBack": return pressed(BTN.LB);
     case "seekForward": return pressed(BTN.RB);
   }
@@ -100,7 +117,7 @@ function wantsIntent(pads: PadSnapshot[], intent: Intent): boolean {
 
 const ALL_INTENTS: readonly Intent[] = [
   "up", "down", "left", "right",
-  "accept", "back", "playpause", "fullscreen",
+  "accept", "back", "view", "playpause",
   "seekBack", "seekForward",
 ];
 
@@ -131,17 +148,28 @@ export function computeFiredIntents(
     }
     // Held non-repeating intents stay armed but silent until released.
   }
+  // Y: a tap (released before LONG_PRESS_MS) is fullscreen and fires on
+  // release; a hold fires "sources" once, as soon as the threshold passes,
+  // and its release is silent.
+  const yDown = pads.some((p) => p.buttons[BTN.Y] === true);
+  const downAt = clock.get("y:down");
+  if (yDown) {
+    if (downAt === undefined) clock.set("y:down", now);
+    else if (!clock.has("y:long") && now - downAt >= LONG_PRESS_MS) {
+      fired.push("sources");
+      clock.set("y:long", now);
+    }
+  } else if (downAt !== undefined) {
+    if (!clock.has("y:long")) fired.push("fullscreen");
+    clock.delete("y:down");
+    clock.delete("y:long");
+  }
   return fired;
 }
 
 function dispatchKey(key: string) {
   const target = document.activeElement instanceof HTMLElement ? document.activeElement : document.body;
   target.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }));
-}
-
-function isTextField(el: Element | null): el is HTMLElement {
-  return el instanceof HTMLElement
-    && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable);
 }
 
 /**
@@ -171,6 +199,8 @@ function activate() {
     dispatchKey(" ");
     return;
   }
+  // A text field has no keyboard on a couch: A opens the built-in one.
+  if (isTypeableField(el) && requestOnScreenKeyboard(el)) return;
   if (el instanceof HTMLElement && el.matches(FOCUS_SELECTOR)) {
     // An untrusted click() on a target="_blank" anchor is popup-blocked
     // (needs user activation, which pads never mint) — navigate in place.
@@ -187,20 +217,10 @@ function activate() {
 }
 
 function goBack() {
-  const el = document.activeElement;
-  // First press frees a focused field; the next one navigates.
-  if (isTextField(el) || el instanceof HTMLSelectElement) {
-    el.blur();
-    return;
-  }
-  // Layers that consume Escape (player, dialogs) get it. Everything else —
-  // details drawer, non-home tabs, double-press exit — lives in BackHandler's
-  // popstate ladder, which a synthetic Escape can never reach.
-  if (playerIsOpen() || document.querySelector('[role="dialog"]')) {
-    dispatchKey("Escape");
-    return;
-  }
-  window.history.back();
+  // One ladder for remotes and pads: free a field → layers consume Escape →
+  // cancel a native <dialog> → app history (details, non-home tabs), which
+  // BackHandler's popstate handler applies. See tvNav.performBack.
+  performBack();
 }
 
 export function fireIntent(intent: Intent) {
@@ -220,6 +240,10 @@ export function fireIntent(intent: Intent) {
     case "right": dispatchKey("ArrowRight"); break;
     case "accept": activate(); break;
     case "back": goBack(); break;
+    // View/Select: subtitles inside the player; Back everywhere else (its
+    // previous meaning, kept for muscle memory).
+    case "view": if (playerIsOpen()) dispatchPlayerCommand("subtitles"); else goBack(); break;
+    case "sources": if (playerIsOpen()) dispatchPlayerCommand("sources"); break;
     // The player overlay's keydown handler owns these when it is open;
     // outside the player, space and "f" are harmless no-ops…
     case "playpause": dispatchKey(" "); break;

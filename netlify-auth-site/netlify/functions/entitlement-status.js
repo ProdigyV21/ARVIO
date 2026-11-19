@@ -12,6 +12,8 @@ const {
   evaluateEntitlement
 } = require("./_entitlements");
 const { recordPremiumEvent } = require("./_premium-funnel");
+const { rewardReferralIfDue } = require("./_referrals");
+const { partnerEntitlement } = require("./_partner-entitlement");
 
 function requestAction(event) {
   let raw = event.body;
@@ -75,15 +77,19 @@ exports.handler = async (event) => {
 
     // Renewal sync for linked Ko-fi emails. The Ko-fi webhook renews the record
     // under the KO-FI email; an account that linked a different email holds a
-    // COPY with the old expiry. When that copy lapses, chase linkedFrom — if the
-    // source subscription is still active, refresh the copy in place so
-    // mismatched-email subscribers never have to re-link after each renewal.
+    // COPY. On every read, take the billing record when it reaches further or
+    // its plan changed (a renewal, a 12-month pass, a referral bonus), so a
+    // linked member never sees "payment not received" after paying on time.
     let state = evaluateEntitlement(record);
-    if (!state.entitled && record && record.linkedFrom) {
+    let payerHash = emailHash;
+    if (record && record.linkedFrom) {
       const sourceEmail = normalizeEmail(record.linkedFrom);
       if (sourceEmail && sourceEmail !== email) {
-        const source = await readEntitlement(store, sha256(sourceEmail));
-        if (evaluateEntitlement(source).entitled) {
+        payerHash = sha256(sourceEmail);
+        const source = await readEntitlement(store, payerHash);
+        const sourceState = evaluateEntitlement(source);
+        const end = (value) => (value && value.expiresAt === null ? Infinity : Date.parse(value?.expiresAt || "") || 0);
+        if (sourceState.entitled && (!state.entitled || end(source) > end(record) || (source.plan || null) !== (record.plan || null))) {
           record = {
             ...source,
             linkedFrom: sourceEmail,
@@ -96,10 +102,31 @@ exports.handler = async (event) => {
       }
     }
 
+    // Catch payments that arrived under a different, subsequently verified
+    // billing email, and referrals still pending from before instant rewards.
+    if (state.entitled && state.reason === "subscription" && record && record.source !== "referral") {
+      const reward = await rewardReferralIfDue(event, { emailHash, payerHash }).catch((error) => {
+        console.error("referral reward check failed", error && error.message);
+        return null;
+      });
+      if (reward && reward.rewarded) {
+        record = await readEntitlement(store, emailHash);
+        if (record && record.linkedFrom) {
+          const source = await readEntitlement(store, payerHash);
+          if (source) {
+            record = { ...source, linkedFrom: record.linkedFrom, trialUsed: record.trialUsed === true, updatedAt: new Date().toISOString() };
+            await writeEntitlement(store, emailHash, record);
+          }
+        }
+        state = evaluateEntitlement(record);
+      }
+    }
+
     if (state.entitled && state.reason === "subscription") {
       await recordPremiumEvent(event, { email, eventName: "paid_access_observed", metadata: { source: state.source || "unknown" } })
         .catch(() => console.error("Paid access analytics temporarily unavailable"));
     }
+    if (!state.entitled) state = await partnerEntitlement(identity) || state;
     return json(200, state);
   } catch (error) {
     console.error("entitlement-status failed", error);

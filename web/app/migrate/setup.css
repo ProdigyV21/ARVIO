@@ -122,7 +122,12 @@
 
 .setup__primary { background: var(--text); color: #000; border: 1px solid transparent; }
 
-.setup__primary:hover:not(:disabled) { transform: translateY(-1px); filter: brightness(1.05); }
+@media (hover: hover) and (pointer: fine) {
+  .setup__primary:hover:not(:disabled) {
+    transform: translateY(-1px);
+    filter: brightness(1.05);
+  }
+}
 
 .setup__primary:disabled { opacity: 0.4; cursor: not-allowed; }
 
@@ -136,7 +141,11 @@
   padding: 0 11px;
 }
 
-.setup__icon:hover { background: var(--chip-focus); }
+@media (hover: hover) and (pointer: fine) {
+  .setup__icon:hover {
+    background: var(--chip-focus);
+  }
+}
 
 .setup__profiles { display: flex; gap: 10px; flex-wrap: wrap; }
 
@@ -200,7 +209,11 @@
 
 @media (prefers-reduced-motion: reduce) {
   .setup .spin { animation: none; }
-  .setup__primary:hover:not(:disabled) { transform: none; }
+  @media (hover: hover) and (pointer: fine) {
+    .setup__primary:hover:not(:disabled) {
+      transform: none;
+    }
+  }
 }
 
 @media (max-width: 560px) {
@@ -222,4 +235,11 @@
   text-underline-offset: 3px;
 }
 
-.setup__link:hover { color: var(--text); }
+@media (hover: hover) and (pointer: fine) {
+  .setup__link:hover {
+    color: var(--text);
+  }
+}
+/* Signed-in account line with sign out / switch account. */
+.setup__account { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; margin-bottom: 12px; font-size: 14px; color: var(--muted, #a3a8ae); }
+.setup__account span { min-width: 0; overflow-wrap: anywhere; }

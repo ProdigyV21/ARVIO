@@ -35,6 +35,12 @@ enum class StreamIntegrationType(
         id = "iptv_vod",
         titleRes = R.string.stream_integration_iptv_vod,
         descRes = R.string.stream_integration_iptv_vod_desc
+    ),
+    /** Sideload builds only (see BuildConfig.YOUTUBE_SEARCH_AVAILABLE). */
+    YOUTUBE(
+        id = "youtube",
+        titleRes = R.string.stream_integration_youtube,
+        descRes = R.string.stream_integration_youtube_desc
     );
 
     companion object {
@@ -43,7 +49,8 @@ enum class StreamIntegrationType(
             STREMIO_ADDONS,
             PLUGINS,
             TELEGRAM,
-            IPTV_VOD
+            IPTV_VOD,
+            YOUTUBE
         )
 
         fun fromId(id: String?): StreamIntegrationType? {
@@ -57,6 +64,7 @@ enum class StreamIntegrationType(
                 addonId == "home_server" -> HOME_SERVER
                 addonId.startsWith("plugin_") -> PLUGINS
                 addonId == "telegram_native" || addonId == "telegram" -> TELEGRAM
+                addonId == "arvio_youtube" -> YOUTUBE
                 IptvVodSourceIds.isIptvVodAddonId(addonId) -> IPTV_VOD
                 else -> STREMIO_ADDONS
             }

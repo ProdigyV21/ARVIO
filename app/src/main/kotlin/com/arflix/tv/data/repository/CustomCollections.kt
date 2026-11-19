@@ -37,7 +37,8 @@ internal object CustomCollections {
     const val PACK_ID_PREFIX = "usercol_"
 
     fun isCustom(config: CatalogConfig): Boolean =
-        config.packId?.startsWith(PACK_ID_PREFIX) == true &&
+        (config.packId?.startsWith(PACK_ID_PREFIX) == true ||
+            PartnerCatalogs.isManaged(config.id) && config.packId?.contains("-$PACK_ID_PREFIX") == true) &&
             !config.collectionRailKey.isNullOrBlank() && !config.isPreinstalled
 
     /** True when [json] parses as a collections document (as opposed to a catalog pack manifest). */

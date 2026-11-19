@@ -33,12 +33,16 @@ const ATTRIBUTION_KEY = "arvio.premium.attribution.v2";
 const JOURNEY_KEY = "arvio.premium.journey.v1";
 const ATTRIBUTION_OWNER_KEY = "arvio.premium.attribution-owner.v1";
 const ATTRIBUTION_TTL = 24 * 60 * 60 * 1000;
+const HANDOFF_EXPIRY_KEY = "arvio_attribution_until";
 const JOURNEY_ID = /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i;
+const LANDING_PAGES = new Set(["home", "premium", "web", "guides", "android", "jellyfin", "servers", "addons", "debrid", "tracking", "live", "subtitles", "firetv", "browser", "collections", "selfhost", "playback"]);
+const INTERNAL_HOSTS = new Set(["arvio.tv", "www.arvio.tv", "web.arvio.tv", "auth.arvio.tv"]);
 let capturedQuery = "";
 let memoryAttribution: Record<string, string> = {};
 let memoryJourney = "";
 let attributionExpiresAt = 0;
 let attributionOwner = "";
+let suppressDocumentReferrer = false;
 export const TRIAL_INTENT_KEY = "arvio.premium.trial-intent.v1";
 const inFlight = new Set<string>();
 const dailyRecorded = new Map<string, string>();
@@ -67,6 +71,26 @@ function clean(value: string | null, max = 80) {
   return /^[a-z0-9._-]+$/i.test(text) ? text.slice(0, max).toLowerCase() : "";
 }
 
+function landingPage(value: string | null | undefined) {
+  return value && LANDING_PAGES.has(value) ? value : "";
+}
+
+function handoffExpiry(value: string | null, now: number) {
+  if (!value || !/^[1-9]\d{0,15}$/.test(value)) return 0;
+  const expiresAt = Number(value);
+  return Number.isSafeInteger(expiresAt) && expiresAt > now && expiresAt <= now + ATTRIBUTION_TTL ? expiresAt : 0;
+}
+
+function referral() {
+  let referrer = "";
+  if (!suppressDocumentReferrer) {
+    try { referrer = clean(new URL(document.referrer).hostname); } catch { /* no usable referring site */ }
+  }
+  const organic = /^(?:www\.)?google\.(?:com|[a-z]{2}|com\.[a-z]{2}|co\.[a-z]{2})$/.test(referrer) ||
+    ["www.bing.com", "bing.com", "duckduckgo.com", "www.duckduckgo.com"].includes(referrer);
+  return { referrer, source: referrer || "direct", medium: INTERNAL_HOSTS.has(referrer) ? "internal" : organic ? "organic" : referrer ? "referral" : "direct" };
+}
+
 // A page-navigation ID links the public Premium page to this signed-in session.
 // It is never a cookie, persistent browser ID, URL sent to Ko-fi, or an identity
 // proof. Attribution expires after a day and resets when the account changes.
@@ -76,6 +100,9 @@ export function capturePremiumAttribution() {
   const query = window.location.search;
   const params = new URLSearchParams(query);
   const now = Date.now();
+  const hasHandoffExpiry = params.has(HANDOFF_EXPIRY_KEY);
+  const incomingExpiry = params.getAll(HANDOFF_EXPIRY_KEY).length === 1 ? handoffExpiry(params.get(HANDOFF_EXPIRY_KEY), now) : 0;
+  const validHandoff = !hasHandoffExpiry || Boolean(incomingExpiry);
   if (!attributionExpiresAt) {
     try {
       const saved = JSON.parse(storageGet(disk, ATTRIBUTION_KEY) || "{}");
@@ -87,30 +114,69 @@ export function capturePremiumAttribution() {
       attributionOwner = storageGet(disk, ATTRIBUTION_OWNER_KEY) || "";
     } catch { /* storage is optional */ }
   }
-  if (attributionExpiresAt <= now) { memoryAttribution = {}; memoryJourney = ""; }
-  const freshQuery = query !== capturedQuery;
-  const incomingJourney = params.get("arvio_journey") || "";
+  if (attributionExpiresAt && attributionExpiresAt <= now) {
+    memoryAttribution = {}; memoryJourney = "";
+    // document.referrer belongs to the original document, not a fresh visit a
+    // day later. Expiry must not resurrect that earlier campaign/referral.
+    suppressDocumentReferrer = true;
+  }
+  const freshQuery = query !== capturedQuery && validHandoff;
+  const incomingJourney = params.getAll("arvio_journey").length === 1 ? params.get("arvio_journey") || "" : "";
   const incoming = freshQuery && JOURNEY_ID.test(incomingJourney) ? incomingJourney.toLowerCase() : "";
+  const queryTag = (name: string) => params.getAll(`utm_${name}`).length === 1 ? clean(params.get(`utm_${name}`)) : "";
+  const incomingSource = freshQuery ? queryTag("source") : "";
+  const changedCampaign = freshQuery && ["source", "medium", "campaign", "content"].some(name => {
+    const value = queryTag(name);
+    return value && value !== memoryAttribution[name];
+  });
   if (incoming) {
     memoryJourney = incoming;
     memoryAttribution = {};
-    attributionExpiresAt = now + ATTRIBUTION_TTL;
+    attributionExpiresAt = incomingExpiry || now + ATTRIBUTION_TTL;
     // Avoid a random navigation ID leaking in outbound referrers or copied URLs.
     try {
       const url = new URL(window.location.href);
       url.searchParams.delete("arvio_journey");
+      url.searchParams.delete("arvio_landing");
+      url.searchParams.delete(HANDOFF_EXPIRY_KEY);
+      // A returned auth handoff is consumed once. Leaving its campaign tags in
+      // the cleaned URL would resurrect that old visit on a later reload when
+      // sessionStorage is unavailable. Ordinary marketing UTMs stay unchanged.
+      if (hasHandoffExpiry) ["utm_source", "utm_medium", "utm_campaign", "utm_content"].forEach(key => url.searchParams.delete(key));
       window.history.replaceState(window.history.state, "", url.toString());
     } catch { /* optional in embedded/restricted browsers */ }
+  } else if (changedCampaign) {
+    memoryAttribution = {}; memoryJourney = "";
+    attributionExpiresAt = incomingExpiry || now + ATTRIBUTION_TTL;
   }
-  let referrer = memoryAttribution.referrer || "";
-  if (!referrer) {
-    try { referrer = document.referrer ? new URL(document.referrer).hostname : ""; } catch { /* invalid referrer */ }
+  if (hasHandoffExpiry && validHandoff && !incoming) {
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.delete(HANDOFF_EXPIRY_KEY);
+      url.searchParams.delete("arvio_landing");
+      url.searchParams.delete("arvio_journey");
+      ["utm_source", "utm_medium", "utm_campaign", "utm_content"].forEach(key => url.searchParams.delete(key));
+      window.history.replaceState(window.history.state, "", url.toString());
+    } catch { /* optional */ }
   }
-  const tag = (name: string, fallback: string) => clean((freshQuery ? params.get(`utm_${name}`) : null) || memoryAttribution[name] || fallback);
+  if (hasHandoffExpiry && !validHandoff) {
+    // A stale/replayed auth handoff cannot turn its old campaign or document
+    // referrer into a fresh 24-hour visit when functional storage is blocked.
+    memoryAttribution = {}; memoryJourney = ""; attributionExpiresAt = 0;
+    suppressDocumentReferrer = true;
+    try {
+      const url = new URL(window.location.href);
+      ["arvio_journey", "arvio_landing", HANDOFF_EXPIRY_KEY, "utm_source", "utm_medium", "utm_campaign", "utm_content"].forEach(key => url.searchParams.delete(key));
+      window.history.replaceState(window.history.state, "", url.toString());
+    } catch { /* optional */ }
+  }
+  const observed = referral();
+  const tag = (name: string, fallback: string) => (freshQuery ? queryTag(name) : "") || clean(memoryAttribution[name]) || fallback;
   memoryAttribution = {
-    source: tag("source", "direct"), medium: tag("medium", "web"),
+    source: tag("source", observed.source), medium: tag("medium", incomingSource ? "campaign" : observed.medium),
     campaign: tag("campaign", "premium"), content: tag("content", "unspecified"),
-    referrer: clean(referrer)
+    referrer: clean(memoryAttribution.referrer || observed.referrer), page: "web",
+    landing_page: (freshQuery && params.getAll("arvio_landing").length === 1 && landingPage(params.get("arvio_landing"))) || landingPage(memoryAttribution.landing_page) || "web"
   };
   if (!attributionExpiresAt || attributionExpiresAt <= now) attributionExpiresAt = now + ATTRIBUTION_TTL;
   capturedQuery = window.location.search;
@@ -119,12 +185,34 @@ export function capturePremiumAttribution() {
   return memoryAttribution;
 }
 
+/** Short-lived, bounded attribution for the fixed ARVIO sign-in round trip.
+ * Never add this snapshot to Ko-fi or another external destination. */
+export function premiumAttributionRedirectParams(): URLSearchParams {
+  const params = new URLSearchParams();
+  if (!analyticsAllowed() || typeof window === "undefined" || window.location.origin !== "https://web.arvio.tv") return params;
+  const now = Date.now();
+  if (attributionExpiresAt && attributionExpiresAt <= now) return params;
+  capturePremiumAttribution();
+  // An earlier account's campaign must not be exported for a new sign-in.
+  if (attributionOwner || !attributionExpiresAt || attributionExpiresAt <= now) return params;
+  if (JOURNEY_ID.test(memoryJourney)) params.set("arvio_journey", memoryJourney.toLowerCase());
+  const landing = landingPage(memoryAttribution.landing_page);
+  if (landing) params.set("arvio_landing", landing);
+  for (const name of ["source", "medium", "campaign", "content"]) {
+    const value = clean(memoryAttribution[name] || null);
+    if (value) params.set(`utm_${name}`, value);
+  }
+  if (params.toString()) params.set(HANDOFF_EXPIRY_KEY, String(attributionExpiresAt));
+  return params;
+}
+
 function attributionForAccount(accountId: string) {
   capturePremiumAttribution();
   if (attributionOwner && attributionOwner !== accountId) {
     memoryAttribution = {};
     memoryJourney = "";
     attributionExpiresAt = 0;
+    suppressDocumentReferrer = true;
     const disk = browserStorage("sessionStorage");
     storageSet(disk, ATTRIBUTION_KEY, "{}");
     storageSet(disk, JOURNEY_KEY, "");
@@ -216,4 +304,25 @@ export async function trackPremiumDaily(
     }
     return recorded;
   } finally { inFlight.delete(key); }
+}
+
+// Per-attempt diagnostics (currently playback failures). Unlike the daily
+// helper above, every attempt is sent — so the page caps them: one broken
+// title hopping through 40 dead links must not become 40 function calls. The
+// server folds attempts into the account's single daily record.
+const ATTEMPT_LIMIT_PER_PAGE = 12;
+const attemptsSent = new Map<string, number>();
+
+export async function trackPremiumAttempt(
+  auth: AuthClient,
+  eventName: Extract<PremiumFunnelEvent, "playback_failed">,
+  metadata: Record<string, string | number | boolean> = {},
+  limit = ATTEMPT_LIMIT_PER_PAGE
+) {
+  if (!analyticsAllowed() || !config.paywallEnabled || !auth.session) return false;
+  const key = `${auth.session.userId}.${eventName}`;
+  const sent = attemptsSent.get(key) ?? 0;
+  if (sent >= limit) return false;
+  attemptsSent.set(key, sent + 1);
+  return trackPremiumEvent(auth, eventName, { ...metadata, attempt: true });
 }

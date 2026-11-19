@@ -58,6 +58,32 @@ class SyncProviderOAuthStoreTest {
         }
     }
 
+    @Test fun rejectedCredentialIsKeptAndMarkedUntilANewOneArrives() = runBlocking {
+        store.setMdbListApiKey("revoked", "one")
+        val rejected = store.getMdbListCredential("one")!!
+        assertTrue(store.markMdbListReconnectRequired("one", rejected))
+        assertTrue(store.isMdbListReconnectRequired("one"))
+        assertEquals(rejected, store.getMdbListCredential("one"))
+
+        store.setMdbListApiKey("fresh", "one")
+        assertFalse(store.isMdbListReconnectRequired("one"))
+        // A late rejection of the old key cannot mark the new one.
+        assertFalse(store.markMdbListReconnectRequired("one", rejected))
+    }
+
+    @Test fun newerCloudCredentialRecoversARejectedConnection() = runBlocking {
+        store.setMdbListOAuthTokens("dead", "dead-refresh", 3600, "one")
+        store.markMdbListReconnectRequired("one", store.getMdbListCredential("one")!!)
+        store.importForProfiles(mapOf("one" to SyncProviderStore.ProfileSyncSelection(
+            provider = SyncProvider.MDBLIST,
+            mdbListAccessToken = "from-other-device",
+            mdbListRefreshToken = "other-refresh",
+            mdbListCredentialUpdatedAt = System.currentTimeMillis() + 60_000L
+        )))
+        assertFalse(store.isMdbListReconnectRequired("one"))
+        assertEquals("from-other-device", store.getMdbListAccessToken("one"))
+    }
+
     @Test fun lateRefreshCannotUndoDisconnect() = runBlocking {
         store.setMdbListOAuthTokens("old", "refresh", 3600, "one")
         val expected = store.getMdbListCredential("one") as SyncProviderStore.MdbListCredential.OAuth

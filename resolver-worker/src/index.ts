@@ -7,7 +7,145 @@ type Env = {
   TRAKT_CLIENT_ID?: string;
   TRAKT_CLIENT_SECRET?: string;
   TMDB_API_KEY?: string;
+  // When set (32+ characters, the same value as the auth site's
+  // STREAM_TICKET_SECRET), /media relays only requests that carry a valid,
+  // unexpired ARVIO Premium stream ticket in the `t` parameter.
+  STREAM_TICKET_SECRET?: string;
+  // "required": /media relays only requests with a valid v2 ticket, verified
+  // with the auth site's PUBLIC key (no shared secret). Anything else: off.
+  STREAM_TICKET_MODE?: string;
+  // Where the public key comes from (default: the ARVIO auth site).
+  STREAM_TICKET_KEYS_URL?: string;
 };
+
+// Stream tickets are minted by the auth site's /stream-ticket function:
+// v1.<expiry, unix seconds>.<account tag>.<HMAC-SHA256 of the first three parts, base64url>
+async function validStreamTicket(secret: string, ticket: string | null, nowSeconds = Math.floor(Date.now() / 1000)) {
+  const parts = String(ticket ?? "").split(".");
+  if (parts.length !== 4 || parts[0] !== "v1") return false;
+  const expiry = Number(parts[1]);
+  if (!Number.isInteger(expiry) || expiry < nowSeconds) return false;
+  const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["verify"]);
+  let signature: Uint8Array;
+  try {
+    const base64 = parts[3].replace(/-/g, "+").replace(/_/g, "/");
+    signature = Uint8Array.from(atob(base64 + "=".repeat((4 - (base64.length % 4)) % 4)), (char) => char.charCodeAt(0));
+  } catch {
+    return false;
+  }
+  return crypto.subtle.verify("HMAC", key, signature, new TextEncoder().encode(parts.slice(0, 3).join(".")));
+}
+
+// v2 tickets: v2.<expiry>.<account tag>.<key id>.<ECDSA P-256 SHA-256 signature, base64url>
+// signed by the auth site with a key it created itself; verified here with
+// its public key from /stream-ticket-key. The key is kept in memory and in KV,
+// so a brief auth-site outage does not stop playback.
+const DEFAULT_TICKET_KEYS_URL = "https://auth.arvio.tv/.netlify/functions/stream-ticket-key";
+const TICKET_KEYS_KV = "stream-ticket-keys:v1";
+type TicketJwk = JsonWebKey & { kid?: string };
+let ticketKeys: { keys: TicketJwk[]; fetchedAt: number } | null = null;
+
+function base64UrlBytes(value: string): Uint8Array | null {
+  try {
+    const base64 = value.replace(/-/g, "+").replace(/_/g, "/");
+    return Uint8Array.from(atob(base64 + "=".repeat((4 - (base64.length % 4)) % 4)), (char) => char.charCodeAt(0));
+  } catch {
+    return null;
+  }
+}
+
+async function streamTicketKeys(env: Env, wantKid: string): Promise<TicketJwk[]> {
+  const fresh = ticketKeys && Date.now() - ticketKeys.fetchedAt < 10 * 60 * 1000;
+  if (fresh && ticketKeys!.keys.some((key) => key.kid === wantKid)) return ticketKeys!.keys;
+  try {
+    const response = await fetch(env.STREAM_TICKET_KEYS_URL || DEFAULT_TICKET_KEYS_URL, { cf: { cacheTtl: 300 } } as RequestInit);
+    if (response.ok) {
+      const body = await response.json<{ keys?: TicketJwk[] }>();
+      const keys = (body.keys ?? []).filter((key) => key && key.kty === "EC" && key.crv === "P-256" && key.x && key.y && key.kid);
+      if (keys.length) {
+        const known = ticketKeys?.keys.map((key) => key.kid).join(",");
+        ticketKeys = { keys, fetchedAt: Date.now() };
+        if (env.RESOLVER_KV && known !== keys.map((key) => key.kid).join(",")) {
+          await env.RESOLVER_KV.put(TICKET_KEYS_KV, JSON.stringify(keys)).catch(() => undefined);
+        }
+        return keys;
+      }
+    }
+  } catch {
+    // Fall back to the last key we knew.
+  }
+  if (ticketKeys) return ticketKeys.keys;
+  const stored = env.RESOLVER_KV ? await env.RESOLVER_KV.get(TICKET_KEYS_KV, "json").catch(() => null) as TicketJwk[] | null : null;
+  if (stored?.length) ticketKeys = { keys: stored, fetchedAt: 0 };
+  return stored ?? [];
+}
+
+async function validStreamTicketV2(env: Env, ticket: string | null, nowSeconds = Math.floor(Date.now() / 1000)) {
+  const parts = String(ticket ?? "").split(".");
+  if (parts.length !== 5 || parts[0] !== "v2") return false;
+  const expiry = Number(parts[1]);
+  if (!Number.isInteger(expiry) || expiry < nowSeconds) return false;
+  const signature = base64UrlBytes(parts[4]);
+  if (!signature) return false;
+  const jwk = (await streamTicketKeys(env, parts[3])).find((key) => key.kid === parts[3]);
+  if (!jwk) return false;
+  try {
+    const key = await crypto.subtle.importKey("jwk", { kty: "EC", crv: "P-256", x: jwk.x, y: jwk.y }, { name: "ECDSA", namedCurve: "P-256" }, false, ["verify"]);
+    return await crypto.subtle.verify({ name: "ECDSA", hash: "SHA-256" }, key, signature, new TextEncoder().encode(parts.slice(0, 4).join(".")));
+  } catch {
+    return false;
+  }
+}
+
+/** Whether /media must see a Premium ticket, and whether this one passes. */
+async function mediaTicketAllowed(env: Env, ticket: string | null) {
+  const secret = env.STREAM_TICKET_SECRET ?? "";
+  const legacy = secret.length >= 32;
+  const required = legacy || (env.STREAM_TICKET_MODE ?? "").trim().toLowerCase() === "required";
+  if (!required) return true;
+  if (legacy && (await validStreamTicket(secret, ticket))) return true;
+  return validStreamTicketV2(env, ticket);
+}
+
+// "View on Trakt": redirect to the title's Trakt page, found by its IMDb or
+// TMDB id. The browser build carries no Trakt client id and Trakt blocks the
+// Netlify backend, so the lookup runs here; misses fall back to a title search.
+async function traktLink(url: URL, env: Env): Promise<Response> {
+  const kind = url.searchParams.get("type") === "movie" ? "movie" : "show";
+  const imdb = (url.searchParams.get("imdb") ?? "").match(/^tt\d{5,10}$/)?.[0];
+  const tmdb = (url.searchParams.get("tmdb") ?? "").match(/^\d{1,9}$/)?.[0];
+  const title = (url.searchParams.get("title") ?? "").slice(0, 200);
+  const fallback = `https://trakt.tv/search?query=${encodeURIComponent(title)}`;
+  const go = (location: string, maxAge: number) => new Response(null, { status: 302, headers: { location, "cache-control": `public, max-age=${maxAge}` } });
+  if (!env.TRAKT_CLIENT_ID || (!imdb && !tmdb)) return go(fallback, 300);
+  const [source, id] = imdb ? ["imdb", imdb] : ["tmdb", tmdb!];
+  const cacheKey = `trakt-link:v1:${kind}:${source}:${id}`;
+  const known = await env.RESOLVER_KV?.get(cacheKey).catch(() => null);
+  if (known) return go(known, 86400);
+  try {
+    const response = await fetch(`https://api.trakt.tv/search/${source}/${encodeURIComponent(id)}?type=${kind}`, {
+      headers: { "content-type": "application/json", "trakt-api-version": "2", "trakt-api-key": env.TRAKT_CLIENT_ID, "user-agent": "ARVIO/1.0" }
+    });
+    // ?debug=1: the lookup's own status, for support (no keys or tokens).
+    if (url.searchParams.get("debug") === "1") {
+      const body = await response.clone().text().catch(() => "");
+      return new Response(JSON.stringify({ status: response.status, sample: body.slice(0, 160) }), { headers: { "content-type": "application/json" } });
+    }
+    if (response.ok) {
+      const results = await response.json<Array<Record<string, { ids?: { slug?: string } } | string | undefined>>>();
+      const match = results.find((result) => result.type === kind)?.[kind] as { ids?: { slug?: string } } | undefined;
+      const slug = match?.ids?.slug;
+      if (slug) {
+        const page = `https://trakt.tv/${kind === "movie" ? "movies" : "shows"}/${encodeURIComponent(slug)}`;
+        await env.RESOLVER_KV?.put(cacheKey, page, { expirationTtl: 30 * 86400 }).catch(() => undefined);
+        return go(page, 86400);
+      }
+    }
+  } catch {
+    // fall through to the search
+  }
+  return go(fallback, 300);
+}
 
 // Trakt device-token exchange from the Worker. The Netlify backend's egress IP
 // is Cloudflare-challenged by Trakt; the Worker (Cloudflare-origin) is not. The
@@ -157,7 +295,7 @@ export default {
         return apiProxy(request, env);
       }
       if (url.pathname === "/health") {
-        return json({ ok: true, service: "arvio-resolver" }, request, env);
+        return json({ ok: true, service: "arvio-resolver", features: ["trakt-link"] }, request, env);
       }
       if (url.pathname === "/sources" && request.method === "POST") {
         return sources(request, env);
@@ -170,6 +308,9 @@ export default {
       }
       if (url.pathname === "/launch" && request.method === "GET") {
         return launchPage(request, env);
+      }
+      if (url.pathname === "/trakt/link" && request.method === "GET") {
+        return traktLink(url, env);
       }
       if (url.pathname === "/trakt/device/token" && request.method === "POST") {
         return traktDeviceToken(request, env);
@@ -425,6 +566,11 @@ async function media(request: Request, env: Env) {
   const input = new URL(request.url);
   const raw = input.searchParams.get("url");
   if (!raw) return json({ error: "Missing url" }, request, env, 400);
+  if (!(await mediaTicketAllowed(env, input.searchParams.get("t")))) {
+    // 402, not 403: the player must tell "the relay refused this session"
+    // apart from "the IPTV provider refused the channel" (which passes through).
+    return json({ error: "ARVIO Premium is required for this stream." }, request, env, 402);
+  }
   let target: URL;
   try {
     target = new URL(raw);
@@ -591,6 +737,9 @@ function rewriteHlsPlaylist(text: string, baseUrl: URL, workerUrl: URL) {
     const params = new URLSearchParams();
     params.set("url", absolute.toString());
     if (headersParam) params.set("h", headersParam);
+    // Segments and variant playlists carry the same stream ticket.
+    const ticket = workerUrl.searchParams.get("t");
+    if (ticket) params.set("t", ticket);
     return `/media?${params.toString()}`;
   };
 

@@ -31,7 +31,7 @@ internal object ContinueWatchingRowReducer {
             episodeStill = fresh.episodeStill ?: existing.episodeStill.takeUnless { episodeChanged },
             progress = fresh.progress,
             nextEpisode = fresh.nextEpisode,
-            timeRemainingLabel = fresh.timeRemainingLabel,
+            timeRemainingMinutes = fresh.timeRemainingMinutes,
             showPlaybackProgress = fresh.showPlaybackProgress
         ) ?: fresh
 

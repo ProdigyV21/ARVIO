@@ -1,6 +1,6 @@
 const { connectLambda, getStore } = require("@netlify/blobs");
 const { privacyHash } = require("./_backend");
-const { journeyKey, summarizeMeasurements, FAILURE_KINDS, TRANSPORTS, PHASES, CHECKOUT_FLOW_VERSIONS } = require("./_premium-measurement");
+const { journeyKey, marketingMetadata, summarizeMeasurements, FAILURE_KINDS, TRANSPORTS, PHASES, CHECKOUT_FLOW_VERSIONS, ATTRIBUTION_EVENTS } = require("./_premium-measurement");
 
 const PREMIUM_EVENTS = new Set([
   "journey_connected", "web_opened", "sources_configured", "sources_missing",
@@ -43,6 +43,18 @@ const CLIENT_PREMIUM_EVENTS = new Set([
   "download_requested", "download_handoff", "download_failed"
 ]);
 const PAYMENT_CHECK_RESULTS = new Set(["pending", "active", "error"]);
+// Per-attempt playback failure detail. Allow-listed labels only — never URLs,
+// hosts, titles or file names — mirrored by web/lib/playbackTelemetry.ts.
+const PLAYBACK_PLATFORMS = new Set(["iphone", "ipad", "android", "mac_safari", "chromium_desktop", "firefox", "other"]);
+const PLAYBACK_METHODS = new Set(["direct", "remux", "hls", "other"]);
+const PLAYBACK_CONTAINERS = new Set(["mp4", "mkv", "ts", "m3u8", "unknown"]);
+const PLAYBACK_HOST_TYPES = new Set(["debrid", "addon_http", "home_server", "iptv", "other"]);
+const PLAYBACK_OUTCOMES = new Set(["retried", "final"]);
+const ATTEMPT_FIELDS = ["platform", "method", "container", "host_type", "failure_kind", "phase", "outcome"];
+// Bounds per account/UTC day: a broken title hopping through dozens of dead
+// links folds into a handful of signatures instead of unbounded growth.
+const MAX_ATTEMPT_SIGNATURES = 24;
+const MAX_ATTEMPTS_PER_DAY = 200;
 
 function premiumFunnelStore(event) {
   connectLambda(event);
@@ -52,13 +64,20 @@ function premiumFunnelStore(event) {
 function sanitizeMetadata(metadata) {
   if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return {};
   const result = {};
-  const allowed = new Set(["source", "medium", "campaign", "content", "referrer", "playback_type", "entry", "player", "stage", "status", "destination", "duration_days", "tier", "provider", "successful", "billing_key", "failure_kind", "transport", "phase", "flow_version"]);
-  for (const [key, value] of Object.entries(metadata).slice(0, 16)) {
+  const allowed = new Set(["source", "medium", "campaign", "content", "referrer", "page", "landing_page", "playback_type", "entry", "player", "stage", "status", "destination", "duration_days", "tier", "provider", "successful", "billing_key", "failure_kind", "transport", "phase", "flow_version", "platform", "method", "container", "host_type", "outcome", "attempt"]);
+  const enumerated = { failure_kind: FAILURE_KINDS, transport: TRANSPORTS, phase: PHASES, flow_version: CHECKOUT_FLOW_VERSIONS,
+    platform: PLAYBACK_PLATFORMS, method: PLAYBACK_METHODS, container: PLAYBACK_CONTAINERS, host_type: PLAYBACK_HOST_TYPES, outcome: PLAYBACK_OUTCOMES };
+  // Attribution (5) + playback diagnostics (12) must fit; unknown keys are
+  // skipped before they count.
+  for (const [key, value] of Object.entries(metadata).slice(0, 24)) {
     if (!allowed.has(key)) continue;
-    if (key === "failure_kind" && !FAILURE_KINDS.has(value)) continue;
-    if (key === "transport" && !TRANSPORTS.has(value)) continue;
-    if (key === "phase" && !PHASES.has(value)) continue;
-    if (key === "flow_version" && !CHECKOUT_FLOW_VERSIONS.has(value)) continue;
+    if (["source", "medium", "campaign", "content", "page", "landing_page", "referrer"].includes(key)) {
+      const safe = marketingMetadata({ [key]: value });
+      if (safe[key]) result[key] = safe[key];
+      continue;
+    }
+    if (enumerated[key] && !enumerated[key].has(value)) continue;
+    if (key === "attempt" && value !== true) continue;
     if (!/^[a-z][a-z0-9_]{0,31}$/i.test(key)) continue;
     if (typeof value === "boolean" || (typeof value === "number" && Number.isFinite(value))) {
       result[key] = value;
@@ -109,6 +128,57 @@ async function recordPaymentCheckResult(store, key, existing, status, at) {
   return current;
 }
 
+/** A validated attempt signature, or null when the detail is incomplete. */
+function playbackAttempt(metadata) {
+  if (metadata.attempt !== true) return null;
+  const attempt = {};
+  for (const field of ["platform", "method", "container", "host_type"]) {
+    if (typeof metadata[field] !== "string") return null;
+    attempt[field] = metadata[field];
+  }
+  attempt.failure_kind = FAILURE_KINDS.has(metadata.failure_kind) ? metadata.failure_kind : "unknown";
+  attempt.phase = PHASES.has(metadata.phase) ? metadata.phase : "startup";
+  attempt.outcome = PLAYBACK_OUTCOMES.has(metadata.outcome) ? metadata.outcome : "final";
+  return attempt;
+}
+
+function mergePlaybackAttempt(record, attempt) {
+  const attempts = Array.isArray(record.attempts) ? record.attempts.map(entry => ({ ...entry })) : [];
+  const total = Number(record.attemptCount || 0);
+  if (total >= MAX_ATTEMPTS_PER_DAY) return null;
+  const match = attempts.find(entry => ATTEMPT_FIELDS.every(field => entry[field] === attempt[field]));
+  const next = { ...record, attempts, attemptCount: total + 1 };
+  if (match) match.count = Number(match.count || 0) + 1;
+  else if (attempts.length < MAX_ATTEMPT_SIGNATURES) attempts.push({ ...attempt, count: 1 });
+  else next.attemptsUnclassified = Number(record.attemptsUnclassified || 0) + 1;
+  return next;
+}
+
+async function recordPlaybackAttempt(store, key, attempt, base) {
+  const created = mergePlaybackAttempt(base, attempt);
+  const first = await store.setJSON(key, created, { onlyIfNew: true });
+  if (first.modified) return created;
+  let current = null;
+  // Same bounded compare-and-set as payment checks: concurrent tabs must not
+  // erase each other's attempts, and diagnostics never retry forever.
+  for (let index = 0; index < 3; index += 1) {
+    let snapshot;
+    try {
+      snapshot = await store.getWithMetadata(key, { type: "json", consistency: "strong" });
+    } catch (error) {
+      if (!String(error?.message || "").includes("uncachedEdgeURL")) throw error;
+      snapshot = await store.getWithMetadata(key, { type: "json" });
+    }
+    if (!snapshot?.data || !snapshot.etag) return current;
+    current = snapshot.data;
+    const record = mergePlaybackAttempt(current, attempt);
+    if (!record) return current;
+    const result = await store.setJSON(key, record, { onlyIfMatch: snapshot.etag });
+    if (result.modified) return record;
+  }
+  return current;
+}
+
 async function recordPremiumEvent(event, { email, accountId, eventName, metadata = {}, occurredAt, journeyId } = {}) {
   if (!PREMIUM_EVENTS.has(eventName)) throw new Error("Unsupported premium funnel event");
   // Email is the stable join key shared by ARVIO authentication and Ko-fi.
@@ -138,6 +208,19 @@ async function recordPremiumEvent(event, { email, accountId, eventName, metadata
   // never every poll. The original event timestamp/placement stays immutable.
   if (existing && eventName === "payment_status_checked" && PAYMENT_CHECK_RESULTS.has(safeMetadata.status)) {
     return recordPaymentCheckResult(store, key, existing, safeMetadata.status, at);
+  }
+  const attempt = eventName === "playback_failed" ? playbackAttempt(safeMetadata) : null;
+  for (const field of ["attempt", "outcome"]) delete safeMetadata[field];
+  if (attempt) {
+    // Attempt detail lives beside the daily record, in its own bounded
+    // per-account/day blob, so playback_failed keeps meaning "a failure reached
+    // the error screen" for the funnel. Account deletion and retention clean
+    // it up with the rest of the account's events/date prefix.
+    await recordPlaybackAttempt(store, `events/date/${date}/account/${accountKey}/_playback_attempts.json`, attempt,
+      { date, accountKey, eventName: "playback_attempts", firstAt: at.toISOString() });
+    // A source that failed but was rescued by the next source/conversion is
+    // an attempt, not a failed playback.
+    if (attempt.outcome === "retried") return existing || { date, eventName, accountKey, metadata: {}, count: 0 };
   }
   // Reports count unique account-event-days, not clicks. Repeated browser
   // callbacks must not rewrite the same blob or replace its first attribution.
@@ -227,25 +310,70 @@ async function premiumFunnelReport(event, days = 30, endDate) {
   const inContext = key => key.split("/")[2] >= contextStart && key.split("/")[2] < dates[0];
   const allJourneyKeys = await listKeys(store, "journeys/date/");
   const journeyKeys = allJourneyKeys.filter(key => dateSet.has(key.split("/")[2]));
-  const detailedEvents = new Set(["_journey", "trial_started", "subscription_started", "paid_access_observed", "membership_cta_viewed", "checkout_opened", "checkout_returned", "payment_status_checked", "checkout_recovery_opened", "checkout_recovery_closed", "membership_link_started", "membership_linked", "membership_link_failed", "billing_email_verified", "playback_failed"]);
-  const detailKeys = keys.filter(key => detailedEvents.has(key.split("/")[5]?.replace(/\.json$/, "")));
   // Look back only for actual new payers, not every historic visitor or trial.
   // This avoids turning a small period report into thousands of extra reads.
   const accountKeys = new Set(keys.filter(key => key.endsWith("/subscription_started.json")).map(key => key.split("/")[4]));
   for (const { billingKey, accountKey } of verifiedLinks) if (accountKeys.has(billingKey)) accountKeys.add(accountKey);
-  const contextLinkKeys = allKeys.filter(key => inContext(key) && key.endsWith("/_journey.json") && accountKeys.has(key.split("/")[4]));
-  const [records, journeys, contextRecords] = await Promise.all([
-    readMany(detailKeys), readMany(journeyKeys), readMany(contextLinkKeys)
+  const detailedEvents = new Set(["_journey", "trial_started", "subscription_started", "paid_access_observed", "membership_cta_viewed", "checkout_opened", "checkout_returned", "payment_status_checked", "checkout_recovery_opened", "checkout_recovery_closed", "membership_link_started", "membership_linked", "membership_link_failed", "billing_email_verified", "playback_failed"]);
+  const detailKeys = keys.filter(key => {
+    const name = key.split("/")[5]?.replace(/\.json$/, "");
+    // Extra authenticated source observations are needed only for confirmed
+    // buyers. Existing diagnostic event reads and key-based totals stay intact.
+    return detailedEvents.has(name) || (ATTRIBUTION_EVENTS.has(name) && accountKeys.has(key.split("/")[4]));
+  });
+  const contextLinkKeys = allKeys.filter(key => inContext(key) && accountKeys.has(key.split("/")[4]) &&
+    (key.endsWith("/_journey.json") || ATTRIBUTION_EVENTS.has(key.split("/")[5]?.replace(/\.json$/, ""))));
+  const [records, journeys, contextRecords, attemptRecords] = await Promise.all([
+    readMany(detailKeys), readMany(journeyKeys), readMany(contextLinkKeys),
+    readMany(keys.filter(key => key.endsWith("/_playback_attempts.json")))
   ]);
-  const contextJourneyIds = new Set(contextRecords.map(record => record.metadata?.journey_key).filter(Boolean));
+  const contextJourneyIds = new Set([...contextRecords, ...records.filter(record => accountKeys.has(record.accountKey))].map(record => record.metadata?.journey_key).filter(Boolean));
   const contextJourneys = await readMany(allJourneyKeys.filter(key => inContext(key) && contextJourneyIds.has(key.split("/")[3])));
   const generatedAt = new Date().toISOString();
   const observationEnd = endDate && endDate < today ? new Date(Date.parse(endDate) + 86400000).toISOString() : generatedAt;
   const summary = summarizePremiumKeys(keys, dates, observationEnd, verifiedLinks);
   return { ...summary, generatedAt, periodStart: dates[0], periodEnd: dates.at(-1),
     ...summarizeMeasurements(records, journeys, verifiedLinks, { contextRecords, contextJourneys }),
-    attributionLookback: { days: 30, contextStart, note: "Earlier retained journeys can explain payments in this period; they do not increase period visit counts. Expired or unlinked journeys remain unattributed." } };
+    playbackAttempts: summarizePlaybackAttempts(attemptRecords),
+    attributionLookback: { days: 30, contextStart, note: "Earlier retained journeys and authenticated pre-payment source observations can explain payments in this period; they do not increase period visit counts. Unknown or post-payment sources remain unattributed. paymentAttribution includes authenticated fallbacks; legacy journey counts still require a connected anonymous journey." } };
 
+}
+
+function summarizePlaybackAttempts(records) {
+  const result = {
+    unit: "failed browser playback attempts, bounded per account/UTC day",
+    attempts: 0, accountDaysWithDetail: 0, unclassifiedAttempts: 0,
+    byPlatform: {}, byMethod: {}, byContainer: {}, byHostType: {}, byOutcome: {}, topCombinations: [],
+    note: "Per-attempt detail begins with the October 2026 iPhone release. 'retried' attempts were rescued by another source or conversion; 'final' ones reached the error screen. Attempts are capped per page and per account/day, so totals undercount heavy failures."
+  };
+  const combinations = new Map();
+  const accounts = new Map();
+  const bump = (bucket, value, count) => { bucket[value] = (bucket[value] || 0) + count; };
+  for (const record of records) {
+    if (record?.eventName !== "playback_attempts" || !Array.isArray(record.attempts)) continue;
+    result.accountDaysWithDetail += 1;
+    result.unclassifiedAttempts += Math.max(0, Number(record.attemptsUnclassified) || 0);
+    for (const entry of record.attempts.slice(0, MAX_ATTEMPT_SIGNATURES)) {
+      const count = Math.min(MAX_ATTEMPTS_PER_DAY, Math.max(0, Math.floor(Number(entry?.count) || 0)));
+      if (!count || !PLAYBACK_PLATFORMS.has(entry.platform) || !PLAYBACK_METHODS.has(entry.method)
+        || !PLAYBACK_CONTAINERS.has(entry.container) || !PLAYBACK_HOST_TYPES.has(entry.host_type)) continue;
+      const outcome = PLAYBACK_OUTCOMES.has(entry.outcome) ? entry.outcome : "final";
+      const failureKind = FAILURE_KINDS.has(entry.failure_kind) ? entry.failure_kind : "unknown";
+      result.attempts += count;
+      bump(result.byPlatform, entry.platform, count);
+      bump(result.byMethod, entry.method, count);
+      bump(result.byContainer, entry.container, count);
+      bump(result.byHostType, entry.host_type, count);
+      bump(result.byOutcome, outcome, count);
+      const id = [entry.platform, entry.method, entry.container, entry.host_type, failureKind].join("/");
+      const row = combinations.get(id) || { platform: entry.platform, method: entry.method, container: entry.container, host_type: entry.host_type, failure_kind: failureKind, attempts: 0, accountDays: 0 };
+      row.attempts += count;
+      if (accounts.get(id) !== record) { row.accountDays += 1; accounts.set(id, record); }
+      combinations.set(id, row);
+    }
+  }
+  result.topCombinations = [...combinations.values()].sort((a, b) => b.attempts - a.attempts || b.accountDays - a.accountDays).slice(0, 15);
+  return result;
 }
 
 function summarizePremiumKeys(keys, dates, generatedAt = new Date().toISOString(), verifiedLinks = []) {
@@ -372,5 +500,5 @@ module.exports = {
   recordPremiumEvent,
   premiumFunnelReport,
   cleanupPremiumFunnel,
-  _test: { sanitizeMetadata, dayRange, summarizePremiumKeys }
+  _test: { sanitizeMetadata, dayRange, summarizePremiumKeys, playbackAttempt, mergePlaybackAttempt, summarizePlaybackAttempts }
 };

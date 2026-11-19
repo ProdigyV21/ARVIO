@@ -1,5 +1,6 @@
 import { mediaSourceConstructor } from "./capabilities";
 import { classifyMediaError } from "./playerRecovery";
+import { mediaInfoFromMime } from "./liveTvPlayback";
 import type { LoadPolicy } from "hls.js";
 
 export type PlaybackTransport = "file" | "hls" | "dash" | "mpegts";
@@ -14,7 +15,16 @@ export type PlaybackError = {
   code?: string | number;
   /** Capture before the failed engine destroys/reset its MediaSource. */
   positionSeconds?: number;
+  /** The HTTP status the server answered, when the engine could see it. */
+  httpStatus?: number;
+  /** What the engine learned about the media before failing (codecs, tracks). */
+  mediaInfo?: PlaybackMediaInfo;
+  /** The playlist / segment URL the failing request was for, when known. */
+  resourceUrl?: string;
 };
+
+/** Codec strings as the engines report them ("mp4a.40.2", "ac-3", "avc1.64001f"). */
+export type PlaybackMediaInfo = { hasAudio?: boolean; hasVideo?: boolean; audioCodec?: string; videoCodec?: string };
 
 export type PlaybackAudioTrack = { id: string; label: string; language?: string };
 export type PlaybackQuality = { id: string; label: string; width?: number; height?: number; bitrate?: number };
@@ -45,6 +55,10 @@ export type PlaybackOptions = {
   /** Browser-permitted headers for adaptive/TS requests; native src cannot set headers. */
   requestHeaders?: Record<string, string>;
   live?: boolean;
+  /** HLS only: "native" uses the browser's own player, "mse" uses hls.js. Default: the platform's preference. */
+  hlsEngine?: "native" | "mse";
+  /** The tracks the stream actually carries, once the engine knows them. */
+  onMediaInfo?: (info: PlaybackMediaInfo) => void;
 };
 
 const HLS_NETWORK_RECOVERIES = 2;
@@ -66,7 +80,8 @@ function inferTransport(url: string, live: boolean): PlaybackTransport {
   return "file";
 }
 
-function preferNativeHls() {
+/** Apple browsers: their own HLS player is preferred over hls.js when both exist. */
+export function preferNativeHls() {
   if (typeof navigator === "undefined") return false;
   const ua = navigator.userAgent;
   return /iPad|iPhone|iPod/.test(ua) || (/Safari/.test(ua) && !/Chrome|Chromium|Android|Edg|OPR/.test(ua));
@@ -158,16 +173,25 @@ export function attachPlayback(video: HTMLVideoElement, url: string, options: Pl
     release();
     resetVideo();
     let failed = false;
+    let mediaInfo: PlaybackMediaInfo | undefined;
     const active = () => !disposed && !failed && session === generation;
-    const fail = (kind: PlaybackError["kind"], message: string, code?: string | number, retryable = kind === "network" || kind === "unknown") => {
+    const fail = (kind: PlaybackError["kind"], message: string, code?: string | number, retryable = kind === "network" || kind === "unknown", detail: Pick<PlaybackError, "httpStatus" | "mediaInfo" | "resourceUrl"> = {}) => {
       if (!active()) return;
       const positionSeconds = Number.isFinite(video.currentTime) ? video.currentTime : 0;
       failed = true;
       release();
+      const info = detail.mediaInfo || mediaInfo ? { ...mediaInfo, ...detail.mediaInfo } : undefined;
       // Return the handle before notifying initial failures, and cancel queued notifications too.
       void Promise.resolve().then(() => {
-        if (!disposed && session === generation) options.onError?.({ transport, kind, fatal: true, retryable, message, code, positionSeconds });
+        if (!disposed && session === generation) options.onError?.({ transport, kind, fatal: true, retryable, message, code, positionSeconds,
+          ...(detail.httpStatus ? { httpStatus: detail.httpStatus } : {}), ...(info ? { mediaInfo: info } : {}),
+          ...(detail.resourceUrl ? { resourceUrl: detail.resourceUrl } : {}) });
       });
+    };
+    const learn = (info: PlaybackMediaInfo) => {
+      if (!active()) return;
+      mediaInfo = { ...mediaInfo, ...info };
+      options.onMediaInfo?.(mediaInfo);
     };
     const publish = (tracks: PlaybackTracks) => { if (active()) options.onTracks?.(tracks); };
     const listen = (target: EventTarget, event: string, listener: () => void) => {
@@ -243,7 +267,8 @@ export function attachPlayback(video: HTMLVideoElement, url: string, options: Pl
     const mse = !!mediaSourceConstructor();
     const nativeHls = !!video.canPlayType("application/vnd.apple.mpegurl");
     if (transport === "hls") {
-      if (nativeHls && !hasHeaders && (!mse || preferNativeHls())) { native(); return; }
+      const engine = options.hlsEngine;
+      if (nativeHls && !hasHeaders && engine !== "mse" && (engine === "native" || !mse || preferNativeHls())) { native(); return; }
       if (!mse) { unsupported(); return; }
       void import("hls.js").then(({ default: Hls }) => {
         if (!active()) return;
@@ -264,10 +289,22 @@ export function attachPlayback(video: HTMLVideoElement, url: string, options: Pl
         let retryTimer: ReturnType<typeof setTimeout> | undefined;
         cleanup.push(() => clearTimeout(retryTimer));
         instance.on(Hls.Events.ERROR, (_event, data) => {
-          if (!active() || !data.fatal) return;
+          if (!active()) return;
+          // Report every failing request (hls.js retries segments quietly, so a
+          // startup timeout may be the only fatal outcome): the player then
+          // knows WHICH server refused, e.g. an http:// IP the page blocks.
+          const failedUrl = (data as { frag?: { url?: string }; url?: string; context?: { url?: string } }).frag?.url
+            ?? (data as { url?: string }).url ?? (data as { context?: { url?: string } }).context?.url;
+          if (failedUrl && data.type === Hls.ErrorTypes.NETWORK_ERROR) {
+            try { video.dispatchEvent(new CustomEvent("arvio-resource-error", { detail: { url: failedUrl, status: data.response?.code } })); } catch { /* no CustomEvent */ }
+          }
+          if (!data.fatal) return;
           const network = data.type === Hls.ErrorTypes.NETWORK_ERROR;
           const media = data.type === Hls.ErrorTypes.MEDIA_ERROR;
           const status = data.response?.code;
+          const httpStatus = typeof status === "number" && status >= 400 ? status : undefined;
+          const resourceUrl = (data as { frag?: { url?: string }; url?: string; context?: { url?: string } }).frag?.url
+            ?? (data as { url?: string }).url ?? (data as { context?: { url?: string } }).context?.url;
           const retryable = network && (!status || status === 408 || status === 429 || status >= 500);
           if (retryable && retryTimer !== undefined) return;
           if (retryable && networkAttempts < HLS_NETWORK_RECOVERIES) {
@@ -278,7 +315,7 @@ export function attachPlayback(video: HTMLVideoElement, url: string, options: Pl
               try {
                 if (/manifest/i.test(data.details)) instance.loadSource(url);
                 else instance.startLoad();
-              } catch { fail("network", "HLS network recovery failed.", data.details); }
+              } catch { fail("network", "HLS network recovery failed.", data.details, true, { httpStatus, resourceUrl }); }
             }, 500 * networkAttempts);
             return;
           }
@@ -287,7 +324,10 @@ export function attachPlayback(video: HTMLVideoElement, url: string, options: Pl
             try { instance.recoverMediaError(); } catch { fail("media", "HLS media recovery failed.", data.details); }
             return;
           }
-          fail(network ? "network" : media ? "media" : "unknown", "HLS playback recovery exhausted.", data.details, network ? retryable : !media);
+          // A SourceBuffer the browser refused names the codec it could not take.
+          const mime = (data as { mimeType?: string }).mimeType ?? (data.error instanceof Error ? data.error.message : undefined);
+          fail(network ? "network" : media ? "media" : "unknown", "HLS playback recovery exhausted.", data.details, network ? retryable : !media,
+            { httpStatus, resourceUrl, mediaInfo: media ? mediaInfoFromMime(mime) : undefined });
         });
         const snapshot = () => {
           if (!active()) return;
@@ -325,6 +365,11 @@ export function attachPlayback(video: HTMLVideoElement, url: string, options: Pl
           if (qualitySelection !== null) controls?.selectQuality(qualitySelection);
           snapshot();
         };
+        instance.on(Hls.Events.BUFFER_CODECS, (_event, data) => {
+          const tracks = data as { audio?: { codec?: string }; video?: { codec?: string }; audiovideo?: { codec?: string } };
+          learn({ hasAudio: !!(tracks.audio || tracks.audiovideo), hasVideo: !!(tracks.video || tracks.audiovideo),
+            audioCodec: tracks.audio?.codec, videoCodec: tracks.video?.codec });
+        });
         instance.on(Hls.Events.MANIFEST_PARSED, restoreSelections);
         instance.on(Hls.Events.AUDIO_TRACKS_UPDATED, restoreSelections);
         instance.on(Hls.Events.LEVELS_UPDATED, snapshot);
@@ -450,12 +495,34 @@ export function attachPlayback(video: HTMLVideoElement, url: string, options: Pl
         autoCleanupMinBackwardDuration: lowMemory ? 10 : 20
       });
       cleanup.push(() => instance.destroy());
-      const onError = (type: string, detail: string) => {
-        const kind = type === mpegts.ErrorTypes.NETWORK_ERROR ? "network" : type === mpegts.ErrorTypes.MEDIA_ERROR ? "media" : "unknown";
-        fail(kind, "MPEG-TS playback failed.", detail);
+      const onError = (type: string, detail: string, info?: { code?: number; msg?: string }) => {
+        const network = type === mpegts.ErrorTypes.NETWORK_ERROR;
+        // Not MPEG-TS at all (an HLS playlist or an HTML error page): another engine may play it.
+        const details: Partial<typeof mpegts.ErrorDetails> = mpegts.ErrorDetails ?? {};
+        const notTs = detail === details.MEDIA_FORMAT_UNSUPPORTED || detail === details.MEDIA_FORMAT_ERROR;
+        const kind = network ? "network" : notTs ? "unsupported" : type === mpegts.ErrorTypes.MEDIA_ERROR ? "media" : "unknown";
+        const httpStatus = network && detail === details.NETWORK_STATUS_CODE_INVALID && typeof info?.code === "number" && info.code >= 400 ? info.code : undefined;
+        fail(kind, "MPEG-TS playback failed.", detail, kind === "network" || kind === "unknown", { httpStatus, mediaInfo: kind === "media" ? mediaInfoFromMime(info?.msg) : undefined });
       };
       instance.on(mpegts.Events.ERROR, onError);
       cleanup.push(() => instance.off(mpegts.Events.ERROR, onError));
+      const onMediaInfo = (info: { hasAudio?: boolean; hasVideo?: boolean; audioCodec?: string; videoCodec?: string }) => {
+        learn({ hasAudio: info.hasAudio, hasVideo: info.hasVideo, audioCodec: info.audioCodec || undefined, videoCodec: info.videoCodec || undefined });
+      };
+      instance.on(mpegts.Events.MEDIA_INFO, onMediaInfo);
+      cleanup.push(() => instance.off(mpegts.Events.MEDIA_INFO, onMediaInfo));
+      if (live) {
+        // A live channel has no end: the provider closing the stream (a panel
+        // evicting this connection, a restart) is a drop. mpegts.js reports it
+        // as a complete load and the picture would freeze on the last frame,
+        // with the stall watchdog standing down on an ended element.
+        const ended = () => fail("network", "The channel's stream ended.", "LIVE_STREAM_ENDED", true);
+        if (mpegts.Events.LOADING_COMPLETE) {
+          instance.on(mpegts.Events.LOADING_COMPLETE, ended);
+          cleanup.push(() => instance.off(mpegts.Events.LOADING_COMPLETE, ended));
+        }
+        listen(video, "ended", ended);
+      }
       controls = { selectAudioTrack: () => false, selectQuality: () => false, goLive: () => seekToLiveEdge(video) };
       instance.attachMediaElement(video);
       if (active()) instance.load();

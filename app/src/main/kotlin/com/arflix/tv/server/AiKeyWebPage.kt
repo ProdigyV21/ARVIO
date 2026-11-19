@@ -55,6 +55,7 @@ $sharedCss
   .provider-btn .badge { font-size: 0.7rem; font-weight: 600; letter-spacing: 0.05em; padding: 0.2rem 0.6rem; border-radius: 100px; margin-bottom: 0.75rem; display: inline-block; }
   .badge-groq { background: rgba(100,200,160,0.15); color: #7ec8a0; }
   .badge-gemini { background: rgba(66,133,244,0.15); color: #6aabff; }
+  .badge-claude { background: rgba(217,119,87,0.15); color: #e8a27f; }
 </style>
 </head>
 <body>
@@ -77,11 +78,17 @@ $sharedCss
     <span class="name">Google Gemini</span>
     <span class="model">Gemini 3.5 Flash · Free tier available</span>
   </a>
+
+  <a id="claudeLink" href="/claude" class="provider-btn">
+    <span class="badge badge-claude">PAID</span>
+    <span class="name">Anthropic Claude</span>
+    <span class="model">Claude Haiku 5.5 · Paid API key</span>
+  </a>
 </div>
 <script>
 var t = new URLSearchParams(window.location.search).get('t') || '';
 if (t) {
-  ['groqLink','geminiLink'].forEach(function(id) {
+  ['groqLink','geminiLink','claudeLink'].forEach(function(id) {
     var a = document.getElementById(id);
     if (a) a.href = a.getAttribute('href') + '?t=' + encodeURIComponent(t);
   });
@@ -210,6 +217,70 @@ async function saveKey() {
     if (data.status === 'saved') {
       status.className = 'status success';
       status.textContent = key ? 'Gemini API key saved to TV.' : 'Key cleared.';
+    } else { throw new Error(); }
+  } catch(e) {
+    status.className = 'status error';
+    status.textContent = 'Failed to save. Make sure your phone and TV are on the same network.';
+  }
+  btn.disabled = false;
+}
+document.getElementById('apiKey').addEventListener('keydown', function(e) { if (e.key === 'Enter') saveKey(); });
+</script>
+</body>
+</html>
+""".trimIndent()
+
+    fun getClaudeHtml(): String = """
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<title>Arvio – Claude API Key</title>
+$sharedCss
+</head>
+<body>
+<div class="page">
+  <div class="header">
+    <img src="/logo.png" alt="Arvio" class="header-logo">
+    <p>Set your Anthropic Claude API Key</p>
+  </div>
+
+  <a href="/" class="back">← Back</a>
+
+  <label for="apiKey">Anthropic API Key</label>
+  <input type="password" id="apiKey" placeholder="sk-ant-..." autocomplete="off" autocapitalize="off" spellcheck="false">
+  <div class="show-toggle" onclick="toggleShow()">
+    <svg id="eyeIcon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+    <span id="showLabel">Show key</span>
+  </div>
+
+  <p class="hint">
+    Create a key at <a href="https://console.anthropic.com/settings/keys" target="_blank">console.anthropic.com</a> (paid, pay-as-you-go)
+  </p>
+
+  <button class="btn" id="saveBtn" onclick="saveKey()">Save to TV</button>
+  <div class="status" id="status"></div>
+</div>
+
+<script>
+var showing = false;
+function toggleShow() {
+  showing = !showing;
+  document.getElementById('apiKey').type = showing ? 'text' : 'password';
+  document.getElementById('showLabel').textContent = showing ? 'Hide key' : 'Show key';
+}
+async function saveKey() {
+  var key = document.getElementById('apiKey').value.trim();
+  var btn = document.getElementById('saveBtn');
+  var status = document.getElementById('status');
+  btn.disabled = true;
+  status.className = 'status';
+  try {
+    var token = new URLSearchParams(window.location.search).get('t') || '';
+    var res = await fetch('/api/key', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({key: key, token: token}) });
+    var data = await res.json();
+    if (data.status === 'saved') {
+      status.className = 'status success';
+      status.textContent = key ? 'Claude API key saved to TV.' : 'Key cleared.';
     } else { throw new Error(); }
   } catch(e) {
     status.className = 'status error';

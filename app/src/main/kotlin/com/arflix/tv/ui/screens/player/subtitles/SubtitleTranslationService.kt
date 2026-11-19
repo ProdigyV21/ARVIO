@@ -14,12 +14,15 @@ import java.util.concurrent.TimeUnit
 
 private const val TAG = "SubtitleTranslation"
 
-private val RTL_LANGUAGES = setOf("hebrew", "arabic", "urdu", "persian", "farsi", "yiddish")
+internal val RTL_LANGUAGES = setOf("hebrew", "arabic", "urdu", "persian", "farsi", "yiddish")
 
 data class TranslationResult(
     val lines: List<String>,
     val success: Boolean,
-    val errorMessage: String? = null
+    val errorMessage: String? = null,
+    // Indices the model left out of an otherwise successful reply; those entries of [lines] still
+    // hold the source text. Lets translateBatch ask for just those lines again.
+    val untranslated: Set<Int> = emptySet()
 )
 
 // Marker error for Gemini's non-configurable content-policy rejections (finishReason
@@ -28,7 +31,7 @@ data class TranslationResult(
 // it's not actionable and translation keeps working for everything else.
 const val TRANSLATION_ERROR_CONTENT_BLOCKED = "CONTENT_BLOCKED"
 
-private val BLOCKED_FINISH_REASONS = setOf(
+internal val BLOCKED_FINISH_REASONS = setOf(
     "PROHIBITED_CONTENT", "SAFETY", "RECITATION", "BLOCKLIST", "SPII"
 )
 
@@ -54,9 +57,62 @@ private const val GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v
 // with short exponential backoff before falling back to English. Kept short so subtitles stay in
 // sync with playback. NOT applied to 429 (that's our own quota — retrying fast makes it worse;
 // the manager's 5s cooldown handles it) or 4xx/content blocks (retrying won't change the outcome).
-private const val GEMINI_MAX_TRANSIENT_RETRIES = 2        // 3 attempts total
-private const val GEMINI_RETRY_BASE_DELAY_MS = 400L       // 400ms, then 800ms (×2 each retry)
-private val GEMINI_RETRYABLE_HTTP = setOf(500, 502, 503)
+internal const val GEMINI_MAX_TRANSIENT_RETRIES = 2        // 3 attempts total
+internal const val GEMINI_RETRY_BASE_DELAY_MS = 400L       // 400ms, then 800ms (×2 each retry)
+internal val GEMINI_RETRYABLE_HTTP = setOf(500, 502, 503)
+
+/**
+ * The JSON array in a model reply: bare, fenced, wrapped in a one-field object, or with a truncated
+ * tail. Shared by every Gemini/Groq caller in the app.
+ */
+internal fun extractJsonArray(text: String): JSONArray? {
+    val codeBlocks = Regex("```(?:json)?\\s*([\\s\\S]*?)```").findAll(text)
+        .map { it.groupValues[1].trim() }.toList().reversed()
+    val stripped = text.replace(Regex("```[^`]*```"), "").trim()
+    val candidates = codeBlocks + listOf(stripped, text)
+
+    for (candidate in candidates) {
+        try { return JSONArray(candidate) } catch (_: Exception) {}
+        // With responseMimeType=application/json the model sometimes wraps the array in an
+        // object (e.g. {"translations": [...]}) — unwrap a lone array-valued field.
+        try {
+            val obj = JSONObject(candidate)
+            val arrays = obj.keys().asSequence()
+                .mapNotNull { key -> obj.optJSONArray(key) }
+                .toList()
+            if (arrays.size == 1) return arrays[0]
+        } catch (_: Exception) {}
+        val start = candidate.indexOf('[')
+        val end = candidate.lastIndexOf(']')
+        if (start < 0 || end <= start) {
+            repairTruncatedArray(candidate)?.let { return it }
+            continue
+        }
+        try {
+            return JSONArray(candidate.substring(start, end + 1))
+        } catch (_: Exception) {}
+    }
+    return null
+}
+
+/**
+ * Gemini's JSON mode intermittently truncates output at the very tail (finishReason STOP but
+ * the closing bracket — sometimes a trailing element — is missing). The translations
+ * themselves are intact, so re-terminate the array instead of failing the whole batch.
+ */
+internal fun repairTruncatedArray(text: String): JSONArray? {
+    val t = text.trim()
+    if (!t.startsWith("[") || t.endsWith("]")) return null
+    val lastQuote = t.lastIndexOf('"')
+    if (lastQuote <= 0) return null
+    // Try closing as-is, then after dropping a trailing partial element.
+    for (cut in listOf(t, t.substring(0, lastQuote + 1))) {
+        val trimmed = cut.trimEnd().trimEnd(',')
+        try { return JSONArray("$trimmed]") } catch (_: Exception) {}
+        try { return JSONArray("$trimmed\"]") } catch (_: Exception) {}
+    }
+    return null
+}
 
 class SubtitleTranslationService(
     private val apiKeyProvider: () -> String,
@@ -67,55 +123,6 @@ class SubtitleTranslationService(
         .connectTimeout(10, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
         .build()
-
-    private fun extractJsonArray(text: String): JSONArray? {
-        val codeBlocks = Regex("```(?:json)?\\s*([\\s\\S]*?)```").findAll(text)
-            .map { it.groupValues[1].trim() }.toList().reversed()
-        val stripped = text.replace(Regex("```[^`]*```"), "").trim()
-        val candidates = codeBlocks + listOf(stripped, text)
-
-        for (candidate in candidates) {
-            try { return JSONArray(candidate) } catch (_: Exception) {}
-            // With responseMimeType=application/json the model sometimes wraps the array in an
-            // object (e.g. {"translations": [...]}) — unwrap a lone array-valued field.
-            try {
-                val obj = JSONObject(candidate)
-                val arrays = obj.keys().asSequence()
-                    .mapNotNull { key -> obj.optJSONArray(key) }
-                    .toList()
-                if (arrays.size == 1) return arrays[0]
-            } catch (_: Exception) {}
-            val start = candidate.indexOf('[')
-            val end = candidate.lastIndexOf(']')
-            if (start < 0 || end <= start) {
-                repairTruncatedArray(candidate)?.let { return it }
-                continue
-            }
-            try {
-                return JSONArray(candidate.substring(start, end + 1))
-            } catch (_: Exception) {}
-        }
-        return null
-    }
-
-    /**
-     * Gemini's JSON mode intermittently truncates output at the very tail (finishReason STOP but
-     * the closing bracket — sometimes a trailing element — is missing). The translations
-     * themselves are intact, so re-terminate the array instead of failing the whole batch.
-     */
-    private fun repairTruncatedArray(text: String): JSONArray? {
-        val t = text.trim()
-        if (!t.startsWith("[") || t.endsWith("]")) return null
-        val lastQuote = t.lastIndexOf('"')
-        if (lastQuote <= 0) return null
-        // Try closing as-is, then after dropping a trailing partial element.
-        for (cut in listOf(t, t.substring(0, lastQuote + 1))) {
-            val trimmed = cut.trimEnd().trimEnd(',')
-            try { return JSONArray("$trimmed]") } catch (_: Exception) {}
-            try { return JSONArray("$trimmed\"]") } catch (_: Exception) {}
-        }
-        return null
-    }
 
     private fun buildSystemPrompt(targetLanguage: String, NL: String) =
         "You are a professional subtitle translator. Translate the following JSON array into natural $targetLanguage.\n" +
@@ -173,6 +180,7 @@ class SubtitleTranslationService(
         val raw = when (modelProvider()) {
             SubtitleAiModel.GROQ_LLAMA_70B -> matchGroq(prompt, payload, apiKey)
             SubtitleAiModel.GEMINI_FLASH_25 -> matchGemini(prompt, payload, apiKey)
+            SubtitleAiModel.CLAUDE_HAIKU -> matchClaude(prompt, payload, apiKey)
         } ?: return null
         val array = extractJsonArray(raw) ?: return null
         val matches = ArrayList<LineMatch>(array.length())
@@ -277,8 +285,48 @@ class SubtitleTranslationService(
         }
     }
 
+    private suspend fun matchClaude(systemPrompt: String, payload: String, apiKey: String): String? =
+        when (val reply = claudeMessagesCall(client, apiKey, systemPrompt, payload)) {
+            is ClaudeReply.Text -> reply.text
+            is ClaudeReply.Refused -> null
+            is ClaudeReply.Failed -> {
+                Log.w(TAG, "matchSubtitleLines claude failed: ${reply.message}")
+                null
+            }
+        }
+
     suspend fun translateBatch(lines: List<String>, targetLanguage: String): TranslationResult =
         translateBatchInternal(lines, targetLanguage, depth = 0)
+
+    /**
+     * One follow-up request for the few lines of a successful batch that came back unusable: lines
+     * the model dropped (they would be cached and shown in the source language) and lines with
+     * letters from an unrelated script inside them (see SubtitleScriptCheck). The retry carries
+     * only those lines, and a retried line is used only if it is an improvement, so the worst case
+     * is one small extra request and the same result as before.
+     *
+     * Returns [first] itself when there was nothing to repair. Call it only off the waiting path:
+     * the caller should already have shown [first].
+     */
+    suspend fun repairSuspectLines(
+        lines: List<String>,
+        first: TranslationResult,
+        targetLanguage: String
+    ): TranslationResult {
+        if (!first.success || first.lines.size != lines.size) return first
+        val expected = dominantScript(first.lines, lines)
+        val suspects = suspectLineIndices(lines, first.lines, first.untranslated, expected)
+        // More than half the batch suspect means the batch or the script guess is off, not a few
+        // stray lines; a retry would just double the request for no gain.
+        if (suspects.isEmpty() || suspects.size * 2 > lines.size) return first
+
+        Log.w(TAG, "Re-requesting ${suspects.size}/${lines.size} lines (dropped or script-corrupted)")
+        val retry = translateBatchInternal(suspects.map { lines[it] }, targetLanguage, depth = 0)
+        if (!retry.success) return first
+        return first.copy(
+            lines = mergeRepairedLines(lines, first.lines, suspects, retry.lines, retry.untranslated, expected)
+        )
+    }
 
     private suspend fun translateBatchInternal(
         lines: List<String>,
@@ -295,14 +343,16 @@ class SubtitleTranslationService(
         val result = when (modelProvider()) {
             SubtitleAiModel.GROQ_LLAMA_70B -> translateGroq(lines, targetLanguage, apiKey)
             SubtitleAiModel.GEMINI_FLASH_25 -> translateGemini(lines, targetLanguage, apiKey)
+            SubtitleAiModel.CLAUDE_HAIKU -> translateClaude(lines, targetLanguage, apiKey)
         }
 
         // A content-policy block poisons the whole window because of (usually) one line.
         // Bisect so the innocuous majority still gets translated; a line that stays blocked all
         // the way down is shown in its original language. Depth cap keeps worst-case extra API
-        // calls bounded (window → halves → quarters).
+        // calls bounded (window → halves → quarters). A Claude reply cut off at max_tokens is
+        // bisected the same way: half the lines fit where the whole batch did not.
         if (!result.success &&
-            result.errorMessage == TRANSLATION_ERROR_CONTENT_BLOCKED &&
+            (result.errorMessage == TRANSLATION_ERROR_CONTENT_BLOCKED || result.errorMessage == CLAUDE_ERROR_MAX_TOKENS) &&
             lines.size >= 2 && depth < 2
         ) {
             Log.w(TAG, "Content-blocked batch of ${lines.size} — bisecting (depth=$depth)")
@@ -310,7 +360,9 @@ class SubtitleTranslationService(
             val left = translateBatchInternal(lines.subList(0, mid), targetLanguage, depth + 1)
             val right = translateBatchInternal(lines.subList(mid, lines.size), targetLanguage, depth + 1)
             // Best-effort merge: failed halves already carry their original lines.
-            return TranslationResult(left.lines + right.lines, true)
+            val untranslated = (if (left.success) left.untranslated else emptySet()) +
+                (if (right.success) right.untranslated.map { it + mid } else emptyList())
+            return TranslationResult(left.lines + right.lines, true, untranslated = untranslated)
         }
         return result
     }
@@ -525,6 +577,31 @@ class SubtitleTranslationService(
         }
     }
 
+    /** Same prompt, indexed batch and parser as Gemini; a reply that doesn't parse is asked for once more. */
+    private suspend fun translateClaude(
+        lines: List<String>,
+        targetLanguage: String,
+        apiKey: String,
+        attempt: Int = 0
+    ): TranslationResult {
+        val NL = "⏎"
+        val userText = "Translate to $targetLanguage:\n${encodeIndexed(lines, NL)}"
+        val systemPrompt = buildSystemPrompt(targetLanguage, NL)
+        return when (val reply = claudeMessagesCall(client, apiKey, systemPrompt, userText)) {
+            is ClaudeReply.Refused -> TranslationResult(lines, false, TRANSLATION_ERROR_CONTENT_BLOCKED)
+            is ClaudeReply.Failed -> TranslationResult(lines, false, reply.message)
+            is ClaudeReply.Text -> {
+                val parsed = parseTranslationResult(lines, targetLanguage, reply.text, NL)
+                if (!parsed.success && attempt == 0) {
+                    Log.w(TAG, "Claude parse failed (${parsed.errorMessage}) — retrying batch once")
+                    translateClaude(lines, targetLanguage, apiKey, attempt = 1)
+                } else {
+                    parsed
+                }
+            }
+        }
+    }
+
     private fun parseTranslationResult(lines: List<String>, targetLanguage: String, rawText: String, NL: String): TranslationResult {
         var resultArray = extractJsonArray(rawText)
         if (resultArray == null && lines.size == 1) {
@@ -575,6 +652,7 @@ class SubtitleTranslationService(
             if (isRtl) "‏$line‏" else line
         }
 
-        return TranslationResult(translated, true)
+        val untranslated = lines.indices.filterNot { byIndex.containsKey(it) }.toSet()
+        return TranslationResult(translated, true, untranslated = untranslated)
     }
 }

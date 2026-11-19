@@ -128,6 +128,7 @@ import com.arflix.tv.ui.components.topBarFocusedItem
 import com.arflix.tv.ui.components.topBarMaxIndex
 import com.arflix.tv.ui.focus.arvioDpadFocusGroup
 import com.arflix.tv.ui.theme.AccentGreen
+import com.arflix.tv.ui.theme.ImdbYellow
 import com.arflix.tv.ui.theme.ArflixTypography
 import com.arflix.tv.ui.theme.BackgroundCard
 import com.arflix.tv.ui.theme.appBackgroundDark
@@ -282,7 +283,8 @@ fun TvScreen(
     var focusZone by rememberSaveable { mutableStateOf(if (uiState.isConfigured) TvFocusZone.GROUPS else TvFocusZone.SIDEBAR) }
     val hasProfile = currentProfile != null
     val maxSidebarIndex = topBarMaxIndex(hasProfile)
-    var sidebarFocusIndex by rememberSaveable { mutableIntStateOf(if (hasProfile) 4 else 3) }
+    var sidebarFocusIndex by rememberSaveable { mutableIntStateOf(com.arflix.tv.ui.components.topBarSelectedIndex(SidebarItem.TV, hasProfile).coerceAtLeast(0)) }
+    com.arflix.tv.ui.components.ReconcileTopBarFocus(sidebarFocusIndex, hasProfile) { sidebarFocusIndex = it }
     var groupIndex by rememberSaveable { mutableIntStateOf(0) }
     var channelIndex by rememberSaveable { mutableIntStateOf(0) }
     var selectedChannelId by rememberSaveable { mutableStateOf<String?>(null) }
@@ -1136,7 +1138,7 @@ fun TvScreen(
                                             contentScale = ContentScale.Fit,
                                             modifier = Modifier
                                                 .size(if (isMobile) 26.dp else 32.dp)
-                                                .clip(RoundedCornerShape(5.dp))
+                                                .clip(RoundedCornerShape(8.dp))
                                                 .background(Color.White.copy(alpha = 0.04f))
                                         )
                                         Spacer(modifier = Modifier.width(if (isMobile) 6.dp else 8.dp))
@@ -1169,7 +1171,7 @@ fun TvScreen(
                                             style = ArflixTypography.caption.copy(fontSize = if (isMobile) 8.sp else 9.sp, fontWeight = FontWeight.Bold),
                                             color = Color.Black,
                                             modifier = Modifier
-                                                .background(AccentGreen, RoundedCornerShape(3.dp))
+                                                .background(AccentGreen, RoundedCornerShape(8.dp))
                                                 .padding(horizontal = 5.dp, vertical = 1.dp)
                                         )
                                         Spacer(modifier = Modifier.width(6.dp))
@@ -1198,7 +1200,7 @@ fun TvScreen(
                                             style = ArflixTypography.caption.copy(fontSize = if (isMobile) 8.sp else 9.sp, fontWeight = FontWeight.Bold),
                                             color = Color.White.copy(alpha = 0.7f),
                                             modifier = Modifier
-                                                .background(Color.White.copy(alpha = 0.08f), RoundedCornerShape(3.dp))
+                                                .background(Color.White.copy(alpha = 0.08f), RoundedCornerShape(8.dp))
                                                 .padding(horizontal = 5.dp, vertical = 1.dp)
                                         )
                                         Spacer(modifier = Modifier.width(6.dp))
@@ -1228,7 +1230,7 @@ fun TvScreen(
                                             style = ArflixTypography.caption.copy(fontSize = if (isMobile) 8.sp else 9.sp),
                                             color = Color.White.copy(alpha = 0.4f),
                                             modifier = Modifier
-                                                .background(Color.White.copy(alpha = 0.04f), RoundedCornerShape(3.dp))
+                                                .background(Color.White.copy(alpha = 0.04f), RoundedCornerShape(8.dp))
                                                 .padding(horizontal = 5.dp, vertical = 1.dp)
                                         )
                                         Spacer(modifier = Modifier.width(6.dp))
@@ -1417,7 +1419,7 @@ fun TvScreen(
                                         .align(Alignment.TopStart)
                                         .padding(start = 8.dp, top = 8.dp)
                                         .size(44.dp)
-                                        .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(22.dp))
+                                        .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(16.dp))
                                 ) {
                                     Icon(
                                         imageVector = Icons.Default.ArrowBack,
@@ -1448,7 +1450,7 @@ fun TvScreen(
                                         },
                                         modifier = Modifier
                                             .size(44.dp)
-                                            .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(22.dp))
+                                            .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(16.dp))
                                     ) {
                                         Icon(
                                             imageVector = Icons.Default.SkipPrevious,
@@ -1471,7 +1473,7 @@ fun TvScreen(
                                         },
                                         modifier = Modifier
                                             .size(44.dp)
-                                            .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(22.dp))
+                                            .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(16.dp))
                                     ) {
                                         Icon(
                                             imageVector = Icons.Default.SkipNext,
@@ -1587,15 +1589,15 @@ private fun GroupRailItem(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(6.dp))
+            .clip(RoundedCornerShape(8.dp))
             .background(if (isFocused) accent.copy(alpha = 0.2f) else Color.Transparent)
-            .then(if (isFocused) Modifier.border(1.5.dp, accent, RoundedCornerShape(6.dp)) else Modifier)
+            .then(if (isFocused) Modifier.border(1.5.dp, accent, RoundedCornerShape(8.dp)) else Modifier)
             .combinedClickable(onClick = onClick, onLongClick = onLongPress)
             .padding(horizontal = 8.dp, vertical = 7.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         if (isFavorite) {
-            Icon(Icons.Default.Star, null, tint = Color(0xFFF5C518).copy(alpha = 0.8f), modifier = Modifier.size(10.dp))
+            Icon(Icons.Default.Star, null, tint = ImdbYellow.copy(alpha = 0.8f), modifier = Modifier.size(10.dp))
             Spacer(modifier = Modifier.width(5.dp))
         }
         Text(name, style = ArflixTypography.caption.copy(fontSize = 11.sp, fontWeight = if (isFocused) FontWeight.Medium else FontWeight.Normal, lineHeight = 14.sp),
@@ -1619,7 +1621,7 @@ private fun GroupRailItem(
                     }
                 }
         ) {
-            FocusableMenuItem(if (isFavorite) "Unfavorite" else "Favorite", if (isFavorite) Icons.Default.StarOutline else Icons.Default.Star, Color(0xFFF5C518)) { onDismissMenu(); onToggleFavorite() }
+            FocusableMenuItem(if (isFavorite) "Unfavorite" else "Favorite", if (isFavorite) Icons.Default.StarOutline else Icons.Default.Star, ImdbYellow) { onDismissMenu(); onToggleFavorite() }
             FocusableMenuItem("Hide", Icons.Default.VisibilityOff) { onDismissMenu(); onToggleHidden() }
             FocusableMenuItem("Move to Top", Icons.Default.KeyboardArrowUp) { onDismissMenu(); onMoveToTop() }
             FocusableMenuItem("Move Up", Icons.Default.KeyboardArrowUp) { onDismissMenu(); onMoveUp() }
@@ -1732,7 +1734,7 @@ private fun FullscreenEpgOverlay(
                             style = ArflixTypography.caption.copy(fontWeight = FontWeight.Bold, fontSize = if (isMobile) 10.sp else 12.sp),
                             color = Color.Black,
                             modifier = Modifier
-                                .background(AccentGreen, RoundedCornerShape(4.dp))
+                                .background(AccentGreen, RoundedCornerShape(8.dp))
                                 .padding(horizontal = if (isMobile) 6.dp else 8.dp, vertical = if (isMobile) 2.dp else 3.dp)
                         )
                         Spacer(modifier = Modifier.width(if (isMobile) 8.dp else 10.dp))
@@ -1759,14 +1761,14 @@ private fun FullscreenEpgOverlay(
                         modifier = Modifier
                             .fillMaxWidth(if (isMobile) 0.6f else 0.4f)
                             .height(3.dp)
-                            .clip(RoundedCornerShape(2.dp))
+                            .clip(RoundedCornerShape(8.dp))
                             .background(Color.White.copy(alpha = 0.15f))
                     ) {
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth(progFraction)
                                 .fillMaxHeight()
-                                .clip(RoundedCornerShape(2.dp))
+                                .clip(RoundedCornerShape(8.dp))
                                 .background(AccentGreen)
                         )
                     }
@@ -1790,7 +1792,7 @@ private fun FullscreenEpgOverlay(
                             style = ArflixTypography.caption.copy(fontWeight = FontWeight.Bold, fontSize = if (isMobile) 10.sp else 12.sp),
                             color = Color.Black,
                             modifier = Modifier
-                                .background(AccentGreen, RoundedCornerShape(4.dp))
+                                .background(AccentGreen, RoundedCornerShape(8.dp))
                                 .padding(horizontal = if (isMobile) 6.dp else 8.dp, vertical = if (isMobile) 2.dp else 3.dp)
                         )
                         Spacer(modifier = Modifier.width(if (isMobile) 8.dp else 10.dp))
@@ -1810,7 +1812,7 @@ private fun FullscreenEpgOverlay(
                             style = ArflixTypography.caption.copy(fontWeight = FontWeight.Bold, fontSize = if (isMobile) 9.sp else 11.sp),
                             color = Color.White.copy(alpha = 0.8f),
                             modifier = Modifier
-                                .background(Color.White.copy(alpha = 0.15f), RoundedCornerShape(4.dp))
+                                .background(Color.White.copy(alpha = 0.15f), RoundedCornerShape(8.dp))
                                 .padding(horizontal = if (isMobile) 6.dp else 8.dp, vertical = if (isMobile) 2.dp else 3.dp)
                         )
                         Spacer(modifier = Modifier.width(if (isMobile) 6.dp else 10.dp))
@@ -2003,13 +2005,13 @@ private fun GuideChannelRow(
         modifier = Modifier
             .fillMaxWidth()
             .height(if (isMobile) 44.dp else 56.dp)
-            .clip(RoundedCornerShape(4.dp))
+            .clip(RoundedCornerShape(8.dp))
             .background(rowBg)
             .then(
                 if (isFocused || isPlaying) Modifier.border(
                     width = if (isFocused) 1.5.dp else 0.5.dp,
                     color = borderColor,
-                    shape = RoundedCornerShape(4.dp)
+                    shape = RoundedCornerShape(8.dp)
                 ) else Modifier
             )
             .clickable(onClick = onClick)
@@ -2039,14 +2041,14 @@ private fun GuideChannelRow(
                         contentScale = ContentScale.Fit,
                         modifier = Modifier
                             .size(if (isMobile) 24.dp else 30.dp)
-                            .clip(RoundedCornerShape(4.dp))
+                            .clip(RoundedCornerShape(8.dp))
                             .background(Color.Black.copy(alpha = 0.3f))
                     )
                 } else {
                     Box(
                         modifier = Modifier
                             .size(if (isMobile) 24.dp else 30.dp)
-                            .clip(RoundedCornerShape(4.dp))
+                            .clip(RoundedCornerShape(8.dp))
                             .background(Color.White.copy(alpha = 0.04f)),
                         contentAlignment = Alignment.Center
                     ) {
@@ -2057,7 +2059,7 @@ private fun GuideChannelRow(
                     Icon(
                         imageVector = Icons.Default.Star,
                         contentDescription = null,
-                        tint = Color(0xFFF5C518).copy(alpha = 0.9f),
+                        tint = ImdbYellow.copy(alpha = 0.9f),
                         modifier = Modifier
                             .size(10.dp)
                             .align(Alignment.TopEnd)
@@ -2146,7 +2148,7 @@ private fun CompactGuideLane(
 
     Box(
         modifier = modifier
-            .clip(RoundedCornerShape(4.dp))
+            .clip(RoundedCornerShape(8.dp))
             .background(baseColor)
     ) {
         if (nowProgram != null) {
@@ -2447,7 +2449,7 @@ private fun NotConfiguredPanel() {
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(BackgroundCard, RoundedCornerShape(14.dp))
+            .background(BackgroundCard, RoundedCornerShape(16.dp))
             .padding(24.dp),
         contentAlignment = Alignment.Center
     ) {

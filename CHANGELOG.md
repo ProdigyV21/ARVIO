@@ -2,6 +2,34 @@
 
 All notable changes to this project are documented in this file.
 
+## [2.4] - 2026-11-18
+
+### Android
+
+- **Redesigned phone and tablet experience.** Updated Home, Details, Sources, Library, Calendar, profiles, add-on browsing and touch controls. The new bottom navigation fades into the content. Choose an immersive full-width or inset poster hero on mobile; portrait artwork and centered title logos now match Details. Long-press an episode to mark it watched or choose a source.
+- **Smoother TV browsing.** Reduced unnecessary row redraws and focus work on Home and in Settings without removing animations. Netflix-style cards keep the same artwork as they expand, with a readable title fallback. Streaming-service collections use the same browsing layout, list newest titles first, and offer a separate genre-filtered grid.
+- **Easier TV setup and discovery.** Scan a QR code to type into supported TV settings fields from a phone. Show optional add-on stream descriptions in the source list, sort discovery results without setting another filter, and customize visible tabs per profile with Cloud sync.
+- **More control for families and trackers.** Parents can approve individual titles and collections for kids' profiles. WeTrakr lists are available in Library and Add to List, with optional recommendations on Home. Trakt and MDBList connection errors are clearer, and Telegram Settings show the connected account.
+- **More reliable playback.** Improved recovery after long pauses, network or decoder failures, and source changes. Reuse trailers more efficiently, with better memory budgeting, a larger back buffer, and an adaptive, configurable disk cache.
+- **Better IPTV connection handling.** Set a device-side connection limit per playlist or portal. The app counts sessions rather than individual requests, releases the previous channel before tuning, and avoids speculative VOD requests on capped accounts. Home previews retain per-channel headers; VOD respects quality limits and tracks matched titles even when duration is still unknown.
+- **AI subtitles and localization.** On Live TV, Gemini translates available channel captions first and uses audio when captions are unavailable. Added Claude Haiku as a translation provider and improved repair of lines in the wrong script. Expanded Spanish and Hebrew translations, and fixed episode dates and English metadata ordering in right-to-left layouts.
+- **Add-ons and catalogs.** Safer add-on sync keeps configuration separate from refreshable metadata; compatible add-ons can delegate catalogs, filtering and IPTV VOD lookups to the client.
+- **16 KB Android compatibility.** Updated the GitHub build's add-on TLS library to avoid an unsafe native memory boundary on ARM64 devices with 16 KB pages.
+- **GitHub APK only:** Search YouTube and use YouTube results as sources, subject to the profile's parental controls. This feature is not in the Play build.
+
+### ARVIO Web, Cloud and Website
+
+- Add Xtream Codes directly from TV Settings. Improved authentication and proxy fallback, kept guide settings and XMLTV headers intact, and made live reconnection and connection limits more predictable.
+- Added MDBList device sign-in, improved default WeTrakr setup for self-hosting, fixed empty Home loading loops and nested collection folders, and hardened playback against malformed source metadata. Reduced memory pressure on iPhone Safari's Sports page.
+- Improved Cloud profile restore and synchronized navigation visibility. Updated checkout and regional pricing presentation, recovery for pending annual upgrades, confirmed-payment referral rewards and Premium Discord badges.
+- Refreshed the website's download and Web links, Hebrew localization, diagnostics and not-found pages. Web and backend changes are delivered separately from the Android release.
+
+### Contributors
+
+Thanks to [@silentbil](https://github.com/silentbil), [@Himanth-reddy](https://github.com/Himanth-reddy), [@galinosT](https://github.com/galinosT), [@OrlS15](https://github.com/OrlS15), [@CaptainMusX](https://github.com/CaptainMusX), [@PedroFlores199](https://github.com/PedroFlores199), [@haveAnIssue](https://github.com/haveAnIssue), [@uHleaf](https://github.com/uHleaf), [@petomalik6-duda](https://github.com/petomalik6-duda), Roey Dvash, and everyone who tested and reported issues.
+
+Version code 323. Install **ARVIO-v2.4-sideload-release.apk** to update the GitHub build on ARM64 or ARMv7. Google Play uses a separate build. ARVIO does not include a media subscription.
+
 ## [2.2] - 2026-10-12
 
 - New artwork release Calendar across Android and web, with tracker/local watchlists, timezone-aware dates, exact episode navigation, consistent Library tabs, stable remote focus, persistent schedules, batched season loading and anime coverage.

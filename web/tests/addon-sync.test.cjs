@@ -74,3 +74,69 @@ test('legacy outbox removal is migrated once before a failed upload', async () =
   assert.equal(sent[0].changes.a.removed, true);
   assert.deepEqual(sent[0].changes, sent[1].changes);
 });
+
+test('older client addon push preserves configured URL, omitted delegation fields, and separate metadata cache', async () => {
+  const existingDiscover = {
+    id: 'tv.arvio.discover_abc',
+    name: 'ARVIO Discover',
+    manifestUrl: 'https://arvio-addon.netlify.app/p/p1/manifest.json',
+    setupUpdatedAt: 200,
+    metadataUpdatedAt: 300,
+    catalogs: [
+      { id: 'vod-recent-movies', type: 'movie', name: 'Recent VOD Movies', clientDelegate: 'vod:recent?type=movie' },
+      { id: 'hybrid-trending', type: 'movie', name: 'Trending On VOD', clientFilter: '{"availableOn":"vod"}' }
+    ]
+  };
+  const root = {
+    addons: [existingDiscover],
+    addonsByProfile: { p1: [existingDiscover] },
+    addonMetadataByKey: {
+      'https://arvio-addon.netlify.app/p/p1': {
+        catalogs: existingDiscover.catalogs,
+        metadataUpdatedAt: 300
+      }
+    }
+  };
+  // Simulate an older client sending a generic root URL without setupUpdatedAt or clientDelegate/clientFilter
+  const staleIncoming = {
+    id: 'tv.arvio.discover_abc',
+    name: 'ARVIO Discover',
+    manifestUrl: 'https://arvio-addon.netlify.app/manifest.json',
+    catalogs: [
+      { id: 'vod-recent-movies', type: 'movie', name: 'Recent VOD Movies' },
+      { id: 'hybrid-trending', type: 'movie', name: 'Trending On VOD' }
+    ]
+  };
+  let pushed;
+  let pulled;
+  const cloud = load('lib/cloud.ts', {
+    './config': { config: { netlifyBackendUrl: 'https://backend.invalid' }, hasNetlifyBackendUrl: () => true },
+    './homeserver': {}, './iptv': {}, './mediaImages': {},
+    './http': { jsonRequest: async (_url, request) => {
+      if (request?.method === 'POST') { pushed = JSON.parse(request.body).payload; return { accepted: true }; }
+      return { payload: pushed || root };
+    } }
+  });
+  await cloud.saveCloudAddons(auth, [staleIncoming], 'p1');
+  const saved = pushed.addonsByProfile.p1[0];
+  assert.equal(saved.manifestUrl, 'https://arvio-addon.netlify.app/p/p1/manifest.json');
+  assert.equal(saved.catalogs[0].clientDelegate, 'vod:recent?type=movie');
+  assert.equal(saved.catalogs[1].clientFilter, '{"availableOn":"vod"}');
+  assert.equal(pushed.addonMetadataByKey['https://arvio-addon.netlify.app/p/p1'].metadataUpdatedAt, 300);
+
+  // When pulling even if the addon list entry had stripped fields, addonMetadataByKey & addon enrichment restore them
+  pushed.addonsByProfile.p1 = [{
+    id: 'tv.arvio.discover_abc',
+    name: 'ARVIO Discover',
+    manifestUrl: 'https://arvio-addon.netlify.app/p/p1/manifest.json',
+    catalogs: [{ id: 'vod-recent-movies', type: 'movie', name: 'Recent VOD Movies' }]
+  }];
+  pushed.catalogsByProfile = {
+    p1: [
+      { id: 'vod-recent-movies', sourceType: 'addon', sourceRef: 'vod-recent-movies', addonId: 'tv.arvio.discover_abc', addonName: 'ARVIO Discover', name: 'Recent VOD Movies', mediaType: 'movie' }
+    ]
+  };
+  pulled = await cloud.pullCloudPayload(auth, 'p1');
+  assert.equal(pulled.addons[0].catalogs[0].clientDelegate, 'vod:recent?type=movie');
+  assert.equal(pulled.settings.catalogs[0].clientDelegate, 'vod:recent?type=movie');
+});

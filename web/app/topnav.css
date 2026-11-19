@@ -1,0 +1,45 @@
+/* Top bar accessibility: skip link, 44px targets, and the card focus ring.
+   Imported by TopNav. */
+
+.skip-link {
+  position: fixed;
+  top: 8px;
+  left: 8px;
+  z-index: 1000;
+  padding: 12px 18px;
+  border-radius: 10px;
+  background: #fff;
+  color: #000;
+  font-weight: 700;
+  text-decoration: none;
+  transform: translateY(-160%);
+  transition: transform 120ms ease;
+}
+[dir="rtl"] .skip-link {
+  left: auto;
+  right: 8px;
+}
+.skip-link:focus,
+.skip-link:focus-visible { transform: none; outline: 3px solid var(--accent, #000); outline-offset: 2px; }
+.content:focus { outline: none; }
+
+/* 44px minimum hit target for the gear (was 40px below 1333px wide). */
+.sidebar .settings-gear { min-width: 44px; min-height: 44px; }
+
+/* One strong focus ring for every card, readable from a sofa: a 3px white
+   ring with a dark halo so it shows on bright and dark artwork alike. Hover
+   (pointer) keeps its softer lift. */
+.app-shell .media-card:focus-visible .poster,
+.collection-page .media-card:focus-visible .poster,
+.app-shell .rail-view-all:focus-visible .rail-view-all-art,
+.app-shell .custom-collection-tile:focus-visible {
+  outline: 3px solid #fff !important;
+  outline-offset: 3px;
+  box-shadow: 0 0 0 7px rgba(0, 0, 0, 0.6), 0 18px 52px rgba(0, 0, 0, 0.58) !important;
+}
+@media (min-width: 1600px) {
+  .app-shell .media-card:focus-visible .poster,
+  .collection-page .media-card:focus-visible .poster,
+  .app-shell .rail-view-all:focus-visible .rail-view-all-art,
+  .app-shell .custom-collection-tile:focus-visible { outline-width: 4px; outline-offset: 4px; }
+}

@@ -1,6 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { load } = require('./load.cjs');
+const { sourceOf, storeSource } = require('./sources.cjs');
 const { shouldRefreshAutomatically: shouldRefresh } = load('lib/automaticRefresh.ts');
 const ready = { visible: true, playing: false, inFlight: false, lastRefreshAt: null, now: 0 };
 
@@ -20,7 +21,7 @@ test('Home return and browser visibility use the same cooldown and clean up list
   const fs = require('node:fs');
   const vm = require('node:vm');
   const ts = require('typescript');
-  const source = fs.readFileSync(require.resolve('../lib/store.tsx'), 'utf8');
+  const source = storeSource();
   const file = ts.createSourceFile('store.tsx', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
   let callback;
   function visit(node) {

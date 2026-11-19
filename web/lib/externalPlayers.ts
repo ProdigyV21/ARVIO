@@ -161,7 +161,7 @@ export function isAppleMobile() {
   return /iPad|iPhone|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
 }
 
-function isAndroid() {
+export function isAndroid() {
   return typeof navigator !== "undefined" && /Android/i.test(navigator.userAgent);
 }
 
@@ -306,6 +306,21 @@ export function openInAnyPlayer(stream: StreamSource, title: string, preferredSu
   // iOS + desktop: VLC is the one route that works generically. This reuses the
   // platform-correct VLC path (iOS scheme, desktop vlc:// or .m3u fallback).
   return openExternalPlayer("vlc", stream, title, preferredSubtitleLang);
+}
+
+export type ExternalPlayerOption = { id: ExternalPlayer | "chooser"; label: string };
+
+/**
+ * The external players worth offering on this device, best first — one button
+ * each, never two that launch the same app:
+ * - iPhone / iPad / Mac: Infuse, then VLC (both have URL schemes);
+ * - Android: the system "Open with" chooser (VLC, MX Player, Just Player…);
+ * - Windows / Linux / other desktops: VLC.
+ */
+export function externalPlayerOptions(platform: "apple" | "android" | "desktop" = isAndroid() ? "android" : (isAppleMobile() || isMac()) ? "apple" : "desktop"): ExternalPlayerOption[] {
+  if (platform === "android") return [{ id: "chooser", label: "Open in player" }];
+  if (platform === "apple") return [{ id: "infuse", label: "Infuse" }, { id: "vlc", label: "VLC" }];
+  return [{ id: "vlc", label: "VLC" }];
 }
 
 // Whether "Open in external player" resolves to a specific-app launch (so the UI

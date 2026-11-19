@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="player_subtitle_hearing_sync">Sincronizando subtítulos por audición…</string>
+    <string name="player_audio_sync_listening">Ningún subtítulo verificado — sincronizándolo con el audio…</string>
+    <string name="player_audio_sync_model_downloading">Descargando el modelo de reconocimiento de voz (%1$s MB) para sincronizar los subtítulos más rápido…</string>
+    <string name="player_audio_sync_live_only">Sin lectura anticipada del audio %1$s en este dispositivo; sincronizando con el audio en curso (más lento)</string>
+    <string name="player_audio_sync_withdrawn">No se pudo confirmar la sincronización de los subtítulos; se ha restaurado el tiempo original</string>
+    <string name="player_audio_sync_estimated">Sincronizando los subtítulos con el audio (%1$s), afinando…</string>
+    <string name="player_audio_sync_synced">Sincronización de subtítulos confirmada (%1$s)</string>
+    <string name="player_audio_sync_synced_rate">Sincronización de subtítulos confirmada (%1$s, frecuencia de fotogramas corregida)</string>
+    <string name="player_audio_sync_adjusted">Ha cambiado el tiempo de los subtítulos; resincronizado (%1$s)</string>
+    <string name="player_audio_sync_unsteady">Sincronización de audio inestable — se mantiene el tiempo actual de los subtítulos</string>
+</resources>

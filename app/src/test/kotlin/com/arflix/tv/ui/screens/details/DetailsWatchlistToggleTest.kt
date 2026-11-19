@@ -13,6 +13,7 @@ import com.arflix.tv.data.repository.MediaRepository
 import com.arflix.tv.data.repository.StreamIntegrationRepository
 import com.arflix.tv.data.repository.StreamRepository
 import com.arflix.tv.data.repository.WatchlistRepository
+import com.arflix.tv.data.repository.effectiveSettingsDataStore
 import com.arflix.tv.data.repository.sync.RemoteSyncManager
 import com.arflix.tv.network.TmdbPriorityDispatcher
 import com.arflix.tv.util.settingsDataStore
@@ -67,6 +68,8 @@ class DetailsWatchlistToggleTest {
         }
         mockkStatic("com.arflix.tv.util.DataStoresKt")
         every { any<Context>().settingsDataStore } returns settings
+        mockkStatic("com.arflix.tv.data.repository.PartnerPreferencesKt")
+        every { any<Context>().effectiveSettingsDataStore } returns settings
 
         media = mockk(relaxed = true)
         every { media.episodeRatingsUpdated } returns MutableSharedFlow<Pair<Int, Int>>()
@@ -84,6 +87,7 @@ class DetailsWatchlistToggleTest {
     fun tearDown() {
         store.clear()
         Dispatchers.resetMain()
+        unmockkStatic("com.arflix.tv.data.repository.PartnerPreferencesKt")
         unmockkStatic("com.arflix.tv.util.DataStoresKt")
         unmockkStatic(Log::class)
     }
@@ -113,7 +117,7 @@ class DetailsWatchlistToggleTest {
             streamIntegrationRepository = integrations,
             recentPlayedSourceRepository = mockk(relaxed = true),
             personalListsRepository = mockk(relaxed = true),
-            kidsContentFilter = mockk(relaxed = true)
+            kidsContentFilter = mockk(relaxed = true), idleReturnCoordinator = com.arflix.tv.data.repository.IdleReturnCoordinator(mockk(relaxed = true), mockk(relaxed = true))
         )
         store.put("details", model)
         model.loadDetails(MediaType.MOVIE, movie.id)
@@ -146,6 +150,32 @@ class DetailsWatchlistToggleTest {
         assertTrue("Cloud push hangs", model.uiState.value.isInWatchlist)
         coVerify(exactly = 1) { watchlist.addToWatchlist(MediaType.MOVIE, movie.id, movie) }
         coVerify(exactly = 1) { cloud.pushToCloud(any()) }
+    }
+
+    @Test
+    fun `connected read only trackers still save the bookmark and cloud`() = runTest {
+        val routing = mockk<com.arflix.tv.data.repository.sync.SyncProviderStore>()
+        val trakt = mockk<com.arflix.tv.data.repository.sync.TraktRemoteProvider>()
+        val simkl = mockk<com.arflix.tv.data.repository.sync.SimklRemoteProvider>()
+        coEvery { routing.readProviders(any()) } returns setOf(
+            com.arflix.tv.data.repository.sync.SyncProvider.TRAKT,
+            com.arflix.tv.data.repository.sync.SyncProvider.SIMKL
+        )
+        coEvery { routing.writeProviders() } returns emptySet()
+        coEvery { trakt.isConnected() } returns true
+        coEvery { simkl.isConnected() } returns true
+        remote = RemoteSyncManager(routing, trakt, mockk(), simkl)
+        val model = openDetails()
+
+        model.toggleWatchlist()
+        runCurrent()
+
+        assertTrue(model.uiState.value.isInWatchlist)
+        assertEquals(ToastType.SUCCESS, model.uiState.value.toastType)
+        coVerify(exactly = 1) { watchlist.addToWatchlist(MediaType.MOVIE, movie.id, movie) }
+        coVerify(exactly = 1) { cloud.pushToCloud(any()) }
+        coVerify(exactly = 0) { trakt.addToWatchlist(any(), any(), any()) }
+        coVerify(exactly = 0) { simkl.addToWatchlist(any(), any(), any()) }
     }
 
     @Test

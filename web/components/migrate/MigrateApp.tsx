@@ -1,7 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { AlertTriangle, ArrowRightLeft, Check, Download, Loader2, LogIn, Plus, RefreshCw, ShieldCheck, Trash2 } from "lucide-react";
+import { AlertTriangle, ArrowRightLeft, Check, Download, Loader2, LogIn, LogOut, Plus, RefreshCw, ShieldCheck, Trash2 } from "lucide-react";
+import { SESSION_KEY, decodeJwtPayload } from "@/lib/auth";
+import { getAuthPortalUrl } from "@/lib/config";
 import { authClient } from "@/lib/store";
 import { installAddon, normalizeAddons } from "@/lib/addons";
 import { pullCloudPayload, pullCloudProfiles, saveCloudAddons } from "@/lib/cloud";
@@ -17,6 +19,37 @@ import { loadStored, saveStored } from "@/lib/storage";
 import type { InstalledAddon, Profile } from "@/lib/types";
 
 const LANGUAGE_KEY = "arvio.web.setupLanguage";
+
+/**
+ * The ARVIO auth portal returns here with the session in the URL hash (same
+ * format the app reads in lib/store.tsx). Store it and clean the address.
+ */
+function consumePortalSignIn(): boolean {
+  if (typeof window === "undefined") return false;
+  const hash = window.location.hash || "";
+  if (!hash.includes("access_token=") || !hash.includes("refresh_token=")) return false;
+  const params = new URLSearchParams(hash.replace(/^#/, ""));
+  const accessToken = params.get("access_token");
+  const refreshToken = params.get("refresh_token");
+  window.history.replaceState({}, document.title, window.location.pathname + window.location.search);
+  if (!accessToken || !refreshToken) return false;
+  const payload = decodeJwtPayload(accessToken);
+  const session = {
+    accessToken, refreshToken,
+    userId: (payload.sub as string | undefined) ?? "",
+    email: params.get("email") || "",
+    expiresAt: Date.now() + Number(params.get("expires_in") || "3600") * 1000,
+    provider: ((payload.iss as string | undefined) === "arvio-netlify" ? "netlify" : "supabase") as "netlify" | "supabase"
+  };
+  saveStored(SESSION_KEY, session);
+  authClient.session = session;
+  return true;
+}
+
+function signInWithPortal() {
+  const target = `${window.location.origin}/migrate`;
+  window.location.href = `${getAuthPortalUrl()}?redirect_uri=${encodeURIComponent(target)}`;
+}
 
 /**
  * Free setup page for ARVIO accounts, outside the web app's subscription: sign
@@ -45,11 +78,8 @@ function SetupTools({ language, onLanguageChange, showLanguagePicker }: {
   onLanguageChange: (value: string) => void;
   showLanguagePicker: boolean;
 }) {
-  // Named `text`, not `translateUi`, so this standalone page reuses the shared
-  // dictionaries without enrolling its own wording in the translated corpus.
-  const text = useTranslation();
+  const translateUi = useTranslation();
   const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
   const [signedIn, setSignedIn] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -90,6 +120,7 @@ function SetupTools({ language, onLanguageChange, showLanguagePicker }: {
   }, []);
 
   useEffect(() => {
+    consumePortalSignIn();
     if (!authClient.session) return;
     setSignedIn(true);
     setEmail(authClient.session.email);
@@ -109,12 +140,11 @@ function SetupTools({ language, onLanguageChange, showLanguagePicker }: {
     }
   };
 
-  const signIn = () => run(async () => {
-    await authClient.signIn(email.trim(), password);
-    setPassword("");
-    setSignedIn(true);
-    await loadAccount();
-  });
+  const signOut = () => {
+    authClient.signOut();
+    setSignedIn(false); setProfiles([]); setProfileId(null); setAddons([]); setAccountReady(false);
+    setEmail(""); setNotice(null); setResults(null);
+  };
 
   const selectProfile = (id: string) => run(async () => {
     setProfileId(id);
@@ -123,13 +153,13 @@ function SetupTools({ language, onLanguageChange, showLanguagePicker }: {
   });
 
   const addAddon = () => run(async () => {
-    if (!profileId) throw new Error("Choose a profile first");
+    if (!profileId) throw new Error(translateUi("Choose a profile first"));
     const installed = await installAddon(addonUrl.trim());
     const next = normalizeAddons([...addons, installed]);
     await saveCloudAddons(authClient, next, profileId, { changes: undefined });
     setAddons(next);
     setAddonUrl("");
-    setNotice(`Installed ${installed.name}`);
+    setNotice(translateUi("Installed {value0}", { value0: installed.name }));
   });
 
   const removeAddon = (addon: InstalledAddon) => run(async () => {
@@ -201,43 +231,41 @@ function SetupTools({ language, onLanguageChange, showLanguagePicker }: {
       </div>
       <header className="setup__header">
         <div className="setup__header-row">
-          <h1>{text("ARVIO setup")}</h1>
+          <h1>{translateUi("ARVIO setup")}</h1>
           {showLanguagePicker && <label className="setup__language">
-            <span>{text("App Language")}</span>
+            <span>{translateUi("App Language")}</span>
             <select value={language} onChange={event => onLanguageChange(event.target.value)}>
               {CONTENT_LANGUAGE_OPTIONS.map(([code, label]) => <option key={code} value={code}>{label}</option>)}
             </select>
           </label>}
         </div>
-        <p>Install addons and bring your Nuvio setup over. Everything is saved to your ARVIO account,
-          so the free Android and TV apps pick it up on their next sync — no web subscription needed.</p>
+        <p>{translateUi("Install addons and bring your Nuvio setup over. Everything is saved to your ARVIO account, so the free Android and TV apps pick it up on their next sync. No web subscription needed.")}</p>
       </header>
 
       {/* Nuvio comes first: reading a Nuvio account needs no ARVIO account, so
           someone who has not signed up yet can still pull their setup out. */}
       <section className="setup__card">
-        <h2>Move from Nuvio</h2>
+        <h2>{translateUi("Move from Nuvio")}</h2>
         {!snapshot && <>
-          <p className="setup__muted">Sign in with your Nuvio account to read its profiles, addons and collections.
-            Nothing in Nuvio is changed, and you do not need an ARVIO account for this step.</p>
-          <label><span>Nuvio email</span>
+          <p className="setup__muted">{translateUi("Sign in with your Nuvio account to read its profiles, addons and collections. Nothing in Nuvio is changed, and you do not need an ARVIO account for this step.")}</p>
+          <label><span>{translateUi("Nuvio email")}</span>
             <input type="email" value={nuvioEmail} onChange={event => setNuvioEmail(event.target.value)} autoComplete="off" /></label>
-          <label><span>Nuvio password</span>
+          <label><span>{translateUi("Nuvio password")}</span>
             <input type="password" value={nuvioPassword} onChange={event => setNuvioPassword(event.target.value)} autoComplete="off" />
-            <small><ShieldCheck size={14} aria-hidden="true" /> Used once to read your setup. It is never stored.</small></label>
+            <small><ShieldCheck size={14} aria-hidden="true" /> {translateUi("Used once to read your setup. It is never stored.")}</small></label>
           {selfHosted
-            ? <label><span>Nuvio server</span>
+            ? <label><span>{translateUi("Nuvio server")}</span>
                 <input value={nuvioServer} onChange={event => setNuvioServer(event.target.value)}
                   placeholder="nuvio.example.com" spellCheck={false} />
-                <small>Only for a Nuvio you host yourself. Leave this off for the normal Nuvio account.</small>
+                <small>{translateUi("Only for a Nuvio you host yourself. Leave this off for the normal Nuvio account.")}</small>
               </label>
             : <button type="button" className="setup__link" onClick={() => setSelfHosted(true)}>
-                I host Nuvio myself
+                {translateUi("I host Nuvio myself")}
               </button>}
           <button type="button" className="setup__primary"
             disabled={busy || !nuvioEmail.trim() || !nuvioPassword || (selfHosted && !nuvioServer.trim())}
             onClick={connectNuvio}>
-            {busy ? <Loader2 size={18} className="spin" aria-hidden="true" /> : <LogIn size={18} aria-hidden="true" />} Connect to Nuvio
+            {busy ? <Loader2 size={18} className="spin" aria-hidden="true" /> : <LogIn size={18} aria-hidden="true" />} {translateUi("Connect to Nuvio")}
           </button>
         </>}
 
@@ -250,12 +278,13 @@ function SetupTools({ language, onLanguageChange, showLanguagePicker }: {
             setResults(null);
             setChoices([]);
           }}>
-            <RefreshCw size={18} aria-hidden="true" /> Reconnect to Nuvio
+            <RefreshCw size={18} aria-hidden="true" /> {translateUi("Reconnect to Nuvio")}
           </button>
         </>}
 
         {snapshot && !results && <>
-          <p>Found {snapshot.profiles.length} profiles in {snapshot.email}.</p>
+          <p>{translateUi("Found {value0} profiles in {value1}.", { value0: snapshot.profiles.length, value1: snapshot.email })}</p>
+          <p className="setup__muted">{translateUi("Addons are shared by every profile in ARVIO: the addons of every imported profile end up on all of them. Collections stay with the profile you copy them into.")}</p>
           <ul className="setup__list">
             {snapshot.profiles.map(profile => {
               const choice = choices.find(entry => entry.nuvioProfileId === profile.profileId);
@@ -266,69 +295,70 @@ function SetupTools({ language, onLanguageChange, showLanguagePicker }: {
               return <li key={profile.profileId}>
                 <span>
                   <strong>{profile.name}</strong>
-                  <em>{profile.addons.length} addons · {collections} collections
-                    {disabled > 0 && ` · ${disabled} switched off in Nuvio`}
-                    {profile.plugins.length > 0 && ` · ${profile.plugins.length} plugins stay in Nuvio`}</em>
+                  <em>{translateUi("{value0} addons · {value1} collections", { value0: profile.addons.length, value1: collections })}
+                    {disabled > 0 && ` · ${translateUi("{value0} switched off in Nuvio", { value0: disabled })}`}
+                    {profile.plugins.length > 0 && ` · ${translateUi("{value0} plugins stay in Nuvio", { value0: profile.plugins.length })}`}</em>
                 </span>
                 <select value={value} onChange={event => setTarget(profile.profileId, event.target.value)}
-                  aria-label={`Copy ${profile.name} into`}>
-                  <option value="__create">Create a new ARVIO profile</option>
+                  aria-label={translateUi("Copy {value0} into", { value0: profile.name })}>
+                  <option value="__create">{translateUi("Create a new ARVIO profile")}</option>
                   {profiles.map(target => <option key={target.id} value={target.id}>{target.name}</option>)}
-                  <option value="__skip">Skip</option>
+                  <option value="__skip">{translateUi("Skip")}</option>
                 </select>
               </li>;
             })}
           </ul>
           <div className="setup__row">
             <button type="button" className="setup__primary" disabled={busy || !signedIn || !accountReady || !planned.length} onClick={runImport}>
-              <ArrowRightLeft size={18} aria-hidden="true" /> Copy {planned.length} profiles into ARVIO
+              <ArrowRightLeft size={18} aria-hidden="true" /> {translateUi("Copy {value0} profiles into ARVIO", { value0: planned.length })}
             </button>
             <button type="button" className="setup__ghost" onClick={downloadSnapshot}>
-              <Download size={18} aria-hidden="true" /> Download a copy
+              <Download size={18} aria-hidden="true" /> {translateUi("Download a copy")}
             </button>
           </div>
-          {!signedIn && <p className="setup__muted">Sign in to ARVIO below to copy this into an account, or download it and keep it for later.</p>}
+          {!signedIn && <p className="setup__muted">{translateUi("Sign in to ARVIO below to copy this into an account, or download it and keep it for later.")}</p>}
         </>}
 
         {results && <div className="setup__results">
-          <p><Check size={18} aria-hidden="true" /> {snapshot?.warnings.length || results.some(result => result.failed || result.addonsFailed) ? "Import finished with warnings" : "Import finished"}</p>
+          <p><Check size={18} aria-hidden="true" /> {snapshot?.warnings.length || results.some(result => result.failed || result.addonsFailed) ? translateUi("Import finished with warnings") : translateUi("Import finished")}</p>
           <ul className="setup__list">
             {results.map(result => <li key={result.profileName}>
               {result.failed
                 // Nothing was written for this profile, so say so plainly rather
                 // than letting a zero count read as "there was nothing to bring".
                 ? <span><strong>{result.profileName}</strong>
-                    <em className="setup__error">Not imported — {result.failed}. Nothing was changed on this profile.</em></span>
+                    <em className="setup__error">{translateUi("Not imported: {value0}. Nothing was changed on this profile.", { value0: result.failed })}</em></span>
                 : <span><strong>{result.profileName}</strong>
-                    <em>{result.addons} addons · {result.collections} collections{result.created ? " · new profile" : ""}
-                      {result.addonsDisabled > 0 && ` · ${result.addonsDisabled} left switched off`}
-                      {result.addonsFailed > 0 && ` · ${result.addonsFailed} could not be reached`}</em></span>}
+                    <em>{translateUi("{value0} addons · {value1} collections", { value0: result.addons, value1: result.collections })}{result.created ? ` · ${translateUi("new profile")}` : ""}
+                      {result.addonsDisabled > 0 && ` · ${translateUi("{value0} left switched off", { value0: result.addonsDisabled })}`}
+                      {result.addonsFailed > 0 && ` · ${translateUi("{value0} could not be reached", { value0: result.addonsFailed })}`}</em></span>}
             </li>)}
           </ul>
-          <p className="setup__muted">Open ARVIO on your TV or phone and sign in with this account to see them.</p>
+          <p className="setup__muted">{translateUi("Open ARVIO on your TV or phone and sign in with this account to see them.")}</p>
         </div>}
       </section>
 
       {!signedIn && <section className="setup__card">
-        <h2>Sign in to ARVIO</h2>
-        <p className="setup__muted">Needed to save addons, or to copy a Nuvio account into ARVIO.</p>
-        <label><span>Email</span>
-          <input type="email" value={email} onChange={event => setEmail(event.target.value)} autoComplete="username" /></label>
-        <label><span>Password</span>
-          <input type="password" value={password} onChange={event => setPassword(event.target.value)} autoComplete="current-password" /></label>
-        <button type="button" className="setup__primary" disabled={busy || !email.trim() || !password} onClick={signIn}>
-          {busy ? <Loader2 size={18} className="spin" aria-hidden="true" /> : <LogIn size={18} aria-hidden="true" />} Sign in
+        <h2>{translateUi("Sign in to ARVIO")}</h2>
+        <p className="setup__muted">{translateUi("Needed to save addons, or to copy a Nuvio account into ARVIO.")}</p>
+        {/* The same ARVIO sign-in page the apps use (email, Discord, password reset). */}
+        <button type="button" className="setup__primary" disabled={busy} onClick={signInWithPortal}>
+          <LogIn size={18} aria-hidden="true" /> {translateUi("Sign In with ARVIO Cloud")}
         </button>
       </section>}
 
       {signedIn && <>
         <section className="setup__card">
-          <h2>Profile</h2>
-          {!accountReady && <p className="setup__muted">{accountLoading ? "Loading your ARVIO account..." : "Your ARVIO account could not be loaded. Retry before importing."}</p>}
+          <div className="setup__account">
+            <span>{translateUi("Signed in as {value0}", { value0: email || authClient.session?.email || "" })}</span>
+            <button type="button" className="setup__ghost" disabled={busy} onClick={signOut}><LogOut size={16} aria-hidden="true" /> {translateUi("Sign out / switch account")}</button>
+          </div>
+          <h2>{translateUi("Profile")}</h2>
+          {!accountReady && <p className="setup__muted">{accountLoading ? translateUi("Loading your ARVIO account...") : translateUi("Your ARVIO account could not be loaded. Retry before importing.")}</p>}
           {!accountReady && <button type="button" className="setup__ghost" disabled={busy || accountLoading} onClick={() => run(() => loadAccount())}>
-            <RefreshCw size={18} aria-hidden="true" /> Retry loading account
+            <RefreshCw size={18} aria-hidden="true" /> {translateUi("Retry loading account")}
           </button>}
-          {accountReady && profiles.length === 0 && <p className="setup__muted">This account has no profiles yet. Importing from Nuvio will create them.</p>}
+          {accountReady && profiles.length === 0 && <p className="setup__muted">{translateUi("This account has no profiles yet. Importing from Nuvio will create them.")}</p>}
           <div className="setup__profiles">
             {profiles.map(profile => <button key={profile.id} type="button"
               className={`setup__profile ${profile.id === profileId ? "is-active" : ""}`}
@@ -337,23 +367,23 @@ function SetupTools({ language, onLanguageChange, showLanguagePicker }: {
         </section>
 
         <section className="setup__card">
-          <h2>Addons</h2>
-          <p className="setup__muted">Paste a Stremio addon manifest URL to install it for this profile.</p>
+          <h2>{translateUi("Addons")}</h2>
+          <p className="setup__muted">{translateUi("Paste a Stremio addon link (manifest.json). Addons are shared by every profile on your account.")}</p>
           <div className="setup__row">
             <input value={addonUrl} onChange={event => setAddonUrl(event.target.value)}
-              placeholder="https://example.com/manifest.json" spellCheck={false} />
+              placeholder="https://example.com/manifest.json" spellCheck={false} aria-label={translateUi("Addon link")} inputMode="url" />
             <button type="button" className="setup__primary" disabled={busy || !accountReady || !addonUrl.trim() || !profileId} onClick={addAddon}>
-              <Plus size={18} aria-hidden="true" /> Install
+              <Plus size={18} aria-hidden="true" /> {translateUi("Install")}
             </button>
           </div>
           <ul className="setup__list">
             {addons.map(addon => <li key={addon.id}>
               <span>{addon.name}</span>
-              <button type="button" className="setup__icon" aria-label={`Remove ${addon.name}`} onClick={() => removeAddon(addon)}>
+              <button type="button" className="setup__icon" aria-label={translateUi("Remove {value0} from every profile", { value0: addon.name })} onClick={() => removeAddon(addon)}>
                 <Trash2 size={16} aria-hidden="true" />
               </button>
             </li>)}
-            {addons.length === 0 && <li className="setup__muted">No addons on this profile yet.</li>}
+            {addons.length === 0 && <li className="setup__muted">{translateUi("No addons yet.")}</li>}
           </ul>
         </section>
 

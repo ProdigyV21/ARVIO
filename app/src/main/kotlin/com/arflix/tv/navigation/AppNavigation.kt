@@ -14,6 +14,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.padding
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.CompositionLocalProvider
+import com.arflix.tv.ui.components.LocalBottomBarInset
+import com.arflix.tv.ui.components.LocalBottomBarHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.key.onPreviewKeyEvent
@@ -47,6 +55,7 @@ import com.arflix.tv.ui.screens.settings.telegram.TelegramSettingsScreen
 import com.arflix.tv.ui.screens.tv.live.LiveTvScreen
 import com.arflix.tv.ui.screens.watchlist.WatchlistScreen
 import com.arflix.tv.ui.screens.watchlist.calendar.ReleaseCalendarViewModel
+import com.arflix.tv.ui.screens.home.HOME_COMING_UP_ROW_ID
 import com.arflix.tv.ui.screens.profile.ProfileSelectionScreen
 import com.arflix.tv.util.LocalDeviceType
 import kotlinx.coroutines.delay
@@ -82,10 +91,17 @@ sealed class Screen(val route: String) {
     data object Home : Screen("home")
     data object Search : Screen("search")
     data object Watchlist : Screen("watchlist")
-    data object CollectionDetails : Screen("collections/{catalogId}") {
+    data object CollectionDetails : Screen(
+        "collections/{catalogId}?serviceRow={serviceRow}&serviceFilter={serviceFilter}"
+    ) {
         fun createRoute(catalogId: String): String {
             return "collections/${android.net.Uri.encode(catalogId)}"
         }
+
+        /** A row opens its exact query; the header Filter action opens the full service grid. */
+        internal fun createGridRoute(catalogId: String, rowId: String?, filter: String): String =
+            "${createRoute(catalogId)}?serviceFilter=${android.net.Uri.encode(filter)}" +
+                rowId?.let { "&serviceRow=${android.net.Uri.encode(it)}" }.orEmpty()
     }
     data object CategoryViewAll : Screen("home_category/{categoryId}") {
         fun createRoute(categoryId: String): String {
@@ -112,22 +128,24 @@ sealed class Screen(val route: String) {
     data object TelegramSettings : Screen("telegram_settings")
     data object ProfileSelection : Screen("profile_selection")
 
-    data object Details : Screen("details/{mediaType}/{mediaId}?initialSeason={initialSeason}&initialEpisode={initialEpisode}") {
+    data object Details : Screen("details/{mediaType}/{mediaId}?initialSeason={initialSeason}&initialEpisode={initialEpisode}&autoPlay={autoPlay}") {
         fun createRoute(
             mediaType: MediaType,
             mediaId: Int,
             initialSeason: Int? = null,
-            initialEpisode: Int? = null
+            initialEpisode: Int? = null,
+            autoPlay: Boolean = false
         ): String {
             val base = "details/${mediaType.name.lowercase()}/$mediaId"
             val params = mutableListOf<String>()
             initialSeason?.let { params.add("initialSeason=$it") }
             initialEpisode?.let { params.add("initialEpisode=$it") }
+            if (autoPlay) params.add("autoPlay=true")
             return if (params.isNotEmpty()) "$base?${params.joinToString("&")}" else base
         }
     }
 
-    data object Player : Screen("player/{mediaType}/{mediaId}?seasonNumber={seasonNumber}&episodeNumber={episodeNumber}&tmdbSeasonNumber={tmdbSeasonNumber}&tmdbEpisodeNumber={tmdbEpisodeNumber}&kitsuId={kitsuId}&kitsuEpisodeNumber={kitsuEpisodeNumber}&imdbId={imdbId}&streamUrl={streamUrl}&preferredAddonId={preferredAddonId}&preferredSourceName={preferredSourceName}&preferredBingeGroup={preferredBingeGroup}&startPositionMs={startPositionMs}&isLiveStream={isLiveStream}") {
+    data object Player : Screen("player/{mediaType}/{mediaId}?seasonNumber={seasonNumber}&episodeNumber={episodeNumber}&tmdbSeasonNumber={tmdbSeasonNumber}&tmdbEpisodeNumber={tmdbEpisodeNumber}&kitsuId={kitsuId}&kitsuEpisodeNumber={kitsuEpisodeNumber}&imdbId={imdbId}&streamUrl={streamUrl}&preferredAddonId={preferredAddonId}&preferredSourceName={preferredSourceName}&preferredBingeGroup={preferredBingeGroup}&startPositionMs={startPositionMs}&isLiveStream={isLiveStream}&iptvSourceId={iptvSourceId}") {
         fun createRoute(
             mediaType: MediaType,
             mediaId: Int,
@@ -143,7 +161,8 @@ sealed class Screen(val route: String) {
             preferredSourceName: String? = null,
             preferredBingeGroup: String? = null,
             startPositionMs: Long? = null,
-            isLiveStream: Boolean = false
+            isLiveStream: Boolean = false,
+            iptvSourceId: String? = null
         ): String {
             val base = "player/${mediaType.name.lowercase()}/$mediaId"
             val params = mutableListOf<String>()
@@ -160,6 +179,7 @@ sealed class Screen(val route: String) {
             preferredBingeGroup?.let { params.add("preferredBingeGroup=${android.net.Uri.encode(it)}") }
             startPositionMs?.let { params.add("startPositionMs=$it") }
             if (isLiveStream) params.add("isLiveStream=true")
+            iptvSourceId?.let { params.add("iptvSourceId=${android.net.Uri.encode(it)}") }
             return if (params.isNotEmpty()) "$base?${params.joinToString("&")}" else base
         }
     }
@@ -173,6 +193,28 @@ internal fun NavHostController.navigateToProfileSelection() {
     }
 }
 
+/** Per-destination clearance keeps the NavHost and outgoing screens at a stable width. */
+@Composable
+internal fun NavigationRailScreen(
+    startInset: Dp,
+    showRail: Boolean = true,
+    bottomInset: Dp = 0.dp,
+    content: @Composable () -> Unit,
+) {
+    val inset by animateDpAsState(
+        targetValue = if (showRail) startInset else 0.dp,
+        animationSpec = androidx.compose.animation.core.tween(220,
+            easing = androidx.compose.animation.core.FastOutSlowInEasing),
+        label = "destination_rail_inset",
+    )
+    CompositionLocalProvider(
+        LocalBottomBarInset provides if (startInset > 0.dp) bottomInset else LocalBottomBarInset.current,
+        LocalBottomBarHeight provides if (startInset > 0.dp) bottomInset else LocalBottomBarHeight.current,
+    ) {
+        Box(Modifier.fillMaxSize().padding(start = inset)) { content() }
+    }
+}
+
 /**
  * Main navigation graph
  */
@@ -180,6 +222,8 @@ internal fun NavHostController.navigateToProfileSelection() {
 fun AppNavigation(
     navController: NavHostController = rememberNavController(),
     startDestination: String = Screen.Login.route,
+    navigationRailInset: Dp = 0.dp,
+    navigationRailBottomInset: Dp = 0.dp,
     preloadedCategories: List<Category> = emptyList(),
     preloadedHeroItem: MediaItem? = null,
     preloadedHeroLogoUrl: String? = null,
@@ -253,109 +297,126 @@ fun AppNavigation(
 
         // Home screen
         composable(Screen.Home.route) {
-          CalendarIdlePreload(calendarViewModel, currentProfile?.id) {
-            HomeScreen(
-                preloadedCategories = preloadedCategories,
-                preloadedHeroItem = preloadedHeroItem,
-                preloadedHeroLogoUrl = preloadedHeroLogoUrl,
-                preloadedLogoCache = preloadedLogoCache,
-                currentProfile = currentProfile,
-                onNavigateToDetails = { mediaType, mediaId, initialSeason, initialEpisode ->
-                    navController.navigate(Screen.Details.createRoute(mediaType, mediaId, initialSeason, initialEpisode))
-                },
-                onNavigateToCollection = { catalogId ->
-                    navController.navigate(Screen.CollectionDetails.createRoute(catalogId))
-                },
-                onNavigateToCategory = { categoryId ->
-                    if (categoryId == com.arflix.tv.ui.screens.home.HOME_WATCHLIST_ROW_ID) {
-                        // "View all" means this watchlist, not a previously restored server/calendar tab.
-                        navController.navigate(Screen.Watchlist.route) {
-                            popUpTo(Screen.Home.route) { saveState = true }
-                            launchSingleTop = true
-                            restoreState = false
-                        }
-                    } else navController.navigate(Screen.CategoryViewAll.createRoute(categoryId))
-                },
-                onNavigateToSearch = {
-                    navigateTopLevel(Screen.Search.route)
-                },
-                onNavigateToWatchlist = {
-                    navigateTopLevel(Screen.Watchlist.route)
-                },
-                onNavigateToTv = { channelId, streamUrl ->
-                    navigateTopLevel(Screen.Tv.createRoute(channelId, streamUrl))
-                },
-                onNavigateToPlayer = { mediaType, mediaId, streamUrl, preferredAddonId, preferredSourceName ->
-                    navController.navigate(
-                        Screen.Player.createRoute(
-                            mediaType = mediaType,
-                            mediaId = mediaId,
-                            streamUrl = streamUrl,
-                            preferredAddonId = preferredAddonId,
-                            preferredSourceName = preferredSourceName,
-                            isLiveStream = true
+            NavigationRailScreen(navigationRailInset, bottomInset = navigationRailBottomInset) {
+              CalendarIdlePreload(calendarViewModel, currentProfile?.id) {
+                val upcoming by calendarViewModel.homeUpcomingItems.collectAsState()
+                HomeScreen(
+                    preloadedCategories = preloadedCategories,
+                    preloadedHeroItem = preloadedHeroItem,
+                    preloadedHeroLogoUrl = preloadedHeroLogoUrl,
+                    preloadedLogoCache = preloadedLogoCache,
+                    currentProfile = currentProfile,
+                    upcomingItems = upcoming,
+                    onNavigateToDetails = { mediaType, mediaId, initialSeason, initialEpisode, autoPlay ->
+                        navController.navigate(Screen.Details.createRoute(mediaType, mediaId, initialSeason, initialEpisode, autoPlay))
+                    },
+                    onNavigateToCollection = { catalogId ->
+                        navController.navigate(Screen.CollectionDetails.createRoute(catalogId))
+                    },
+                    onNavigateToCategory = { categoryId ->
+                        if (categoryId == HOME_COMING_UP_ROW_ID) {
+                            navController.navigate("${Screen.Watchlist.route}?openCalendar=true") {
+                                popUpTo(Screen.Home.route) { saveState = true }
+                                launchSingleTop = true
+                            }
+                        } else if (categoryId == com.arflix.tv.ui.screens.home.HOME_WATCHLIST_ROW_ID) {
+                            // "View all" means this watchlist, not a previously restored server/calendar tab.
+                            navController.navigate(Screen.Watchlist.route) {
+                                popUpTo(Screen.Home.route) { saveState = true }
+                                launchSingleTop = true
+                                restoreState = false
+                            }
+                        } else navController.navigate(Screen.CategoryViewAll.createRoute(categoryId))
+                    },
+                    onNavigateToSearch = {
+                        navigateTopLevel(Screen.Search.route)
+                    },
+                    onNavigateToWatchlist = {
+                        navigateTopLevel(Screen.Watchlist.route)
+                    },
+                    onNavigateToTv = { channelId, streamUrl ->
+                        navigateTopLevel(Screen.Tv.createRoute(channelId, streamUrl))
+                    },
+                    onNavigateToPlayer = { mediaType, mediaId, streamUrl, preferredAddonId, preferredSourceName ->
+                        navController.navigate(
+                            Screen.Player.createRoute(
+                                mediaType = mediaType,
+                                mediaId = mediaId,
+                                streamUrl = streamUrl,
+                                preferredAddonId = preferredAddonId,
+                                preferredSourceName = preferredSourceName,
+                                isLiveStream = true
+                            )
                         )
-                    )
-                },
-                onNavigateToSettings = {
-                    navigateTopLevel(Screen.Settings.route)
-                },
-                onSwitchProfile = {
-                    onSwitchProfile()
-                    navController.navigateToProfileSelection()
-                },
-                onExitApp = onExitApp
-            )
-          }
+                    },
+                    onNavigateToSettings = {
+                        navigateTopLevel(Screen.Settings.route)
+                    },
+                    onSwitchProfile = {
+                        onSwitchProfile()
+                        navController.navigateToProfileSelection()
+                    },
+                    onExitApp = onExitApp
+                )
+              }
+            }
         }
 
         // Search screen
         composable(Screen.Search.route) {
-            SearchScreen(
-                currentProfile = currentProfile,
-                onNavigateToDetails = { mediaType, mediaId ->
-                    navController.navigate(Screen.Details.createRoute(mediaType, mediaId))
-                },
-                onNavigateToHome = { navigateHome() },
-                onNavigateToWatchlist = { navigateTopLevel(Screen.Watchlist.route) },
-                onNavigateToTv = { navigateTopLevel(Screen.Tv.createRoute()) },
-                onNavigateToSettings = { navigateTopLevel(Screen.Settings.route) },
-                onSwitchProfile = {
-                    onSwitchProfile()
-                    navController.navigateToProfileSelection()
-                },
-                onBack = { navigateHome() }
-            )
+            NavigationRailScreen(navigationRailInset, bottomInset = navigationRailBottomInset) {
+                SearchScreen(
+                    currentProfile = currentProfile,
+                    onNavigateToDetails = { mediaType, mediaId ->
+                        navController.navigate(Screen.Details.createRoute(mediaType, mediaId))
+                    },
+                    onNavigateToHome = { navigateHome() },
+                    onNavigateToWatchlist = { navigateTopLevel(Screen.Watchlist.route) },
+                    onNavigateToTv = { navigateTopLevel(Screen.Tv.createRoute()) },
+                    onNavigateToSettings = { navigateTopLevel(Screen.Settings.route) },
+                    onSwitchProfile = {
+                        onSwitchProfile()
+                        navController.navigateToProfileSelection()
+                    },
+                    onBack = { navigateHome() }
+                )
+            }
         }
 
         // Watchlist screen
-        composable(Screen.Watchlist.route) {
-            DisposableEffect(calendarViewModel) {
-                calendarViewModel.onVisible()
-                onDispose { calendarViewModel.onHidden() }
+        composable(
+            route = "${Screen.Watchlist.route}?openCalendar={openCalendar}",
+            arguments = listOf(navArgument("openCalendar") { type = NavType.BoolType; defaultValue = false })
+        ) { entry ->
+            NavigationRailScreen(navigationRailInset, bottomInset = navigationRailBottomInset) {
+                DisposableEffect(calendarViewModel) {
+                    calendarViewModel.onVisible()
+                    onDispose { calendarViewModel.onHidden() }
+                }
+                WatchlistScreen(
+                    calendarViewModel = calendarViewModel,
+                    openCalendar = entry.arguments?.getBoolean("openCalendar") == true,
+                    onCalendarOpenRelease = { release ->
+                        navController.navigate(Screen.Details.createRoute(release.media.mediaType, release.media.id,
+                            release.seasonNumber, release.episodeNumber))
+                    },
+                    currentProfile = currentProfile,
+                    onNavigateToDetails = { mediaType, mediaId ->
+                        navController.navigate(Screen.Details.createRoute(mediaType, mediaId))
+                    },
+                    onNavigateToHome = { navigateHome() },
+                    onNavigateToSearch = { navigateTopLevel(Screen.Search.route) },
+                    onNavigateToTv = { navigateTopLevel(Screen.Tv.createRoute()) },
+                    onNavigateToSettings = { section ->
+                        navigateTopLevel(Screen.Settings.createRoute(initialSection = section))
+                    },
+                    onSwitchProfile = {
+                        onSwitchProfile()
+                        navController.navigateToProfileSelection()
+                    },
+                    onBack = { navigateHome() }
+                )
             }
-            WatchlistScreen(
-                calendarViewModel = calendarViewModel,
-                onCalendarOpenRelease = { release ->
-                    navController.navigate(Screen.Details.createRoute(release.media.mediaType, release.media.id,
-                        release.seasonNumber, release.episodeNumber))
-                },
-                currentProfile = currentProfile,
-                onNavigateToDetails = { mediaType, mediaId ->
-                    navController.navigate(Screen.Details.createRoute(mediaType, mediaId))
-                },
-                onNavigateToHome = { navigateHome() },
-                onNavigateToSearch = { navigateTopLevel(Screen.Search.route) },
-                onNavigateToTv = { navigateTopLevel(Screen.Tv.createRoute()) },
-                onNavigateToSettings = { section ->
-                    navigateTopLevel(Screen.Settings.createRoute(initialSection = section))
-                },
-                onSwitchProfile = {
-                    onSwitchProfile()
-                    navController.navigateToProfileSelection()
-                },
-                onBack = { navigateHome() }
-            )
         }
 
         // TV screen
@@ -366,32 +427,36 @@ fun AppNavigation(
                 navArgument("streamUrl") { type = NavType.StringType; nullable = true; defaultValue = null }
             )
         ) { backStackEntry ->
-            val initialChannelId = backStackEntry.arguments?.getString("channelId")
-            val initialStreamUrl = backStackEntry.arguments?.getString("streamUrl")
-            if (isKidsProfile) {
-                LaunchedEffect(Unit) { navigateHome() }
-                return@composable
+            var tvHasSubScreen by remember { mutableStateOf(false) }
+            var tvFullscreen by remember { mutableStateOf(false) }
+            NavigationRailScreen(navigationRailInset, showRail = !tvHasSubScreen && !tvFullscreen, bottomInset = navigationRailBottomInset) {
+                val initialChannelId = backStackEntry.arguments?.getString("channelId")
+                val initialStreamUrl = backStackEntry.arguments?.getString("streamUrl")
+                if (isKidsProfile) {
+                    LaunchedEffect(Unit) { navigateHome() }
+                    return@NavigationRailScreen
+                }
+                LiveTvScreen(
+                    currentProfile = currentProfile,
+                    initialChannelId = initialChannelId,
+                    initialStreamUrl = initialStreamUrl,
+                    onFullscreenChanged = { tvFullscreen = it; onTvFullscreenChanged(it) },
+                    onSubScreenChanged = { tvHasSubScreen = it; onTvSubScreenChanged(it) },
+                    onNavigateToHome = { navigateHome() },
+                    onNavigateToSearch = { navigateTopLevel(Screen.Search.route) },
+                    onNavigateToWatchlist = { navigateTopLevel(Screen.Watchlist.route) },
+                    onNavigateToSettings = { navigateTopLevel(Screen.Settings.route) },
+                    onNavigateToIptvSettings = { navigateTopLevel(Screen.Settings.createRoute(initialSection = "iptv")) },
+                    onNavigateToDetails = { mediaType, mediaId ->
+                        navController.navigate(Screen.Details.createRoute(mediaType, mediaId))
+                    },
+                    onSwitchProfile = {
+                        onSwitchProfile()
+                        navController.navigateToProfileSelection()
+                    },
+                    onBack = { navController.popBackStack() }
+                )
             }
-            LiveTvScreen(
-                currentProfile = currentProfile,
-                initialChannelId = initialChannelId,
-                initialStreamUrl = initialStreamUrl,
-                onFullscreenChanged = onTvFullscreenChanged,
-                onSubScreenChanged = onTvSubScreenChanged,
-                onNavigateToHome = { navigateHome() },
-                onNavigateToSearch = { navigateTopLevel(Screen.Search.route) },
-                onNavigateToWatchlist = { navigateTopLevel(Screen.Watchlist.route) },
-                onNavigateToSettings = { navigateTopLevel(Screen.Settings.route) },
-                onNavigateToIptvSettings = { navigateTopLevel(Screen.Settings.createRoute(initialSection = "iptv")) },
-                onNavigateToDetails = { mediaType, mediaId ->
-                    navController.navigate(Screen.Details.createRoute(mediaType, mediaId))
-                },
-                onSwitchProfile = {
-                    onSwitchProfile()
-                    navController.navigateToProfileSelection()
-                },
-                onBack = { navController.popBackStack() }
-            )
         }
 
         // Settings screen
@@ -419,28 +484,37 @@ fun AppNavigation(
                 }
             )
         ) { backStackEntry ->
-            val autoCloudAuth = backStackEntry.arguments?.getBoolean("autoCloudAuth") ?: false
-            val initialSection = backStackEntry.arguments?.getString("initialSection")
-            val installPackUrl = backStackEntry.arguments?.getString("installPackUrl")
-            val installAddonUrl = backStackEntry.arguments?.getString("installAddonUrl")
-            SettingsScreen(
-                currentProfile = currentProfile,
-                autoStartCloudAuth = autoCloudAuth,
-                initialSection = initialSection,
-                installPackUrl = installPackUrl,
-                installAddonUrl = installAddonUrl,
-                onNavigateToHome = { navigateHome() },
-                onNavigateToSearch = { navigateTopLevel(Screen.Search.route) },
-                onNavigateToTv = { navigateTopLevel(Screen.Tv.createRoute()) },
-                onNavigateToWatchlist = { navigateTopLevel(Screen.Watchlist.route) },
-                onNavigateToTelegramSettings = { navController.navigate(Screen.TelegramSettings.route) },
-                onSwitchProfile = {
-                    onSwitchProfile()
-                    navController.navigateToProfileSelection()
-                },
-                onBack = { navController.popBackStack() },
-                onSubPageChanged = onSettingsSubPageChanged
-            )
+            var settingsHasSubPage by remember { mutableStateOf(false) }
+            NavigationRailScreen(navigationRailInset, showRail = !settingsHasSubPage, bottomInset = navigationRailBottomInset) {
+                val autoCloudAuth = backStackEntry.arguments?.getBoolean("autoCloudAuth") ?: false
+                val initialSection = backStackEntry.arguments?.getString("initialSection")
+                val installPackUrl = backStackEntry.arguments?.getString("installPackUrl")
+                val installAddonUrl = backStackEntry.arguments?.getString("installAddonUrl")
+                SettingsScreen(
+                    currentProfile = currentProfile,
+                    autoStartCloudAuth = autoCloudAuth,
+                    initialSection = initialSection,
+                    installPackUrl = installPackUrl,
+                    installAddonUrl = installAddonUrl,
+                    onNavigateToHome = { navigateHome() },
+                    onNavigateToSearch = { navigateTopLevel(Screen.Search.route) },
+                    onNavigateToTv = { navigateTopLevel(Screen.Tv.createRoute()) },
+                    onNavigateToWatchlist = { navigateTopLevel(Screen.Watchlist.route) },
+                    onNavigateToTelegramSettings = { navController.navigate(Screen.TelegramSettings.route) },
+                    onSwitchProfile = {
+                        onSwitchProfile()
+                        navController.navigateToProfileSelection()
+                    },
+                    onBack = {
+                        if (currentProfile == null) {
+                            navController.navigateToProfileSelection()
+                        } else {
+                            navController.popBackStack()
+                        }
+                    },
+                    onSubPageChanged = { settingsHasSubPage = it; onSettingsSubPageChanged(it) }
+                )
+            }
         }
 
         // Telegram settings screen
@@ -458,9 +532,6 @@ fun AppNavigation(
                     }
                 },
                 onShowAddProfile = { /* Handled internally by ProfileSelectionScreen */ },
-                onConnectCloud = {
-                    navController.navigate("settings?autoCloudAuth=true")
-                },
                 isCloudConnected = isCloudConnected
             )
         }
@@ -468,9 +539,14 @@ fun AppNavigation(
         // Details screen
         composable(
             route = Screen.CollectionDetails.route,
-            arguments = listOf(navArgument("catalogId") { type = NavType.StringType })
+            arguments = listOf(
+                navArgument("catalogId") { type = NavType.StringType },
+                navArgument("serviceRow") { type = NavType.StringType; nullable = true; defaultValue = null },
+                navArgument("serviceFilter") { type = NavType.StringType; nullable = true; defaultValue = null }
+            )
         ) { backStackEntry ->
             val catalogId = backStackEntry.arguments?.getString("catalogId").orEmpty()
+            val gridArgs = backStackEntry.arguments
             if (catalogId.isBlank()) {
                 navigateHome()
                 return@composable
@@ -478,8 +554,16 @@ fun AppNavigation(
             CollectionDetailsScreen(
                 catalogId = catalogId,
                 currentProfile = currentProfile,
+                serviceRowId = gridArgs?.getString("serviceRow"),
+                serviceFilter = gridArgs?.getString("serviceFilter"),
                 onNavigateToDetails = { mediaType, mediaId ->
                     navController.navigate(Screen.Details.createRoute(mediaType, mediaId))
+                },
+                onNavigateToDetailsAutoPlay = { mediaType, mediaId ->
+                    navController.navigate(Screen.Details.createRoute(mediaType, mediaId, autoPlay = true))
+                },
+                onOpenServiceGrid = { serviceId, rowId, filter ->
+                    navController.navigate(Screen.CollectionDetails.createGridRoute(serviceId, rowId, filter))
                 },
                 onNavigateToPlayer = { mediaType, mediaId, streamUrl, preferredAddonId, preferredSourceName ->
                     navController.navigate(
@@ -539,6 +623,10 @@ fun AppNavigation(
                 navArgument("initialEpisode") {
                     type = NavType.IntType
                     defaultValue = -1
+                },
+                navArgument("autoPlay") {
+                    type = NavType.BoolType
+                    defaultValue = false
                 }
             )
         ) { backStackEntry ->
@@ -551,6 +639,9 @@ fun AppNavigation(
             }
             val initialSeason = backStackEntry.arguments?.getInt("initialSeason")?.takeIf { it >= 0 }
             val initialEpisode = backStackEntry.arguments?.getInt("initialEpisode")?.takeIf { it >= 0 }
+            val autoPlayArg = backStackEntry.arguments?.getBoolean("autoPlay") ?: false
+            val autoPlayHandled = backStackEntry.savedStateHandle.get<Boolean>("autoPlayHandled") ?: false
+            val autoPlay = autoPlayArg && !autoPlayHandled
             val mediaType = if (mediaTypeStr == "tv") MediaType.TV else MediaType.MOVIE
 
             DetailsScreen(
@@ -559,8 +650,12 @@ fun AppNavigation(
                 mediaId = mediaId,
                 initialSeason = initialSeason,
                 initialEpisode = initialEpisode,
+                autoPlay = autoPlay,
+                onAutoPlayHandled = {
+                    backStackEntry.savedStateHandle["autoPlayHandled"] = true
+                },
                 currentProfile = currentProfile,
-                onNavigateToPlayer = { type, id, identity, imdbId, url, preferredAddonId, preferredSourceName, startPositionMs ->
+                onNavigateToPlayer = { type, id, identity, imdbId, url, preferredAddonId, preferredSourceName, startPositionMs, iptvSourceId ->
                     navController.navigate(
                         Screen.Player.createRoute(
                             mediaType = type,
@@ -575,9 +670,14 @@ fun AppNavigation(
                             streamUrl = url,
                             preferredAddonId = preferredAddonId,
                             preferredSourceName = preferredSourceName,
-                            startPositionMs = startPositionMs
+                            startPositionMs = startPositionMs,
+                            iptvSourceId = iptvSourceId
                         )
-                    )
+                    ) {
+                        if (autoPlayArg) {
+                            popUpTo(Screen.Details.route) { inclusive = true }
+                        }
+                    }
                 },
                 onNavigateToDetails = { type, id ->
                     navController.navigate(Screen.Details.createRoute(type, id))
@@ -667,6 +767,11 @@ fun AppNavigation(
                 navArgument("isLiveStream") {
                     type = NavType.BoolType
                     defaultValue = false
+                },
+                navArgument("iptvSourceId") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
                 }
             ),
             exitTransition = { ExitTransition.None },
@@ -689,6 +794,7 @@ fun AppNavigation(
             val preferredBingeGroup = backStackEntry.arguments?.getString("preferredBingeGroup")?.takeIf { it.isNotBlank() }
             val startPositionMs = backStackEntry.arguments?.getLong("startPositionMs")?.takeIf { it >= 0L }
             val isLiveStream = backStackEntry.arguments?.getBoolean("isLiveStream") ?: false
+            val iptvSourceId = backStackEntry.arguments?.getString("iptvSourceId")?.takeIf { it.isNotBlank() }
             val mediaType = if (mediaTypeStr == "tv") MediaType.TV else MediaType.MOVIE
 
             PlayerScreen(
@@ -707,6 +813,7 @@ fun AppNavigation(
                 preferredBingeGroup = preferredBingeGroup,
                 startPositionMs = startPositionMs,
                 isLiveStream = isLiveStream,
+                iptvSourceId = iptvSourceId,
                 onBack = { navController.popBackStack() },
                 onPlayNext = { nextIdentity, nextPreferredAddonId, nextPreferredSourceName, nextPreferredBingeGroup ->
                     // Navigate to next episode

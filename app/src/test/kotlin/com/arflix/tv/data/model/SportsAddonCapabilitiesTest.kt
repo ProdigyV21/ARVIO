@@ -197,6 +197,23 @@ class SportsAddonCapabilitiesTest {
     }
 
     @Test
+    fun `internal vod addon id wins over an inherited live manifest but not explicit live playback`() {
+        for (id in IptvVodSourceIds.ALL) {
+            val manifest = AddonManifest(id = "live-parent", name = "IPTV", version = "1", description = "Live TV",
+                types = listOf("tv"), resources = listOf(AddonResource(name = "stream")), catalogs = emptyList())
+            val addon = Addon(id = id, name = "IPTV", version = "1", description = "", isInstalled = true,
+                type = AddonType.COMMUNITY, manifest = manifest)
+            assertFalse(SportsAddonCapabilities.isLiveStreamAddon(addon))
+            assertFalse(SportsAddonCapabilities.isLiveStreamOrSportsItem(MediaType.TV, 1416,
+                streamAddonId = id, addons = listOf(addon)))
+            assertTrue(SportsAddonCapabilities.isLiveStreamOrSportsItem(MediaType.TV, 1416,
+                streamAddonId = id, addons = listOf(addon), isLiveStream = true))
+            assertTrue(SportsAddonCapabilities.isLiveStreamOrSportsItem(MediaType.TV, -1,
+                streamAddonId = id, addons = listOf(addon)))
+        }
+    }
+
+    @Test
     fun `regular iptv and explicit live playback remain excluded from continue watching`() {
         assertTrue(SportsAddonCapabilities.isLiveStreamAddonId("my_iptv_provider"))
         assertTrue(

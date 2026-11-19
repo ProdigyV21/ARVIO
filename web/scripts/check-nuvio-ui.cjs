@@ -1,4 +1,5 @@
 const fs = require('node:fs');
+const { appCss } = require('./app-styles.cjs');
 const path = require('node:path');
 const http = require('node:http');
 const assert = require('node:assert/strict');
@@ -27,7 +28,7 @@ const { chromium } = require('@playwright/test');
       fs.createReadStream(path.join(root, 'app/migrate/setup.css')).pipe(res);
     } else if (req.url === '/globals.css') {
       res.setHeader('content-type', 'text/css');
-      fs.createReadStream(path.join(root, 'app/globals.css')).pipe(res);
+      res.end(appCss(root));
     } else if (req.url.startsWith('/logos/')) {
       const file = path.join(root, 'public/logos', path.basename(req.url));
       if (!fs.existsSync(file)) { res.writeHead(404).end(); return; }

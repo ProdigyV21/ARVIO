@@ -52,7 +52,7 @@ class ForcedSubtitleSelectionTest {
             streamIntegrationRepository = mockk(relaxed = true),
             recentPlayedSourceRepository = mockk(relaxed = true),
 
-            kidsContentFilter = mockk(relaxed = true)
+            kidsContentFilter = mockk(relaxed = true), idleReturnCoordinator = com.arflix.tv.data.repository.IdleReturnCoordinator(mockk(relaxed = true), mockk(relaxed = true))
         )
         store.put("player", model)
         state().value = PlayerUiState(useForcedSubtitles = true)

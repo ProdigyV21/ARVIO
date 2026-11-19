@@ -1,10 +1,11 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { load } = require('./load.cjs');
+const langs = { './languages': load('lib/languages.ts') };
 const vtt = 'WEBVTT\n\n00:00:01.000 --> 00:00:05.000\nA subtitle\n';
 
 test('subtitle relay responses normalize BOM, CRLF and SRT without changing VTT markup', () => {
-  const { normalizeSubtitleText } = load('lib/playerSubtitles.ts');
+  const { normalizeSubtitleText } = load('lib/playerSubtitles.ts', langs);
   assert.equal(normalizeSubtitleText('\uFEFF  ' + vtt.replace(/\n/g, '\r\n')), vtt);
   assert.equal(normalizeSubtitleText('1\n00:00:01,000 --> 00:00:05,000\n<b>Hello</b>'),
     'WEBVTT\n\n1\n00:00:01.000 --> 00:00:05.000\n<b>Hello</b>\n');
@@ -16,19 +17,19 @@ test('subtitle relay responses normalize BOM, CRLF and SRT without changing VTT 
 test('subtitle fetch preserves cancellation, omits credentials and rejects failures', async () => {
   const controller = new AbortController();
   let options;
-  const { fetchSubtitleText } = load('lib/playerSubtitles.ts', {}, {
+  const { fetchSubtitleText } = load('lib/playerSubtitles.ts', langs, {
     fetch: async (_url, init) => { options = init; return new Response(vtt); }
   });
   assert.equal(await fetchSubtitleText('https://relay.example/subtitle', controller.signal), vtt);
   assert.equal(options.signal, controller.signal);
   assert.equal(options.credentials, 'omit');
-  const fail = load('lib/playerSubtitles.ts', {}, { fetch: async () => new Response('Denied', { status: 403 }) });
+  const fail = load('lib/playerSubtitles.ts', langs, { fetch: async () => new Response('Denied', { status: 403 }) });
   await assert.rejects(fail.fetchSubtitleText('https://relay.example', controller.signal), /request failed/);
 });
 
 test('subtitle fetch bounds both declared and streamed body sizes', async () => {
   for (const headers of [{ 'content-length': String(3 * 1024 * 1024) }, {}]) {
-    const { fetchSubtitleText } = load('lib/playerSubtitles.ts', {}, {
+    const { fetchSubtitleText } = load('lib/playerSubtitles.ts', langs, {
       fetch: async () => new Response('x'.repeat(2 * 1024 * 1024 + 1), { headers })
     });
     await assert.rejects(fetchSubtitleText('https://relay.example', new AbortController().signal), /too large/);
@@ -36,7 +37,7 @@ test('subtitle fetch bounds both declared and streamed body sizes', async () => 
 });
 
 test('subtitle timing changes are relative to original cues, including resetting to zero', () => {
-  const { positionSubtitleCues } = load('lib/playerSubtitles.ts');
+  const { positionSubtitleCues } = load('lib/playerSubtitles.ts', langs);
   const cue = { startTime: 10, endTime: 20 };
   const track = { cues: [cue] };
   positionSubtitleCues(track, 84, 1000);
@@ -60,7 +61,7 @@ function fixture(fetcher) {
   const revoked = [];
   const states = [];
   const created = [];
-  const { attachExternalSubtitle } = load('lib/playerSubtitles.ts', {}, {
+  const { attachExternalSubtitle } = load('lib/playerSubtitles.ts', langs, {
     fetch: fetcher || (async () => new Response(vtt)), Blob,
     window: { setTimeout, clearTimeout },
     URL: { createObjectURL: () => 'blob:local/subtitle', revokeObjectURL: url => revoked.push(url) },
@@ -82,7 +83,8 @@ test('selected subtitle uses its own track, not the native track index, and clea
   const el = f.created[0];
   assert.equal(el.src, 'blob:local/subtitle');
   assert.equal(el.track.mode, 'showing');
-  assert.equal(f.native.mode, 'disabled');
+  // The media's own track is hidden, not disabled, while an external file shows.
+  assert.equal(f.native.mode, 'hidden');
   el.dispatchEvent(new Event('load'));
   assert.equal(f.states.at(-1).track, el.track);
   assert.equal(f.states.at(-1).status, 'ready');

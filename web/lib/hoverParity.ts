@@ -24,12 +24,37 @@
 let sheetBuilt = false;
 let exitInstalled = false;
 
+/** The guard every hover rule sits in, so a tap on a touch screen cannot leave
+ *  a lift or zoom stuck on (the stylesheets wrap :hover rules in it). */
+export const HOVER_GUARD = "(hover: hover) and (pointer: fine)";
+const GUARD_PATTERN = /^\(\s*hover:\s*hover\s*\)\s+and\s+\(\s*pointer:\s*fine\s*\)$/i;
+const GUARD_SUFFIX = /\s+and\s+\(\s*hover:\s*hover\s*\)\s+and\s+\(\s*pointer:\s*fine\s*\)$/i;
+
+/**
+ * A wrapper's media condition for the focus twin: the hover guard removed.
+ * Focus twins must apply on every key-driven device, and TV remotes, gamepads
+ * and keyboards on touch tablets report no hover-capable pointer. Returns null
+ * when nothing is left to wrap (the condition was only the guard).
+ */
+export function parityCondition(condition: string): string | null {
+  const parts = condition.split(",").map((part) => part.trim());
+  const kept: string[] = [];
+  for (const part of parts) {
+    if (GUARD_PATTERN.test(part)) return null; // one branch always applies
+    kept.push(part.replace(GUARD_SUFFIX, ""));
+  }
+  return kept.join(", ");
+}
+
 /** Conditional wrappers (`@media …`, `@supports …`) around a nested rule. */
 function wrappers(rule: CSSRule): string[] {
   const out: string[] = [];
   let parent: CSSRule | null = rule.parentRule;
   while (parent) {
-    if (parent instanceof CSSMediaRule) out.unshift(`@media ${parent.conditionText}`);
+    if (parent instanceof CSSMediaRule) {
+      const condition = parityCondition(parent.conditionText);
+      if (condition) out.unshift(`@media ${condition}`);
+    }
     else if (typeof CSSSupportsRule !== "undefined" && parent instanceof CSSSupportsRule) {
       out.unshift(`@supports ${parent.conditionText}`);
     }
@@ -54,18 +79,33 @@ function twinSelector(selectorText: string): string | null {
     // twin it would unblur every synopsis the D-pad merely passes over,
     // silently defeating the setting — suppression rules don't get twins.
     .filter((p) => !p.includes(".spoiler-blur"))
+    // Touch-only rules (html.no-hover) never need a keyboard twin.
+    .filter((p) => !p.includes(".no-hover"))
     .map((p) => `html.kbd-nav ${p.split(":hover").join(":focus-within")}`);
   return parts.length > 0 ? parts.join(", ") : null;
 }
 
+// Screens are code-split (next/dynamic), so their stylesheets arrive AFTER the
+// first key press built the twins. Each sheet is processed once; later calls
+// only pick up sheets that appeared since.
+const processedSheets = new WeakSet<CSSStyleSheet>();
+let paritySheet: CSSStyleSheet | null = null;
+let seenSheetCount = -1;
+
 function buildParitySheet() {
-  if (sheetBuilt) return;
-  sheetBuilt = true;
-  const style = document.createElement("style");
-  style.setAttribute("data-hover-parity", "");
-  document.head.appendChild(style);
-  const target = style.sheet;
+  if (!sheetBuilt) {
+    sheetBuilt = true;
+    const style = document.createElement("style");
+    style.setAttribute("data-hover-parity", "");
+    document.head.appendChild(style);
+    paritySheet = style.sheet;
+    if (paritySheet) processedSheets.add(paritySheet);
+  }
+  const target = paritySheet;
   if (!target) return;
+  const sheets = Array.from(document.styleSheets);
+  if (sheets.length === seenSheetCount && sheets.every((sheet) => processedSheets.has(sheet))) return;
+  seenSheetCount = sheets.length;
 
   const walk = (rules: CSSRuleList) => {
     for (const rule of Array.from(rules)) {
@@ -91,14 +131,15 @@ function buildParitySheet() {
     }
   };
 
-  for (const sheet of Array.from(document.styleSheets)) {
+  for (const sheet of sheets) {
+    if (processedSheets.has(sheet)) continue;
     let rules: CSSRuleList;
     try {
       rules = sheet.cssRules;
     } catch {
-      continue; // cross-origin sheet
+      continue; // cross-origin sheet (or still loading) — retried next time
     }
-    if (sheet.ownerNode === style) continue;
+    processedSheets.add(sheet);
     walk(rules);
   }
 }

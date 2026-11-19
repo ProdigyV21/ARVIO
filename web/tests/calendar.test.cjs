@@ -7,8 +7,8 @@ const show = { id: 2, mediaType: 'tv', title: 'Saved series' };
 const options = { start: '2026-10-01', end: '2026-10-31', language: 'en', region: 'NL' };
 const json = value => JSON.parse(JSON.stringify(value));
 const deferred = () => { let resolve; const promise = new Promise(done => { resolve = done; }); return { promise, resolve }; };
-function loader(tmdb = async () => ({}), resolveTmdbId = async () => null) {
-  return load('lib/calendarLoader.ts', { './calendar': calendar, './calendarTitleCache': load('lib/calendarTitleCache.ts', { './storage': storage() }), './tmdb': { tmdb, resolveTmdbId, mapTmdbItem: (details, mediaType) => ({ id: details.id, title: details.title || details.name, mediaType }) } });
+function loader(tmdb = async () => ({}), resolveTmdbId = async () => null, globals = {}) {
+  return load('lib/calendarLoader.ts', { './calendar': calendar, './calendarTitleCache': load('lib/calendarTitleCache.ts', { './storage': storage() }), './tmdb': { tmdb, resolveTmdbId, mapTmdbItem: (details, mediaType) => ({ id: details.id, title: details.title || details.name, mediaType }) } }, globals);
 }
 
 test('season time enrichment keeps every verified episode after waiting for other seasons', async () => {
@@ -511,15 +511,31 @@ test('cancellation closes pending requests promptly, skips queued work and never
 });
 
 test('large episode batches coalesce progress and expired enrichment queues skip network calls', async () => {
+  // Advance the deadline and request timers together. Real 25 ms timers can fire
+  // just before Date.now reaches the deadline, making a fifth call appear in CI.
+  let now = 0, nextTimer = 0;
+  const timers = new Map(), started = deferred();
+  const clock = {
+    Date: class extends Date { static now() { return now; } },
+    setTimeout: (callback, delay) => { const id = ++nextTimer; timers.set(id, { callback, at: now + delay }); return id; },
+    clearTimeout: id => timers.delete(id),
+  };
   const episodes = Array.from({ length: 80 }, (_, index) => ({ season_number: index + 1, episode_number: 1, air_date: '2026-10-16' }));
-  const module = loader(async path => path === 'tv/2' ? { id: 2, name: show.title, seasons: [{ id: 1, season_number: 1 }] } : { episodes });
+  const module = loader(async path => path === 'tv/2' ? { id: 2, name: show.title, seasons: [{ id: 1, season_number: 1 }] } : { episodes }, undefined, clock);
   const snapshots = []; let timeCalls = 0;
-  const result = await module.loadCalendar({ ...options, timeoutMs: 500, enrichmentTimeoutMs: 25,
-    sources: [{ source: 'arvio', read: async () => [show] }], episodeTime: async () => { timeCalls++; return new Promise(() => {}); }, onProgress: value => snapshots.push(value) });
+  const request = module.loadCalendar({ ...options, timeoutMs: 500, enrichmentTimeoutMs: 25,
+    sources: [{ source: 'arvio', read: async () => [show] }], episodeTime: async () => { if (++timeCalls === 4) started.resolve(); return new Promise(() => {}); }, onProgress: value => snapshots.push(value) });
+  await started.promise;
+  now = 25;
+  for (const [id, timer] of [...timers]) {
+    if (timer.at <= now) { timers.delete(id); timer.callback(); }
+  }
+  const result = await request;
   assert.equal(result.releases.length, 80, 'All confirmed dates remain available');
   assert.equal(timeCalls, 4, 'Expired queue entries do not start new network requests');
   assert.ok(snapshots.length <= 4, 'Progress snapshots are coalesced instead of copied/sorted per episode');
   assert.equal(snapshots.at(-1).releases.length, 80, 'Final snapshot is immediate and complete');
+  assert.equal(timers.size, 0, 'Completed work clears its timers');
 });
 
 test('historical season walks cannot block the first details response of later watchlist titles', async () => {

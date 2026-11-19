@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<resources>
+<resources xmlns:tools="http://schemas.android.com/tools">
     <string name="settings_preference_save_failed">Could not save this setting. Please try again.</string>
     <string name="stream_source_cached">Cached</string>
     <string name="live_sports_source_count">Sources: %1$d</string>
@@ -210,6 +210,7 @@
     <string name="frame_rate_desc">Off, Seamless, or Always</string>
     <string name="quality_filters_desc">Exclude quality tiers on this device</string>
     <string name="card_layout_desc">Landscape or poster cards</string>
+    <string name="card_layout_netflix_exception_desc">Not used in regular Netflix-style Home rows</string>
     <string name="ui_mode_desc">Force TV, Tablet, or Phone</string>
     <string name="skip_profile_desc">Auto-load last used profile after restart</string>
     <string name="oled_black_background_desc">Use pure black app backgrounds for OLED screens</string>
@@ -234,7 +235,7 @@
     <string name="show_loading_stats_desc">Display stream resolution progress</string>
     <string name="volume_boost_desc">Amplify quiet sources (via system LoudnessEnhancer)</string>
     <string name="dns_desc">Resolve API and stream requests</string>
-    <string name="add_catalog_desc">Import a Trakt, MDBList or TMDB catalog URL</string>
+    <string name="add_catalog_desc">Import a Trakt, MDBList or TMDB catalog URL, or add a YouTube video link</string>
 
     <!-- Player / audio -->
     <string name="audio_track">Audio Track</string>
@@ -292,7 +293,7 @@
     <string name="ai_remove_hi_title">Remove Hearing Impaired Text</string>
     <string name="ai_remove_hi_desc">Strip [bracketed] hearing-impaired markers before translation</string>
     <string name="ai_api_key_title">API Key</string>
-    <string name="ai_api_key_desc">Enter your Groq or Gemini API key manually</string>
+    <string name="ai_api_key_desc">Enter your Groq, Gemini or Claude API key manually</string>
     <string name="ai_scan_qr_title">Scan QR Code to Set Key</string>
     <string name="ai_scan_qr_desc">Open a browser on your phone to enter the API key</string>
     <string name="ai_groq_disclaimer">Groq free tier: ~30 requests/min_</string>
@@ -303,9 +304,13 @@
     <string name="ai_gemini_model_note">Better quality · Requires a billing-enabled Google account</string>
     <string name="ai_api_key_dialog_subtitle_groq">Enter your Groq API key</string>
     <string name="ai_api_key_dialog_subtitle_gemini">Enter your Gemini API key</string>
+    <string name="ai_api_key_dialog_subtitle_claude" tools:ignore="MissingTranslation">Enter your Anthropic API key</string>
+    <string name="ai_claude_model_note" tools:ignore="MissingTranslation">Paid Anthropic API key</string>
+    <string name="ai_model_switched_from_gemini" tools:ignore="MissingTranslation">Model switched to match the key. Live TV AI subtitles and the hearing reference need a Gemini key</string>
+    <string name="ai_claude_disclaimer" tools:ignore="MissingTranslation">Paid Anthropic API key. Cost: about $0.02–0.05 per episode. Audio features (hearing reference, live TV) still need Gemini</string>
     <string name="ai_key_saved_title">API key saved</string>
     <string name="ai_key_saved_subtitle">AI translation is ready to use</string>
-    <string name="ai_qr_scan_hint">Scan with your phone — choose Groq or Gemini</string>
+    <string name="ai_qr_scan_hint">Scan with your phone — choose Groq, Gemini or Claude</string>
     <string name="smooth_scrolling">Smoother Scrolling</string>
     <string name="smooth_scrolling_desc">Use premium smooth transitions when navigating poster rows</string>
 
@@ -481,6 +486,9 @@
     <string name="settings_section_languages">LANGUAGES</string>
     <string name="settings_section_user_account">USER INFO &amp; ACCOUNT</string>
     <string name="settings_force_sync">Force Sync</string>
+    <string name="settings_force_trakt_sync" tools:ignore="MissingTranslation">Force Trakt Sync</string>
+    <string name="settings_force_trakt_sync_desc" tools:ignore="MissingTranslation">Download full watch history, playback progress and continue watching from Trakt.tv</string>
+    <string name="settings_syncing_trakt_now" tools:ignore="MissingTranslation">Syncing Trakt data now…</string>
     <string name="settings_disconnect">Disconnect</string>
     <string name="settings_cloud_disconnect_confirm_title">Disconnect ARVIO Cloud?</string>
     <string name="settings_cloud_disconnect_confirm_desc">You\'ll need to sign in again to sync your settings.</string>
@@ -563,6 +571,10 @@
     <string name="mdblist_code_expired">MDBList code expired. Please try again.</string>
     <string name="mdblist_code_denied">MDBList authorization denied.</string>
     <string name="mdblist_connect_with_key">Enter API Key manually</string>
+    <string name="mdblist_reconnect_required">MDBList no longer accepts this connection. Connect MDBList again to resume syncing.</string>
+    <string name="mdblist_session_unavailable">MDBList could not be reached, so syncing is paused. ARVIO keeps retrying; reconnect MDBList if this lasts.</string>
+    <string name="mdblist_library_unavailable">MDBList could not be reached right now. Try again in a few minutes.</string>
+    <string name="mdblist_library_load_failed">Could not load this list from MDBList. Try again.</string>
     <!-- Tracking Integrations sub-page -->
     <string name="settings_tracking_integrations">Tracking Integrations</string>
     <string name="settings_connected_as">Connected as %1$s</string>
@@ -591,6 +603,8 @@
     <string name="settings_routing_update_simkl">Update Simkl while watching</string>
     <string name="settings_routing_update_simkl_on">Send progress and watched changes to Simkl.</string>
     <string name="settings_routing_update_simkl_off">Connect Simkl to enable this.</string>
+    <string name="settings_routing_update_wetrakr_on">Send progress and watched changes to WeTrakr.</string>
+    <string name="settings_routing_update_wetrakr_off">Connect WeTrakr to enable this.</string>
     <string name="settings_tracking_mode_automatic">Automatic</string>
 
     <string name="settings_fact_app_language">App language</string>
@@ -696,14 +710,18 @@
     <string name="settings_test">Test</string>
     <string name="settings_cd_qr_code">QR Code</string>
     <string name="settings_cd_drag_reorder">Drag to reorder</string>
-    <string name="settings_cd_manage_categories">Manage Categories</string>
+    <string name="settings_source_menu_categories">Categories</string>
+    <string name="settings_source_menu_edit">Edit</string>
+    <string name="settings_source_menu_delete_confirm">Tap again to delete</string>
+    <string name="settings_source_menu_open">open menu</string>
+    <string name="settings_source_menu_select">select</string>
     <string name="settings_progress_format">%1$s (%2$d%%)</string>
     <string name="settings_refreshing_channels_epg">Refreshing channels and EPG...</string>
     <string name="settings_reload_playlists_now">Reload playlists now</string>
     <string name="settings_reload_playlist_epg_now">Reload playlist and EPG now</string>
     <string name="settings_no_playlists_configured">No playlists configured</string>
     <string name="settings_remove_playlists_epg">Remove playlists, EPG and favorites</string>
-    <string name="settings_add_iptv_lists_hint">Add up to 5 M3U / Xtream IPTV lists with names</string>
+    <string name="settings_add_iptv_lists_hint">Add up to 10 M3U / Xtream IPTV lists with names</string>
     <string name="settings_create_another_iptv">Create another IPTV list</string>
     <string name="settings_badge_full">FULL</string>
     <string name="settings_badge_add">ADD</string>
@@ -742,12 +760,12 @@
     <string name="settings_iptv_order_provider">Provider order</string>
     <string name="settings_iptv_order_number">Channel number</string>
     <string name="settings_iptv_order_name">Alphabetical (A-Z)</string>
-    <string name="settings_add_tv_lists_hint">Add up to 5 M3U / Xtream TV lists</string>
+    <string name="settings_add_tv_lists_hint">Add up to 10 M3U / Xtream TV lists</string>
     <string name="settings_create_another_tv">Create another TV list</string>
     <string name="settings_badge_full_short">Full</string>
     <string name="settings_search_lists">Search Lists</string>
     <string name="settings_paste_url">Paste URL</string>
-    <string name="settings_ph_trakt_mdblist">Trakt, MDBList, SIMKL or TMDB URL</string>
+    <string name="settings_ph_trakt_mdblist">YouTube, Trakt, MDBList, SIMKL or TMDB URL</string>
     <string name="settings_add_url">Add URL</string>
     <string name="settings_searching_both_sources">Searching both sources</string>
     <string name="settings_lists_found">%1$d lists found</string>
@@ -806,6 +824,10 @@
     <string name="settings_update_ready_install">Latest update downloaded and ready to install</string>
     <string name="settings_update_checking">Checking GitHub Releases for a newer APK</string>
     <string name="settings_update_available_format">Update available: %1$s</string>
+    <string name="settings_quiet_update_notifications">Quiet update notifications</string>
+    <string name="settings_quiet_update_notifications_desc">Show a small notice at startup instead of the update popup. Install from App Update.</string>
+    <string name="settings_sidebar_update_available">Update %1$s available. Install it from Accounts → App Update.</string>
+    <string name="home_update_available_quiet">Update %1$s is available. Install it from Settings → Accounts → App Update.</string>
     <string name="settings_update_latest">You already have the latest ARVIO version</string>
     <string name="settings_update_check_releases">Check GitHub Releases for the latest ARVIO APK</string>
     <string name="settings_badge_play">PLAY</string>
@@ -906,7 +928,6 @@
     <string name="settings_stalker_configured">Configured</string>
     <string name="settings_stalker_not_configured">Not configured</string>
     <string name="settings_stalker_remove">Remove portal</string>
-    <string name="settings_cd_manage_stalker_categories">Manage Stalker categories</string>
     <!-- IPTV account details: subscription end and stream limit -->
     <string name="iptv_account_days_left">%1$d days left</string>
     <string name="iptv_account_one_day_left">1 day left</string>
@@ -922,10 +943,22 @@
     <string name="iptv_account_refresh">Refresh now</string>
     <string name="iptv_account_refreshing">Checking…</string>
     <string name="iptv_account_refresh_failed">The provider did not answer. Please try again in a minute.</string>
+    <string name="iptv_connection_limit_title">Connection limit on this device</string>
+    <string name="iptv_connection_limit_auto">Auto</string>
+    <string name="iptv_connection_limit_no_limit">No limit</string>
+    <string name="iptv_connection_limit_at_a_time">%1$d at a time</string>
+    <string name="iptv_connection_limit_with_effective">%1$s (%2$d at a time)</string>
+    <string name="iptv_provider_allowance">Provider allowance: %1$s</string>
+    <string name="iptv_provider_allowance_not_reported">Provider allowance: not reported</string>
+    <string name="iptv_account_busy_title">This account is full</string>
+    <string name="iptv_account_busy_live_detail">The provider reports %1$d of %2$d streams in use.</string>
+    <string name="iptv_account_busy_vod">The provider reports that all of this account\'s streams are in use. Close one elsewhere and try again.</string>
+    <string name="iptv_account_busy_dismissed_hint">Press OK to try again.</string>
+    <string name="iptv_account_play_anyway">Play anyway</string>
     <string name="settings_cd_edit_stalker_config">Edit Stalker portal</string>
     <string name="settings_section_stalker_portals">STALKER PORTALS</string>
     <string name="settings_add_stalker_portal_button">Add Stalker portal</string>
-    <string name="settings_stalker_add_hint">Add up to 3 Stalker / Ministra portals</string>
+    <string name="settings_stalker_add_hint">Add up to 10 Stalker / Ministra portals</string>
     <string name="settings_stalker_create_another">Add another Stalker portal</string>
     <string name="settings_stalker_portal_name_label">Portal name</string>
     <string name="settings_stalker_portal_name_placeholder">e.g. Portal 1</string>
@@ -934,7 +967,7 @@
     <string name="settings_cd_move_stalker_down">Move Stalker portal down</string>
     <string name="settings_cd_remove_stalker_portal">Remove Stalker portal</string>
     <string name="settings_stalker_rename_title">Rename portal</string>
-    <string name="settings_stalker_max_reached">Maximum of 3 Stalker portals reached</string>
+    <string name="settings_stalker_max_reached">Maximum of 10 Stalker portals reached</string>
     <string name="settings_ua_default">Default</string>
     <string name="settings_enter_field">Enter %1$s...</string>
     <string name="settings_clock_12h">12-hour</string>
@@ -1015,8 +1048,11 @@
 
     <!-- Extracted from code: Profile, Login and Collections -->
     <string name="profile_edit_title">Edit Profile</string>
+    <string name="profile_choose_avatar">Choose an avatar</string>
     <string name="profile_name_hint">Profile name</string>
     <string name="profile_lock">Profile Lock</string>
+    <string name="profile_lock_desc">Require a PIN to access this profile</string>
+    <string name="profile_pin_active">PIN protection is active</string>
     <string name="profile_set_pin">Set PIN</string>
     <string name="profile_change_pin">Change PIN</string>
     <string name="profile_remove_pin">Remove PIN</string>
@@ -1085,6 +1121,8 @@
     <string name="home_sports_opening">Opening live event...</string>
     <string name="home_sports_playback_failed">Could not play this live event</string>
     <string name="home_sports_event_not_live">This event is not live yet</string>
+    <string name="home_optimizing_notice">Still optimizing ARVIO for this device. Scrolling may be slow for now.</string>
+    <string name="settings_optimizing_notice">Still optimizing for this device. Scrolling may be slow for now.</string>
     <string name="home_cd_primary_provider">Primary streaming provider</string>
     <string name="home_cd_rank">Rank #%1$d</string>
     <string name="search_filter_all">All</string>
@@ -1113,6 +1151,11 @@
     <string name="search_recent">Recent</string>
     <string name="search_recent_clear">Clear</string>
     <string name="search_clear_query">Clear search</string>
+    <string name="search_voice">Search by voice</string>
+    <string name="search_voice_listening">Listening…</string>
+    <string name="search_voice_no_match">Didn\'t catch that. Try again.</string>
+    <string name="search_voice_network">Voice search needs an internet connection.</string>
+    <string name="search_voice_permission">Allow the microphone to search by voice.</string>
     <string name="search_filter_panel_hint">The grid updates as you tick · BACK closes the panel</string>
     <string name="search_filter_age_movies_only">Movies only — TMDB has no age filter for series</string>
     <string name="search_filter_language_hint">The language a title was made in — not the language of the app</string>
@@ -1157,6 +1200,85 @@
     <string name="player_muted">Muted</string>
     <string name="player_cd_setup">Setup</string>
     <string name="player_cd_error">Error</string>
+    <!-- Mobile player -->
+    <string name="mplayer_audio_track_number">Audio %1$d</string>
+    <string name="mplayer_cd_unlock">Unlock</string>
+    <string name="mplayer_tap_to_unlock">Tap to unlock</string>
+    <string name="mplayer_error_no_streams_title">No Playable Streams</string>
+    <string name="mplayer_error_playback_failed_title">Playback Failed</string>
+    <string name="mplayer_error_no_streams_message">No playable streams found for this content. Try reloading streams or checking addon settings.</string>
+    <string name="mplayer_error_playback_failed_message">The connection was interrupted, or this stream format could not be played.</string>
+    <string name="mplayer_reload_streams">Reload Streams</string>
+    <string name="mplayer_cd_lock_controls">Lock Controls</string>
+    <string name="mplayer_more_settings">More Settings</string>
+    <string name="mplayer_playing_next_in">PLAYING NEXT IN %1$dS</string>
+    <string name="mplayer_up_next">UP NEXT</string>
+    <string name="mplayer_subtitles_off">Subtitles Off</string>
+    <string name="mplayer_subtitles_track">Subtitles: %1$s</string>
+    <string name="mplayer_this_season">This Season</string>
+    <string name="mplayer_source">Source</string>
+    <string name="mplayer_no_sources">No sources available</string>
+    <string name="mplayer_audio_delay">Audio Delay</string>
+    <string name="mplayer_audio_settings">Audio Settings</string>
+    <string name="mplayer_audio_settings_meta">Enhancements &amp; sync</string>
+    <string name="mplayer_section_enhancements">ENHANCEMENTS</string>
+    <string name="mplayer_section_tracks">TRACKS</string>
+    <string name="mplayer_section_settings">SETTINGS</string>
+    <string name="mplayer_volume_normalization">Volume Normalization</string>
+    <string name="mplayer_gemini_live_translation">Gemini Live Voice Translation</string>
+    <string name="mplayer_default_audio_track">Default Audio Track</string>
+    <string name="mplayer_subtitle_delay">Subtitle Delay</string>
+    <string name="mplayer_language_subtitles">%1$s Subtitles</string>
+    <string name="mplayer_language_track">%1$s Track %2$d</string>
+    <string name="mplayer_badge_embedded">Embedded</string>
+    <string name="mplayer_find_best_match_language">Find Best Match (%1$s)</string>
+    <string name="mplayer_find_best_match_auto">Find Best Match (Auto)</string>
+    <string name="mplayer_scanning_best_match">Scanning Best Match…</string>
+    <string name="mplayer_find_best_match_desc">Auto-sync and pick best timing match</string>
+    <string name="mplayer_badge_scanning">Scanning</string>
+    <string name="mplayer_badge_auto_sync">Auto Sync</string>
+    <string name="mplayer_ai_translation_language">AI Translation (%1$s)</string>
+    <string name="mplayer_ai_translation">AI Translation</string>
+    <string name="mplayer_no_subtitles">No subtitles found</string>
+    <string name="mplayer_track_active">Track active</string>
+    <string name="mplayer_subtitle_settings_meta">Size, style, font &amp; more</string>
+    <string name="mplayer_section_preview">PREVIEW</string>
+    <string name="mplayer_subtitle_preview_sample">Hello, how are you?</string>
+    <string name="mplayer_section_size">SIZE</string>
+    <string name="mplayer_text_size">Text size</string>
+    <string name="mplayer_section_color">COLOR</string>
+    <string name="mplayer_section_position">POSITION</string>
+    <string name="mplayer_percent_from_bottom">%1$d%% from bottom</string>
+    <string name="mplayer_adjust_on_screen">Adjust on Screen</string>
+    <string name="mplayer_section_style_font">STYLE &amp; FONT</string>
+    <string name="mplayer_font_weight">Font Weight</string>
+    <string name="mplayer_font_family">Font Family</string>
+    <string name="mplayer_stylized_subtitles">Stylized Subtitles (ASS / SSA)</string>
+    <string name="mplayer_section_general">GENERAL</string>
+    <string name="mplayer_filter_by_app_language">Filter by App Language</string>
+    <string name="mplayer_remove_sdh">Remove Hearing Impaired (SDH)</string>
+    <string name="mplayer_playback_speed">Playback Speed</string>
+    <string name="mplayer_aspect_ratio">Aspect Ratio</string>
+    <string name="mplayer_aspect_fit_screen">Fit to Screen</string>
+    <string name="mplayer_aspect_stretch">Stretch</string>
+    <string name="mplayer_aspect_crop">Crop</string>
+    <string name="mplayer_autoplay_next_episode">Autoplay next episode</string>
+    <string name="mplayer_auto_skip_intro">Automatically skip intro</string>
+    <string name="mplayer_auto_skip_outro">Automatically skip outro</string>
+    <string name="mplayer_section_video">VIDEO</string>
+    <string name="mplayer_delay_dialog_hint">Enter offset in milliseconds (negative = advance, positive = delay):</string>
+    <string name="mplayer_apply">Apply</string>
+    <string name="mplayer_reset_zero">Reset (0 ms)</string>
+    <string name="mplayer_delay_synchronized">Synchronized • Tap to type number</string>
+    <string name="mplayer_delay_delayed">Delayed (+) • Tap to type number</string>
+    <string name="mplayer_delay_advanced">Advanced (–) • Tap to type number</string>
+    <string name="mplayer_reset_to_zero">Reset to 0 ms</string>
+    <string name="mplayer_adjust_subtitle_position">Adjust Subtitle Position</string>
+    <string name="mplayer_drag_subtitle_hint">Drag up/down anywhere to move • %1$d%% from bottom</string>
+    <string name="mplayer_reset">Reset</string>
+    <string name="mplayer_sample_subtitle">Sample Subtitle</string>
+    <string name="mplayer_unknown_language">Unknown</string>
+    <string name="mplayer_speed_chip">%1$s Speed</string>
     <string name="player_addon_setup_required">Addon Setup Required</string>
     <string name="player_addon_setup_hint">Configure and install video addons in Settings to stream content</string>
     <string name="player_season_episode_short">S%1$d E%2$d</string>
@@ -1172,6 +1294,8 @@
     <string name="player_fail_startup_generic">Source failed during startup. Try another source.</string>
     <string name="player_fail_buffering_slow">Buffering too slow</string>
     <string name="player_fail_device_cannot_play">Video can\'t play on this device</string>
+    <string name="player_fail_source_not_ready">Source not ready yet</string>
+    <string name="player_toast_placeholder_video">This source isn\'t ready yet: the addon is only showing a placeholder video. Try another source or try again later.</string>
     <string name="player_fail_source_too_slow">Source too slow to load</string>
     <string name="player_fail_no_start_after_retries">Source did not start after retries. Try another source.</string>
     <string name="player_fail_no_start_in_time">Source did not start in time. Try another source.</string>
@@ -1345,6 +1469,14 @@
     <string name="component_label_media">Media</string>
     <string name="component_media_logo">%1$s logo</string>
     <string name="component_badge_new_episode">New Episode</string>
+    <string name="component_badge_new_episode_short">New</string>
+    <string name="component_next_season_episode">Next: S%1$dE%2$d</string>
+    <string name="component_time_left_minutes">%1$dmin left</string>
+    <string name="component_time_left_hours">%1$dhr left</string>
+    <string name="component_time_left_hours_minutes">%1$dhr %2$dmin left</string>
+    <string name="component_time_left_minutes_short">%1$dm</string>
+    <string name="component_time_left_hours_short">%1$dh</string>
+    <string name="component_time_left_hours_minutes_short">%1$dh %2$dm</string>
     <string name="component_ep_left_one">1 ep left</string>
     <string name="component_eps_left">%1$d eps left</string>
     <string name="component_season_episode_marker">S%1$d • E%2$d</string>
@@ -1439,6 +1571,8 @@
 
     <!-- Extracted from code (data layer): shared labels and errors -->
     <string name="continue_season_episode">Continue S%1$dE%2$d</string>
+    <string name="syncing_progress">Syncing progress…</string>
+    <string name="details_progress_refresh_failed">Could not refresh watch progress. Showing saved progress.</string>
     <string name="play_season_episode">Play S%1$dE%2$d</string>
     <string name="continue_season_episode_at">Continue S%1$dE%2$d at %3$s</string>
     <string name="continue_at">Continue at %1$s</string>
@@ -1503,7 +1637,9 @@
     <string name="settings_community_addons_search">Search addons</string>
     <string name="settings_community_addons_all">All</string>
     <string name="settings_community_addons_empty">No addons match your search</string>
+    <string name="settings_community_addons_clear_filters">Clear search &amp; filters</string>
     <string name="settings_community_addons_failed">Couldn\'t load community addons</string>
+    <string name="settings_copied_url">URL copied to clipboard</string>
     <string name="settings_community_addon_configure">Configure</string>
     <string name="settings_community_addon_configurable">Configurable</string>
     <string name="settings_community_addon_uninstall">Uninstall</string>
@@ -1531,6 +1667,21 @@
     <string name="settings_catalog_added">Added %1$s</string>
     <string name="settings_catalog_updated">Updated %1$s</string>
     <string name="settings_catalog_removed">Catalog removed</string>
+    <string name="kids_list_approve_title">Approve an unrated title</string>
+    <string name="kids_list_approval_pin_required">Incorrect parent PIN. Set a parent PIN in Manage Profiles if needed.</string>
+    <string name="kids_list_approval_changed">The profile or list changed. Open the approval again.</string>
+    <string name="kids_list_approval_unavailable">The list or rating could not be verified. No approval was saved.</string>
+    <string name="kids_list_approval_rated">This title has a certification. The age filter still applies.</string>
+    <string name="kids_list_approval_empty">No titles available in this list.</string>
+    <string name="kids_catalog_explain">Approve this add-on catalog for this kids profile: its titles will show here even without an age rating. Titles with a rating still follow the age limit.</string>
+    <string name="kids_catalog_approved_state">This add-on catalog is approved for this kids profile.</string>
+    <string name="kids_catalog_approve">Approve for this kids profile</string>
+    <string name="kids_catalog_unapprove">Remove the approval</string>
+    <string name="kids_catalog_approved_toast">%1$s is approved for this kids profile</string>
+    <string name="kids_catalog_unapproved_toast">%1$s is no longer approved for this kids profile</string>
+    <string name="kids_catalog_unavailable">This catalog\'s add-on isn\'t installed on this profile.</string>
+    <string name="kids_list_more_titles">More titles</string>
+    <string name="kids_list_title_approved">Approved %1$s</string>
     <string name="settings_catalog_unpacked">Catalog row extracted from pack</string>
     <string name="settings_catalog_search_min_chars">Type at least 2 characters</string>
     <string name="settings_catalog_search_no_lists">No public Trakt lists found</string>
@@ -1590,6 +1741,7 @@
     <!-- SettingsViewModel messages: Trakt, Simkl and sign-out -->
     <string name="settings_trakt_activation_failed_code">Trakt activation failed (%1$d)</string>
     <string name="settings_trakt_activation_failed">Trakt activation failed</string>
+    <string name="settings_trakt_unavailable">Trakt is temporarily unavailable. Please try again later.</string>
     <string name="settings_trakt_connected_toast">Trakt connected successfully</string>
     <string name="settings_trakt_code_invalid">Trakt activation code is invalid</string>
     <string name="settings_trakt_code_used">Trakt activation code was already used</string>
@@ -1649,7 +1801,7 @@
     <string name="catalog_url_invalid_format">Invalid URL format</string>
     <string name="catalog_url_invalid_host">Invalid host</string>
     <string name="catalog_url_trakt_hint">Use a Trakt list URL: trakt.tv/users/{user}/lists/{list}</string>
-    <string name="catalog_url_unsupported">Only Trakt, MDBList, SIMKL and TMDB URLs are supported</string>
+    <string name="catalog_url_unsupported">Only Trakt, MDBList, SIMKL, TMDB and YouTube video URLs are supported</string>
     <string name="iptv_progress_loading_channels">Loading channels from portal...</string>
     <string name="iptv_progress_loading_full_epg">Loading full EPG (%1$d/%2$d)...</string>
     <string name="iptv_progress_loading_live">Loading live streams...</string>
@@ -1677,6 +1829,11 @@
     <string name="auth_unexpected_credential">Unexpected credential type</string>
     <string name="auth_failed_parse_google">Failed to parse Google credentials</string>
     <string name="trakt_not_authenticated">Not authenticated with Trakt</string>
+    <string name="trakt_reconnect_required">Your Trakt authorization expired or was revoked. Connect Trakt again to resume syncing.</string>
+    <string name="trakt_sync_refresh_failed">History was imported, but Continue Watching could not be fully refreshed. Saved items have been kept; try again later.</string>
+    <string name="trakt_session_unavailable">Trakt could not be reached, so syncing is paused. ARVIO keeps retrying; reconnect Trakt if this lasts.</string>
+    <string name="trakt_library_unavailable">Trakt could not be reached right now. Try again in a few minutes.</string>
+    <string name="trakt_library_load_failed">Could not load this list from Trakt. Try again.</string>
     <string name="sync_supabase_auth_failed">Supabase auth failed</string>
     <string name="launcher_continue_dash">%1$s - %2$s</string>
     <string name="telegram_search_timed_out">Telegram search timed out</string>
@@ -1890,6 +2047,8 @@
     <string name="stream_integration_telegram_desc">Direct streaming from your connected Telegram chats and channels.</string>
     <string name="stream_integration_iptv_vod">IPTV VOD</string>
     <string name="stream_integration_iptv_vod_desc">Video-on-demand movies and series from your IPTV playlists.</string>
+    <string name="stream_integration_youtube">YouTube</string>
+    <string name="stream_integration_youtube_desc">Videos of 5+ minutes, searched when you press Search YouTube</string>
     <string name="stream_integration_move_up">Move up</string>
     <string name="stream_integration_move_down">Move down</string>
     <string name="stream_integration_toggle_enabled">Pull streams</string>
@@ -1930,4 +2089,107 @@
     <string name="profile_parent_pin_set">Set a parent PIN for this kids profile</string>
     <string name="profile_parent_pin_enter">Parent PIN</string>
     <string name="profile_parent_pin_hint">4-5 digits. Needed to change or delete this kids profile, not to watch.</string>
+    <!-- YouTube collection -->
+    <string name="youtube_add_link">Add YouTube link</string>
+    <string name="youtube_link_label">YouTube link</string>
+    <string name="youtube_add_link_desc">Paste a youtu.be or youtube.com video link</string>
+    <string name="youtube_video_count">%1$d YouTube videos</string>
+    <string name="youtube_no_videos">No videos yet. Add a YouTube link.</string>
+    <string name="youtube_videos_home_order">%1$d videos • shown on Home in this order</string>
+    <string name="youtube_videos_home_order_tv">%1$d videos • shown on Home in this order • Left/Right: move or remove</string>
+    <string name="youtube_rename_row">Rename row</string>
+    <string name="youtube_press_ok_again_remove">Press OK again to remove</string>
+    <string name="youtube_ok_move_up">%1$d • OK: move up</string>
+    <string name="youtube_ok_move_down">%1$d • OK: move down</string>
+    <string name="youtube_ok_remove">%1$d • OK: remove</string>
+    <string name="youtube_video_removed">Removed %1$s</string>
+    <string name="youtube_collection_full">This collection has reached the limit of %1$d videos. Remove a video before adding another.</string>
+    <string name="youtube_parent_approval_required">A correct parent PIN is required to add videos to this kids profile. Set a parent PIN in Manage Profiles if needed.</string>
+    <string name="youtube_profile_changed">The profile changed. Please add the video again.</string>
+    <string name="settings_wetrakr_tagline">Watchlists, history &amp; playback progress</string>
+    <string name="settings_wetrakr_device">Connection for this device and profile</string>
+    <string name="settings_wetrakr_update">Update WeTrakr while watching</string>
+    <string name="settings_connect_wetrakr">Connect WeTrakr</string>
+    <string name="settings_wetrakr_copy_open">Copy code and open WeTrakr</string>
+    <string name="settings_iptv_max_reached">Maximum of 10 IPTV playlists reached</string>
+    <!-- Playback cache (on-disk cache of streamed video for instant rewinds) -->
+    <string name="settings_section_playback_cache">PLAYBACK CACHE</string>
+    <string name="playback_cache_size">Playback Cache Size</string>
+    <string name="playback_cache_size_desc">Video saved by cache-enabled playback for local rewinds. Used: %1$s</string>
+    <string name="playback_cache_limited">%1$s (free space)</string>
+    <string name="clear_playback_cache">Clear Playback Cache</string>
+    <string name="clear_playback_cache_desc">Delete all cached video data. Anything playing simply downloads again.</string>
+    <string name="playback_cache_cleared">Playback cache cleared</string>
+    <string name="settings_help_playback_cache_desc">Cache-enabled playback saves video for local rewinds. Large or remote streams may bypass this cache for performance. The size adapts to available storage, aiming to leave 1 GB free.</string>
+
+    <!-- Live TV AI subtitles -->
+    <string name="live_ai_subtitles">AI subtitles</string>
+    <string name="live_ai_subs_preparing">Preparing subtitles… %1$d s</string>
+    <string name="live_ai_subs_no_key">AI subtitles need a Google Gemini API key (Settings → AI subtitles)</string>
+    <string name="live_ai_subs_invalid_key">AI subtitles: the Gemini API key was rejected</string>
+    <string name="live_ai_subs_quota">AI subtitles paused: Gemini quota reached</string>
+    <string name="live_ai_subs_offline">AI subtitles: no internet connection</string>
+    <string name="live_ai_subs_unsupported">AI subtitles not supported on this channel</string>
+    <string name="live_ai_subs_memory_capped">This channel can\'t be delayed enough; some subtitles may be late</string>
+    <string name="live_ai_subs_title">Live TV AI subtitles</string>
+    <string name="live_ai_subs_desc">Adds AI subtitles to the subtitle menu of live channels: Gemini transcribes and translates into your profile\'s subtitle language. Live TV is delayed a few seconds so lines appear on time.</string>
+    <string name="live_ai_subs_key_valid">Gemini API key works</string>
+    <string name="live_ai_subs_key_rejected">Gemini rejected this API key</string>
+    <string name="live_ai_subs_key_unchecked">Couldn\'t check the API key (offline?)</string>
+    <string name="live_ai_subs_needs_key">Add a Google Gemini API key first</string>
+    <string name="live_ai_subs_auto_title">Auto-translate when a channel starts</string>
+    <string name="live_ai_subs_auto_desc">Every channel starts with AI subtitles on, without picking them in the subtitle menu</string>
+    <string name="show_addon_stream_details">Show add-on stream details</string>
+    <string name="show_addon_stream_details_desc">Show add-on descriptions below source badges on TV. Focus a source to expand its details.</string>
+    <string name="navigation_sections">Navigation</string>
+    <string name="navigation_show_search">Show Search</string>
+    <string name="navigation_show_library">Show Library</string>
+    <string name="navigation_show_tv">Show TV Player</string>
+    <!-- YouTube search on the Search screen -->
+    <string name="youtube_search_row_title">YouTube</string>
+    <string name="youtube_search_button">Search YouTube</string>
+    <string name="youtube_kids_search_button">Search YouTube Kids</string>
+    <string name="youtube_search_for">for "%1$s"</string>
+    <string name="youtube_search_loading">Searching YouTube…</string>
+    <string name="youtube_search_no_results">No YouTube videos</string>
+    <string name="youtube_search_failed">YouTube didn\'t answer</string>
+    <string name="youtube_search_retry">Press to try again</string>
+    <string name="youtube_favorite_added">Saved to your YouTube row on Home</string>
+    <string name="youtube_favorite_removed">Removed from your YouTube row</string>
+    <string name="youtube_favorite">YouTube favorite</string>
+    <string name="youtube_favorite_add">Save to your YouTube row</string>
+    <string name="youtube_parent_pin_title">Parent PIN to save this video</string>
+    <string name="youtube_source_row_idle">Click to search YouTube</string>
+    <string name="youtube_source_row_searching">Searching YouTube…</string>
+    <string name="youtube_source_row_none">No YouTube videos of 5+ minutes — select to search again</string>
+    <string name="youtube_source_row_failed">YouTube didn\'t answer — select to try again</string>
+
+    <!-- Type on the phone (QR in TV text dialogs) -->
+    <string name="phone_input_button">Use your phone</string>
+    <string name="phone_input_button_hide">Hide phone code</string>
+    <string name="phone_input_qr_title">📱 From your phone</string>
+    <string name="phone_input_qr_hint">Scan to type or paste it on your phone.</string>
+    <string name="phone_input_page_hint">Whatever you send appears on the TV. Press OK there to save it.</string>
+    <string name="phone_input_page_send">Send to TV</string>
+    <string name="phone_input_page_sent">Sent ✓ — press OK on the TV.</string>
+    <string name="phone_input_page_not_sent">Not sent</string>
+    <string name="phone_input_page_expired">This code has expired — scan the QR code on the TV again.</string>
+    <!-- Streaming-service page laid out like Home; %1$s is the service name -->
+    <string name="service_home_top10_series">Top 10 series on %1$s</string>
+    <string name="service_home_top10_movies">Top 10 movies on %1$s</string>
+    <string name="service_home_new">New on %1$s</string>
+    <string name="service_home_originals">%1$s Originals</string>
+    <string name="service_home_top_rated_series">Top rated series</string>
+    <string name="service_home_top_rated_movies">Top rated movies</string>
+    <string name="service_home_filter_all">All</string>
+    <string name="service_home_filter_grid">Filter</string>
+    <string name="home_coming_up">Coming Up</string>
+    <string name="coming_up_on_home">Coming Up on Home</string>
+    <string name="coming_up_on_home_desc">Show upcoming episodes from your Calendar.</string>
+    <string name="playback_compatibility">Playback compatibility</string>
+    <string name="playback_compatibility_desc">Device capabilities and your last playback session.</string>
+    <string name="playback_compatibility_checking">Checking device capabilities...</string>
+    <string name="playback_compatibility_copy">Copy report</string>
+    <string name="playback_compatibility_test">Run format test</string>
+    <string name="playback_compatibility_test_failed">Could not run the format test.</string>
 </resources>

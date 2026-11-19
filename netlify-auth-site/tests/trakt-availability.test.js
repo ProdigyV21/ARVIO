@@ -9,10 +9,21 @@ test('upstream HTML denial is a retryable outage, not an invalid account or empt
   process.env.TRAKT_CLIENT_SECRET = 'test-only-secret';
   const request = { httpMethod: 'GET', headers: { apikey: 'test-only-app-key' }, queryStringParameters: { path: '/sync/watchlist' } };
   try {
-    global.fetch = async () => new Response('<!doctype html><html><title>Attention Required</title></html>', { status: 403, headers: { 'content-type': 'text/html' } });
+    global.fetch = async (_url, init) => {
+      assert.match(init.headers['user-agent'], /^ARVIO\//);
+      assert.equal(init.headers.accept, 'application/json');
+      return new Response('<!doctype html><html><title>Attention Required</title></html>', { status: 403, headers: { 'content-type': 'text/html' } });
+    };
     const blocked = await handleTraktProxy(request);
     assert.equal(blocked.statusCode, 503);
     assert.equal(JSON.parse(blocked.body).error, 'trakt_upstream_blocked');
+    assert.equal(JSON.parse(blocked.body).message, 'Trakt is temporarily blocking this connection. Please try again later.');
+    global.fetch = async () => new Response('<html>Blocked</html>', { status: 401, headers: { 'content-type': 'text/html' } });
+    assert.equal((await handleTraktProxy(request)).statusCode, 503);
+    global.fetch = async () => new Response('{"error":"rate_limit"}', { status: 429, headers: { 'retry-after': '60' } });
+    const limited = await handleTraktProxy(request);
+    assert.equal(limited.statusCode, 429);
+    assert.equal(limited.headers['retry-after'], '60');
     global.fetch = async () => new Response('{"error":"invalid_token"}', { status: 401, headers: { 'content-type': 'application/json' } });
     assert.equal((await handleTraktProxy(request)).statusCode, 401);
     global.fetch = async () => new Response('[]', { status: 200, headers: { 'content-type': 'application/json' } });

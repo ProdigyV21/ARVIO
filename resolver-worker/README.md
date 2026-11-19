@@ -79,3 +79,13 @@ NEXT_PUBLIC_ARVIO_RESOLVER_URL=http://localhost:8787
 ```
 
 The web app falls back to direct browser addon lookups if the resolver is not configured or unavailable.
+
+## Premium-only media relay (optional)
+
+`/media` relays video for ARVIO Web. To serve it only to ARVIO Premium members, give the Worker the same secret as the auth site's `STREAM_TICKET_SECRET` (32+ random characters):
+
+```bash
+npx wrangler secret put STREAM_TICKET_SECRET
+```
+
+ARVIO Web then fetches a short-lived signed ticket from the auth site (`/stream-ticket`, Premium accounts only) and adds it to `/media` URLs as `t`; playlists rewritten by the Worker carry it to every segment. Without the secret the relay behaves as before. Deploy order: auth site and web app first, then set the secret on the Worker.

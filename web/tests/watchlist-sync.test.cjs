@@ -1,6 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { load, storage } = require('./load.cjs');
+const { sourceOf, storeSource } = require('./sources.cjs');
 
 const authFor = userId => ({ session: { userId, accessToken: 'test' }, isNetlifySession: true, accessToken: async () => 'test' });
 const auth = authFor('account');
@@ -180,7 +181,7 @@ function extractToggle(globals) {
   const vm = require('node:vm');
   const ts = require('typescript');
   const filename = path.resolve(__dirname, '../lib/store.tsx');
-  const source = ts.createSourceFile(filename, fs.readFileSync(filename, 'utf8'), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const source = ts.createSourceFile(filename, storeSource(), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
   let callback;
   const visit = node => {
     if (ts.isVariableDeclaration(node) && node.name.getText(source) === 'toggleWatchlist') callback = node.initializer.arguments[0];
@@ -258,4 +259,21 @@ test('a stale tracker failure cannot undo a later toggle or change a newly selec
     await first;
     assert.deepEqual(plain(displayed).map(item => item.id), scenario === 'newer-action' ? [] : [99], scenario);
   }
+});
+
+test('without an ARVIO account the watchlist is kept on this device and never sent', async () => {
+  const disk = storage();
+  let sent = 0;
+  const guest = { session: null };
+  const first = outboxHarness(disk, async () => { sent++; });
+  first.api.queueWatchlistChange(guest, movie(1), false, 'p');
+  first.api.queueWatchlistChange(guest, movie(2), false, 'p');
+  first.api.queueWatchlistChange(guest, movie(2), true, 'p');
+  await first.api.flushWatchlistOutbox(guest);
+  assert.equal(sent, 0);
+  // A reload, then a cloud/tracker read that knows nothing of these titles.
+  const second = outboxHarness(disk);
+  assert.deepEqual(plain(second.api.applyPendingWatchlist(guest, 'p', [])).map(item => item.id), [1]);
+  assert.deepEqual(plain(second.api.applyPendingWatchlist(guest, 'other', [])), [], 'per profile');
+  assert.deepEqual(plain(second.api.applyPendingWatchlist(auth, 'p', [])), [], 'an account never sees device-local edits');
 });

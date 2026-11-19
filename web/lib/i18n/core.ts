@@ -38,6 +38,11 @@ export function translate(dictionary: Dictionary, text: string, values?: Record<
   const result = text.slice(0, text.length - text.trimStart().length) + translated + text.slice(text.trimEnd().length);
   return values ? result.replace(/\{(\w+)\}/g, (match, name) => String(values[name] ?? match)) : result;
 }
+/** Writing direction of an interface language (Arabic, Hebrew, Persian, Urdu read right to left). */
+export function directionOf(language: string): 'rtl' | 'ltr' {
+  return /^(ar|he|iw|fa|ur)(-|$)/i.test(language) ? 'rtl' : 'ltr';
+}
+
 export function localeUrl(locale: string): string {
   return `/i18n/${locale}.json?v=${manifest[locale as keyof typeof manifest]}`;
 }
