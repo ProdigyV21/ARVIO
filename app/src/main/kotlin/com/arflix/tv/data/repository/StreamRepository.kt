@@ -2808,7 +2808,12 @@ class StreamRepository @Inject constructor(
         var lingerJob: Job? = null
     }
 
-    private data class SharedSearchSnapshot(val result: ProgressiveStreamResult?, val finished: Boolean)
+    private data class SharedSearchSnapshot(
+        val result: ProgressiveStreamResult?,
+        val finished: Boolean,
+        // Set when the search itself failed; listeners rethrow it exactly as an unshared search would.
+        val error: Throwable? = null
+    )
 
     private val sharedSearches = HashMap<String, SharedStreamSearch>()
     private val sharedSearchLock = Any()
@@ -2822,6 +2827,7 @@ class StreamRepository @Inject constructor(
             val e = sharedSearches.getOrPut(key) {
                 val created = SharedStreamSearch()
                 created.job = repositoryScope.launch {
+                    var failure: Throwable? = null
                     try {
                         start().collect { result ->
                             created.latest.value = SharedSearchSnapshot(result, result.isFinal)
@@ -2830,9 +2836,10 @@ class StreamRepository @Inject constructor(
                         throw e
                     } catch (e: Exception) {
                         Log.w(TAG, "[StreamFetch] shared search failed key=$key", e)
+                        failure = e
                     } finally {
                         // Whatever ended it, listeners must stop waiting; the cache holds any final result.
-                        created.latest.value = SharedSearchSnapshot(created.latest.value?.result, true)
+                        created.latest.value = SharedSearchSnapshot(created.latest.value?.result, true, failure)
                         synchronized(sharedSearchLock) {
                             if (sharedSearches[key] === created) sharedSearches.remove(key)
                         }
@@ -2850,6 +2857,7 @@ class StreamRepository @Inject constructor(
                 entry.latest.transformWhile<SharedSearchSnapshot?, ProgressiveStreamResult> { snapshot ->
                     if (snapshot == null) return@transformWhile true
                     snapshot.result?.let { emit(it) }
+                    snapshot.error?.let { throw it }
                     !snapshot.finished
                 }
             )
@@ -2882,7 +2890,12 @@ class StreamRepository @Inject constructor(
         val search = { searchMovieStreamsProgressive(imdbId, title, year, forceRefresh, sequential, nativeType) }
         // A forced refresh or sequential search is a deliberate fresh run: never merge it into another.
         if (forceRefresh || sequential) return search()
-        return sharedProgressiveSearch("${profileManager.getProfileIdSync()}|movie|$imdbId|${nativeType.orEmpty()}", search)
+        // Everything that shapes the results is in the key, so the player only joins a prefetch that
+        // asked the same question; a search started with weaker inputs (blank title, no year) is not shared.
+        return sharedProgressiveSearch(
+            "${profileManager.getProfileIdSync()}|movie|$imdbId|${nativeType.orEmpty()}|${year ?: ""}|${title.isNotBlank()}",
+            search
+        )
     }
 
     fun resolveEpisodeStreamsProgressive(
@@ -2909,7 +2922,9 @@ class StreamRepository @Inject constructor(
         }
         if (forceRefresh || sequential) return search()
         return sharedProgressiveSearch(
-            "${profileManager.getProfileIdSync()}|tv|$imdbId|$season|$episode|${tvdbId ?: ""}|${animeQueryOverride.orEmpty()}|${nativeType.orEmpty()}",
+            "${profileManager.getProfileIdSync()}|tv|$imdbId|$season|$episode|${tmdbId ?: ""}|${tvdbId ?: ""}|" +
+                "${animeQueryOverride.orEmpty()}|${nativeType.orEmpty()}|${title.isNotBlank()}|${airDate.orEmpty()}|" +
+                "${originalLanguage.orEmpty()}|${genreIds.sorted().joinToString(",")}",
             search
         )
     }
@@ -2929,8 +2944,10 @@ class StreamRepository @Inject constructor(
             awaitClose { }
             return@callbackFlow
         }
-        // Retained so cancelling the collector (back-nav, superseded prefetch)
-        // also stops the scrape instead of leaking it in repositoryScope.
+        // Retained so cancelling this search also stops the scrape instead of leaking it in
+        // repositoryScope. Cancelling the last listener no longer cancels at once: the shared
+        // wrapper (sharedProgressiveSearch) keeps it alive for SHARED_SEARCH_LINGER_MS so the
+        // player can join, then cancels it.
         val noticeSink = AddonNoticeSink()
         val searchHealth = AddonSearchHealth()
         val workerJob = repositoryScope.launch(noticeSink + searchHealth) {
@@ -3665,8 +3682,10 @@ class StreamRepository @Inject constructor(
     ): Flow<ProgressiveStreamResult> = callbackFlow {
         // Native addon items carry a negative stand-in id, which no addon knows as TMDB.
         val tmdbId = tmdbId?.takeIf { it > 0 }
-        // Retained so cancelling the collector (back-nav, superseded prefetch)
-        // also stops the scrape instead of leaking it in repositoryScope.
+        // Retained so cancelling this search also stops the scrape instead of leaking it in
+        // repositoryScope. Cancelling the last listener no longer cancels at once: the shared
+        // wrapper (sharedProgressiveSearch) keeps it alive for SHARED_SEARCH_LINGER_MS so the
+        // player can join, then cancels it.
         val noticeSink = AddonNoticeSink()
         val searchHealth = AddonSearchHealth()
         val workerJob = repositoryScope.launch(noticeSink + searchHealth) {
