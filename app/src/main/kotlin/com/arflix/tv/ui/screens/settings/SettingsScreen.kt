@@ -3832,19 +3832,18 @@ private fun SettingsChip(
     isFocused: Boolean = false,
     modifier: Modifier = Modifier
 ) {
-    val chipFocusColor = resolveAccentColor(fallback = Color.White)
+    val chipFocusColor = resolveAccentColor(fallback = Pink)
     Box(
         modifier = modifier
             .clip(RoundedCornerShape(12.dp))
             .background(
                 when {
                     !enabled -> Color.White.copy(alpha = 0.06f)
-                    isFocused -> Color.White
                     else -> Color.White.copy(alpha = 0.12f)
                 }
             )
             .border(
-                width = if (isFocused) 1.dp else 0.dp,
+                width = if (isFocused) 2.dp else 0.dp,
                 color = if (isFocused) chipFocusColor else Color.Transparent,
                 shape = RoundedCornerShape(12.dp)
             )
@@ -3857,7 +3856,6 @@ private fun SettingsChip(
             style = ArflixTypography.button,
             color = when {
                 !enabled -> TextSecondary
-                isFocused -> Color.Black
                 else -> TextPrimary
             }
         )
@@ -6316,25 +6314,22 @@ private fun UpdateActionButton(
     highlighted: Boolean = false,
     enabled: Boolean = true
 ) {
+    val accent = resolveAccentColor(fallback = Pink)
     val background = when {
         !enabled -> Color.White.copy(alpha = 0.06f)
-        highlighted && isFocused -> Pink
-        isFocused -> Color.White.copy(alpha = 0.16f)
-        highlighted -> Pink.copy(alpha = 0.18f)
+        highlighted -> accent.copy(alpha = 0.18f)
         else -> Color.White.copy(alpha = 0.08f)
     }
     val textColor = when {
         !enabled -> TextSecondary.copy(alpha = 0.6f)
-        highlighted && isFocused -> Color.Black
         highlighted -> Color.White
         isFocused -> TextPrimary
         else -> TextSecondary
     }
     val borderColor = when {
         !enabled -> Color.White.copy(alpha = 0.1f)
-        highlighted && isFocused -> Pink.copy(alpha = 0.95f)
-        highlighted -> Pink.copy(alpha = 0.4f)
-        isFocused -> Color.White.copy(alpha = 0.75f)
+        isFocused -> accent
+        highlighted -> accent.copy(alpha = 0.4f)
         else -> Color.White.copy(alpha = 0.12f)
     }
 
@@ -6343,7 +6338,7 @@ private fun UpdateActionButton(
             .clip(RoundedCornerShape(12.dp))
             .background(background, RoundedCornerShape(12.dp))
             .border(
-                width = if (isFocused || highlighted) 1.5.dp else 1.dp,
+                width = if (isFocused) 2.dp else 1.dp,
                 color = borderColor,
                 shape = RoundedCornerShape(12.dp)
             )
@@ -9116,7 +9111,7 @@ private fun CatalogDiscoveryInputButton(
     Column(
         modifier = modifier
             .clip(RoundedCornerShape(12.dp))
-            .background(if (isFocused) Color.White else Color.Black.copy(alpha = 0.36f))
+            .background(Color.Black.copy(alpha = 0.36f))
             .border(
                 width = if (isFocused) 2.dp else 1.dp,
                 color = if (isFocused) inputFocusColor else Color.White.copy(alpha = 0.55f),
@@ -9129,7 +9124,7 @@ private fun CatalogDiscoveryInputButton(
         Text(
             text = label,
             style = ArflixTypography.caption,
-            color = if (isFocused) Color.Black.copy(alpha = 0.68f) else TextSecondary,
+            color = TextSecondary,
             maxLines = 1
         )
         Spacer(modifier = Modifier.height(4.dp))
@@ -9137,7 +9132,6 @@ private fun CatalogDiscoveryInputButton(
             text = value.ifBlank { placeholder },
             style = ArflixTypography.body,
             color = when {
-                isFocused -> Color.Black
                 value.isBlank() -> TextSecondary.copy(alpha = 0.7f)
                 else -> TextPrimary
             },
@@ -9259,7 +9253,7 @@ private fun CatalogDiscoveryResultRow(
                 .onFocusChanged { isFocused = it.isFocused || it.hasFocus }
                 .clickable(onClick = { if (!isAdded) onAdd() })
                 .background(
-                    if (isFocused) Color.White.copy(alpha = 0.12f) else Color.Black.copy(alpha = 0.38f),
+                    Color.Black.copy(alpha = 0.38f),
                     RoundedCornerShape(16.dp)
                 )
                 .border(
@@ -9372,7 +9366,7 @@ private fun CatalogDiscoveryResultRow(
             .onFocusChanged { isFocused = it.isFocused || it.hasFocus }
             .clickable(onClick = { if (!isAdded) onAdd() })
             .background(
-                if (isFocused) Color.White.copy(alpha = 0.12f) else Color.Black.copy(alpha = 0.38f),
+                Color.Black.copy(alpha = 0.38f),
                 RoundedCornerShape(16.dp)
             )
             .border(
@@ -9590,7 +9584,6 @@ private fun DiscoveryActionButton(
             .background(
                 when {
                     !enabled -> Color.Black.copy(alpha = 0.18f)
-                    isFocused -> Color.White
                     highlighted -> Color.Black.copy(alpha = 0.46f)
                     else -> Color.Black.copy(alpha = 0.36f)
                 },
@@ -9600,7 +9593,7 @@ private fun DiscoveryActionButton(
                 width = if (isFocused) 2.dp else 1.dp,
                 color = when {
                     !enabled -> Color.White.copy(alpha = 0.18f)
-                    isFocused -> Color.White
+                    isFocused -> resolveAccentColor(fallback = Pink)
                     highlighted -> Color.White.copy(alpha = 0.74f)
                     else -> Color.White.copy(alpha = 0.55f)
                 },
@@ -9613,7 +9606,6 @@ private fun DiscoveryActionButton(
     ) {
         val contentColor = when {
             !enabled -> TextSecondary.copy(alpha = 0.72f)
-            isFocused -> Color.Black
             else -> TextPrimary
         }
         Row(
@@ -10022,25 +10014,20 @@ private fun CatalogActionChip(
     enabled: Boolean = true,
     onClick: () -> Unit = {}
 ) {
-    // Support both D-pad focus AND touch pressed state
-    val accent = resolveAccentColor(fallback = Color.White)
+    // Support both D-pad focus AND touch pressed state. Focus is shown as a themed
+    // border only (never a fill), matching every other settings control.
+    val accent = resolveAccentColor(fallback = Pink)
     var isPressed by remember { mutableStateOf(false) }
     val visualActive = isFocused || isPressed
+    val borderAccent = if (isDestructive) Color(0xFFDC2626) else accent
     val bgColor = when {
         !enabled -> Color.Black.copy(alpha = 0.4f)
-        visualActive && isDestructive -> Color(0xFFDC2626)
-        visualActive -> accent
         else -> Color.White.copy(alpha = 0.08f)
     }
-    // Choose foreground (icon) color based on accent luminance for contrast
-    val accentFg = if (visualActive) {
-        val l = 0.299f * accent.red + 0.587f * accent.green + 0.114f * accent.blue
-        if (l > 0.5f) Color.Black else Color.White
-    } else Color.White
     val fgColor = when {
         !enabled -> Color.White.copy(alpha = 0.5f)
-        visualActive && isDestructive -> Color.White
-        visualActive -> accentFg
+        visualActive && isDestructive -> Color(0xFFDC2626)
+        visualActive -> Color.White
         else -> Color.White.copy(alpha = 0.7f)
     }
     Box(
@@ -10061,8 +10048,8 @@ private fun CatalogActionChip(
             .clickable(enabled = enabled, onClick = onClick)
             .background(bgColor, RoundedCornerShape(8.dp))
             .border(
-                width = if (visualActive) 1.5.dp else 1.dp,
-                color = if (visualActive) accent else Color.White.copy(alpha = 0.15f),
+                width = if (visualActive) 2.dp else 1.dp,
+                color = if (visualActive) borderAccent else Color.White.copy(alpha = 0.15f),
                 shape = RoundedCornerShape(8.dp)
             ),
         contentAlignment = Alignment.Center
@@ -10318,7 +10305,7 @@ private fun AddonRow(
             .fillMaxWidth()
             .clickable { onToggle() }
             .background(
-                if (isFocused) Color.White.copy(alpha = 0.12f) else Color.White.copy(alpha = 0.05f),
+                Color.White.copy(alpha = 0.05f),
                 RoundedCornerShape(12.dp)
             )
             .border(
@@ -10391,7 +10378,7 @@ private fun AddonRow(
                 modifier = Modifier
                     .border(
                         width = if (isToggleFocused) 2.dp else 0.dp,
-                        color = if (isToggleFocused) Color.White else Color.Transparent,
+                        color = if (isToggleFocused) focusRingColor else Color.Transparent,
                         shape = RoundedCornerShape(16.dp)
                     )
                     .padding(2.dp)
@@ -10852,7 +10839,7 @@ private fun AccountActionRow(
         modifier = Modifier
             .fillMaxWidth()
             .background(
-                if (isFocused) Color.White.copy(alpha = 0.12f) else Color.White.copy(alpha = 0.05f),
+                Color.White.copy(alpha = 0.05f),
                 RoundedCornerShape(12.dp)
             )
             .border(
@@ -11538,8 +11525,8 @@ private fun AccountRow(
     secondaryActionLabel: String? = null,
     expirationText: String? = null
 ) {
-    val foreground = if (isFocused) Color.Black else TextPrimary
-    val secondary = if (isFocused) Color.Black.copy(alpha = 0.65f) else TextSecondary
+    val foreground = TextPrimary
+    val secondary = TextSecondary
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -11547,9 +11534,10 @@ private fun AccountRow(
                 if (isConnected) onDisconnect() else onConnect()
             }
             .background(
-                if (isFocused) Color.White else Color.White.copy(alpha = 0.05f),
+                Color.White.copy(alpha = 0.05f),
                 RoundedCornerShape(8.dp)
             )
+            .settingsFocusOutline(isFocused)
             .padding(horizontal = 16.dp, vertical = 14.dp)
     ) {
         Row(
@@ -12287,7 +12275,7 @@ private fun InputModal(
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .background(Color.White.copy(alpha = if (isFocused) 0.12f else 0.05f), RoundedCornerShape(12.dp))
+                                    .background(Color.White.copy(alpha = 0.05f), RoundedCornerShape(12.dp))
                                     .border(
                                         width = if (isFocused) 2.dp else 1.dp,
                                         color = if (isFocused) regexFieldFocusColor else Color.White.copy(alpha = 0.2f),
@@ -12420,7 +12408,7 @@ private fun InputModal(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clip(RoundedCornerShape(12.dp))
-                                .background(Color.White.copy(alpha = if (isFocused) 0.12f else 0.05f), RoundedCornerShape(12.dp))
+                                .background(Color.White.copy(alpha = 0.05f), RoundedCornerShape(12.dp))
                                 .border(
                                     width = if (isFocused) 2.dp else 1.dp,
                                     color = if (isFocused) resolveAccentColor(fallback = Pink) else Color.White.copy(alpha = 0.2f),
@@ -12682,7 +12670,7 @@ private fun SubtitlePickerModal(
                                 .fillMaxWidth()
                                 .clip(RoundedCornerShape(12.dp))
                                 .background(
-                                    if (isFocused) Color.White.copy(alpha = 0.12f) else Color.Transparent,
+                                    Color.Transparent,
                                     RoundedCornerShape(12.dp)
                                 )
                                 .border(
@@ -14393,12 +14381,12 @@ private fun YouTubeModalRow(
     imageUrl: String? = null,
     actions: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit
 ) {
-    val accent = if (danger) Color(0xFFDC2626) else Pink
+    val accent = if (danger) Color(0xFFDC2626) else resolveAccentColor(fallback = Pink)
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 4.dp)
-            .background(Color.White.copy(alpha = if (isFocused) 0.12f else 0.04f), RoundedCornerShape(10.dp))
+            .background(Color.White.copy(alpha = 0.04f), RoundedCornerShape(10.dp))
             .border(if (isFocused) 2.dp else 1.dp, if (isFocused) accent else Color.White.copy(alpha = 0.08f), RoundedCornerShape(10.dp))
             .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
             .padding(horizontal = 14.dp, vertical = 10.dp),
