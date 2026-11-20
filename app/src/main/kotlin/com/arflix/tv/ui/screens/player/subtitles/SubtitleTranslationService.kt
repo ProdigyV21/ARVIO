@@ -116,7 +116,8 @@ internal fun repairTruncatedArray(text: String): JSONArray? {
 
 class SubtitleTranslationService(
     private val apiKeyProvider: () -> String,
-    private val modelProvider: () -> SubtitleAiModel = { SubtitleAiModel.GROQ_LLAMA_70B }
+    private val modelProvider: () -> SubtitleAiModel = { SubtitleAiModel.GROQ_LLAMA_70B },
+    private val liteLlmConfigProvider: () -> LiteLlmConfig = { LiteLlmConfig() }
 ) {
 
     private val client = OkHttpClient.Builder()
@@ -181,6 +182,7 @@ class SubtitleTranslationService(
             SubtitleAiModel.GROQ_LLAMA_70B -> matchGroq(prompt, payload, apiKey)
             SubtitleAiModel.GEMINI_FLASH_25 -> matchGemini(prompt, payload, apiKey)
             SubtitleAiModel.CLAUDE_HAIKU -> matchClaude(prompt, payload, apiKey)
+            SubtitleAiModel.LITELLM -> matchLiteLlm(prompt, payload, apiKey)
         } ?: return null
         val array = extractJsonArray(raw) ?: return null
         val matches = ArrayList<LineMatch>(array.length())
@@ -295,6 +297,16 @@ class SubtitleTranslationService(
             }
         }
 
+    private suspend fun matchLiteLlm(systemPrompt: String, payload: String, apiKey: String): String? =
+        when (val reply = liteLlmChatCall(client, liteLlmConfigProvider(), apiKey, systemPrompt, payload)) {
+            is LiteLlmReply.Text -> reply.text
+            is LiteLlmReply.Refused -> null
+            is LiteLlmReply.Failed -> {
+                Log.w(TAG, "matchSubtitleLines litellm failed: ${reply.message}")
+                null
+            }
+        }
+
     suspend fun translateBatch(lines: List<String>, targetLanguage: String): TranslationResult =
         translateBatchInternal(lines, targetLanguage, depth = 0)
 
@@ -344,13 +356,14 @@ class SubtitleTranslationService(
             SubtitleAiModel.GROQ_LLAMA_70B -> translateGroq(lines, targetLanguage, apiKey)
             SubtitleAiModel.GEMINI_FLASH_25 -> translateGemini(lines, targetLanguage, apiKey)
             SubtitleAiModel.CLAUDE_HAIKU -> translateClaude(lines, targetLanguage, apiKey)
+            SubtitleAiModel.LITELLM -> translateLiteLlm(lines, targetLanguage, apiKey)
         }
 
         // A content-policy block poisons the whole window because of (usually) one line.
         // Bisect so the innocuous majority still gets translated; a line that stays blocked all
         // the way down is shown in its original language. Depth cap keeps worst-case extra API
-        // calls bounded (window → halves → quarters). A Claude reply cut off at max_tokens is
-        // bisected the same way: half the lines fit where the whole batch did not.
+        // calls bounded (window → halves → quarters). A Claude or LiteLLM reply cut off at its
+        // output limit is bisected the same way: half the lines fit where the whole batch did not.
         if (!result.success &&
             (result.errorMessage == TRANSLATION_ERROR_CONTENT_BLOCKED || result.errorMessage == CLAUDE_ERROR_MAX_TOKENS) &&
             lines.size >= 2 && depth < 2
@@ -595,6 +608,31 @@ class SubtitleTranslationService(
                 if (!parsed.success && attempt == 0) {
                     Log.w(TAG, "Claude parse failed (${parsed.errorMessage}) — retrying batch once")
                     translateClaude(lines, targetLanguage, apiKey, attempt = 1)
+                } else {
+                    parsed
+                }
+            }
+        }
+    }
+
+    /** Same prompt, indexed batch and parser as Claude; a reply that doesn't parse is asked for once more. */
+    private suspend fun translateLiteLlm(
+        lines: List<String>,
+        targetLanguage: String,
+        apiKey: String,
+        attempt: Int = 0
+    ): TranslationResult {
+        val NL = "⏎"
+        val userText = "Translate to $targetLanguage:\n${encodeIndexed(lines, NL)}"
+        val systemPrompt = buildSystemPrompt(targetLanguage, NL)
+        return when (val reply = liteLlmChatCall(client, liteLlmConfigProvider(), apiKey, systemPrompt, userText)) {
+            is LiteLlmReply.Refused -> TranslationResult(lines, false, TRANSLATION_ERROR_CONTENT_BLOCKED)
+            is LiteLlmReply.Failed -> TranslationResult(lines, false, reply.message)
+            is LiteLlmReply.Text -> {
+                val parsed = parseTranslationResult(lines, targetLanguage, reply.text, NL)
+                if (!parsed.success && attempt == 0) {
+                    Log.w(TAG, "LiteLLM parse failed (${parsed.errorMessage}) — retrying batch once")
+                    translateLiteLlm(lines, targetLanguage, apiKey, attempt = 1)
                 } else {
                     parsed
                 }

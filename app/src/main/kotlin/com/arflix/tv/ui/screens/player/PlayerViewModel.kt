@@ -473,6 +473,7 @@ class PlayerViewModel @Inject constructor(
     private var subtitlePreloadJob: Job? = null
     private var aiApiKey = ""
     private var aiModel = SubtitleAiModel.GROQ_LLAMA_70B
+    private var aiLiteLlm = com.arflix.tv.ui.screens.player.subtitles.LiteLlmConfig()
     private var aiRemoveHearingImpaired = true
 
     // Global AI subtitle DataStore keys (device-wide, not profile-scoped)
@@ -488,6 +489,8 @@ class PlayerViewModel @Inject constructor(
     private val dolbyVisionCompatPrefKey = booleanPreferencesKey("dolby_vision_compat")
     private val aiApiKeyKey = globalStringPreferencesKey("subtitle_ai_api_key")
     private val aiModelKey = globalStringPreferencesKey("subtitle_ai_model")
+    private val aiLiteLlmBaseUrlKey = globalStringPreferencesKey("subtitle_ai_litellm_base_url")
+    private val aiLiteLlmModelKey = globalStringPreferencesKey("subtitle_ai_litellm_model")
     private val aiRemoveHearingImpairedKey = booleanPreferencesKey("subtitle_remove_hearing_impaired")
     // Remembered "find best match" results, keyed by stream identity (sync is a property of the
     // exact video file, not the title — a different rip needs a fresh scan).
@@ -512,7 +515,8 @@ class PlayerViewModel @Inject constructor(
     /** Shared with [translationManager]; also used directly for AI subtitle line-matching. */
     private val translationService = SubtitleTranslationService(
         apiKeyProvider = { aiApiKey },
-        modelProvider = { aiModel }
+        modelProvider = { aiModel },
+        liteLlmConfigProvider = { aiLiteLlm }
     )
 
     val translationManager: SubtitleTranslationManager = SubtitleTranslationManager(
@@ -940,8 +944,12 @@ class PlayerViewModel @Inject constructor(
             aiModel = runCatching {
                 SubtitleAiModel.valueOf(prefs[aiModelKey] ?: SubtitleAiModel.GROQ_LLAMA_70B.name)
             }.getOrDefault(SubtitleAiModel.GROQ_LLAMA_70B)
+            aiLiteLlm = com.arflix.tv.ui.screens.player.subtitles.LiteLlmConfig(
+                baseUrl = prefs[aiLiteLlmBaseUrlKey] ?: "",
+                model = prefs[aiLiteLlmModelKey] ?: ""
+            )
             aiRemoveHearingImpaired = prefs[aiRemoveHearingImpairedKey] ?: true
-            translationManager.updateService(apiKey = aiApiKey, model = aiModel)
+            translationManager.updateService(apiKey = aiApiKey, model = aiModel, liteLlm = aiLiteLlm)
             translationManager.removeHearingImpaired = aiRemoveHearingImpaired
             translationManager.isEnabled = false
             untranslatableSourceKeys.clear()

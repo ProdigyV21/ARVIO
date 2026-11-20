@@ -59,10 +59,11 @@ class SubtitleTranslationManager(
         }
     }
 
-    fun updateService(apiKey: String, model: SubtitleAiModel) {
+    fun updateService(apiKey: String, model: SubtitleAiModel, liteLlm: LiteLlmConfig = LiteLlmConfig()) {
         service = SubtitleTranslationService(
             apiKeyProvider = { apiKey },
-            modelProvider = { model }
+            modelProvider = { model },
+            liteLlmConfigProvider = { liteLlm }
         )
     }
 

@@ -11,7 +11,10 @@ enum class SubtitleAiModel {
     GEMINI_FLASH_25,
     // Anthropic Claude Haiku (model id in ClaudeMessages.kt). Text only: features that stream audio
     // to the Gemini Live API still need the Gemini model, as with Groq.
-    CLAUDE_HAIKU
+    CLAUDE_HAIKU,
+    // Any model behind a LiteLLM proxy (proxy URL and model name in LiteLlmChat.LiteLlmConfig; the
+    // key is the proxy's key). Text only, as with Groq and Claude.
+    LITELLM
 }
 
 /**

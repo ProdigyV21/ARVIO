@@ -447,6 +447,9 @@ data class SettingsUiState(
     val dolbyVisionCompatEnabled: Boolean = true,
     val subtitleAiApiKey: String = "",
     val subtitleAiModel: SubtitleAiModel = SubtitleAiModel.GROQ_LLAMA_70B,
+    val subtitleAiLiteLlmBaseUrl: String = "",
+    val subtitleAiLiteLlmModel: String = "",
+    val liteLlmModels: LiteLlmModelsState = LiteLlmModelsState(),
     val subtitleRemoveHearingImpaired: Boolean = true,
     val aiKeyServerState: AiKeyServerState = AiKeyServerState(),
     val smoothScrolling: Boolean = true,
@@ -480,6 +483,13 @@ data class KidsListApprovalUi(
     val items: List<MediaItem> = emptyList(),
     val nextOffset: Int? = null,
     val error: SettingsMessage? = null
+)
+
+/** The model list the LiteLLM setup dialog loaded from the proxy (GET /v1/models). */
+data class LiteLlmModelsState(
+    val isLoading: Boolean = false,
+    val models: List<String> = emptyList(),
+    val error: String? = null
 )
 
 @HiltViewModel
@@ -637,6 +647,15 @@ class SettingsViewModel @Inject constructor(
     private val dolbyVisionCompatKey = booleanPreferencesKey("dolby_vision_compat")
     private val subtitleAiApiKeyKey = stringPreferencesKey("subtitle_ai_api_key")
     private val subtitleAiModelKey = stringPreferencesKey("subtitle_ai_model")
+    private val subtitleAiLiteLlmBaseUrlKey = stringPreferencesKey("subtitle_ai_litellm_base_url")
+    private val subtitleAiLiteLlmModelKey = stringPreferencesKey("subtitle_ai_litellm_model")
+    private val liteLlmClient by lazy {
+        okhttp3.OkHttpClient.Builder()
+            .connectTimeout(10, java.util.concurrent.TimeUnit.SECONDS)
+            .readTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
+            .build()
+    }
+    private var liteLlmModelsJob: Job? = null
     private val subtitleRemoveHearingImpairedKey = booleanPreferencesKey("subtitle_remove_hearing_impaired")
     private fun includeSpecialsKeyFor(profileId: String) = profileManager.profileBooleanKeyFor(profileId, "include_specials")
     private val gson = Gson()
@@ -968,6 +987,8 @@ class SettingsViewModel @Inject constructor(
             val subtitleAiModel = runCatching {
                 SubtitleAiModel.valueOf(prefs[subtitleAiModelKey] ?: SubtitleAiModel.GROQ_LLAMA_70B.name)
             }.getOrDefault(SubtitleAiModel.GROQ_LLAMA_70B)
+            val subtitleAiLiteLlmBaseUrl = prefs[subtitleAiLiteLlmBaseUrlKey] ?: ""
+            val subtitleAiLiteLlmModel = prefs[subtitleAiLiteLlmModelKey] ?: ""
             val subtitleRemoveHearingImpaired = prefs[subtitleRemoveHearingImpairedKey] ?: true
 
             // Check auth statuses
@@ -1096,6 +1117,8 @@ class SettingsViewModel @Inject constructor(
                 dolbyVisionCompatEnabled = dolbyVisionCompatEnabled,
                 subtitleAiApiKey = subtitleAiApiKey,
                 subtitleAiModel = subtitleAiModel,
+                subtitleAiLiteLlmBaseUrl = subtitleAiLiteLlmBaseUrl,
+                subtitleAiLiteLlmModel = subtitleAiLiteLlmModel,
                 subtitleRemoveHearingImpaired = subtitleRemoveHearingImpaired,
                 smoothScrolling = smoothScrolling,
                 vodSearchEnabled = vodSearchEnabled,
@@ -2383,8 +2406,10 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch {
             // A key's fixed prefix names its provider: follow it, whether the key was typed on the
             // TV or sent from the phone, so it never sits under the wrong model.
+            // Not for LiteLLM: a proxy key can look like any provider's (the proxy may pass it through).
             val keyModel = com.arflix.tv.ui.screens.player.subtitles.subtitleAiModelForKey(key)
                 ?.takeIf { it != _uiState.value.subtitleAiModel }
+                ?.takeIf { _uiState.value.subtitleAiModel != SubtitleAiModel.LITELLM }
             val leavingGemini = keyModel != null &&
                 _uiState.value.subtitleAiModel == com.arflix.tv.ui.screens.player.subtitles.SubtitleAiModel.GEMINI_FLASH_25
             context.settingsDataStore.edit {
@@ -2412,6 +2437,46 @@ class SettingsViewModel @Inject constructor(
             _uiState.value = _uiState.value.copy(subtitleAiModel = model)
             syncLocalStateToCloud(silent = true)
         }
+    }
+
+    /** Saves the LiteLLM proxy setup from Settings and switches AI subtitles to it. */
+    fun saveLiteLlmSettings(baseUrl: String, apiKey: String, model: String) {
+        viewModelScope.launch {
+            val url = com.arflix.tv.ui.screens.player.subtitles.normalizeLiteLlmBaseUrl(baseUrl)
+            context.settingsDataStore.edit {
+                it[subtitleAiLiteLlmBaseUrlKey] = url
+                it[subtitleAiLiteLlmModelKey] = model.trim()
+                it[subtitleAiApiKeyKey] = apiKey.trim()
+                it[subtitleAiModelKey] = SubtitleAiModel.LITELLM.name
+            }
+            _uiState.value = _uiState.value.copy(
+                subtitleAiLiteLlmBaseUrl = url,
+                subtitleAiLiteLlmModel = model.trim(),
+                subtitleAiApiKey = apiKey.trim(),
+                subtitleAiModel = SubtitleAiModel.LITELLM
+            )
+            syncLocalStateToCloud(silent = true)
+        }
+    }
+
+    /** Loads the proxy's model names for the picker in the LiteLLM setup dialog. */
+    fun loadLiteLlmModels(baseUrl: String, apiKey: String) {
+        liteLlmModelsJob?.cancel()
+        _uiState.value = _uiState.value.copy(liteLlmModels = LiteLlmModelsState(isLoading = true))
+        liteLlmModelsJob = viewModelScope.launch {
+            val result = com.arflix.tv.ui.screens.player.subtitles.fetchLiteLlmModels(liteLlmClient, baseUrl, apiKey)
+            _uiState.value = _uiState.value.copy(
+                liteLlmModels = result.fold(
+                    onSuccess = { LiteLlmModelsState(models = it) },
+                    onFailure = { LiteLlmModelsState(error = it.message ?: "Could not load models") }
+                )
+            )
+        }
+    }
+
+    fun clearLiteLlmModels() {
+        liteLlmModelsJob?.cancel()
+        _uiState.value = _uiState.value.copy(liteLlmModels = LiteLlmModelsState())
     }
 
     fun startAiKeyServer() {

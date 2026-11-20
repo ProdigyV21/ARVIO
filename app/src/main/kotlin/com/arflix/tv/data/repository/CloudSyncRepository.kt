@@ -471,6 +471,8 @@ class CloudSyncRepository @Inject constructor(
     private val dolbyVisionCompatKey = androidx.datastore.preferences.core.booleanPreferencesKey("dolby_vision_compat")
     private val subtitleAiApiKeyKey = androidx.datastore.preferences.core.stringPreferencesKey("subtitle_ai_api_key")
     private val subtitleAiModelKey = androidx.datastore.preferences.core.stringPreferencesKey("subtitle_ai_model")
+    private val subtitleAiLiteLlmBaseUrlKey = androidx.datastore.preferences.core.stringPreferencesKey("subtitle_ai_litellm_base_url")
+    private val subtitleAiLiteLlmModelKey = androidx.datastore.preferences.core.stringPreferencesKey("subtitle_ai_litellm_model")
     private val subtitleRemoveHearingImpairedKey = androidx.datastore.preferences.core.booleanPreferencesKey("subtitle_remove_hearing_impaired")
 
     // Active-profile key shortcuts (used for legacy flat fields in snapshot)
@@ -834,6 +836,8 @@ class CloudSyncRepository @Inject constructor(
         root.put("dolbyVisionCompatEnabled", prefs[dolbyVisionCompatKey] ?: true)
         root.put("subtitleAiApiKey", prefs[subtitleAiApiKeyKey] ?: "")
         root.put("subtitleAiModel", prefs[subtitleAiModelKey] ?: "GROQ_LLAMA_70B")
+        root.put("subtitleAiLiteLlmBaseUrl", prefs[subtitleAiLiteLlmBaseUrlKey] ?: "")
+        root.put("subtitleAiLiteLlmModel", prefs[subtitleAiLiteLlmModelKey] ?: "")
         root.put("subtitleRemoveHearingImpaired", prefs[subtitleRemoveHearingImpairedKey] ?: true)
         // Live TV AI subtitles (global, like the AI subtitle key they share).
         root.put("liveAiSubsEnabled", prefs[com.arflix.tv.ui.screens.tv.live.aisubs.LiveAiSubsPrefs.ENABLED] ?: false)
@@ -1946,6 +1950,9 @@ class CloudSyncRepository @Inject constructor(
                 if (apiKey.isNotBlank()) prefs[subtitleAiApiKeyKey] = apiKey
                 val model = root.optString("subtitleAiModel", "GROQ_LLAMA_70B")
                 if (model.isNotBlank()) prefs[subtitleAiModelKey] = model
+                // has() guards: backups from versions without the LiteLLM provider must not reset it.
+                if (root.has("subtitleAiLiteLlmBaseUrl")) prefs[subtitleAiLiteLlmBaseUrlKey] = root.optString("subtitleAiLiteLlmBaseUrl", "")
+                if (root.has("subtitleAiLiteLlmModel")) prefs[subtitleAiLiteLlmModelKey] = root.optString("subtitleAiLiteLlmModel", "")
                 prefs[subtitleRemoveHearingImpairedKey] = root.optBoolean("subtitleRemoveHearingImpaired", true)
                 // has() guards: backups from versions without Live TV AI subtitles must not reset them.
                 val live = com.arflix.tv.ui.screens.tv.live.aisubs.LiveAiSubsPrefs

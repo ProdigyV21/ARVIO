@@ -738,6 +738,7 @@ fun SettingsScreen(
     var qualityFilterDeviceName by remember { mutableStateOf("") }
     var showAiModelDialog by remember { mutableStateOf(false) }
     var showAiApiKeyDialog by remember { mutableStateOf(false) }
+    var showLiteLlmDialog by remember { mutableStateOf(false) }
     var showCustomUserAgentDialog by remember { mutableStateOf(false) }
     var qualityFilterRegexPattern by remember { mutableStateOf("") }
     var showHomeServerInput by remember { mutableStateOf(false) }
@@ -1045,6 +1046,7 @@ fun SettingsScreen(
         addonConfigureTarget != null ||
         showAiModelDialog ||
         showAiApiKeyDialog ||
+        showLiteLlmDialog ||
         showCustomUserAgentDialog ||
         uiState.aiKeyServerState.isActive ||
         uiState.showCloudPairDialog ||
@@ -2231,10 +2233,30 @@ fun SettingsScreen(
                             AiModelDialog(
                                 currentModel = uiState.subtitleAiModel,
                                 onModelSelected = { model ->
-                                    viewModel.setSubtitleAiModel(model)
+                                    // LiteLLM needs a proxy URL and model first; it is switched on when they are saved.
+                                    if (model == com.arflix.tv.ui.screens.player.subtitles.SubtitleAiModel.LITELLM) showLiteLlmDialog = true
+                                    else viewModel.setSubtitleAiModel(model)
                                     showAiModelDialog = false
                                 },
                                 onDismiss = { showAiModelDialog = false }
+                            )
+                        }
+                        if (showLiteLlmDialog) {
+                            LiteLlmSetupDialog(
+                                currentBaseUrl = uiState.subtitleAiLiteLlmBaseUrl,
+                                currentKey = uiState.subtitleAiApiKey,
+                                currentModel = uiState.subtitleAiLiteLlmModel,
+                                modelsState = uiState.liteLlmModels,
+                                onLoadModels = viewModel::loadLiteLlmModels,
+                                onSave = { url, key, model ->
+                                    viewModel.saveLiteLlmSettings(url, key, model)
+                                    viewModel.clearLiteLlmModels()
+                                    showLiteLlmDialog = false
+                                },
+                                onDismiss = {
+                                    viewModel.clearLiteLlmModels()
+                                    showLiteLlmDialog = false
+                                }
                             )
                         }
                         if (showAiApiKeyDialog) {
@@ -3276,10 +3298,31 @@ fun SettingsScreen(
             AiModelDialog(
                 currentModel = uiState.subtitleAiModel,
                 onModelSelected = { model ->
-                    viewModel.setSubtitleAiModel(model)
+                    // LiteLLM needs a proxy URL and model first; it is switched on when they are saved.
+                    if (model == com.arflix.tv.ui.screens.player.subtitles.SubtitleAiModel.LITELLM) showLiteLlmDialog = true
+                    else viewModel.setSubtitleAiModel(model)
                     showAiModelDialog = false
                 },
                 onDismiss = { showAiModelDialog = false }
+            )
+        }
+
+        if (isTouchDevice && showLiteLlmDialog) {
+            LiteLlmSetupDialog(
+                currentBaseUrl = uiState.subtitleAiLiteLlmBaseUrl,
+                currentKey = uiState.subtitleAiApiKey,
+                currentModel = uiState.subtitleAiLiteLlmModel,
+                modelsState = uiState.liteLlmModels,
+                onLoadModels = viewModel::loadLiteLlmModels,
+                onSave = { url, key, model ->
+                    viewModel.saveLiteLlmSettings(url, key, model)
+                    viewModel.clearLiteLlmModels()
+                    showLiteLlmDialog = false
+                },
+                onDismiss = {
+                    viewModel.clearLiteLlmModels()
+                    showLiteLlmDialog = false
+                }
             )
         }
 
@@ -5629,6 +5672,7 @@ private fun MobileSettingsSubPage(
                             com.arflix.tv.ui.screens.player.subtitles.SubtitleAiModel.GROQ_LLAMA_70B -> "Groq - GPT-OSS 120B"
                             com.arflix.tv.ui.screens.player.subtitles.SubtitleAiModel.GEMINI_FLASH_25 -> "Google - Gemini 3.5 Flash Lite"
                             com.arflix.tv.ui.screens.player.subtitles.SubtitleAiModel.CLAUDE_HAIKU -> "Anthropic - Claude Haiku 5.5"
+                            com.arflix.tv.ui.screens.player.subtitles.SubtitleAiModel.LITELLM -> "LiteLLM proxy"
                         },
                         isFocused = false,
                         onClick = onSubtitleAiModelClick
@@ -5678,6 +5722,8 @@ private fun MobileSettingsSubPage(
                                     stringResource(R.string.ai_gemini_disclaimer)
                                 com.arflix.tv.ui.screens.player.subtitles.SubtitleAiModel.CLAUDE_HAIKU ->
                                     stringResource(R.string.ai_claude_disclaimer)
+                                com.arflix.tv.ui.screens.player.subtitles.SubtitleAiModel.LITELLM ->
+                                    stringResource(R.string.ai_litellm_disclaimer)
                             },
                             style = ArflixTypography.caption.copy(fontSize = 11.sp),
                             color = TextSecondary.copy(alpha = 0.5f),
@@ -7157,6 +7203,7 @@ private fun TvGeneralSettingsRows(
                         com.arflix.tv.ui.screens.player.subtitles.SubtitleAiModel.GROQ_LLAMA_70B -> "Groq - GPT-OSS 120B"
                         com.arflix.tv.ui.screens.player.subtitles.SubtitleAiModel.GEMINI_FLASH_25 -> "Google - Gemini 3.5 Flash Lite"
                         com.arflix.tv.ui.screens.player.subtitles.SubtitleAiModel.CLAUDE_HAIKU -> "Anthropic - Claude Haiku 5.5"
+                        com.arflix.tv.ui.screens.player.subtitles.SubtitleAiModel.LITELLM -> "LiteLLM proxy"
                     },
                     isFocused = focusedIndex == localIndex,
                     onClick = onSubtitleAiModelClick,
@@ -7688,6 +7735,7 @@ private fun GeneralSettings(
                 com.arflix.tv.ui.screens.player.subtitles.SubtitleAiModel.GROQ_LLAMA_70B -> "Groq – GPT-OSS 120B"
                 com.arflix.tv.ui.screens.player.subtitles.SubtitleAiModel.GEMINI_FLASH_25 -> "Google – Gemini 3.5 Flash Lite"
                 com.arflix.tv.ui.screens.player.subtitles.SubtitleAiModel.CLAUDE_HAIKU -> "Anthropic – Claude Haiku 5.5"
+                com.arflix.tv.ui.screens.player.subtitles.SubtitleAiModel.LITELLM -> "LiteLLM proxy"
             },
             isFocused = focusedIndex == 29,
             onClick = onSubtitleAiModelClick,
@@ -7741,6 +7789,8 @@ private fun GeneralSettings(
                         stringResource(R.string.ai_gemini_disclaimer)
                     com.arflix.tv.ui.screens.player.subtitles.SubtitleAiModel.CLAUDE_HAIKU ->
                         stringResource(R.string.ai_claude_disclaimer)
+                    com.arflix.tv.ui.screens.player.subtitles.SubtitleAiModel.LITELLM ->
+                        stringResource(R.string.ai_litellm_disclaimer)
                 },
                 style = ArflixTypography.caption.copy(fontSize = 11.sp),
                 color = TextSecondary.copy(alpha = 0.4f),
@@ -7758,6 +7808,7 @@ private fun maskAiApiKey(key: String, notSetLabel: String = "Not set"): String {
         com.arflix.tv.ui.screens.player.subtitles.SubtitleAiModel.GROQ_LLAMA_70B -> "Groq · "
         com.arflix.tv.ui.screens.player.subtitles.SubtitleAiModel.GEMINI_FLASH_25 -> "Gemini · "
         com.arflix.tv.ui.screens.player.subtitles.SubtitleAiModel.CLAUDE_HAIKU -> "Claude · "
+        com.arflix.tv.ui.screens.player.subtitles.SubtitleAiModel.LITELLM -> "LiteLLM · "
         null -> ""
     }
     val masked = if (trimmed.length <= 4) "••••" else "••••${trimmed.takeLast(4)}"
@@ -7774,7 +7825,8 @@ private fun AiModelDialog(
     val options = listOf(
         Triple(com.arflix.tv.ui.screens.player.subtitles.SubtitleAiModel.GROQ_LLAMA_70B, "Groq – GPT-OSS 120B", stringResource(R.string.ai_groq_model_note)),
         Triple(com.arflix.tv.ui.screens.player.subtitles.SubtitleAiModel.GEMINI_FLASH_25, "Google – Gemini 3.5 Flash Lite", stringResource(R.string.ai_gemini_model_note)),
-        Triple(com.arflix.tv.ui.screens.player.subtitles.SubtitleAiModel.CLAUDE_HAIKU, "Anthropic – Claude Haiku 5.5", stringResource(R.string.ai_claude_model_note))
+        Triple(com.arflix.tv.ui.screens.player.subtitles.SubtitleAiModel.CLAUDE_HAIKU, "Anthropic – Claude Haiku 5.5", stringResource(R.string.ai_claude_model_note)),
+        Triple(com.arflix.tv.ui.screens.player.subtitles.SubtitleAiModel.LITELLM, "LiteLLM proxy", stringResource(R.string.ai_litellm_model_note))
     )
     BackHandler { onDismiss() }
     androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
@@ -7855,6 +7907,7 @@ private fun AiApiKeyDialog(
         com.arflix.tv.ui.screens.player.subtitles.SubtitleAiModel.GROQ_LLAMA_70B -> "gsk_..."
         com.arflix.tv.ui.screens.player.subtitles.SubtitleAiModel.GEMINI_FLASH_25 -> "AIzaSy..."
         com.arflix.tv.ui.screens.player.subtitles.SubtitleAiModel.CLAUDE_HAIKU -> "sk-ant-..."
+        com.arflix.tv.ui.screens.player.subtitles.SubtitleAiModel.LITELLM -> "sk-..."
     }
     BackHandler { onDismiss() }
     LaunchedEffect(Unit) {
@@ -7880,6 +7933,7 @@ private fun AiApiKeyDialog(
                             com.arflix.tv.ui.screens.player.subtitles.SubtitleAiModel.GROQ_LLAMA_70B -> R.string.ai_api_key_dialog_subtitle_groq
                             com.arflix.tv.ui.screens.player.subtitles.SubtitleAiModel.GEMINI_FLASH_25 -> R.string.ai_api_key_dialog_subtitle_gemini
                             com.arflix.tv.ui.screens.player.subtitles.SubtitleAiModel.CLAUDE_HAIKU -> R.string.ai_api_key_dialog_subtitle_claude
+                            com.arflix.tv.ui.screens.player.subtitles.SubtitleAiModel.LITELLM -> R.string.ai_api_key_dialog_subtitle_litellm
                         }
                     ),
                     style = ArflixTypography.caption,
@@ -7930,6 +7984,188 @@ private fun AiApiKeyDialog(
                         onClick = { onSave(value) },
                         modifier = Modifier.weight(1f).focusRequester(saveFocus).pointerInput(Unit) {
                             detectTapGestures(onTap = { onSave(value) })
+                        },
+                        colors = ClickableSurfaceDefaults.colors(
+                            containerColor = Pink.copy(alpha = 0.15f),
+                            focusedContainerColor = Pink.copy(alpha = 0.3f)
+                        ),
+                        shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp))
+                    ) {
+                        Text(
+                            text = stringResource(R.string.save),
+                            modifier = Modifier.padding(vertical = 12.dp).fillMaxWidth(),
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                            color = Pink
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * LiteLLM proxy setup: where the proxy is, its key (the shared AI key slot) and which of its models
+ * to use. Load models fills a picker from the proxy's /v1/models; a name can also be typed.
+ */
+@Composable
+private fun LiteLlmSetupDialog(
+    currentBaseUrl: String,
+    currentKey: String,
+    currentModel: String,
+    modelsState: LiteLlmModelsState,
+    onLoadModels: (baseUrl: String, apiKey: String) -> Unit,
+    onSave: (baseUrl: String, apiKey: String, model: String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val isMobile = LocalDeviceType.current.isTouchDevice()
+    var baseUrl by remember(currentBaseUrl) { mutableStateOf(currentBaseUrl) }
+    var key by remember(currentKey) { mutableStateOf(currentKey) }
+    var model by remember(currentModel) { mutableStateOf(currentModel) }
+    val inputFocusRequester = remember { FocusRequester() }
+    val canSave = baseUrl.isNotBlank() && key.isNotBlank() && model.isNotBlank()
+    val fieldColors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
+        focusedTextColor = TextPrimary,
+        unfocusedTextColor = TextPrimary,
+        focusedBorderColor = Pink,
+        unfocusedBorderColor = TextSecondary.copy(alpha = 0.3f)
+    )
+    BackHandler { onDismiss() }
+    LaunchedEffect(Unit) {
+        kotlinx.coroutines.delay(100)
+        inputFocusRequester.requestFocus()
+    }
+    androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
+        Box(
+            modifier = Modifier
+                .then(
+                    if (isMobile) Modifier.fillMaxWidth().padding(horizontal = 16.dp)
+                    else Modifier.width(560.dp)
+                )
+                .clip(RoundedCornerShape(16.dp))
+                .background(BackgroundElevated)
+        ) {
+            Column(modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(24.dp)) {
+                Text(text = stringResource(R.string.ai_litellm_setup_title), style = ArflixTypography.sectionTitle, color = TextPrimary)
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(text = stringResource(R.string.ai_litellm_setup_subtitle), style = ArflixTypography.caption, color = TextSecondary)
+                Spacer(modifier = Modifier.height(16.dp))
+                androidx.compose.material3.OutlinedTextField(
+                    value = baseUrl,
+                    onValueChange = { baseUrl = it },
+                    label = { Text(stringResource(R.string.ai_litellm_base_url)) },
+                    placeholder = { Text("http://192.168.1.10:4000", color = TextSecondary.copy(alpha = 0.4f)) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth().focusRequester(inputFocusRequester),
+                    colors = fieldColors
+                )
+                Spacer(modifier = Modifier.height(10.dp))
+                androidx.compose.material3.OutlinedTextField(
+                    value = key,
+                    onValueChange = { key = it },
+                    label = { Text(stringResource(R.string.ai_api_key_title)) },
+                    placeholder = { Text("sk-...", color = TextSecondary.copy(alpha = 0.4f)) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = fieldColors
+                )
+                Spacer(modifier = Modifier.height(10.dp))
+                androidx.compose.material3.OutlinedTextField(
+                    value = model,
+                    onValueChange = { model = it },
+                    label = { Text(stringResource(R.string.ai_litellm_model)) },
+                    placeholder = { Text("gpt-4.1-mini", color = TextSecondary.copy(alpha = 0.4f)) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = fieldColors
+                )
+                Spacer(modifier = Modifier.height(10.dp))
+                Surface(
+                    onClick = { onLoadModels(baseUrl, key) },
+                    modifier = Modifier.fillMaxWidth().pointerInput(baseUrl, key) {
+                        detectTapGestures(onTap = { onLoadModels(baseUrl, key) })
+                    },
+                    colors = ClickableSurfaceDefaults.colors(
+                        containerColor = BackgroundElevated,
+                        focusedContainerColor = Pink.copy(alpha = 0.25f)
+                    ),
+                    shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
+                    border = ClickableSurfaceDefaults.border(
+                        border = androidx.tv.material3.Border(
+                            border = androidx.compose.foundation.BorderStroke(1.dp, TextSecondary.copy(alpha = 0.3f))
+                        )
+                    )
+                ) {
+                    Text(
+                        text = stringResource(if (modelsState.isLoading) R.string.ai_litellm_loading_models else R.string.ai_litellm_load_models),
+                        modifier = Modifier.padding(vertical = 10.dp).fillMaxWidth(),
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                        color = TextSecondary
+                    )
+                }
+                modelsState.error?.let { error ->
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(text = error, style = ArflixTypography.caption, color = Pink)
+                }
+                if (modelsState.models.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Column(modifier = Modifier.fillMaxWidth().heightIn(max = 220.dp).verticalScroll(rememberScrollState())) {
+                        modelsState.models.forEach { name ->
+                            val isSelected = name == model.trim()
+                            Surface(
+                                onClick = { model = name },
+                                modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp).pointerInput(name) {
+                                    detectTapGestures(onTap = { model = name })
+                                },
+                                colors = ClickableSurfaceDefaults.colors(
+                                    containerColor = if (isSelected) Pink.copy(alpha = 0.15f) else BackgroundElevated,
+                                    focusedContainerColor = Pink.copy(alpha = 0.25f)
+                                ),
+                                shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp))
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(text = name, style = ArflixTypography.caption, color = TextPrimary, modifier = Modifier.weight(1f))
+                                    if (isSelected) {
+                                        Icon(imageVector = Icons.Default.Check, contentDescription = null, tint = Pink, modifier = Modifier.size(16.dp))
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                Spacer(modifier = Modifier.height(20.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Surface(
+                        onClick = onDismiss,
+                        modifier = Modifier.weight(1f).pointerInput(Unit) {
+                            detectTapGestures(onTap = { onDismiss() })
+                        },
+                        colors = ClickableSurfaceDefaults.colors(
+                            containerColor = BackgroundElevated,
+                            focusedContainerColor = BackgroundElevated.copy(alpha = 0.8f)
+                        ),
+                        shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
+                        border = ClickableSurfaceDefaults.border(
+                            border = androidx.tv.material3.Border(
+                                border = androidx.compose.foundation.BorderStroke(1.dp, TextSecondary.copy(alpha = 0.3f))
+                            )
+                        )
+                    ) {
+                        Text(
+                            text = stringResource(R.string.cancel),
+                            modifier = Modifier.padding(vertical = 12.dp).fillMaxWidth(),
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                            color = TextSecondary
+                        )
+                    }
+                    Surface(
+                        onClick = { if (canSave) onSave(baseUrl, key, model) },
+                        modifier = Modifier.weight(1f).alpha(if (canSave) 1f else 0.4f).pointerInput(canSave, baseUrl, key, model) {
+                            detectTapGestures(onTap = { if (canSave) onSave(baseUrl, key, model) })
                         },
                         colors = ClickableSurfaceDefaults.colors(
                             containerColor = Pink.copy(alpha = 0.15f),
