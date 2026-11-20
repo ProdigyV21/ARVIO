@@ -70,6 +70,9 @@ import androidx.compose.ui.zIndex
 import coil.compose.AsyncImage
 import com.arflix.tv.R
 import com.arflix.tv.data.model.MediaType
+import com.arflix.tv.ui.screens.player.ActivePlaybackBadgeData
+import com.arflix.tv.ui.screens.player.ActivePlaybackBadgeUtils
+import com.arflix.tv.ui.screens.player.ActivePlaybackBadgesRow
 import com.arflix.tv.ui.screens.player.PlayerUiState
 import com.arflix.tv.ui.skin.LocalAccentColorOverride
 import com.arflix.tv.ui.theme.ArflixTypography
@@ -98,6 +101,7 @@ fun TvPlayerControls(
     seasonNumber: Int?,
     episodeNumber: Int?,
     playerAccent: Color,
+    activePlaybackBadges: ActivePlaybackBadgeData? = null,
     seekPreviewFrame: SeekPreviewFrame? = null,
     formatTime: (Long) -> String,
     formatClockTime: (Long, String) -> String,
@@ -151,7 +155,8 @@ fun TvPlayerControls(
                     episodeNumber = episodeNumber,
                     isPaused = isPaused,
                     accentColor = playerAccent,
-                    modifier = Modifier.weight(1f, fill = false)
+                    modifier = Modifier.weight(1f, fill = false),
+                    activePlaybackBadges = activePlaybackBadges
                 )
 
                 // Right side - Clock & Ends At Time
@@ -527,24 +532,30 @@ fun TvPlayerMetadataChrome(
     episodeNumber: Int?,
     isPaused: Boolean,
     accentColor: Color,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    activePlaybackBadges: ActivePlaybackBadgeData? = null
 ) {
     val displayTitle = when {
         mediaType == MediaType.TV && !uiState.episodeTitle.isNullOrBlank() -> uiState.episodeTitle
         else -> uiState.title
     }
     val metaLine = buildTvPlaybackBaseMetaLine(uiState, mediaType, seasonNumber, episodeNumber)
+    val resolvedBadges = remember(activePlaybackBadges, uiState.selectedStream) {
+        activePlaybackBadges ?: ActivePlaybackBadgeUtils.resolveBadgeData(stream = uiState.selectedStream)
+    }
+    val hasActiveBadges = resolvedBadges.hasAnyBadge
     val overview = uiState.overview?.trim().orEmpty()
     val logoHeight = 44.dp
     val logoWidth = 230.dp
-    val chromeHeight = when {
+    val baseChromeHeight = when {
         isPaused && overview.isNotBlank() -> 138.dp
         isPaused -> 104.dp
         else -> 86.dp
     }
+    val chromeHeight = if (hasActiveBadges) baseChromeHeight + 28.dp else baseChromeHeight
 
     Row(
-        modifier = modifier.widthIn(max = if (isPaused) 620.dp else 520.dp),
+        modifier = modifier.widthIn(max = if (isPaused) 620.dp else 560.dp),
         verticalAlignment = Alignment.Top
     ) {
         Box(
@@ -556,7 +567,7 @@ fun TvPlayerMetadataChrome(
         )
         Spacer(modifier = Modifier.width(16.dp))
         Column(
-            modifier = Modifier.widthIn(max = if (isPaused) 560.dp else 470.dp),
+            modifier = Modifier.widthIn(max = if (isPaused) 580.dp else 510.dp),
             verticalArrangement = Arrangement.spacedBy(if (isPaused) 5.dp else 4.dp)
         ) {
             if (!uiState.logoUrl.isNullOrBlank()) {
@@ -592,6 +603,13 @@ fun TvPlayerMetadataChrome(
                     color = TextPrimary,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
+                )
+            }
+
+            if (hasActiveBadges) {
+                ActivePlaybackBadgesRow(
+                    badges = resolvedBadges,
+                    modifier = Modifier.padding(top = 2.dp, bottom = 1.dp)
                 )
             }
 
