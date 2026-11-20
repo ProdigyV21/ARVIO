@@ -116,7 +116,7 @@ fun SettingsRow(
                 onClick = onClick
             )
             .background(
-                Color.White.copy(alpha = if (isFocused) 0.1f else 0.05f),
+                Color.White.copy(alpha = 0.05f),
                 RoundedCornerShape(8.dp)
             )
             .settingsFocusOutline(isFocused)
@@ -200,7 +200,7 @@ fun SettingsToggleRow(
             )
             .semantics { stateDescription = toggleDescription }
             .background(
-                Color.White.copy(alpha = if (isFocused) 0.1f else 0.05f),
+                Color.White.copy(alpha = 0.05f),
                 RoundedCornerShape(8.dp)
             )
             .settingsFocusOutline(isFocused)

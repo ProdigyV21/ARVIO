@@ -104,6 +104,8 @@ val BorderGradient = ArcticWhite50            // 50% white
 // ============================================
 val SuccessGreen = AccentGreen
 val ErrorRed = Color(0xFFE74C3C)
+/** Destructive-action red (delete, remove, danger focus), deliberately stronger than [ErrorRed]. */
+val DangerRed = Color(0xFFDC2626)
 val WarningOrange = Color(0xFFF39C12)
 val InfoBlue = ArcticWhite
 val OngoingBlue = ArcticWhite
