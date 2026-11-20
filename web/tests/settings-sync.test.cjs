@@ -159,6 +159,43 @@ test('longer language names win, and audio preferences match Android names', () 
   assert.equal(remux.preferredAudioIndex(tracks, ''), 0);
 });
 
+test('the second audio language is used only when no track matches the first', () => {
+  const remux = load('lib/remuxProtocol.ts');
+  const track = (index, language, extra = {}) => ({ index, codec: 'aac', label: language, language, browserPlayable: true, passthrough: true, ...extra });
+  const tracks = [track(0, 'eng'), track(1, 'ger'), track(2, 'dan')];
+  // The first language wins whenever it exists, whatever the second is.
+  assert.equal(remux.preferredAudioIndex(tracks, 'Danish', 'German'), 2);
+  // Missing first language: the second one is chosen, by name or by code.
+  assert.equal(remux.preferredAudioIndex([track(0, 'eng'), track(1, 'ger')], 'Danish', 'German'), 1);
+  assert.equal(remux.preferredAudioIndex([track(0, 'eng'), track(1, 'ger')], 'Danish', 'de'), 1);
+  // Neither language present: the provider's default order, as before.
+  assert.equal(remux.preferredAudioIndex([track(0, 'eng'), track(1, 'ger')], 'Danish', 'Polish'), 0);
+  // Second language off / blank / non-specific: unchanged behaviour.
+  for (const off of ['', 'Off', 'None', 'Auto (Original)']) {
+    assert.equal(remux.preferredAudioIndex([track(0, 'eng'), track(1, 'ger')], 'Danish', off), 0, `secondary ${off || '(blank)'}`);
+  }
+  // A first choice of Original/None keeps today's behaviour and ignores the second language.
+  assert.equal(remux.preferredAudioIndex([track(0, 'eng'), track(1, 'ger')], '', 'German'), 0);
+  assert.equal(remux.preferredAudioIndex([track(0, 'eng'), track(1, 'ger')], 'None', 'German'), 0);
+  // Only browser-playable tracks count for the fallback, too.
+  assert.equal(remux.preferredAudioIndex([track(0, 'eng'), track(1, 'ger', { browserPlayable: false }), track(2, 'ger')], 'Danish', 'German'), 2);
+  // The one-argument form used elsewhere is unchanged.
+  assert.equal(remux.preferredAudioIndex(tracks, 'German'), 1);
+  assert.equal(remux.preferredAudioIndex([], 'Danish', 'German'), -1);
+});
+
+test('the second audio language syncs with the name Android stores', async () => {
+  const h = cloudHarness({ profileSettingsById: { p1: {} } });
+  const base = webDefaults();
+  assert.equal(base.secondaryAudioLanguage, '', 'off by default');
+  await h.cloud.saveCloudSettings(h.auth, { ...base, secondaryAudioLanguage: 'German' }, [], 'p1', [], base);
+  assert.equal(h.remote().profileSettingsById.p1.secondaryAudioLanguage, 'German');
+  assert.equal((await h.cloud.pullCloudPayload(h.auth, 'p1')).settings.secondaryAudioLanguage, 'German');
+  // Android writes "Off" for no fallback; the web stores that as blank.
+  const android = cloudHarness({ profileSettingsById: { p1: { secondaryAudioLanguage: 'Off' } } });
+  assert.equal((await android.cloud.pullCloudPayload(android.auth, 'p1')).settings.secondaryAudioLanguage, '');
+});
+
 test('values older web builds wrote are rewritten for Android on the next save', async () => {
   const h = cloudHarness({ subtitleAiModel: 'gemini', accentColor: 'purple', profileSettingsById: { p1: {} } });
   const base = { ...webDefaults(), aiSubtitleModel: 'gemini', accentColor: 'purple' };

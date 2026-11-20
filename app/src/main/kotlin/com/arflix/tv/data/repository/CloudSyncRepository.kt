@@ -322,6 +322,7 @@ class CloudSyncRepository @Inject constructor(
     data class CloudProfileSettings(
         val defaultSubtitle: String = "Off",
         val defaultAudioLanguage: String = "Auto (Original)",
+        val secondaryAudioLanguage: String = "Off",
         val contentLanguage: String = "en-US",
         val subtitleSize: String = "Medium",
         val subtitleColor: String = "White",
@@ -446,6 +447,8 @@ class CloudSyncRepository @Inject constructor(
         profileManager.profileStringKeyFor(profileId, "default_subtitle")
     private fun defaultAudioLanguageKeyFor(profileId: String) =
         profileManager.profileStringKeyFor(profileId, "default_audio_language")
+    private fun secondaryAudioLanguageKeyFor(profileId: String) =
+        profileManager.profileStringKeyFor(profileId, "secondary_audio_language")
     private fun cardLayoutModeKeyFor(profileId: String) =
         profileManager.profileStringKeyFor(profileId, "card_layout_mode")
     private fun frameRateMatchingModeKeyFor(profileId: String) =
@@ -742,6 +745,7 @@ class CloudSyncRepository @Inject constructor(
                     CloudProfileSettings(
                         defaultSubtitle = prefs[defaultSubtitleKeyFor(profile.id)] ?: "Off",
                         defaultAudioLanguage = prefs[defaultAudioLanguageKeyFor(profile.id)] ?: "Auto (Original)",
+                        secondaryAudioLanguage = prefs[secondaryAudioLanguageKeyFor(profile.id)] ?: "Off",
                         contentLanguage = resolveAppLanguage(prefs, profile.id),
 
                         homePresentationVersion = HOME_PRESENTATION_VERSION,
@@ -1733,6 +1737,7 @@ class CloudSyncRepository @Inject constructor(
                             }
                         }
                         prefs[defaultAudioLanguageKeyFor(profileId)] = state.defaultAudioLanguage
+                        prefs[secondaryAudioLanguageKeyFor(profileId)] = state.secondaryAudioLanguage.ifBlank { "Off" }
                         prefs[contentLanguageKeyFor(profileId)] = state.contentLanguage
                         if (profileId == activeProfileId) {
                             prefs[LAST_APP_LANGUAGE_KEY] = state.contentLanguage

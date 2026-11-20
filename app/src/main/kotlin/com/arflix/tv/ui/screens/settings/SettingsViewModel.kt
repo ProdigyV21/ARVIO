@@ -222,6 +222,9 @@ data class SettingsUiState(
     val subtitleOptions: List<String> = emptyList(),
     val defaultAudioLanguage: String = "Auto (Original)",
     val audioLanguageOptions: List<String> = emptyList(),
+    /** Fallback audio language used when [defaultAudioLanguage] has no matching track. */
+    val secondaryAudioLanguage: String = "Off",
+    val secondaryAudioLanguageOptions: List<String> = emptyList(),
     val cardLayoutMode: String = CARD_LAYOUT_MODE_LANDSCAPE,
     val frameRateMatchingMode: String = "Off",
     val autoPlayNext: Boolean = true,
@@ -580,6 +583,7 @@ class SettingsViewModel @Inject constructor(
     private fun subtitleSettingsUpdatedAtKey() = profileManager.profileStringKey("subtitle_settings_updated_at")
     private fun defaultAudioLanguageKey() = profileManager.profileStringKey("default_audio_language")
     private fun defaultAudioLanguageKeyFor(profileId: String) = profileManager.profileStringKeyFor(profileId, "default_audio_language")
+    private fun secondaryAudioLanguageKey() = profileManager.profileStringKey("secondary_audio_language")
     private fun subtitleUsageKey() = profileManager.profileStringKey("subtitle_usage_v1")
     private fun cardLayoutModeKey() = profileManager.profileStringKey("card_layout_mode")
     private fun cardLayoutModeKeyFor(profileId: String) = profileManager.profileStringKeyFor(profileId, "card_layout_mode")
@@ -876,6 +880,7 @@ class SettingsViewModel @Inject constructor(
             val prefs = context.settingsDataStore.data.first()
             var defaultSub = prefs[defaultSubtitleKey()] ?: "Off"
             val defaultAudio = prefs[defaultAudioLanguageKey()] ?: "Auto (Original)"
+            val secondaryAudio = prefs[secondaryAudioLanguageKey()]?.trim()?.takeIf { it.isNotBlank() } ?: "Off"
             val cardLayoutMode = normalizeCardLayoutMode(prefs[cardLayoutModeKey()])
             val frameRateMode = normalizeFrameRateMode(prefs[frameRateMatchingModeKey()])
             val deviceModeOverride = prefs[com.arflix.tv.util.DEVICE_MODE_OVERRIDE_KEY] ?: "auto"
@@ -1016,6 +1021,8 @@ class SettingsViewModel @Inject constructor(
                 subtitleOptions = subtitleOptions,
                 defaultAudioLanguage = defaultAudio,
                 audioLanguageOptions = audioLanguageOptions,
+                secondaryAudioLanguage = secondaryAudio,
+                secondaryAudioLanguageOptions = loadSecondaryAudioLanguageOptions(secondaryAudio),
                 cardLayoutMode = cardLayoutMode,
                 frameRateMatchingMode = frameRateMode,
                 autoPlayNext = autoPlay,
@@ -1267,6 +1274,13 @@ class SettingsViewModel @Inject constructor(
             if (_uiState.value.audioLanguageOptions != options) {
                 _uiState.value = _uiState.value.copy(audioLanguageOptions = options)
             }
+        }
+    }
+
+    fun refreshSecondaryAudioLanguageOptions() {
+        val options = loadSecondaryAudioLanguageOptions(_uiState.value.secondaryAudioLanguage)
+        if (_uiState.value.secondaryAudioLanguageOptions != options) {
+            _uiState.value = _uiState.value.copy(secondaryAudioLanguageOptions = options)
         }
     }
 
@@ -1783,6 +1797,26 @@ class SettingsViewModel @Inject constructor(
             )
             syncLocalStateToCloud(silent = true)
         }
+    }
+
+    fun setSecondaryAudioLanguage(language: String) {
+        viewModelScope.launch {
+            context.settingsDataStore.edit { prefs ->
+                prefs[secondaryAudioLanguageKey()] = language
+            }
+            _uiState.value = _uiState.value.copy(
+                secondaryAudioLanguage = language,
+                secondaryAudioLanguageOptions = loadSecondaryAudioLanguageOptions(language)
+            )
+            syncLocalStateToCloud(silent = true)
+        }
+    }
+
+    /** Options for the fallback audio language: "Off" plus the primary picker's languages. */
+    private fun loadSecondaryAudioLanguageOptions(current: String): List<String> {
+        val languages = loadAudioLanguageOptions(current)
+            .filterNot { it.equals("None", ignoreCase = true) || it.equals("Off", ignoreCase = true) || it.startsWith("Auto", ignoreCase = true) }
+        return listOf("Off") + languages
     }
 
     private suspend fun loadSubtitleOptions(current: String): List<String> {

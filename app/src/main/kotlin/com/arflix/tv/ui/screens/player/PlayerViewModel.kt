@@ -218,6 +218,8 @@ data class PlayerUiState(
     val expectedDurationMs: Long = 0,
     val isLoadingPlaybackMetadata: Boolean = false,
     val preferredAudioLanguage: String = "en",
+    // Fallback audio language used when no track matches [preferredAudioLanguage]; "" = off.
+    val secondaryAudioLanguage: String = "",
     // The language a source's badge puts first: the chosen audio language, or null (the device
     // language) under "Auto"/"None", the same as the details screen's source list.
     val sourceBadgeLanguage: String? = null,
@@ -674,6 +676,7 @@ class PlayerViewModel @Inject constructor(
 
     private fun defaultSubtitleKey() = profileManager.profileStringKey("default_subtitle")
     private fun defaultAudioLanguageKey() = profileManager.profileStringKey("default_audio_language")
+    private fun secondaryAudioLanguageKey() = profileManager.profileStringKey("secondary_audio_language")
     private fun subtitleUsageKey() = profileManager.profileStringKey("subtitle_usage_v1")
     private fun filterSubtitlesByLanguageKey() = profileManager.profileBooleanKey("filter_subtitles_by_lang")
     private fun useForcedSubtitlesKey() = profileManager.profileBooleanKey("use_forced_subtitles")
@@ -971,6 +974,7 @@ class PlayerViewModel @Inject constructor(
                 logoUrl = cachedLogoUrl,
                 addonOrderedIds = orderedAddonIds,
                 preferredAudioLanguage = preferredAudioLanguage,
+                secondaryAudioLanguage = resolveSecondaryAudioLanguage(),
                 sourceBadgeLanguage = resolveSourceBadgeLanguage(),
                 preferredSubtitleLang = preferredSub,
                 secondarySubtitleLang = secondarySub,
@@ -2037,7 +2041,8 @@ class PlayerViewModel @Inject constructor(
                 releaseYear = releaseYear,
                 expectedDurationMs = runtimeMinutes.coerceAtLeast(0) * 60_000L,
                 seasonEpisodes = if (mediaType == MediaType.TV && fetchedSeasonEpisodes.isNotEmpty()) fetchedSeasonEpisodes else _uiState.value.seasonEpisodes,
-                preferredAudioLanguage = resolvePreferredAudioLanguage()
+                preferredAudioLanguage = resolvePreferredAudioLanguage(),
+                secondaryAudioLanguage = resolveSecondaryAudioLanguage()
             )
         } catch (e: Exception) {
             if (e is kotlinx.coroutines.CancellationException) throw e
@@ -2833,6 +2838,20 @@ class PlayerViewModel @Inject constructor(
             ?.takeIf { it.isNotBlank() }
             ?: "en"
         return if (fromOriginal in knownLanguageCodes) fromOriginal else "en"
+    }
+
+    /**
+     * The fallback audio language as a language code, or "" when it is off, unknown,
+     * or the same as the preferred language.
+     */
+    private suspend fun resolveSecondaryAudioLanguage(): String {
+        val setting = runCatching {
+            context.settingsDataStore.data.first()[secondaryAudioLanguageKey()]
+        }.getOrNull().orEmpty().trim()
+        if (setting.isBlank() || setting.equals("Off", ignoreCase = true)) return ""
+        val code = normalizeLanguage(setting)
+        if (code !in knownLanguageCodes) return ""
+        return code.takeUnless { it == resolvePreferredAudioLanguage() }.orEmpty()
     }
 
     private fun streamLanguageScore(stream: StreamSource, preferredLanguage: String): Int {
