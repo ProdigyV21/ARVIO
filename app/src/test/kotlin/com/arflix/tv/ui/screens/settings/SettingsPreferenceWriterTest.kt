@@ -42,7 +42,7 @@ class SettingsPreferenceWriterTest {
         val key = stringPreferencesKey("profile_a_subtitle_size")
         val writer = SettingsPreferenceWriter(store, state, scope, { profile }, { synced++ }, { failed++ }, onCommitted = { committed++ })
         fun size(value: String, sync: Boolean = true, afterSave: suspend () -> Unit = { synced++ }) =
-            writer.save(key, value, { it.subtitleSize }, { s, v -> s.copy(subtitleSize = v) }, sync, afterSave)
+            writer.save(key, value, { it.subtitleSize }, { s, v -> s.copy(subtitleSize = v) }, sync = sync, afterSave = afterSave)
     }
 
     @Test fun feedbackDoesNotWaitForDiskOrCloud() = runTest {
@@ -174,5 +174,20 @@ class SettingsPreferenceWriterTest {
         assertEquals("Medium", f.store.data.value[f.key])
         assertEquals(1, f.committed)
         assertEquals(0, f.synced)
+    }
+
+    @Test fun namedPresetAndItsNumericAliasCommitInTheSameEdit() = runTest {
+        val f = Fixture(this)
+        val numeric = androidx.datastore.preferences.core.intPreferencesKey("profile_a_subtitle_size_pct")
+        f.writer.save(
+            f.key, "Large", { it.subtitleSize }, { s, v -> s.copy(subtitleSize = v) },
+            editRelated = { it[numeric] = 120 },
+        )
+        runCurrent()
+        f.store.finish()
+        advanceUntilIdle()
+        // Both keys land together: the player reads the numeric one, the settings UI the named one.
+        assertEquals("Large", f.store.data.value[f.key])
+        assertEquals(120, f.store.data.value[numeric])
     }
 }

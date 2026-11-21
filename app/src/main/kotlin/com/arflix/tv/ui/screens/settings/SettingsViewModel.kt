@@ -2293,7 +2293,12 @@ class SettingsViewModel @Inject constructor(
 
     fun cycleSubtitleSize() {
         val next = when (_uiState.value.subtitleSize) { "Small" -> "Medium"; "Medium" -> "Large"; "Large" -> "Extra Large"; else -> "Small" }
-        preferenceWriter.save(subtitleSizeKey(), next, { it.subtitleSize }, { state, value -> state.copy(subtitleSize = value) })
+        // The bilingual layer (and the player's TV +/- controls) read the numeric alias, so the
+        // named preset must update it in the same write — a stale number otherwise wins silently.
+        val numericKey = profileManager.profileIntKey("subtitle_size_pct")
+        val percent = when (next) { "Small" -> 80; "Large" -> 120; "Extra Large" -> 140; else -> 100 }
+        preferenceWriter.save(subtitleSizeKey(), next, { it.subtitleSize }, { state, value -> state.copy(subtitleSize = value) },
+            editRelated = { it[numericKey] = percent })
     }
 
     fun cycleSubtitleColor() {
@@ -2303,7 +2308,11 @@ class SettingsViewModel @Inject constructor(
 
     fun cycleSubtitleOffset() {
         val next = when (_uiState.value.subtitleOffset) { "Bottom" -> "Low"; "Low" -> "Medium"; "Medium" -> "High"; else -> "Bottom" }
-        preferenceWriter.save(subtitleOffsetKey(), next, { it.subtitleOffset }, { state, value -> state.copy(subtitleOffset = value) })
+        // Same as size: the numeric vertical position is what the overlay and the TV sliders read.
+        val numericKey = profileManager.profileIntKey("subtitle_vertical_pct")
+        val percent = when (next) { "Low" -> 8; "Medium" -> 15; "High" -> 25; else -> 2 }
+        preferenceWriter.save(subtitleOffsetKey(), next, { it.subtitleOffset }, { state, value -> state.copy(subtitleOffset = value) },
+            editRelated = { it[numericKey] = percent })
     }
 
     fun cycleSubtitleStyle() {
