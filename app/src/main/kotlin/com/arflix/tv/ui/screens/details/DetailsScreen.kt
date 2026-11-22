@@ -904,6 +904,7 @@ fun DetailsScreen(
                                         SidebarItem.HOME -> onNavigateToHome()
                                         SidebarItem.WATCHLIST -> onNavigateToWatchlist()
                                         SidebarItem.TV -> onNavigateToTv()
+                                        SidebarItem.NEWS -> com.arflix.tv.ui.components.NewsNavigation.open()
                                         SidebarItem.SETTINGS -> onNavigateToSettings()
                                         null -> Unit
                                     }
