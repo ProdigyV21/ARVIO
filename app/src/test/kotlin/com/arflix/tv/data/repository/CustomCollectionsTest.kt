@@ -11,8 +11,8 @@ import org.junit.Test
 
 class CustomCollectionsTest {
 
-    // Nuvio collections export shape: array of collections -> folders -> sources.
-    private val nuvioExport = """
+    // Collections export shape: array of collections -> folders -> sources.
+    private val collectionsExport = """
         [
           {
             "id": "studios", "title": "Studios", "viewMode": "TABBED_GRID",
@@ -41,9 +41,9 @@ class CustomCollectionsTest {
     """.trimIndent()
 
     @Test
-    fun `installs a Nuvio export as one rail per collection`() {
-        assertTrue(CustomCollections.looksLikeCollections(nuvioExport))
-        val result = CustomCollections.parse(nuvioExport, url = "https://example.com/collections.json")
+    fun `installs a collections export as one rail per collection`() {
+        assertTrue(CustomCollections.looksLikeCollections(collectionsExport))
+        val result = CustomCollections.parse(collectionsExport, url = "https://example.com/collections.json")
         assertTrue(result.isSuccess)
         assertEquals(2, result.getOrThrow().size)
 
@@ -70,7 +70,7 @@ class CustomCollectionsTest {
 
     @Test
     fun `cloud restored catalogs are valid without a device local registry`() {
-        val configs = CustomCollections.catalogs(CustomCollections.parse(nuvioExport, null).getOrThrow())
+        val configs = CustomCollections.catalogs(CustomCollections.parse(collectionsExport, null).getOrThrow())
         val gson = com.google.gson.Gson()
         val restored = gson.fromJson(gson.toJson(configs), Array<CatalogConfig>::class.java).toList()
         assertEquals(configs, restored)
@@ -82,8 +82,8 @@ class CustomCollectionsTest {
     @Test
     fun `separate imports do not change built in defaults or each other`() {
         val before = MediaRepository.buildPreinstalledDefaults()
-        val first = CustomCollections.parse(nuvioExport, "https://example.com/A.json").getOrThrow()
-        val second = CustomCollections.parse(nuvioExport, "https://example.com/a.json").getOrThrow()
+        val first = CustomCollections.parse(collectionsExport, "https://example.com/A.json").getOrThrow()
+        val second = CustomCollections.parse(collectionsExport, "https://example.com/a.json").getOrThrow()
         assertFalse(first.first().packId == second.first().packId)
         assertEquals(before, MediaRepository.buildPreinstalledDefaults())
     }
@@ -92,13 +92,13 @@ class CustomCollectionsTest {
     fun `rejects documents that are not collections`() {
         assertFalse(CustomCollections.looksLikeCollections("""{"id":"pack","name":"x","catalogs":[]}"""))
         assertTrue(CustomCollections.parse("not json", null).isFailure)
-        assertTrue(CustomCollections.parse(nuvioExport.replace("\"tmdbId\": 3", "\"tmdbId\": \"invalid\""), null).isFailure)
-        assertTrue(CustomCollections.parse(nuvioExport.replace("\"tmdbId\": 3", "\"tmdbId\": -1"), null).isFailure)
+        assertTrue(CustomCollections.parse(collectionsExport.replace("\"tmdbId\": 3", "\"tmdbId\": \"invalid\""), null).isFailure)
+        assertTrue(CustomCollections.parse(collectionsExport.replace("\"tmdbId\": 3", "\"tmdbId\": -1"), null).isFailure)
     }
 
     @Test
     fun `reimport preserves position and renamed titles without duplicating catalogs`() {
-        val imported = CustomCollections.catalogs(CustomCollections.parse(nuvioExport, null).getOrThrow())
+        val imported = CustomCollections.catalogs(CustomCollections.parse(collectionsExport, null).getOrThrow())
         val other = CatalogConfig(id = "other", title = "Other", sourceType = CatalogSourceType.ADDON)
         val current = listOf(other) + imported.reversed().map { it.copy(title = "Renamed ${it.id}") }
         val merged = CustomCollections.merge(current, imported)
@@ -109,7 +109,7 @@ class CustomCollectionsTest {
 
     @Test
     fun `URL import identifiers match the web format`() {
-        val rails = CustomCollections.parse(nuvioExport, "https://example.com/collections.json").getOrThrow()
+        val rails = CustomCollections.parse(collectionsExport, "https://example.com/collections.json").getOrThrow()
         val expected = java.security.MessageDigest.getInstance("SHA-256")
             .digest("https://example.com/collections.json".toByteArray()).take(6)
             .joinToString("") { "%02x".format(it) }

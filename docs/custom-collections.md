@@ -1,6 +1,6 @@
 # Imported collections
 
-Import a Nuvio collection document in Settings > Catalogs, using a URL or JSON.
+Import a collections export document in Settings > Catalogs, using a URL or JSON.
 Each collection becomes a Home row, with a tile for each supported folder.
 The existing Home layout and built-in artwork are unchanged.
 
@@ -92,7 +92,7 @@ are retained during upgrades; imported packs remain user-managed and keep their
 own names and sources. Disabling the built-in set also hides newly added defaults.
 
 No explicit reuse license was found on `ImKaptain/Kaptain-Collection` or
-`ImKaptain/nuvio-art` when checked on 2026-09-28. The existing attributed example
+the creator's artwork repository when checked on 2026-09-28. The existing attributed example
 file has not been renamed or stripped of its credits and is not bundled as an
 app default. Obtain the creator's permission before redistributing that pack or
 its artwork; public access is not a substitute for permission.
@@ -111,7 +111,7 @@ TMDB-only scores retain their TMDB label rather than an IMDb badge.
 The existing `collections/kaptain-arvio-trimmed.json` import example originates
 from **Kaptain (ImKaptain)**. Credit for the original collection curation belongs
 to [Kaptain Collection](https://github.com/ImKaptain/Kaptain-Collection), and
-associated artwork is credited to [nuvio-art](https://github.com/ImKaptain/nuvio-art).
+associated artwork is credited to [Kaptain (ImKaptain)](https://github.com/ImKaptain).
 The example retains its original source references. This credit is not a claim
 of permission, endorsement, or ownership by ARVIO.
 

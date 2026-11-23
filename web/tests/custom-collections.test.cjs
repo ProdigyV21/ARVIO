@@ -82,7 +82,7 @@ test('production loaders send discover filters, list IDs and addon genre to the 
   assert.ok(calls.some(url => url.includes('with_origin_country=IL') && url.includes('sort_by=first_air_date.desc')));
   const list = await api.loadCatalog(catalog([{ kind: 'TMDB_LIST', tmdbListId: 99 }]), 'en', []);
   assert.equal(list.items[0].title, 'Film');
-  await api.loadCatalog(catalog([{ kind: 'ADDON_CATALOG', addonId: 'old-nuvio-id', addonCatalogType: 'movie', addonCatalogId: 'top', addonGenre: 'Science Fiction' }]), 'en',
+  await api.loadCatalog(catalog([{ kind: 'ADDON_CATALOG', addonId: 'old-addon-id', addonCatalogType: 'movie', addonCatalogId: 'top', addonGenre: 'Science Fiction' }]), 'en',
     [{ id: 'installed', manifestUrl: 'https://addon.invalid/manifest.json', catalogs: [{ id: 'top', type: 'movie' }] }]);
   assert.ok(calls.includes('https://addon.invalid/catalog/movie/top/genre=Science%20Fiction.json'));
   const person = await parseCustomCollections(JSON.stringify({ title: 'Director', folders: [{ title: 'Shows', sources: [

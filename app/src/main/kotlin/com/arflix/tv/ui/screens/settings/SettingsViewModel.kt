@@ -3126,7 +3126,7 @@ class SettingsViewModel @Inject constructor(
                 pendingPackManifest = null,
                 pendingPackUrl = null
             )
-            // Collections documents (e.g. a Nuvio collections export, by URL or pasted
+            // Collections documents (e.g. a collections export file, by URL or pasted
             // JSON) install directly; anything else continues as a catalog pack.
             val collectionsResult = catalogRepository.importCollections(url)
             if (collectionsResult != null) {

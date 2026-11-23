@@ -815,7 +815,7 @@ private fun EventArtwork(
 }
 
 /**
- * The focused game, large, above the Sports rows (as in Nuvio + IPTV's sports hub).
+ * The focused game, large, above the Sports rows.
  * Reads the focused event through [eventProvider] so moving focus recomposes only
  * this banner, never the rows.
  */

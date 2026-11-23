@@ -63,7 +63,7 @@ enum class CollectionSourceKind {
     MDBLIST_PUBLIC,
     // Generic TMDB /discover query built from `discoverParams` (raw TMDB query
     // keys such as with_companies / with_networks / primary_release_date.gte).
-    // Lets imported collections (e.g. Nuvio exports) describe any discover
+    // Lets imported collections (e.g. exported collection files) describe any discover
     // filter without a dedicated source kind per filter.
     TMDB_DISCOVER,
     // Public TMDB v3 list (`/list/{id}`), mixed movies and series in list order.

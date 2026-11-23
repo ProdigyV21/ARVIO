@@ -83,7 +83,7 @@ Thank you to **@Himanth-reddy, @ReichiMD, @silentbil, @Saelon600, @test01203 and
 - **@test01203:** custom collection imports and replacement of built-in collections.
 - **@GAPP99:** live guide improvements, sports guide placement, expandable groups and configurable guide rows.
 
-The optional collection import example retains credit to [Kaptain / ImKaptain](https://github.com/ImKaptain/Kaptain-Collection) and [nuvio-art](https://github.com/ImKaptain/nuvio-art). ARVIO's built-in replacement collections are independently authored.
+The optional collection import example retains credit to [Kaptain / ImKaptain](https://github.com/ImKaptain/Kaptain-Collection). ARVIO's built-in replacement collections are independently authored.
 
 [Merged contributions](https://github.com/ProdigyV21/ARVIO/blob/v2.0.1/releases/v2.0.1/MERGED_CONTRIBUTIONS.md) | [Complete commit history](https://github.com/ProdigyV21/ARVIO/blob/v2.0.1/releases/v2.0.1/COMMIT_CHANGELOG.md) | [Full comparison](https://github.com/ProdigyV21/ARVIO/compare/v2.0.0...v2.0.1)
 

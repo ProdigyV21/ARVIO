@@ -121,7 +121,7 @@ class ExternalRepoParser @Inject constructor(
         return try {
             val request = Request.Builder()
                 .url(url)
-                .header("User-Agent", "NuvioTV/1.0")
+                .header("User-Agent", "ARVIO/1.0")
                 .build()
             httpClient.newCall(request).execute().use { response ->
                 if (!response.isSuccessful) {

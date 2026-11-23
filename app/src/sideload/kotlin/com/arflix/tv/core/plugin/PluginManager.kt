@@ -1,7 +1,7 @@
 package com.arflix.tv.core.plugin
 
 import android.util.Log
-import com.arflix.tv.core.plugin.cloudstream.toNuvioType
+import com.arflix.tv.core.plugin.cloudstream.toContentType
 import com.arflix.tv.core.plugin.cloudstream.tvTypeFromString
 import com.arflix.tv.core.plugin.cloudstream.ExternalExtensionLoader
 import com.arflix.tv.core.plugin.cloudstream.ExternalExtensionRunner
@@ -48,6 +48,7 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 private const val TAG = "PluginManager"
+private const val PLUGIN_USER_AGENT = "ARVIO/1.0"
 // Scrapers are network-bound, not CPU-bound. Running more concurrently lets slow
 // providers overlap with fast ones instead of batching in groups of 5. OkHttp's
 // dispatcher + the providers' own internal parallelism stay the real bottleneck.
@@ -138,7 +139,7 @@ class PluginManager @Inject constructor(
 
             val request = Request.Builder()
                 .url("https://cutt.ly/$code")
-                .header("User-Agent", "NuvioTV/1.0")
+                .header("User-Agent", PLUGIN_USER_AGENT)
                 .build()
 
             noRedirectClient.newCall(request).execute().use { response ->
@@ -161,7 +162,7 @@ class PluginManager @Inject constructor(
             // Fallback: follow redirects and see where we end up
             val request = Request.Builder()
                 .url("https://cutt.ly/$code")
-                .header("User-Agent", "NuvioTV/1.0")
+                .header("User-Agent", PLUGIN_USER_AGENT)
                 .build()
 
             httpClient.newCall(request).execute().use { response ->
@@ -189,7 +190,7 @@ class PluginManager @Inject constructor(
     }
 
     /**
-     * Canonicalize a URL for deduplication. For NuvioTV-style URLs (that don't end in .json),
+     * Canonicalize a URL for deduplication. For plugin repository URLs (that don't end in .json),
      * appends /manifest.json. For URLs already ending in .json (external repos), keeps them as-is.
      */
     private fun canonicalizeRepoUrl(url: String): String {
@@ -198,7 +199,7 @@ class PluginManager @Inject constructor(
         if (trimmed.substringAfterLast("/").endsWith(".json", ignoreCase = true)) {
             return trimmed
         }
-        // Otherwise canonicalize as NuvioTV manifest
+        // Otherwise canonicalize as a plugin manifest
         return canonicalizeManifestUrl(trimmed)
     }
 
@@ -277,7 +278,7 @@ class PluginManager @Inject constructor(
 
     /**
      * Add a new repository from manifest URL.
-     * Auto-detects format: tries NuvioTV manifest first, then external repo format.
+     * Auto-detects format: tries the plugin manifest first, then external repo format.
      */
     suspend fun addRepository(manifestUrl: String): Result<PluginRepository> = withContext(Dispatchers.IO) {
         try {
@@ -301,7 +302,7 @@ class PluginManager @Inject constructor(
             val fallbackName = if (isShortCode(originalInput)) originalInput else null
 
             // If the URL points to a specific .json file (not manifest.json),
-            // try external format first to avoid a wasted 404 on the NuvioTV path.
+            // try external format first to avoid a wasted 404 on the manifest path.
             if (isExplicitJsonFile) {
                 Log.d(TAG, "URL ends in .json — trying external format first: $sanitizedUrl")
                 val externalResult = externalRepoParser.tryParse(sanitizedUrl, fallbackName)
@@ -310,18 +311,18 @@ class PluginManager @Inject constructor(
                 }
             }
 
-            // Try NuvioTV format (with canonicalized /manifest.json URL)
+            // Try the plugin manifest format (with canonicalized /manifest.json URL)
             val canonicalManifestUrl = canonicalizeManifestUrl(sanitizedUrl)
-            Log.d(TAG, "Trying NuvioTV manifest: $canonicalManifestUrl")
+            Log.d(TAG, "Trying plugin manifest: $canonicalManifestUrl")
 
             val manifest = fetchManifest(canonicalManifestUrl)
             if (manifest != null) {
-                return@withContext addNuvioRepository(canonicalManifestUrl, manifest)
+                return@withContext addJsPluginRepository(canonicalManifestUrl, manifest)
             }
 
             // If we haven't tried external format yet, try it now
             if (!isExplicitJsonFile) {
-                Log.d(TAG, "NuvioTV manifest not found, trying external format: $sanitizedUrl")
+                Log.d(TAG, "Plugin manifest not found, trying external format: $sanitizedUrl")
                 val externalResult = externalRepoParser.tryParse(sanitizedUrl, fallbackName)
                 if (externalResult != null) {
                     return@withContext addExternalRepository(sanitizedUrl, externalResult)
@@ -357,14 +358,14 @@ class PluginManager @Inject constructor(
                     // Hint was wrong or parse failed — fall through to auto-detect
                     Log.w(TAG, "addRepositoryWithTypeHint: EXTERNAL_DEX hint failed, falling back to auto-detect")
                 }
-                RepositoryType.NUVIO_JS -> {
-                    Log.d(TAG, "addRepositoryWithTypeHint: NUVIO_JS hint, trying manifest: $sanitizedUrl")
+                RepositoryType.JS_PLUGIN -> {
+                    Log.d(TAG, "addRepositoryWithTypeHint: JS_PLUGIN hint, trying manifest: $sanitizedUrl")
                     val canonicalManifestUrl = canonicalizeManifestUrl(sanitizedUrl)
                     val manifest = fetchManifest(canonicalManifestUrl)
                     if (manifest != null) {
-                        return@withContext addNuvioRepository(canonicalManifestUrl, manifest)
+                        return@withContext addJsPluginRepository(canonicalManifestUrl, manifest)
                     }
-                    Log.w(TAG, "addRepositoryWithTypeHint: NUVIO_JS hint failed, falling back to auto-detect")
+                    Log.w(TAG, "addRepositoryWithTypeHint: JS_PLUGIN hint failed, falling back to auto-detect")
                 }
                 null -> { /* No hint — use auto-detect */ }
             }
@@ -377,7 +378,7 @@ class PluginManager @Inject constructor(
         }
     }
 
-    private suspend fun addNuvioRepository(
+    private suspend fun addJsPluginRepository(
         canonicalManifestUrl: String,
         manifest: PluginManifest
     ): Result<PluginRepository> {
@@ -388,13 +389,13 @@ class PluginManager @Inject constructor(
             enabled = true,
             lastUpdated = System.currentTimeMillis(),
             scraperCount = manifest.getActiveScrapers().size,
-            type = RepositoryType.NUVIO_JS
+            type = RepositoryType.JS_PLUGIN
         )
 
         dataStore.addRepository(repo)
         downloadJsScrapers(repo.id, canonicalManifestUrl, manifest.getActiveScrapers())
 
-        Log.d(TAG, "NuvioTV repository added: ${repo.name} with ${manifest.getActiveScrapers().size} scrapers")
+        Log.d(TAG, "Plugin repository added: ${repo.name} with ${manifest.getActiveScrapers().size} scrapers")
         triggerRemoteSync("repo added: ${repo.name}")
         return Result.success(repo)
     }
@@ -496,7 +497,7 @@ class PluginManager @Inject constructor(
         normalizedRemote.forEach { remotePlugin ->
             if (initialLocalByNormalizedUrl[normalizeUrl(remotePlugin.url)] == null) {
                 val typeHint = remotePlugin.repoType?.let {
-                    try { RepositoryType.valueOf(it) } catch (_: Exception) { null }
+                    RepositoryType.fromStored(it)
                 }
                 val result = addRepositoryWithTypeHint(remotePlugin.url, typeHint)
                 if (result.isFailure) {
@@ -765,7 +766,7 @@ class PluginManager @Inject constructor(
     ): List<LocalScraperResult> {
         return when (scraper.type) {
             RepositoryType.EXTERNAL_DEX -> executeExternalDexScraper(scraper, tmdbId, mediaType, season, episode)
-            RepositoryType.NUVIO_JS -> executeJsScraper(scraper, tmdbId, mediaType, season, episode)
+            RepositoryType.JS_PLUGIN -> executeJsScraper(scraper, tmdbId, mediaType, season, episode)
         }
     }
 
@@ -895,7 +896,7 @@ class PluginManager @Inject constructor(
                         scraper.id, testTmdbId, testMediaType, testSeason, testEpisode, diagnostics
                     )
                 }
-                RepositoryType.NUVIO_JS -> {
+                RepositoryType.JS_PLUGIN -> {
                     diagnostics.addStep("Executing JS scraper...")
                     executeScraper(scraper, testTmdbId, testMediaType, testSeason, testEpisode)
                 }
@@ -912,7 +913,7 @@ class PluginManager @Inject constructor(
         try {
             val request = Request.Builder()
                 .url(url)
-                .header("User-Agent", "NuvioTV/1.0")
+                .header("User-Agent", PLUGIN_USER_AGENT)
                 .build()
 
             httpClient.newCall(request).execute().use { response ->
@@ -965,7 +966,7 @@ class PluginManager @Inject constructor(
                 // Download code
                 val codeRequest = Request.Builder()
                     .url(codeUrl)
-                    .header("User-Agent", "NuvioTV/1.0")
+                    .header("User-Agent", PLUGIN_USER_AGENT)
                     .build()
 
                 val code = httpClient.newCall(codeRequest).execute().use { codeResponse ->
@@ -1064,7 +1065,7 @@ class PluginManager @Inject constructor(
 
                         val supportedTypes = plugin.tvTypes
                             ?.mapNotNull { tvTypeFromString(it) }
-                            ?.map { it.toNuvioType() }
+                            ?.map { it.toContentType() }
                             ?.distinct()
                             ?.ifEmpty { listOf("movie", "tv") }
                             ?: listOf("movie", "tv")

@@ -163,21 +163,21 @@ test('upstream channel and quality details are preserved without claiming verifi
 test('live-sport-plugin tv protocol preserves exact IDs and merges with Highfly and IPTV', async () => {
   const urls = [];
   const m = modules({ jsonRequest: async url => { urls.push(url); return { streams: [{ name: 'Provider', url: 'https://media.example/live.m3u8' }] }; } });
-  const second = { ...addon, id: 'community.nuvio.live-sports', name: 'Live Sports', types: ['tv', 'series', 'channel'],
+  const second = { ...addon, id: 'community.example.live-sports', name: 'Live Sports', types: ['tv', 'series', 'channel'],
     manifestUrl: 'https://second.example/config/manifest.json', catalogs: [
-      { type: 'tv', id: 'nuvio_sports_live', name: 'Live Now' },
-      { type: 'tv', id: 'nuvio_sports_networks', name: '24/7 Live TV' },
-      { type: 'tv', id: 'nuvio_sports_replays', name: 'Sports Replays' }
+      { type: 'tv', id: 'community_sports_live', name: 'Live Now' },
+      { type: 'tv', id: 'community_sports_networks', name: '24/7 Live TV' },
+      { type: 'tv', id: 'community_sports_replays', name: 'Sports Replays' }
     ] };
   const catalogs = m.sportsEventCatalogs(second);
   assert.equal(catalogs.length, 1);
-  const source = m.toSportsAddonEvent({ id: 'nuvio_sport_match-123', type: 'tv', name: '\uD83D\uDD34 LIVE: North vs South',
+  const source = m.toSportsAddonEvent({ id: 'community_sport_match-123', type: 'tv', name: '\uD83D\uDD34 LIVE: North vs South',
     released: new Date(now - 60_000).toISOString(), releaseInfo: 'LIVE', genres: ['FOOTBALL'] }, second, catalogs[0], now);
   const highfly = m.toSportsAddonEvent(meta, addon, catalog, now);
   const merged = m.attachSportsAddonSources([guide], [highfly, source], now);
   assert.equal(merged.length, 1); assert.equal(merged[0].addonSources.length, 2); assert.equal(merged[0].channels.length, 1);
   await m.resolveSportsAddon(source, [second], new AbortController().signal);
-  assert.equal(urls[0], 'https://second.example/config/stream/tv/nuvio_sport_match-123.json');
+  assert.equal(urls[0], 'https://second.example/config/stream/tv/community_sport_match-123.json');
 });
 
 test('promotional links are excluded and playable video precedes external handoffs', async () => {

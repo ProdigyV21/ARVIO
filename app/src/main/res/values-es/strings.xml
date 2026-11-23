@@ -411,7 +411,7 @@
     <string name="settings_edit_tv_playlist">Editar lista de TV</string>
     <string name="settings_add_tv_playlist">Añadir lista de TV</string>
     <string name="settings_catalog_pack_import_title">Importar paquete de catálogos / colecciones</string>
-    <string name="settings_catalog_pack_import_desc">Importar un paquete de catálogos o un archivo de colecciones (p. ej., una exportación de colecciones de Nuvio) desde una URL o un JSON pegado</string>
+    <string name="settings_catalog_pack_import_desc">Importar un paquete de catálogos o un archivo de colecciones (p. ej., una exportación de colecciones) desde una URL o un JSON pegado</string>
     <string name="settings_catalog_pack_import_badge">IMPORTAR</string>
     <string name="settings_catalog_pack_url_label">URL o JSON del paquete / colecciones</string>
     <string name="settings_catalog_pack_loading">Cargando detalles del paquete de catálogos...</string>
@@ -2057,7 +2057,7 @@
     <string name="settings_builtin_collections_title">Colecciones integradas</string>
     <string name="settings_builtin_collections_desc">Mostrar las filas integradas de ARVIO de Servicios / Géneros / Franquicias. Desactívalo para usar solo tus propias colecciones importadas</string>
     <string name="settings_collections_installed">Colecciones instaladas: %1$s (%2$d filas)</string>
-    <string name="catalog_collections_invalid">No es un archivo de colecciones válido (se esperaba un JSON de exportación de colecciones de Nuvio)</string>
+    <string name="catalog_collections_invalid">No es un archivo de colecciones válido (se esperaba un JSON de exportación de colecciones)</string>
     <string name="catalog_tmdb_title">Catálogo TMDB</string>
     <string name="catalog_url_tmdb_hint">Usa la URL de una página de TMDB de lista, colección, productora, cadena, persona, palabra clave o género</string>
     <string name="catalog_url_simkl_hint">Usa la URL de una lista personalizada de SIMKL, p. ej., simkl.com/5/list/14462.</string>

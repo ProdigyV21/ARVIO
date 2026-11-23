@@ -223,7 +223,7 @@ Thank you to [all contributors](https://github.com/ProdigyV21/ARVIO/graphs/contr
 
 This product uses the TMDB API but is not endorsed or certified by TMDB. Other integrated services, trademarks, SDKs and artwork belong to their respective owners; compatibility does not imply endorsement.
 
-The optional Kaptain collection import example retains credit to [Kaptain / ImKaptain](https://github.com/ImKaptain), [Kaptain Collection](https://github.com/ImKaptain/Kaptain-Collection) and [nuvio-art](https://github.com/ImKaptain/nuvio-art). See [collection credits and reuse notes](docs/custom-collections.md#collection-credits). ARVIO's built-in collection queries are maintained separately.
+The optional Kaptain collection import example retains credit to [Kaptain / ImKaptain](https://github.com/ImKaptain) and [Kaptain Collection](https://github.com/ImKaptain/Kaptain-Collection). See [collection credits and reuse notes](docs/custom-collections.md#collection-credits). ARVIO's built-in collection queries are maintained separately.
 
 - **Privacy and cloud data:** [Privacy policy](PRIVACY.md). Cloud account and synced-data deletion is available at [auth.arvio.tv/delete](https://auth.arvio.tv/delete).
 - **Content and copyright:** ARVIO does not host, sell or distribute movies, series, channels or streams. Metadata and artwork do not grant viewing rights or permission to reuse an image. Use sources you are authorized to access. Report concerns about ARVIO-controlled material or links through [COPYRIGHT.md](COPYRIGHT.md); independently hosted material may also need reporting to its provider.

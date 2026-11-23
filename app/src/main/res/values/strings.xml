@@ -411,7 +411,7 @@
     <string name="settings_edit_tv_playlist">Edit TV Playlist</string>
     <string name="settings_add_tv_playlist">Add TV Playlist</string>
     <string name="settings_catalog_pack_import_title">Import Catalog Pack / Collections</string>
-    <string name="settings_catalog_pack_import_desc">Import a catalog pack or a collections file (e.g. a Nuvio collections export) from a URL or pasted JSON</string>
+    <string name="settings_catalog_pack_import_desc">Import a catalog pack or a collections file (e.g. a collections export) from a URL or pasted JSON</string>
     <string name="settings_catalog_pack_import_badge">IMPORT</string>
     <string name="settings_catalog_pack_url_label">Pack / collections URL or JSON</string>
     <string name="settings_catalog_pack_loading">Loading catalog pack details...</string>
@@ -2059,7 +2059,7 @@
     <string name="settings_builtin_collections_title">Built-in Collections</string>
     <string name="settings_builtin_collections_desc">Show the built-in ARVIO Services / Genres / Franchises rails. Turn off to use only your own imported collections</string>
     <string name="settings_collections_installed">Installed collections: %1$s (%2$d rails)</string>
-    <string name="catalog_collections_invalid">This is not a valid collections file (Nuvio collections export JSON expected)</string>
+    <string name="catalog_collections_invalid">This is not a valid collections file (collections export JSON expected)</string>
     <string name="catalog_tmdb_title">TMDB catalog</string>
     <string name="catalog_url_tmdb_hint">Use a TMDB list, collection, company, network, person, keyword or genre page URL</string>
     <string name="catalog_url_simkl_hint">Use a SIMKL custom-list URL, e.g. simkl.com/5/list/14462.</string>

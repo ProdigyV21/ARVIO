@@ -13,7 +13,7 @@ private const val TAG = "ExtExtractorRegistry"
 
 /**
  * Registry of loaded extractors from external extensions.
- * Bridges NuvioTV's extractor management with the CloudStream library's
+ * Bridges ARVIO's extractor management with the CloudStream library's
  * global [extractorApis] list and [loadExtractor] function.
  */
 @Singleton
