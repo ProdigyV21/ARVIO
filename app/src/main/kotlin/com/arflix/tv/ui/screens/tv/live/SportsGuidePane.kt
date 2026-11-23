@@ -204,6 +204,8 @@ internal fun SportsGuidePane(
         }
     }
     var selected by remember { mutableStateOf<SportsGuideEvent?>(null) }
+    // The game the D-pad is on, shown large above the rows. Only the preview reads it.
+    var previewEvent by remember { mutableStateOf<SportsGuideEvent?>(null) }
     var returnFocus by remember { mutableStateOf<FocusRequester?>(null) }
     var showScore by remember { mutableStateOf(false) }
     val firstFocus = remember { FocusRequester() }
@@ -410,7 +412,21 @@ internal fun SportsGuidePane(
                     )
                 }
             }
-        } else LazyColumn(Modifier.fillMaxSize().testTag("sports-guide-list"), state = listState, contentPadding = PaddingValues(bottom = 24.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()),
+        } else Column(Modifier.fillMaxSize()) {
+            if (!touch && !narrow) SportsFocusPreview(
+                eventProvider = {
+                    val current = previewEvent
+                    current?.let { focusedEvent -> rows.firstNotNullOfOrNull { row -> row.events.firstOrNull { it.id == focusedEvent.id } } }
+                        ?: rows.firstOrNull()?.events?.firstOrNull()
+                },
+                timeLabel = ::eventTime,
+                isLive = { it.isOnAir(now) },
+                channelNames = { event ->
+                    ((if (event.isOnAir(now)) event.availableChannels(now) else event.channels) + event.possibleChannels)
+                        .distinctBy { it.id }.map { it.name }
+                },
+            )
+            LazyColumn(Modifier.weight(1f).fillMaxWidth().testTag("sports-guide-list"), state = listState, contentPadding = PaddingValues(bottom = 24.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()),
             verticalArrangement = Arrangement.spacedBy(2.dp)) {
             val rowKeys = disambiguatedLazyKeys(rows) { it.id }
             itemsIndexed(rows, key = { index, _ -> rowKeys[index] }, contentType = { _, _ -> "sports-row" }) { rowIndex, row ->
@@ -453,6 +469,7 @@ internal fun SportsGuidePane(
                                 .onFocusChanged {
                                     focused = it.isFocused
                                     if (it.isFocused) {
+                                        previewEvent = event
                                         handledFocusSignal = focusSignal
                                         onContentFocused()
                                         if (focusedOrder[0]?.first != row.id) {
@@ -525,6 +542,7 @@ internal fun SportsGuidePane(
                     }
                 }
             }
+        }
         }
     }
     }
@@ -795,6 +813,59 @@ private fun EventArtwork(
         layers(with(density) { maxWidth.roundToPx() }.coerceAtLeast(1), with(density) { maxHeight.roundToPx() }.coerceAtLeast(1))
     }
 }
+
+/**
+ * The focused game, large, above the Sports rows (as in Nuvio + IPTV's sports hub).
+ * Reads the focused event through [eventProvider] so moving focus recomposes only
+ * this banner, never the rows.
+ */
+@Composable
+private fun SportsFocusPreview(
+    eventProvider: () -> SportsGuideEvent?,
+    timeLabel: (SportsGuideEvent) -> String,
+    isLive: (SportsGuideEvent) -> Boolean,
+    channelNames: (SportsGuideEvent) -> List<String>,
+    modifier: Modifier = Modifier,
+) {
+    val event = eventProvider()
+    Row(
+        modifier.fillMaxWidth().height(SportsPreviewHeight).padding(horizontal = 18.dp, vertical = 8.dp)
+            .testTag("sports-focus-preview"),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(18.dp),
+    ) {
+        if (event == null) return@Row
+        Box(Modifier.width(SportsPreviewArtWidth).aspectRatio(16f / 9f).clip(RoundedCornerShape(10.dp))) {
+            key(event.id) {
+                EventArtwork(event, Modifier.fillMaxSize(),
+                    knownSize = androidx.compose.ui.unit.DpSize(SportsPreviewArtWidth, SportsPreviewArtWidth * 9f / 16f))
+            }
+        }
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text(listOfNotNull(event.sport.title, event.competition).joinToString(" · "),
+                color = LiveColors.FgDim, fontSize = 13.sp, lineHeight = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(event.title, color = LiveColors.Fg, fontSize = 24.sp, lineHeight = 28.sp, fontWeight = FontWeight.SemiBold,
+                maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.testTag("sports-focus-preview-title"))
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                val live = isLive(event)
+                Row(Modifier.background(if (live) LiveColors.LiveRed.copy(alpha = 0.18f) else Color.White.copy(alpha = 0.08f), RoundedCornerShape(6.dp))
+                    .padding(horizontal = 8.dp, vertical = 3.dp), verticalAlignment = Alignment.CenterVertically) {
+                    if (live) Box(Modifier.padding(end = 6.dp).size(7.dp).background(LiveColors.LiveRed, RoundedCornerShape(50)))
+                    Text(timeLabel(event), color = LiveColors.Fg, fontSize = 12.sp, lineHeight = 15.sp, fontWeight = FontWeight.Medium)
+                }
+                val names = channelNames(event)
+                if (names.isNotEmpty()) {
+                    Icon(Icons.Default.Tv, null, tint = LiveColors.FgDim, modifier = Modifier.size(14.dp))
+                    Text(names.take(3).joinToString(", ") + if (names.size > 3) " +${names.size - 3}" else "",
+                        color = LiveColors.FgDim, fontSize = 12.sp, lineHeight = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+            }
+        }
+    }
+}
+
+private val SportsPreviewHeight = 140.dp
+private val SportsPreviewArtWidth = 220.dp
 
 @Composable
 private fun PickerBadge(label: String) {
