@@ -1133,13 +1133,37 @@ class AuthRepository @Inject constructor(
         return if (!cached.isNullOrBlank() && !isJwtExpired(cached)) cached else refreshAccessToken()
     }
 
+    /**
+     * Refreshes the session. Only one refresh runs at a time: refresh tokens rotate,
+     * so parallel callers sending the same token made all but one fail, and the
+     * failures could revoke the session. A token the server rejected is not sent
+     * again (it can never succeed), and a network failure waits [REFRESH_RETRY_MS]
+     * before the next attempt. Without this, a device with a dead token sent
+     * hundreds of refreshes a day.
+     */
     suspend fun refreshAccessToken(): String? {
-        val prefs = context.authDataStore.data.first()
-        val refreshToken = prefs[PrefsKeys.REFRESH_TOKEN]
-        if (refreshToken.isNullOrBlank()) return null
+        val tokenBeforeWaiting = context.authDataStore.data.first()[PrefsKeys.ACCESS_TOKEN]
+        return refreshMutex.withLock {
+            val prefs = context.authDataStore.data.first()
+            // Another caller refreshed while this one waited: use its result.
+            val current = prefs[PrefsKeys.ACCESS_TOKEN]
+            if (!current.isNullOrBlank() && current != tokenBeforeWaiting && !isJwtExpired(current)) {
+                return@withLock current
+            }
+            val refreshToken = prefs[PrefsKeys.REFRESH_TOKEN]
+            if (!refreshGate.mayRefresh(refreshToken, System.currentTimeMillis())) return@withLock null
+            refreshAccessTokenLocked(refreshToken!!)
+        }
+    }
 
+    private val refreshMutex = Mutex()
+    private val refreshGate = RefreshGate()
+
+    private suspend fun refreshAccessTokenLocked(refreshToken: String): String? {
         if (Constants.USE_NETLIFY_CLOUD_SYNC) {
             refreshNetlifyAccessToken(refreshToken)?.let { return it }
+            // The backend proxies the same Supabase refresh, so a rejection there is final.
+            if (refreshGate.isRejected(refreshToken)) return null
         }
 
         return try {
@@ -1148,7 +1172,7 @@ class AuthRepository @Inject constructor(
             refreshed.accessToken
         } catch (e: Exception) {
             if (e is kotlinx.coroutines.CancellationException) throw e
-
+            refreshGate.onFailure(refreshToken, null, System.currentTimeMillis())
             null
         }
     }
@@ -1170,7 +1194,10 @@ class AuthRepository @Inject constructor(
 
                 okHttpClient.newCall(request).execute().use { response ->
                     val body = response.body?.string().orEmpty()
-                    if (!response.isSuccessful) return@withContext null
+                    if (!response.isSuccessful) {
+                        refreshGate.onFailure(refreshToken, response.code, System.currentTimeMillis())
+                        return@withContext null
+                    }
                     val json = JSONObject(body)
                     val accessToken = json.optString("access_token")
                     val newRefreshToken = json.optString("refresh_token")
@@ -1192,7 +1219,7 @@ class AuthRepository @Inject constructor(
                 }
             } catch (e: Exception) {
                 if (e is kotlinx.coroutines.CancellationException) throw e
-
+                refreshGate.onFailure(refreshToken, null, System.currentTimeMillis())
                 null
             }
         }
