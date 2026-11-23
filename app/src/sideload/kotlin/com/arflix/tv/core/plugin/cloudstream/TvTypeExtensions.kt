@@ -2,8 +2,8 @@ package com.arflix.tv.core.plugin.cloudstream
 
 import com.lagradost.cloudstream3.TvType
 
-/** Map CloudStream TvType to NuvioTV content type string ("movie" or "tv"). */
-fun TvType.toNuvioType(): String = when (this) {
+/** Map CloudStream TvType to ARVIO content type string ("movie" or "tv"). */
+fun TvType.toContentType(): String = when (this) {
     TvType.Movie, TvType.AnimeMovie, TvType.Documentary, TvType.Torrent -> "movie"
     else -> "tv"
 }

@@ -140,7 +140,7 @@ class AiSubtitleRenderersFactory(
         allowedVideoJoiningTimeMs: Long,
         out: ArrayList<Renderer>
     ) {
-        // VIDEO is ALWAYS hardware-first, exactly like NuvioTV (which ships no software video
+        // VIDEO is ALWAYS hardware-first, (the app ships no software video
         // renderer at all and never guesses by device name). The bundled jellyfin FFmpeg *video*
         // decoder must never be PREFERRED — software 4K HEVC/DV decode can't keep up on TV boxes
         // (Homatics/Mi Box), producing audio-but-no-video → source skip, while the hardware

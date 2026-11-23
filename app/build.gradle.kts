@@ -517,7 +517,7 @@ ksp {
     implementation("org.nanohttpd:nanohttpd:2.3.1")
 
     // Plugin system dependencies (Sideload flavor only)
-    add("sideloadImplementation", files("libs/quickjs-kt-android-1.0.5-nuvio.aar"))
+    add("sideloadImplementation", files("libs/quickjs-kt-android-1.0.5-arvio.aar"))
     add("sideloadImplementation", "com.fasterxml.jackson.core:jackson-databind:2.17.0")
     add("sideloadImplementation", "com.fasterxml.jackson.module:jackson-module-kotlin:2.17.0")
     add("sideloadImplementation", "com.github.Blatzar:NiceHttp:0.4.11")
@@ -689,7 +689,7 @@ dependencies {
     annotationProcessor("org.jetbrains.kotlin:kotlin-metadata-jvm:2.3.0")
 
     // Plugin system dependencies (Sideload flavor only)
-    add("sideloadImplementation", files("libs/quickjs-kt-android-1.0.5-nuvio.aar"))
+    add("sideloadImplementation", files("libs/quickjs-kt-android-1.0.5-arvio.aar"))
     add("sideloadImplementation", "com.fasterxml.jackson.core:jackson-databind:2.17.0")
     add("sideloadImplementation", "com.fasterxml.jackson.module:jackson-module-kotlin:2.17.0")
     add("sideloadImplementation", "com.github.Blatzar:NiceHttp:0.4.11")

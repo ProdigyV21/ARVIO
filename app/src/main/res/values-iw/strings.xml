@@ -407,7 +407,7 @@
     <string name="settings_edit_tv_playlist">עריכת רשימת השמעה לטלוויזיה</string>
     <string name="settings_add_tv_playlist">הוספת רשימת השמעה לטלוויזיה</string>
     <string name="settings_catalog_pack_import_title">ייבוא חבילת קטלוגים / אוספים</string>
-    <string name="settings_catalog_pack_import_desc">ייבוא חבילת קטלוגים או קובץ אוספים (למשל ייצוא אוספים של Nuvio) מכתובת או מ-JSON שהודבק</string>
+    <string name="settings_catalog_pack_import_desc">ייבוא חבילת קטלוגים או קובץ אוספים (למשל ייצוא אוספים) מכתובת או מ-JSON שהודבק</string>
     <string name="settings_catalog_pack_import_badge">ייבוא</string>
     <string name="settings_catalog_pack_url_label">כתובת או JSON של חבילה / אוספים</string>
     <string name="settings_catalog_pack_loading">טוען פרטי חבילת קטלוגים...</string>
@@ -2040,7 +2040,7 @@
     <string name="settings_builtin_collections_title">אוספים מובנים</string>
     <string name="settings_builtin_collections_desc">הצגת שורות ARVIO Services / Genres / Franchises המובנות. יש לכבות כדי להשתמש רק באוספים המיובאים שלך</string>
     <string name="settings_collections_installed">אוספים מותקנים: %1$s (%2$d שורות)</string>
-    <string name="catalog_collections_invalid">זה אינו קובץ אוספים תקין (צפוי JSON של ייצוא אוספים מ-Nuvio)</string>
+    <string name="catalog_collections_invalid">זה אינו קובץ אוספים תקין (צפוי JSON של ייצוא אוספים)</string>
     <string name="catalog_tmdb_title">קטלוג TMDB</string>
     <string name="catalog_url_tmdb_hint">יש להשתמש בכתובת של רשימה, אוסף, חברה, רשת, אדם, מילת מפתח או דף ז׳אנר ב-TMDB</string>
     <string name="catalog_url_simkl_hint">יש להשתמש בכתובת של רשימה מותאמת אישית ב-SIMKL, לדוגמה simkl.com/5/list/14462.</string>

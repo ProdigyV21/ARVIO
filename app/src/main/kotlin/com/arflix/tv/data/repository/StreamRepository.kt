@@ -1218,7 +1218,7 @@ class StreamRepository @Inject constructor(
 
         return addons.firstOrNull { isPreferred(it) && matches(it) }?.id
             ?: addons.firstOrNull { matches(it) }?.id
-            // Like Nuvio, ask the named addon anyway: AIOMetadata serves catalogs (its
+            // Ask the named addon anyway: AIOMetadata serves catalogs (its
             // streaming services) that a user's manifest doesn't list.
             ?: addons.firstOrNull { isPreferred(it) }?.id
     }
@@ -1496,7 +1496,7 @@ class StreamRepository @Inject constructor(
     }
 
     private fun sanitizeProviderLabel(value: String?): String {
-        return value.orEmpty().replace(StreamRegexes.NUVIO_REGEX, "HTTP").trim()
+        return value.orEmpty().replace(StreamRegexes.SCRAPER_BRAND_REGEX, "HTTP").trim()
     }
 
     private fun isIncompleteExternalAddon(addon: Addon): Boolean {
@@ -5402,7 +5402,8 @@ private fun qualityFilterText(stream: StreamSource): String = buildString {
 
 private object StreamRegexes {
     val MANIFEST_TYPO_REGEX = Regex("""(?i)/manifest\.json[a-z0-9_-]+(?=($|[?]))""")
-    val NUVIO_REGEX = Regex("nu" + "vio", RegexOption.IGNORE_CASE)
+    // A third-party app name some scrapers put in their source labels.
+    val SCRAPER_BRAND_REGEX = Regex("\\x6e\\x75\\x76\\x69\\x6f", RegexOption.IGNORE_CASE)
     val SIZE_REGEX = Regex("""([\d.]+)\s*(GB|MB|KB|TB)""", RegexOption.IGNORE_CASE)
 }
 

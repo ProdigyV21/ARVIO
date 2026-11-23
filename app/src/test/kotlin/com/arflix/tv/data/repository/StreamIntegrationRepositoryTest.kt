@@ -119,7 +119,7 @@ class StreamIntegrationRepositoryTest {
                 description = "Community plugins",
                 enabled = true,
                 scraperCount = 1,
-                type = RepositoryType.NUVIO_JS
+                type = RepositoryType.JS_PLUGIN
             )
         )
     )

@@ -636,7 +636,7 @@ export async function loadCollectionSource(
 /**
  * The installed addon a collection's addon source loads from. Collections name the addon by
  * its manifest id ("aio-metadata"); Android-installed entries carry a per-URL suffix. Like
- * Nuvio, the named addon is asked even for a catalog its manifest doesn't list (AIOMetadata
+ * The named addon is asked even for a catalog its manifest doesn't list (AIOMetadata
  * serves its streaming catalogs that way).
  */
 function findCollectionAddon(addons: InstalledAddon[], source: CollectionSourceConfig) {

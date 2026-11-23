@@ -214,7 +214,7 @@ class ExternalExtensionLoader @Inject constructor(
 
             val request = Request.Builder()
                 .url(downloadUrl)
-                .header("User-Agent", "NuvioTV/1.0")
+                .header("User-Agent", "ARVIO/1.0")
                 .build()
 
             httpClient.newCall(request).execute().use { response ->

@@ -45,7 +45,7 @@ object PluginRuntimeHooks {
             try {
                 Security.insertProviderAt(Conscrypt.newProvider(), 1)
             } catch (e: Exception) {
-                Log.w("NuvioApplication", "Failed to install Conscrypt: ${e.message}")
+                Log.w("PluginRuntime", "Failed to install Conscrypt: ${e.message}")
             }
 
             try {
@@ -60,7 +60,7 @@ object PluginRuntimeHooks {
                     ))
                     .build()
             } catch (e: Throwable) {
-                Log.w("NuvioApplication", "Failed to initialize NiceHttp client (API ${Build.VERSION.SDK_INT}): ${e.message}")
+                Log.w("PluginRuntime", "Failed to initialize NiceHttp client (API ${Build.VERSION.SDK_INT}): ${e.message}")
             }
 
             isCloudstreamInitialized = true

@@ -8,7 +8,7 @@ import com.lagradost.cloudstream3.utils.ExtractorApi
 import com.lagradost.cloudstream3.utils.extractorApis
 
 /**
- * The base class that CloudStream extensions extend in NuvioTV.
+ * The base class that CloudStream extensions extend in ARVIO.
  * Kept standalone (not extending BasePlugin) because BasePlugin's registration
  * methods are final and can't be overridden. Extensions compiled against the
  * real CloudStream app reference this class directly.
@@ -20,7 +20,7 @@ open class Plugin {
     val registeredMainAPIs: List<MainAPI> get() = _registeredMainAPIs
     val registeredExtractorAPIs: List<ExtractorApi> get() = _registeredExtractorAPIs
 
-    /** Extensions can set this to provide a settings UI callback. No-op in NuvioTV. */
+    /** Extensions can set this to provide a settings UI callback. No-op in ARVIO. */
     var openSettings: ((Context) -> Unit)? = null
 
     /** Full file path to the plugin (matches BasePlugin's property). */

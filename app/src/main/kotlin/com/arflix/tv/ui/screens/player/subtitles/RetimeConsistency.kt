@@ -8,7 +8,7 @@ package com.arflix.tv.ui.screens.player.subtitles
  *
  * The retimer's `confident` flag checks that lines found partners, not how far off they are, so a
  * release with a cut (or uneven drift) can pass as confident while part of the episode is seconds
- * out — a measured weakness of the Nuvio retimer (3 of 8 planted 5-second cuts accepted, per the
+ * out — a measured weakness of a simpler retimer (3 of 8 planted 5-second cuts accepted, per the
  * NG Feature-16 study) and exactly The Shards S01E04 (Sept 2026): ×1.001 + 6.9s, right at the start
  * and ~4–5s late from minute 30. The NG "A–I" contract refuses on local residual steps of 1s; this
  * is the same test on the retimer's own matched pairs.

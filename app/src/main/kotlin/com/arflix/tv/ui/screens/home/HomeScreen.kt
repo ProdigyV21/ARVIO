@@ -3692,7 +3692,7 @@ private fun MobileHomeRowsLayer(
                         }
 
                         if (showViewAll) {
-                            // Like Nuvio, the "View all" card replaces the loading tail;
+                            // The "View all" card replaces the loading tail;
                             // the next page still loads as it scrolls into view.
                             item(key = "${category.id}_view_all", contentType = "view_all_card") {
                                 HomeViewAllCard(

@@ -26,7 +26,7 @@ internal data class CustomCollectionRail(
 /**
  * Stateless collections importer. CatalogRepository persists the resulting catalogs per profile.
  *
- * Accepts the Nuvio collections export format (a JSON array of collections, each
+ * Accepts the common collections export format (a JSON array of collections, each
  * with `folders` and `sources`), a single collection object, or a wrapper
  * `{ "name": "...", "collections": [ ... ] }`. Each imported document becomes a
  * "pack" that can be removed as a whole from Settings → Catalogs.

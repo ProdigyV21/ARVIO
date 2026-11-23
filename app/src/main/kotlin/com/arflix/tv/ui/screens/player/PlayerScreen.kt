@@ -438,7 +438,7 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
             isTvDevice = deviceType == com.arflix.tv.util.DeviceType.TV
         ).let { it.copy(targetBufferBytes = minOf(it.targetBufferBytes, playbackMemoryBudget.maxPlaybackBytes)) }
     }
-    // No device-name decoder guessing — matches NuvioTV, which is hardware-first for video and
+    // No device-name decoder guessing — hardware-first for video and
     // never branches on Build.MODEL/HARDWARE. The old (amlogic/sei/"Box R") heuristic force-fed
     // capable boxes to the FFmpeg *software* video decoder ("Box R" even caught the Homatics Box R
     // 4K Plus), causing audio-but-no-video → source skip. Video is now hardware-first for EVERY

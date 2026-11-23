@@ -8,7 +8,7 @@ Pull requests merged after the v2.0.0 source tag and included in this release.
 | [#726](https://github.com/ProdigyV21/ARVIO/pull/726) | @ReichiMD | feat(player): add a Forced Subtitles setting |
 | [#727](https://github.com/ProdigyV21/ARVIO/pull/727) | @Himanth-reddy | feat(distribution): add official Obtainium support and release store badges |
 | [#728](https://github.com/ProdigyV21/ARVIO/pull/728) | @ReichiMD | fix(settings): open Trakt activation page with the code prefilled on phones |
-| [#729](https://github.com/ProdigyV21/ARVIO/pull/729) | @test01203 | Allow installing any collections (Nuvio format) and replacing the built-in ones |
+| [#729](https://github.com/ProdigyV21/ARVIO/pull/729) | @test01203 | Allow installing any collections (collections export format) and replacing the built-in ones |
 | [#731](https://github.com/ProdigyV21/ARVIO/pull/731) | @Himanth-reddy | feat(settings & player): stream integrations management and priority search strategy |
 | [#732](https://github.com/ProdigyV21/ARVIO/pull/732) | @silentbil | Read subtitle sync reference from the container's Cues index |
 | [#733](https://github.com/ProdigyV21/ARVIO/pull/733) | @Saelon600 | fix(mobile): restore responsive landscape heroes and Live TV guide |
