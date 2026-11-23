@@ -488,6 +488,7 @@ function androidProfileSettings(settings: AppSettings) {
   return {
     defaultSubtitle: settings.defaultSubtitle || "Off",
     defaultAudioLanguage: settings.audioLanguage || "Auto (Original)",
+    secondaryAudioLanguage: settings.secondaryAudioLanguage || "Off",
     contentLanguage: settings.language || "en-US",
     trailerAutoPlay: settings.trailerAutoPlay,
     trailerSoundEnabled: settings.trailerSound,
@@ -543,6 +544,10 @@ function settingsFromAndroidProfile(value: unknown): Partial<AppSettings> {
   const partial: Partial<AppSettings> = {};
   if ("defaultSubtitle" in state) partial.defaultSubtitle = String(state.defaultSubtitle || "");
   if ("defaultAudioLanguage" in state) partial.audioLanguage = String(state.defaultAudioLanguage || "");
+  if ("secondaryAudioLanguage" in state) {
+    const secondaryAudio = String(state.secondaryAudioLanguage || "");
+    partial.secondaryAudioLanguage = secondaryAudio.toLowerCase() === "off" ? "" : secondaryAudio;
+  }
   if ("contentLanguage" in state) partial.language = String(state.contentLanguage || "en-US");
   if ("trailerAutoPlay" in state) partial.trailerAutoPlay = Boolean(state.trailerAutoPlay);
   if ("trailerSoundEnabled" in state) partial.trailerSound = Boolean(state.trailerSoundEnabled);

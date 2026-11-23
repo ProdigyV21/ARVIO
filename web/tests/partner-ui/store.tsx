@@ -23,7 +23,7 @@ const settings: AppSettings = {
   autoPlayNext: false, autoPlaySingleSource: false, autoPlayMinQuality: "any", frameRateMatchingMode: "off",
   trailerAutoPlay: false, trailerSound: false, trailerDelaySeconds: 2, trailerInCards: false, volumeBoostDb: 0,
   includeSpecials: true, qualityFilterPreset: "off", qualityFilters: [], language: "en-US", defaultSubtitle: "en",
-  secondarySubtitle: "", audioLanguage: "", subtitleSize: 100, subtitleColor: "#fff", subtitleColorName: "White",
+  secondarySubtitle: "", audioLanguage: "", secondaryAudioLanguage: "", subtitleSize: 100, subtitleColor: "#fff", subtitleColorName: "White",
   subtitleOffsetMs: 0, subtitleOffset: "bottom", subtitleStyle: "outline", subtitleStylized: false,
   filterSubtitlesByLanguage: false, removeHearingImpaired: false, aiSubtitlesEnabled: false, aiSubtitleModel: "off",
   aiAutoSelect: false, aiApiKey: "", aiFindBestMatch: false, dolbyVisionCompat: true, telegramSearchOnClickOnly: true,

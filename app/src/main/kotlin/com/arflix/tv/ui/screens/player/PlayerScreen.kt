@@ -1408,7 +1408,7 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
                 androidx.media3.exoplayer.trackselection.DefaultTrackSelector(context).apply {
                     parameters = buildUponParameters()
                         // Prefer original audio language when available
-                        .setPreferredAudioLanguage(uiState.preferredAudioLanguage.takeUnless { it.isBlank() || it.equals("none", ignoreCase = true) })
+                        .setPreferredAudioLanguages(*preferredAudioLanguages(uiState.preferredAudioLanguage, uiState.secondaryAudioLanguage))
                         // Allow decoder fallback for unsupported codecs
                         .setAllowVideoMixedMimeTypeAdaptiveness(true)
                         .setAllowVideoNonSeamlessAdaptiveness(true)
@@ -2643,12 +2643,12 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
         }
     }
 
-    LaunchedEffect(uiState.preferredAudioLanguage) {
+    LaunchedEffect(uiState.preferredAudioLanguage, uiState.secondaryAudioLanguage) {
         if (playerReleased) return@LaunchedEffect
         val trackSelector = exoPlayer.trackSelector as? androidx.media3.exoplayer.trackselection.DefaultTrackSelector
         if (trackSelector != null) {
             val params = trackSelector.buildUponParameters()
-                .setPreferredAudioLanguage(uiState.preferredAudioLanguage.takeUnless { it.isBlank() || it.equals("none", ignoreCase = true) })
+                .setPreferredAudioLanguages(*preferredAudioLanguages(uiState.preferredAudioLanguage, uiState.secondaryAudioLanguage))
                 .build()
             trackSelector.parameters = params
         }
@@ -2666,12 +2666,10 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
     // tag get skipped and playback falls back to the default track (often Russian on
     // multi-audio releases). We additionally match on the track label here so the user's
     // chosen language wins regardless of how the track was tagged.
-    LaunchedEffect(audioTracks, uiState.preferredAudioLanguage, userPickedAudioForStream) {
+    LaunchedEffect(audioTracks, uiState.preferredAudioLanguage, uiState.secondaryAudioLanguage, userPickedAudioForStream) {
         if (playerReleased || userPickedAudioForStream) return@LaunchedEffect
         if (audioTracks.size < 2) return@LaunchedEffect
-        val preferred = uiState.preferredAudioLanguage.trim()
-        if (preferred.isBlank() || preferred.equals("none", ignoreCase = true)) return@LaunchedEffect
-        val matchIndex = findPreferredAudioTrackIndex(audioTracks, preferred)
+        val matchIndex = chooseAudioTrackIndex(audioTracks, uiState.preferredAudioLanguage, uiState.secondaryAudioLanguage)
         if (matchIndex == null || matchIndex == selectedAudioIndex) return@LaunchedEffect
         audioTracks.getOrNull(matchIndex)?.let { track ->
             applyAudioTrackSelection(exoPlayer, track, audioTracks)?.let {
@@ -6139,6 +6137,27 @@ private fun applyAudioTrackSelection(
         null
     }
 }
+
+/**
+ * The user's audio languages in priority order (preferred, then secondary), skipping
+ * blank values and "none" (which disables language preference).
+ */
+internal fun preferredAudioLanguages(preferred: String, secondary: String): Array<String> {
+    val primary = preferred.trim()
+    if (primary.equals("none", ignoreCase = true)) return emptyArray()
+    return listOf(primary, secondary.trim())
+        .filter { it.isNotBlank() && !it.equals("none", ignoreCase = true) }
+        .distinct()
+        .toTypedArray()
+}
+
+/**
+ * Index into [audioTracks] of the track for the preferred language, else for the
+ * secondary (fallback) language, or `null` when neither is present.
+ */
+internal fun chooseAudioTrackIndex(audioTracks: List<AudioTrackInfo>, preferred: String, secondary: String): Int? =
+    preferredAudioLanguages(preferred, secondary)
+        .firstNotNullOfOrNull { findPreferredAudioTrackIndex(audioTracks, it) }
 
 /**
  * Find the audio track that best matches the user's preferred audio language.

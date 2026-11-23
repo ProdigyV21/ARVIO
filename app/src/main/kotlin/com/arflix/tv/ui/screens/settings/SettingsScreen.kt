@@ -345,7 +345,7 @@ private val tvGeneralSectionIds = setOf(
 
 internal fun tvGeneralRowsForSection(section: String): List<Int> {
     return when (section) {
-        "language" -> listOf(0, 3, 1, 2)
+        "language" -> listOf(0, 3, 59, 1, 2)
         // 48 (sync by hearing) only where it exists: the sideload build.
         "subtitles" -> listOf(4, 5, 6, 7, 42, 8, 38) +
             (if (BuildConfig.AUDIO_SYNC_AVAILABLE) listOf(48) else emptyList()) +
@@ -731,6 +731,8 @@ fun SettingsScreen(
     var secondarySubtitlePickerIndex by remember { mutableIntStateOf(0) }
     var showAudioLanguagePicker by remember { mutableStateOf(false) }
     var audioLanguagePickerIndex by remember { mutableIntStateOf(0) }
+    var showSecondaryAudioLanguagePicker by remember { mutableStateOf(false) }
+    var secondaryAudioLanguagePickerIndex by remember { mutableIntStateOf(0) }
     var showDnsProviderPicker by remember { mutableStateOf(false) }
     var dnsProviderPickerIndex by remember { mutableIntStateOf(0) }
     var showContentLanguagePicker by remember { mutableStateOf(false) }
@@ -830,6 +832,13 @@ fun SettingsScreen(
             .coerceAtLeast(0)
         showAudioLanguagePicker = true
     }
+    val openSecondaryAudioLanguagePicker = {
+        viewModel.refreshSecondaryAudioLanguageOptions()
+        val options = uiState.secondaryAudioLanguageOptions
+        secondaryAudioLanguagePickerIndex = options.indexOfFirst { it.equals(uiState.secondaryAudioLanguage, ignoreCase = true) }
+            .coerceAtLeast(0)
+        showSecondaryAudioLanguagePicker = true
+    }
     val openDnsProviderPicker = {
         val options = uiState.dnsProviderOptions
         dnsProviderPickerIndex = options.indexOfFirst { it.equals(uiState.dnsProvider, ignoreCase = true) }
@@ -889,6 +898,15 @@ fun SettingsScreen(
             val maxIndex = (options.size - 1).coerceAtLeast(0)
             val targetIndex = options.indexOfFirst { it.equals(uiState.defaultAudioLanguage, ignoreCase = true) }
             audioLanguagePickerIndex = if (targetIndex >= 0) targetIndex else audioLanguagePickerIndex.coerceIn(0, maxIndex)
+        }
+    }
+
+    LaunchedEffect(showSecondaryAudioLanguagePicker, uiState.secondaryAudioLanguageOptions) {
+        if (showSecondaryAudioLanguagePicker) {
+            val options = uiState.secondaryAudioLanguageOptions
+            val maxIndex = (options.size - 1).coerceAtLeast(0)
+            val targetIndex = options.indexOfFirst { it.equals(uiState.secondaryAudioLanguage, ignoreCase = true) }
+            secondaryAudioLanguagePickerIndex = if (targetIndex >= 0) targetIndex else secondaryAudioLanguagePickerIndex.coerceIn(0, maxIndex)
         }
     }
 
@@ -1041,6 +1059,7 @@ fun SettingsScreen(
         showSubtitlePicker ||
         showSecondarySubtitlePicker ||
         showAudioLanguagePicker ||
+        showSecondaryAudioLanguagePicker ||
         showDnsProviderPicker ||
         showContentLanguagePicker ||
         showUiModeWarningDialog ||
@@ -1477,6 +1496,7 @@ fun SettingsScreen(
                                                 1 -> openSubtitlePicker()
                                                 2 -> openSecondarySubtitlePicker()
                                                 3 -> openAudioLanguagePicker()
+                                                59 -> openSecondaryAudioLanguagePicker()
                                                 4 -> viewModel.cycleSubtitleSize()
                                                 5 -> viewModel.cycleSubtitleColor()
                                                 6 -> viewModel.cycleSubtitleOffset()
@@ -1930,6 +1950,7 @@ fun SettingsScreen(
                 openSubtitlePicker = openSubtitlePicker,
                 openSecondarySubtitlePicker = openSecondarySubtitlePicker,
                 openAudioLanguagePicker = openAudioLanguagePicker,
+                openSecondaryAudioLanguagePicker = openSecondaryAudioLanguagePicker,
                 openDnsProviderPicker = openDnsProviderPicker,
                 openUiModeWarningDialog = openUiModeWarningDialog,
                 openQualityFiltersModal = { showQualityFiltersModal = true },
@@ -2119,6 +2140,7 @@ fun SettingsScreen(
                             defaultSubtitle = uiState.defaultSubtitle,
                             secondarySubtitle = uiState.secondarySubtitle,
                             defaultAudioLanguage = uiState.defaultAudioLanguage,
+                            secondaryAudioLanguage = uiState.secondaryAudioLanguage,
                             dnsProvider = uiState.dnsProvider,
                             cardLayoutMode = uiState.cardLayoutMode,
                             frameRateMatchingMode = uiState.frameRateMatchingMode,
@@ -2144,6 +2166,7 @@ fun SettingsScreen(
                             onSubtitleClick = openSubtitlePicker,
                             onSecondarySubtitleClick = openSecondarySubtitlePicker,
                             onAudioLanguageClick = openAudioLanguagePicker,
+                            onSecondaryAudioLanguageClick = openSecondaryAudioLanguagePicker,
                             onCardLayoutToggle = { viewModel.toggleCardLayoutMode() },
                             onFrameRateMatchingClick = { viewModel.cycleFrameRateMatchingMode() },
                             onDnsProviderClick = openDnsProviderPicker,
@@ -3243,6 +3266,21 @@ fun SettingsScreen(
                     showAudioLanguagePicker = false
                 },
                 onDismiss = { showAudioLanguagePicker = false }
+            )
+        }
+
+        if (showSecondaryAudioLanguagePicker) {
+            SubtitlePickerModal(
+                title = stringResource(R.string.secondary_audio),
+                options = uiState.secondaryAudioLanguageOptions,
+                selected = uiState.secondaryAudioLanguage,
+                focusedIndex = secondaryAudioLanguagePickerIndex,
+                onFocusChange = { secondaryAudioLanguagePickerIndex = it },
+                onSelect = {
+                    viewModel.setSecondaryAudioLanguage(it)
+                    showSecondaryAudioLanguagePicker = false
+                },
+                onDismiss = { showSecondaryAudioLanguagePicker = false }
             )
         }
 
@@ -4708,6 +4746,7 @@ private fun MobileSettingsLayout(
     openSubtitlePicker: () -> Unit,
     openSecondarySubtitlePicker: () -> Unit = {},
     openAudioLanguagePicker: () -> Unit,
+    openSecondaryAudioLanguagePicker: () -> Unit = {},
     openDnsProviderPicker: () -> Unit,
     openUiModeWarningDialog: () -> Unit,
     openQualityFiltersModal: () -> Unit,
@@ -4886,6 +4925,7 @@ private fun MobileSettingsLayout(
                 openSubtitlePicker = openSubtitlePicker,
                 openSecondarySubtitlePicker = openSecondarySubtitlePicker,
                 openAudioLanguagePicker = openAudioLanguagePicker,
+                openSecondaryAudioLanguagePicker = openSecondaryAudioLanguagePicker,
                 onSwitchProfile = onSwitchProfile,
                 onNavigateToTelegram = onNavigateToTelegram
             )
@@ -5032,6 +5072,7 @@ private fun MobileSettingsMainPage(
     openSubtitlePicker: () -> Unit,
     openSecondarySubtitlePicker: () -> Unit = {},
     openAudioLanguagePicker: () -> Unit,
+    openSecondaryAudioLanguagePicker: () -> Unit = {},
     onSwitchProfile: () -> Unit,
     onNavigateToTelegram: () -> Unit = {}
 ) {
@@ -5067,6 +5108,14 @@ private fun MobileSettingsMainPage(
                     isToggle = false,
                     isFocused = false,
                     onClick = openAudioLanguagePicker
+                )
+                MobileSettingsRow(
+                    icon = Icons.Default.VolumeUp,
+                    title = stringResource(R.string.secondary_audio),
+                    value = uiState.secondaryAudioLanguage,
+                    isToggle = false,
+                    isFocused = false,
+                    onClick = openSecondaryAudioLanguagePicker
                 )
                 MobileSettingsRow(
                     icon = Icons.Default.Subtitles,
@@ -6761,7 +6810,8 @@ private fun tvSettingsPanelFacts(
     return when (section) {
         "language" -> listOf(
             stringResource(R.string.settings_fact_app_language) to uiState.contentLanguage.uppercase(),
-            stringResource(R.string.audio) to uiState.defaultAudioLanguage
+            stringResource(R.string.audio) to uiState.defaultAudioLanguage,
+            stringResource(R.string.secondary_audio) to uiState.secondaryAudioLanguage
         )
         "subtitles" -> listOf(
             stringResource(R.string.settings_fact_default) to uiState.defaultSubtitle,
@@ -6836,6 +6886,7 @@ private fun tvSettingsFocusedHelp(section: String, focusedIndex: Int): TvSetting
     return when (section) {
         "language" -> when (focusedIndex) {
             0 -> TvSettingsHelp(stringResource(R.string.settings_fact_app_language), stringResource(R.string.settings_help_app_language_desc))
+            2 -> TvSettingsHelp(stringResource(R.string.secondary_audio), stringResource(R.string.settings_help_secondary_audio_desc))
             else -> TvSettingsHelp(stringResource(R.string.default_audio), stringResource(R.string.settings_help_default_audio_desc))
         }
         "subtitles" -> when (focusedIndex) {
@@ -6930,6 +6981,7 @@ private fun TvGeneralSettingsRows(
     defaultSubtitle: String,
     secondarySubtitle: String = "Off",
     defaultAudioLanguage: String,
+    secondaryAudioLanguage: String = "Off",
     contentLanguage: String = "en-US",
     dnsProvider: String,
     cardLayoutMode: String,
@@ -6959,6 +7011,7 @@ private fun TvGeneralSettingsRows(
     onSubtitleClick: () -> Unit,
     onSecondarySubtitleClick: () -> Unit = {},
     onAudioLanguageClick: () -> Unit,
+    onSecondaryAudioLanguageClick: () -> Unit = {},
     onCardLayoutToggle: () -> Unit,
     onFrameRateMatchingClick: () -> Unit,
     onDnsProviderClick: () -> Unit,
@@ -7090,6 +7143,15 @@ private fun TvGeneralSettingsRows(
                     value = defaultAudioLanguage,
                     isFocused = focusedIndex == localIndex,
                     onClick = onAudioLanguageClick,
+                    modifier = Modifier.settingsFocusSlot(localIndex)
+                )
+                59 -> SettingsRow(
+                    icon = Icons.Default.VolumeUp,
+                    title = stringResource(R.string.secondary_audio),
+                    subtitle = stringResource(R.string.secondary_audio_desc),
+                    value = secondaryAudioLanguage,
+                    isFocused = focusedIndex == localIndex,
+                    onClick = onSecondaryAudioLanguageClick,
                     modifier = Modifier.settingsFocusSlot(localIndex)
                 )
                 4 -> SettingsRow(Icons.Default.Subtitles, stringResource(R.string.subtitle_size), stringResource(R.string.subtitle_size_desc), subtitleSize, focusedIndex == localIndex, onSubtitleSizeClick, Modifier.settingsFocusSlot(localIndex))
