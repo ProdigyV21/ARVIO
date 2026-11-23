@@ -1,5 +1,7 @@
 package com.arflix.tv.ui.components
 
+import com.arflix.tv.ui.focus.TvPivotScroll
+
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -41,7 +43,7 @@ import com.arflix.tv.util.LocalDeviceType
 import com.arflix.tv.ui.theme.BackgroundCard
 import com.arflix.tv.ui.theme.BackgroundElevated
 import com.arflix.tv.ui.theme.BorderLight
-import androidx.tv.foundation.lazy.list.TvLazyRow
+import androidx.compose.foundation.lazy.LazyRow
 
 /**
  * Shared shimmer animation state - only one animation for all skeleton loaders
@@ -257,7 +259,7 @@ fun SkeletonCategoryRow(
                 }
             }
         } else {
-            TvLazyRow(
+            TvPivotScroll { LazyRow(
                 contentPadding = PaddingValues(end = 48.dp),
                 horizontalArrangement = Arrangement.spacedBy(16.dp)
             ) {
@@ -269,7 +271,7 @@ fun SkeletonCategoryRow(
                         SkeletonCardType.CAST -> SkeletonCastCard()
                     }
                 }
-            }
+            } }
         }
     }
 }

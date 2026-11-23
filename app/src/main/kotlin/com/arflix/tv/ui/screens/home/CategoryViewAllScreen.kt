@@ -13,13 +13,13 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.tv.foundation.lazy.grid.rememberTvLazyGridState
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import com.arflix.tv.R
 import com.arflix.tv.data.model.CatalogConfig
 import com.arflix.tv.data.model.CatalogSourceType
@@ -117,7 +117,7 @@ internal fun CategoryViewAllContent(
     BackHandler(onBack = onBack)
     val catalog = remember(categoryId, title) { CatalogConfig(categoryId, title, CatalogSourceType.PREINSTALLED) }
     val isMobile = LocalDeviceType.current.isTouchDevice()
-    val gridState = rememberTvLazyGridState()
+    val gridState = rememberLazyGridState()
     var lastFocusedIndex by rememberSaveable(categoryId) { mutableIntStateOf(0) }
     var pendingFocusIndex by remember(categoryId) { mutableIntStateOf(-1) }
     val latestItemCount by rememberUpdatedState(items.size)

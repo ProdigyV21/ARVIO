@@ -370,31 +370,32 @@ ksp {
     // Core Android
     implementation("androidx.core:core-ktx:1.12.0")
     implementation("androidx.core:core-splashscreen:1.0.1")  // Android 12+ Splash Screen
-    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.7.0")
-    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.7.0")
+    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.9.4")
+    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.9.4")
     // Provides collectAsStateWithLifecycle — pauses Flow collection while the
     // screen is off so we don't drive recompositions on invisible UI.
-    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.7.0")
+    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.9.4")
     implementation("androidx.activity:activity:1.10.0")
     implementation("androidx.activity:activity-ktx:1.10.0")
     implementation("androidx.activity:activity-compose:1.10.0")
 
-    // Compose BOM — bumped alongside Kotlin 2.1. Staying on the 2024.06
-    // line keeps tv-foundation 1.0.0-alpha11 happy; newer BOMs drift the
-    // runtime off alpha11 and cause invalid-slot-table crashes on D-pad.
-    implementation(platform("androidx.compose:compose-bom:2024.06.00"))
+    // Compose BOM. The app used to stay on 2024.06 because tv-foundation
+    // 1.0.0-alpha11 crashed (invalid slot table on D-pad) with newer runtimes.
+    // tv-foundation is gone now: lists are the standard Compose lazy lists with
+    // TvPivotScroll (ui/focus) providing the TV pivot scrolling.
+    implementation(platform("androidx.compose:compose-bom:2026.05.01"))
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-graphics")
     implementation("androidx.compose.ui:ui-tooling-preview")
-    implementation("androidx.compose.material3:material3:1.3.2")
+    implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material:material-icons-extended")
     implementation("androidx.compose.animation:animation")
     implementation("dev.chrisbanes.haze:haze:0.7.3")
 
     // Compose for TV - Core TV components
-    // tv-foundation stays alpha (no beta/stable releases exist); tv-material bumped to stable
-    implementation("androidx.tv:tv-foundation:1.0.0-alpha11")
-    implementation("androidx.tv:tv-material:1.0.0")
+    // Compose for TV components (tv-foundation's lazy lists are replaced by the
+    // standard ones, see TvPivotScroll).
+    implementation("androidx.tv:tv-material:1.1.0")
 
     // Navigation
     implementation("androidx.navigation:navigation-compose:2.8.9")
@@ -453,9 +454,9 @@ ksp {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
 
     // Image loading - Coil
-    implementation("io.coil-kt:coil-compose:2.5.0")
-    implementation("io.coil-kt:coil-gif:2.5.0")
-    implementation("io.coil-kt:coil-svg:2.5.0")
+    implementation("io.coil-kt:coil-compose:2.7.0")
+    implementation("io.coil-kt:coil-gif:2.7.0")
+    implementation("io.coil-kt:coil-svg:2.7.0")
     implementation("androidx.palette:palette-ktx:1.0.0")
     implementation("com.google.zxing:core:3.5.3")
 
@@ -538,9 +539,13 @@ ksp {
     testImplementation("app.cash.turbine:turbine:1.0.0")  // Flow testing
     testImplementation("com.google.truth:truth:1.1.5")    // Better assertions
     testImplementation("org.robolectric:robolectric:4.11.1")  // Android mocking
+    // Compose UI tests on the JVM (Robolectric) for D-pad focus and scrolling.
+    testImplementation(platform("androidx.compose:compose-bom:2026.05.01"))
+    testImplementation("androidx.compose.ui:ui-test-junit4")
+    testImplementation("androidx.compose.ui:ui-test-manifest")
 
     // Android Instrumented Testing
-    androidTestImplementation(platform("androidx.compose:compose-bom:2024.06.00"))
+    androidTestImplementation(platform("androidx.compose:compose-bom:2026.05.01"))
     androidTestImplementation("androidx.test.ext:junit:1.1.5")
     androidTestImplementation("androidx.test:core-ktx:1.5.0")
     androidTestImplementation("androidx.test:runner:1.5.2")

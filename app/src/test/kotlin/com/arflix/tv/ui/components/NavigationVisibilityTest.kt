@@ -64,7 +64,8 @@ class NavigationVisibilityTest {
 
     @Test fun appearanceRowsHaveUniqueIdsWithoutChangingExistingSettingsSlots() {
         val appearance = tvGeneralRowsForSection("appearance")
-        assertEquals(listOf(56, 57, 58), appearance.takeLast(3))
+        // Row 59 was appended after the existing appearance slots.
+        assertEquals(listOf(56, 57, 58, 59), appearance.takeLast(4))
         val all = listOf("language", "subtitles", "ai_subtitles", "playback", "appearance", "profiles", "network")
             .flatMap(::tvGeneralRowsForSection)
         assertEquals(all.size, all.distinct().size)

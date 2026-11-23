@@ -54,7 +54,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import androidx.tv.foundation.ExperimentalTvFoundationApi
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import com.arflix.tv.BuildConfig
 import com.arflix.tv.R
@@ -88,7 +87,7 @@ internal fun updateNotesScrollDelta(scrollDown: Boolean, value: Int, maxValue: I
         else -> null
     }
 
-@OptIn(ExperimentalTvMaterial3Api::class, ExperimentalTvFoundationApi::class, ExperimentalLayoutApi::class)
+@OptIn(ExperimentalTvMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun AppUpdateModal(
     status: UpdateStatus,

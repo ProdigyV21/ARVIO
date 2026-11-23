@@ -34,6 +34,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -278,6 +279,16 @@ private fun GuideProgrammeSummary(
         Text(listOfNotNull(programme?.let(::formatTimeWindow),
             channel?.genre?.name?.let(::formatGenreName), remainingLabel(programme).takeIf(String::isNotBlank)).joinToString("  ·  "),
             color = LiveColors.FgDim, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        // How far into the programme we are, for anything on air now.
+        val played = programme?.let { liveProgrammeProgress(it, System.currentTimeMillis()) } ?: 0f
+        if (played > 0f) {
+            val accent = liveAccent()
+            Box(Modifier.width(220.dp).height(3.dp).testTag("live-programme-progress").drawBehind {
+                val radius = androidx.compose.ui.geometry.CornerRadius(size.height / 2f)
+                drawRoundRect(accent.copy(alpha = 0.18f), cornerRadius = radius)
+                drawRoundRect(accent.copy(alpha = 0.9f), size = size.copy(width = size.width * played), cornerRadius = radius)
+            })
+        }
         // A wrapping channel fallback needs only its content height. A weighted
         // description here would expand the preview and consume the guide below.
         val description = programme?.description.orEmpty()

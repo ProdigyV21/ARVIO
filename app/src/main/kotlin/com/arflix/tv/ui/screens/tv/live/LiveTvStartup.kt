@@ -199,3 +199,9 @@ object LiveTvStartup {
     fun channelIds(channels: List<IptvChannel>): Set<String> =
         channels.mapTo(LinkedHashSet(channels.size)) { it.id }
 }
+
+/** Milliseconds until just after the next minute boundary (at least 1 second). */
+internal fun liveClockDelayToNextMinute(nowMillis: Long): Long {
+    val untilNextMinute = 60_000L - Math.floorMod(nowMillis, 60_000L)
+    return (untilNextMinute + 50L).coerceIn(1_000L, 60_050L)
+}

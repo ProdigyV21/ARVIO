@@ -18,14 +18,16 @@ class PlaybackCacheSettingsRowsTest {
         val playback = tvGeneralRowsForSection("playback")
         assertEquals(1, playback.count { it == 55 })
         assertTrue(playback.indexOf(55) > playback.indexOf(44))
-        assertEquals(listOf(53, 54), playback.takeLast(2))
+        // Playback compatibility (60) was appended after the cache actions.
+        assertEquals(listOf(53, 54, 60), playback.takeLast(3))
     }
 
     @Test
     fun `cache actions do not reuse live AI subtitle actions`() {
         val playback = tvGeneralRowsForSection("playback")
         val ai = tvGeneralRowsForSection("ai_subtitles")
-        assertEquals(listOf(53, 54), playback.takeLast(2))
+        // Playback compatibility (60) was appended after the cache actions.
+        assertEquals(listOf(53, 54, 60), playback.takeLast(3))
         assertTrue(ai.containsAll(LIVE_AI_SUBS_ROWS))
         val all = listOf("language", "subtitles", "ai_subtitles", "playback", "appearance", "profiles", "network")
             .flatMap(::tvGeneralRowsForSection)

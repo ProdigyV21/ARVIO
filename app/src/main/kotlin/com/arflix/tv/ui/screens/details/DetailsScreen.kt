@@ -1,5 +1,7 @@
 package com.arflix.tv.ui.screens.details
 
+import com.arflix.tv.ui.focus.TvPivotScroll
+
 import androidx.activity.compose.BackHandler
 import android.content.Context
 import android.graphics.Bitmap
@@ -115,7 +117,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
@@ -134,7 +135,7 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
@@ -146,11 +147,10 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.lerp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.tv.foundation.lazy.list.TvLazyColumn
-import androidx.tv.foundation.lazy.list.TvLazyListState
-import androidx.tv.foundation.lazy.list.TvLazyRow
-import androidx.tv.foundation.lazy.list.itemsIndexed
-import androidx.tv.foundation.lazy.list.rememberTvLazyListState
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Text
 import androidx.lifecycle.Lifecycle
@@ -196,7 +196,6 @@ import com.arflix.tv.ui.components.SkeletonDetailsPage
 import com.arflix.tv.ui.components.SkeletonEpisodeCard
 import com.arflix.tv.ui.components.StreamSelector
 import com.arflix.tv.ui.components.YouTubeTrailerModal
-import androidx.activity.compose.BackHandler
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Close
@@ -2583,7 +2582,7 @@ private fun DetailsTvRows(
     onSimilarClick: (Int) -> Unit,
     onCollectionClick: (Int) -> Unit = {}
 ) {
-    val contentScrollState = rememberTvLazyListState()
+    val contentScrollState = rememberLazyListState()
     val isTV = item.mediaType == MediaType.TV
     val hasEpisodes = isTV && episodes.isNotEmpty()
     val hasAnyValidRating = remember(episodes) {
@@ -2675,7 +2674,7 @@ private fun DetailsTvRows(
     val contentStartPadding = 12.dp
     val contentOuterStartPadding = 24.dp
 
-    TvLazyColumn(
+    TvPivotScroll { LazyColumn(
         state = contentScrollState,
         modifier = modifier
             .fillMaxWidth()
@@ -2798,7 +2797,7 @@ private fun DetailsTvRows(
         }
 
         item { Spacer(modifier = Modifier.height(20.dp)) }
-    }
+    } }
 }
 
 @Composable
@@ -2814,7 +2813,7 @@ private fun DetailsSeasonRail(
     onSeasonClick: (Int) -> Unit,
     onSeasonLongClick: ((Int) -> Unit)? = null
 ) {
-    val seasonRowState = rememberTvLazyListState()
+    val seasonRowState = rememberLazyListState()
     val seasonItems = remember(totalSeasons) { (1..totalSeasons).toList() }
     HomeStyleRowAutoScroll(
         rowState = seasonRowState,
@@ -2833,7 +2832,7 @@ private fun DetailsSeasonRail(
 
     val currentOnSeasonClick = rememberUpdatedState(onSeasonClick)
 
-    TvLazyRow(
+    TvPivotScroll { LazyRow(
         state = seasonRowState,
         modifier = Modifier.arvioDpadFocusGroup(enableFocusRestorer = false),
         contentPadding = PaddingValues(
@@ -2872,7 +2871,7 @@ private fun DetailsSeasonRail(
                 onLongClick = onLongClickForSeason
             )
         }
-    }
+    } }
 }
 
 private fun getEpisodeRatingColor(rating: Float): Color {
@@ -3146,7 +3145,7 @@ private fun DetailsEpisodeRail(
     onEpisodeClick: (Int) -> Unit
 ) {
     val episodeCardWidth = if (configuration.screenWidthDp < 1400) 292.dp else 300.dp
-    val episodeRowState = rememberTvLazyListState()
+    val episodeRowState = rememberLazyListState()
     val episodeFixedFocus = focusSectionForUi == FocusSection.EPISODES &&
         detailsRailUsesFixedFirstSlotFocus(
             totalItems = episodes.size,
@@ -3167,7 +3166,7 @@ private fun DetailsEpisodeRail(
     val currentOnEpisodeClick = rememberUpdatedState(onEpisodeClick)
 
     Box(modifier = Modifier.fillMaxWidth()) {
-        TvLazyRow(
+        TvPivotScroll { LazyRow(
             state = episodeRowState,
             modifier = Modifier.arvioDpadFocusGroup(enableFocusRestorer = false),
             contentPadding = PaddingValues(
@@ -3207,7 +3206,7 @@ private fun DetailsEpisodeRail(
                     )
                 }
             }
-        }
+        } }
         if (episodeFixedFocus) {
             FixedDetailsRailFocusOverlay(
                 startPadding = contentStartPadding,
@@ -3229,7 +3228,7 @@ private fun DetailsCastRail(
     contentOuterStartPadding: Dp,
     onCastClick: (Int) -> Unit
 ) {
-    val castRowState = rememberTvLazyListState()
+    val castRowState = rememberLazyListState()
     HomeStyleRowAutoScroll(
         rowState = castRowState,
         isCurrentRow = focusSectionForUi == FocusSection.CAST,
@@ -3252,7 +3251,7 @@ private fun DetailsCastRail(
             modifier = Modifier.padding(start = contentStartPadding, bottom = 10.dp)
         )
 
-        TvLazyRow(
+        TvPivotScroll { LazyRow(
             state = castRowState,
             modifier = Modifier.arvioDpadFocusGroup(enableFocusRestorer = false),
             contentPadding = PaddingValues(
@@ -3281,7 +3280,7 @@ private fun DetailsCastRail(
                     onClick = onClickForCast
                 )
             }
-        }
+        } }
     }
 }
 
@@ -3293,7 +3292,7 @@ private fun DetailsReviewRail(
     contentStartPadding: Dp,
     contentOuterStartPadding: Dp
 ) {
-    val reviewRowState = rememberTvLazyListState()
+    val reviewRowState = rememberLazyListState()
     HomeStyleRowAutoScroll(
         rowState = reviewRowState,
         isCurrentRow = focusSectionForUi == FocusSection.REVIEWS,
@@ -3314,7 +3313,7 @@ private fun DetailsReviewRail(
             modifier = Modifier.padding(start = contentStartPadding, bottom = 10.dp)
         )
 
-        TvLazyRow(
+        TvPivotScroll { LazyRow(
             state = reviewRowState,
             modifier = Modifier.arvioDpadFocusGroup(enableFocusRestorer = false),
             contentPadding = PaddingValues(
@@ -3339,7 +3338,7 @@ private fun DetailsReviewRail(
                     isFocused = focusSectionForUi == FocusSection.REVIEWS && index == reviewIndex
                 )
             }
-        }
+        } }
     }
 }
 
@@ -3354,7 +3353,7 @@ private fun DetailsSimilarRail(
     contentOuterStartPadding: Dp,
     onSimilarClick: (Int) -> Unit
 ) {
-    val similarRowState = rememberTvLazyListState()
+    val similarRowState = rememberLazyListState()
     val similarCardWidth = if (usePosterCards) 126.dp else 210.dp
     val similarFocusBleed = if (usePosterCards) 18.dp else 14.dp
     val similarFixedFocus = focusSectionForUi == FocusSection.SIMILAR &&
@@ -3385,7 +3384,7 @@ private fun DetailsSimilarRail(
         )
 
         Box(modifier = Modifier.fillMaxWidth()) {
-            TvLazyRow(
+            TvPivotScroll { LazyRow(
                 state = similarRowState,
                 modifier = Modifier.arvioDpadFocusGroup(enableFocusRestorer = false),
                 contentPadding = PaddingValues(
@@ -3416,7 +3415,7 @@ private fun DetailsSimilarRail(
                         onClick = onClickForSimilar
                     )
                 }
-            }
+            } }
             if (similarFixedFocus) {
                 FixedDetailsRailFocusOverlay(
                     startPadding = contentStartPadding,
@@ -3440,7 +3439,7 @@ private fun DetailsCollectionRail(
     contentOuterStartPadding: Dp,
     onCollectionClick: (Int) -> Unit
 ) {
-    val collectionRowState = rememberTvLazyListState()
+    val collectionRowState = rememberLazyListState()
     val collectionCardWidth = if (usePosterCards) 126.dp else 210.dp
     val collectionFocusBleed = if (usePosterCards) 18.dp else 14.dp
     val collectionFixedFocus = focusSectionForUi == FocusSection.COLLECTION &&
@@ -3472,7 +3471,7 @@ private fun DetailsCollectionRail(
         )
 
         Box(modifier = Modifier.fillMaxWidth()) {
-            TvLazyRow(
+            TvPivotScroll { LazyRow(
                 state = collectionRowState,
                 modifier = Modifier.arvioDpadFocusGroup(enableFocusRestorer = false),
                 contentPadding = PaddingValues(
@@ -3503,7 +3502,7 @@ private fun DetailsCollectionRail(
                         onClick = onClickForCollection
                     )
                 }
-            }
+            } }
             if (collectionFixedFocus) {
                 FixedDetailsRailFocusOverlay(
                     startPadding = contentStartPadding,
@@ -3556,7 +3555,7 @@ private fun lockedDetailsRailEndPadding(
 
 private val DetailsScrollEasing = FastOutSlowInEasing
 
-private suspend fun TvLazyListState.animateDetailsScrollDelta(
+private suspend fun LazyListState.animateDetailsScrollDelta(
     deltaPx: Float,
     durationMillis: Int,
     easing: Easing = DetailsScrollEasing
@@ -3608,7 +3607,7 @@ private fun FixedDetailsRailFocusOverlay(
 
 @Composable
 private fun HomeStyleRowAutoScroll(
-    rowState: TvLazyListState,
+    rowState: LazyListState,
     isCurrentRow: Boolean,
     focusedItemIndex: Int,
     totalItems: Int,
