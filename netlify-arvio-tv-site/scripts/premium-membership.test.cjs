@@ -113,8 +113,7 @@ test('English, Spanish and Portuguese homepages send Premium CTAs to ARVIO Web a
     const anchors = links(html);
     for (const placement of ['header-membership', 'hero-membership', 'premium-section', 'premium-yearly']) {
       const link = anchors.find(anchor => anchor.placement === placement);
-      const expected = placement === 'hero-membership' ? (file === 'index.html' ? '/premium/' : `/${file.split('/')[0]}/premium/`) :
-        placement === 'premium-section' ? web + '?premium_plan=monthly' : placement === 'premium-yearly' ? web + '?premium_plan=yearly' : web;
+      const expected = placement === 'premium-section' ? web + '?premium_plan=monthly' : placement === 'premium-yearly' ? web + '?premium_plan=yearly' : web;
       assert.equal(link?.href, expected, `${file}: ${placement}`);
       assert.ok(link.classes.includes('button'), file);
       assert.ok(link.text, file);
