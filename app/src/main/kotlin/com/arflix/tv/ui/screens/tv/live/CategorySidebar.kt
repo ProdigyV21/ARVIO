@@ -692,7 +692,7 @@ fun CategorySidebar(
                 }
                 if (playlistSections.isNotEmpty()) {
                     playlistSections.forEach { section ->
-                        item(key = "playlist-section:${section.id}") {
+                        item(key = "playlist-section:${section.id}", contentType = "sidebar-playlist-section") {
                             val isOpen = section.id in expandedPlaylistIds
                             val sectionKey = "playlist-section:${section.id}"
                             val isSectionSelected = section.id == selectedId ||

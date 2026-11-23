@@ -21,7 +21,7 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.unit.dp
 import androidx.test.platform.app.InstrumentationRegistry
-import androidx.tv.foundation.lazy.grid.rememberTvLazyGridState
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import com.arflix.tv.data.model.*
 import com.arflix.tv.di.RepositoryAccessEntryPoint
 import com.arflix.tv.util.DeviceType
@@ -67,7 +67,7 @@ class CollectionDetailsUiDeviceTest {
         var opened: MediaItem? = null
         var preview: MediaItem? = null
         var nearEnd = false
-        var renderedGridState: androidx.tv.foundation.lazy.grid.TvLazyGridState? = null
+        var renderedGridState: LazyGridState? = null
         val selected = mutableStateOf(CollectionTab.MOVIES)
         compose.runOnUiThread {
             compose.activity.actionBar?.hide()
@@ -80,7 +80,7 @@ class CollectionDetailsUiDeviceTest {
                 val secondTab = remember { FocusRequester() }
                 val mobile = device.isTouchDevice()
                 val inputMode = LocalInputModeManager.current
-                val gridState = rememberTvLazyGridState()
+                val gridState = rememberLazyGridState()
                 renderedGridState = gridState
                 LaunchedEffect(Unit) {
                     kotlinx.coroutines.delay(300)

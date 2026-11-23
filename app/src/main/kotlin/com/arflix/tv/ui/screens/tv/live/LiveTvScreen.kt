@@ -104,7 +104,7 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
-import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -598,9 +598,12 @@ fun LiveTvScreen(
     val showTopBar = !isTouchDevice
     val contentTopPadding = if (showTopBar) LiveDims.ContentTopInset else 0.dp
     val coroutineScope = rememberCoroutineScope()
+    // Ticks on each minute boundary. Every tick recomposes the whole Live TV screen,
+    // and guide times are shown to the minute, so a 30-second tick only doubled the
+    // work without changing anything on screen.
     val guideClockMillis by produceState(initialValue = System.currentTimeMillis()) {
         while (true) {
-            delay(30_000L)
+            delay(liveClockDelayToNextMinute(System.currentTimeMillis()))
             value = System.currentTimeMillis()
         }
     }

@@ -1,5 +1,8 @@
 package com.arflix.tv.ui.components
 
+import com.arflix.tv.ui.focus.TvPivotScroll
+import androidx.compose.foundation.lazy.rememberLazyListState
+
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
@@ -34,7 +37,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
@@ -62,8 +64,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.tv.foundation.lazy.list.TvLazyRow
-import androidx.tv.foundation.lazy.list.itemsIndexed
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Text
 import coil.compose.AsyncImage
@@ -346,7 +346,7 @@ fun PersonModal(
 
                         // Known For section
                         if (person.knownFor.isNotEmpty()) {
-                            val knownForListState = androidx.tv.foundation.lazy.list.rememberTvLazyListState()
+                            val knownForListState = rememberLazyListState()
 
                             // Auto-scroll when focus changes
                             androidx.compose.runtime.LaunchedEffect(focusedKnownForIndex) {
@@ -366,7 +366,7 @@ fun PersonModal(
                             Spacer(modifier = Modifier.height(16.dp))
 
                             // Horizontal cards like homepage
-                            TvLazyRow(
+                            TvPivotScroll { LazyRow(
                                 state = knownForListState,
                                 modifier = Modifier.arvioDpadFocusGroup(),
                                 contentPadding = PaddingValues(end = 24.dp),
@@ -378,7 +378,7 @@ fun PersonModal(
                                         isFocused = index == focusedKnownForIndex
                                     )
                                 }
-                            }
+                            } }
 
                             Spacer(modifier = Modifier.height(24.dp))
                         }

@@ -157,7 +157,7 @@ fun LiveTvGroupHome(
             contentPadding = PaddingValues(bottom = 16.dp + LocalBottomBarInset.current),
         ) {
         // 1. Current live / Continue Watching mini-player card
-        item(key = "home_mini_player") {
+        item(key = "home_mini_player", contentType = "groupHome-home_mini_player") {
             Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable { previewExpanded = !previewExpanded }.padding(horizontal = 16.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
@@ -202,7 +202,7 @@ fun LiveTvGroupHome(
         }
 
         // 2. Quick access 2x2 tile grid
-        item(key = "home_quick_access") {
+        item(key = "home_quick_access", contentType = "groupHome-home_quick_access") {
             QuickAccessGrid(
                 allChannelsCount = allChannelsCount,
                 sportsCount = sportsCount,
@@ -219,7 +219,7 @@ fun LiveTvGroupHome(
         }
 
         if (providers.size > 1) {
-            item(key = "home_playlist_tile") {
+            item(key = "home_playlist_tile", contentType = "groupHome-home_playlist_tile") {
                 PlaylistSubwayTile(
                     providers = providers,
                     selectedProviderId = selectedProviderId,
@@ -230,7 +230,7 @@ fun LiveTvGroupHome(
         }
 
         // 3. Playlists heading
-        item(key = "home_groups_heading") {
+        item(key = "home_groups_heading", contentType = "groupHome-home_groups_heading") {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -549,7 +549,7 @@ private fun PlaylistSubwayTile(
                                 .heightIn(max = 340.dp),
                             verticalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
-                            items(providers, key = { it.id }) { provider ->
+                            items(providers, key = { it.id }, contentType = { "groupHome" }) { provider ->
                                 val isSelected = provider.id == selectedProviderId ||
                                     provider.id == selectedProviderId.removePrefix("source:")
                                 Row(

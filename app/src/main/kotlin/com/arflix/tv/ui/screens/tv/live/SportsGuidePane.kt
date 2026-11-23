@@ -67,13 +67,44 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.animation.core.tween
+import androidx.compose.ui.zIndex
 
 /** Shared day label formatter for sports cards — was allocated per card per compose. */
 private val sportsDayFormat: java.time.format.DateTimeFormatter =
     java.time.format.DateTimeFormatter.ofPattern("EEE d MMM", java.util.Locale.getDefault())
 
 internal const val SPORTS_GUIDE_CATEGORY = "sports-hub"
+
+/**
+ * The last Sports rows built in this process, so reopening Sports doesn't start
+ * from a spinner. Reused only for the same events (matched by id and start), so a
+ * different playlist or profile never shows someone else's rows.
+ */
+internal object SportsPresentationCache {
+    @Volatile private var key: List<String>? = null
+    @Volatile private var rows: List<SportsGuideRow>? = null
+
+    internal fun keyOf(events: List<SportsGuideEvent>): List<String> =
+        events.map { it.id + "@" + it.programme.startUtcMillis }
+
+    fun rowsFor(events: List<SportsGuideEvent>): List<SportsGuideRow>? {
+        if (events.isEmpty()) return null
+        val cached = rows ?: return null
+        return cached.takeIf { key == keyOf(events) }
+    }
+
+    fun store(events: List<SportsGuideEvent>, built: List<SportsGuideRow>) {
+        if (events.isEmpty() || built.isEmpty()) return
+        rows = built
+        key = keyOf(events)
+    }
+
+    internal fun clear() { key = null; rows = null }
+}
 internal const val SPORTS_CHANNEL_CATEGORY = "g-sports"
+
+/** How much the focused Sports card grows (spacing between cards leaves room for it). */
+internal const val SPORTS_CARD_FOCUS_SCALE = 1.04f
 
 /**
  * Gives the match guide a home, preferring the one right next to the sport it
@@ -145,15 +176,20 @@ internal fun SportsGuidePane(
     val focusedOrder = remember { arrayOfNulls<Pair<String, List<String>>>(1) }
     var artworkRetry by remember { mutableIntStateOf(0) }
     var failedArtwork by remember(artworkRetry) { mutableStateOf(emptySet<String>()) }
-    var presentationRows by remember { mutableStateOf(emptyList<SportsGuideRow>()) }
-    var presentationLoading by remember { mutableStateOf(true) }
+    // Reopening Sports shows the rows from the last visit straight away (when they
+    // were built from the same events) instead of a spinner, then refreshes them.
+    val cachedPresentation = remember(events) { SportsPresentationCache.rowsFor(events) }
+    var presentationRows by remember { mutableStateOf(cachedPresentation.orEmpty()) }
+    var presentationLoading by remember { mutableStateOf(cachedPresentation == null) }
     LaunchedEffect(events, now) {
-        presentationLoading = true
+        if (presentationRows.isEmpty()) presentationLoading = true
         try {
-            presentationRows = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+            val built = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
                 // An image failure must not remove/reparent the focused lazy item.
                 sportsPresentationRows(events, now, emptySet())
             }
+            SportsPresentationCache.store(events, built)
+            if (built != presentationRows) presentationRows = built
         } finally {
             presentationLoading = false
         }
@@ -283,6 +319,11 @@ internal fun SportsGuidePane(
         }
         (viewport - 36.dp - 12.dp * (columns - 1)) / columns
     }
+    // Art fills the card's width inside its 2.dp padding, at 16:9.
+    val cardArtSize = remember(cardWidth) {
+        val width = cardWidth - 4.dp
+        androidx.compose.ui.unit.DpSize(width, width * 9f / 16f)
+    }
     Column(Modifier.fillMaxSize()) {
         if (showHeader) {
             if (!sidebarOpen) {
@@ -370,9 +411,9 @@ internal fun SportsGuidePane(
                 }
             }
         } else LazyColumn(Modifier.fillMaxSize().testTag("sports-guide-list"), state = listState, contentPadding = PaddingValues(bottom = 24.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()),
-            verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            verticalArrangement = Arrangement.spacedBy(2.dp)) {
             val rowKeys = disambiguatedLazyKeys(rows) { it.id }
-            itemsIndexed(rows, key = { index, _ -> rowKeys[index] }) { rowIndex, row ->
+            itemsIndexed(rows, key = { index, _ -> rowKeys[index] }, contentType = { _, _ -> "sports-row" }) { rowIndex, row ->
                 val rowState = rememberLazyListState()
                 DisposableEffect(row.id, rowState) {
                     rowStates[row.id] = rowState
@@ -384,9 +425,11 @@ internal fun SportsGuidePane(
                             modifier = Modifier.weight(1f))
                     }
                     val eventKeys = keysByRow.getValue(row.id)
-                    LazyRow(Modifier.padding(horizontal = 18.dp), state = rowState, contentPadding = PaddingValues(vertical = 1.dp),
+                    // Inner padding leaves room for the focused card's lift without clipping;
+                    // the outer padding shrinks by the same amount so cards stay aligned.
+                    LazyRow(Modifier.padding(horizontal = 10.dp), state = rowState, contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp),
                         horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        itemsIndexed(row.events, key = { index, _ -> eventKeys[index] }) { index, event ->
+                        itemsIndexed(row.events, key = { index, _ -> eventKeys[index] }, contentType = { _, _ -> "sports-card" }) { index, event ->
                             val scheduleOnly = row.id.endsWith("-schedule")
                             val itemRequester = remember { FocusRequester() }
                             val requester = if (index == 0 && rowIndex == 0) firstFocus else itemRequester
@@ -396,7 +439,16 @@ internal fun SportsGuidePane(
                                 onDispose { cardFocus.remove(key) }
                             }
                             var focused by remember { mutableStateOf(false) }
+                            // A small lift on the focused card. Read only inside graphicsLayer,
+                            // so the animation redraws the card without recomposing or relayout.
+                            val focusScale by androidx.compose.animation.core.animateFloatAsState(
+                                targetValue = if (focused && !touch) SPORTS_CARD_FOCUS_SCALE else 1f,
+                                animationSpec = tween(140),
+                                label = "sportsCardFocusScale",
+                            )
                             Column(Modifier.width(cardWidth).testTag("sports-event-card")
+                                .zIndex(if (focused) 1f else 0f)
+                                .graphicsLayer { scaleX = focusScale; scaleY = focusScale }
                                 .focusRequester(requester)
                                 .onFocusChanged {
                                     focused = it.isFocused
@@ -436,7 +488,7 @@ internal fun SportsGuidePane(
                                     Text(eventTime(event), color = LiveColors.Fg, fontSize = 11.sp)
                                 } else Box(Modifier.fillMaxWidth().aspectRatio(16f / 9f).testTag("sports-event-art").clip(RoundedCornerShape(8.dp))) {
                                     if (event.id !in failedArtwork) {
-                                        EventArtwork(event, Modifier.fillMaxSize()) { failedArtwork = failedArtwork + event.id }
+                                        EventArtwork(event, Modifier.fillMaxSize(), knownSize = cardArtSize) { failedArtwork = failedArtwork + event.id }
                                     } else {
                                         // Keep the focused card in place when an image fails.
                                         Box(Modifier.fillMaxSize().background(LiveColors.Panel), contentAlignment = Alignment.Center) {
@@ -537,7 +589,7 @@ internal fun SportsGuidePane(
             }
             val channelKeys = remember(sourceChannels) { disambiguatedLazyKeys(sourceChannels) { it.id } }
             LazyColumn(Modifier.weight(1f, fill = false).heightIn(max = configuration.screenHeightDp.dp * .55f)) {
-                itemsIndexed(sourceChannels, key = { index, _ -> channelKeys[index] }) { index, channel ->
+                itemsIndexed(sourceChannels, key = { index, _ -> channelKeys[index] }, contentType = { _, _ -> "sports-channel" }) { index, channel ->
                     var focused by remember { mutableStateOf(false) }
                     Row(Modifier.fillMaxWidth().heightIn(min = if (narrow) 48.dp else 40.dp).clip(RoundedCornerShape(8.dp))
                         .then(if (index == 0) Modifier.focusRequester(initialFocus) else Modifier)
@@ -639,7 +691,14 @@ private fun channelCount(count: Int) =
     else stringResource(R.string.live_channels_count, count)
 
 @Composable
-private fun EventArtwork(event: SportsGuideEvent, modifier: Modifier = Modifier, onUnavailable: () -> Unit = {}) {
+private fun EventArtwork(
+    event: SportsGuideEvent,
+    modifier: Modifier = Modifier,
+    // The card's art size when the caller already knows it. Skips BoxWithConstraints,
+    // whose extra subcomposition per card showed up while scrolling Sports rows.
+    knownSize: androidx.compose.ui.unit.DpSize? = null,
+    onUnavailable: () -> Unit = {},
+) {
     var loaded by remember(event.artwork) { mutableStateOf(false) }
     var bannerFailed by remember(event.artwork) { mutableStateOf(event.artwork.isNullOrBlank()) }
     val pair = event.teamArtwork
@@ -656,9 +715,8 @@ private fun EventArtwork(event: SportsGuideEvent, modifier: Modifier = Modifier,
     // recompositions (clock ticks, D-Pad focus) via remember + key(), mirroring
     // ChannelLogo. The previous raw-String models re-decoded full-res art on
     // every pass and retried failures on each recomposition.
-    BoxWithConstraints(modifier.background(LiveColors.Panel).testTag(if (loaded) "sports-artwork-loaded" else "sports-artwork-pending")) {
-        val artW = with(density) { maxWidth.roundToPx() }.coerceAtLeast(1)
-        val artH = with(density) { maxHeight.roundToPx() }.coerceAtLeast(1)
+    val boxModifier = modifier.background(LiveColors.Panel).testTag(if (loaded) "sports-artwork-loaded" else "sports-artwork-pending")
+    val layers: @Composable (Int, Int) -> Unit = { artW, artH ->
         val bannerUrl = event.artwork
         val bannerRequest = remember(bannerUrl, artW, artH) {
             bannerUrl?.let { url ->
@@ -728,6 +786,13 @@ private fun EventArtwork(event: SportsGuideEvent, modifier: Modifier = Modifier,
                 }
             }
         }
+    }
+    if (knownSize != null) {
+        val artW = with(density) { knownSize.width.roundToPx() }.coerceAtLeast(1)
+        val artH = with(density) { knownSize.height.roundToPx() }.coerceAtLeast(1)
+        Box(boxModifier) { layers(artW, artH) }
+    } else BoxWithConstraints(boxModifier) {
+        layers(with(density) { maxWidth.roundToPx() }.coerceAtLeast(1), with(density) { maxHeight.roundToPx() }.coerceAtLeast(1))
     }
 }
 
