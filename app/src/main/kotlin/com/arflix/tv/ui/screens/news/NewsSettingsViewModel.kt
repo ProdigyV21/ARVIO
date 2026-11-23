@@ -24,16 +24,10 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-/** The app's UI language, which picks the first-run providers (ynet for Hebrew, CNN/Fox/BBC otherwise). */
-internal fun newsAppLanguage(context: Context): String =
-    context.getSharedPreferences("app_locale", Context.MODE_PRIVATE)
-        .getString("locale_tag", null)?.takeIf { it.isNotBlank() }
-        ?: java.util.Locale.getDefault().language
-
 /** The active profile's news setup, following profile switches and edits made anywhere. */
 internal fun newsSelectionFlow(context: Context, profileManager: ProfileManager): Flow<NewsSourceSelection> =
     combine(profileManager.activeProfileId, context.settingsDataStore.data) { profileId, prefs ->
-        NewsSourcePreferences.decode(prefs[NewsSourcePreferences.key(profileId)], newsAppLanguage(context))
+        NewsSourcePreferences.decode(prefs[NewsSourcePreferences.key(profileId)])
     }.distinctUntilChanged()
 
 data class NewsSettingsState(
@@ -94,7 +88,7 @@ class NewsSettingsViewModel @Inject constructor(
             val profileId = profileManager.getProfileId()
             context.settingsDataStore.edit { prefs ->
                 val key = NewsSourcePreferences.key(profileId)
-                val current = NewsSourcePreferences.decode(prefs[key], newsAppLanguage(context))
+                val current = NewsSourcePreferences.decode(prefs[key])
                 prefs[key] = NewsSourcePreferences.encode(transform(current))
             }
         }

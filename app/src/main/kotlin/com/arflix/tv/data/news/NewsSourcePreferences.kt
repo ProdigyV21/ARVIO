@@ -35,10 +35,10 @@ data class NewsSourceSelection(
 object NewsSourcePreferences {
     fun key(profileId: String) = stringPreferencesKey("profile_${profileId}_news_sources")
 
-    fun decode(json: String?, appLanguage: String): NewsSourceSelection {
+    fun decode(json: String?): NewsSourceSelection {
         val root = runCatching { JsonParser.parseString(json ?: "") }.getOrNull()
             ?.takeIf { it.isJsonObject }?.asJsonObject
-            ?: return NewsSourceSelection(NewsProviders.defaultSelection(appLanguage))
+            ?: return NewsSourceSelection(NewsProviders.defaultSelection)
         val custom = root.arrayOrEmpty("custom").mapNotNull { element ->
             val obj = element.takeIf { it.isJsonObject }?.asJsonObject ?: return@mapNotNull null
             val id = obj.string("id") ?: return@mapNotNull null

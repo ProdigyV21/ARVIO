@@ -163,12 +163,8 @@ object NewsProviders {
 
     fun isPreset(id: String) = id in presetIds
 
-    /** First-run selection, picked from the app language so nobody starts with an empty page. */
-    fun defaultSelection(appLanguage: String): List<String> =
-        when (appLanguage.substringBefore('-').substringBefore('_').lowercase()) {
-            "he", "iw" -> listOf("ynet", "ynet_flash")
-            else -> listOf("cnn", "fox", "bbc")
-        }
+    /** First-run selection for every profile, so nobody starts with an empty page. */
+    val defaultSelection: List<String> = listOf("fox", "sky", "bbc")
 }
 
 object NewsMerge {

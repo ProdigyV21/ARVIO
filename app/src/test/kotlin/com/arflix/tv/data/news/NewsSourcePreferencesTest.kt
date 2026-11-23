@@ -7,12 +7,12 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class NewsSourcePreferencesTest {
-    @Test fun unsetOrMalformedValuesFallBackToLanguageDefaults() {
+    @Test fun unsetOrMalformedValuesFallBackToFoxSkyAndBbc() {
         for (json in listOf(null, "", "broken", "[]", "42")) {
-            assertEquals(NewsProviders.defaultSelection("en-US"), NewsSourcePreferences.decode(json, "en-US").selectedIds)
+            assertEquals(listOf("fox", "sky", "bbc"), NewsSourcePreferences.decode(json).selectedIds)
         }
-        assertEquals(listOf("ynet", "ynet_flash"), NewsSourcePreferences.decode(null, "iw").selectedIds)
-        assertTrue(NewsSourcePreferences.decode("""{"selected":[]}""", "en").selectedIds.isEmpty())
+        // A saved empty choice is the user's, not a reason to bring the defaults back.
+        assertTrue(NewsSourcePreferences.decode("""{"selected":[]}""").selectedIds.isEmpty())
     }
 
     @Test fun unknownIdsAndInvalidCustomFeedsAreDropped() {
@@ -20,7 +20,7 @@ class NewsSourcePreferencesTest {
             "custom":[{"id":"custom_a","name":"Mine","url":"https://feeds.example.com/a.xml"},
                       {"id":"custom_b","url":"javascript:alert(1)"},
                       {"id":"fox","url":"https://evil.example.com"}]}"""
-        val selection = NewsSourcePreferences.decode(json, "en")
+        val selection = NewsSourcePreferences.decode(json)
         assertEquals(listOf("fox", "custom_a"), selection.selectedIds)
         assertEquals(listOf("custom_a"), selection.customProviders.map { it.id })
         assertEquals("Fox News", selection.providers.first().name)
@@ -36,7 +36,7 @@ class NewsSourcePreferencesTest {
         // Fox and ynet cover sports; the flash feed covers nothing; a user-added feed is always shown.
         assertEquals(listOf("fox", "ynet", selection.customProviders.single().id), selection.shownProviders.map { it.id })
         assertEquals(listOf("ynet_flash"), selection.uncoveredProviders.map { it.id })
-        assertEquals(selection, NewsSourcePreferences.decode(NewsSourcePreferences.encode(selection), "en"))
+        assertEquals(selection, NewsSourcePreferences.decode(NewsSourcePreferences.encode(selection)))
 
         selection = NewsSourcePreferences.toggleTopic(selection, NewsTopic.SPORTS)
         selection = NewsSourcePreferences.toggleTopic(selection, NewsTopic.BUSINESS)
@@ -44,7 +44,7 @@ class NewsSourcePreferencesTest {
         selection = NewsSourcePreferences.toggleTopic(NewsSourcePreferences.toggleTopic(selection, NewsTopic.TECH), null)
         assertTrue(selection.topics.isEmpty())
 
-        val unknown = NewsSourcePreferences.decode("""{"selected":["bbc"],"topics":["sports","gossip",3,"sports"]}""", "en")
+        val unknown = NewsSourcePreferences.decode("""{"selected":["bbc"],"topics":["sports","gossip",3,"sports"]}""")
         assertEquals(listOf(NewsTopic.SPORTS), unknown.topics)
     }
 
@@ -76,7 +76,7 @@ class NewsSourcePreferencesTest {
         assertEquals(selection, NewsSourcePreferences.addCustom(selection, "Again", "https://feeds.example.co.il/rss"))
         assertNull(NewsSourcePreferences.addCustom(selection, "", "not a url"))
 
-        val decoded = NewsSourcePreferences.decode(NewsSourcePreferences.encode(selection), "en")
+        val decoded = NewsSourcePreferences.decode(NewsSourcePreferences.encode(selection))
         assertEquals(selection, decoded)
 
         selection = NewsSourcePreferences.toggle(selection, "cnn")

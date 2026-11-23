@@ -2169,6 +2169,7 @@
     <string name="settings_desc_news">לשונית החדשות, המקורות והנושאים שלה</string>
     <string name="news_topics_section">נושאים</string>
     <string name="news_topics_desc">הצגת כל הנושאים, או רק אלה שבחרתם. פידים שהוספתם בעצמכם מוצגים תמיד.</string>
+    <string name="news_change_providers_hint">ניתן לשנות את המקורות בהגדרות ← חדשות</string>
     <string name="news_sources_section">מקורות</string>
     <string name="news_topic_all">כל הנושאים</string>
     <string name="news_topic_world">עולם</string>

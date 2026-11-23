@@ -195,6 +195,9 @@ fun NewsScreen(
                     modifier = if (state.providers.isEmpty()) chipFocus else Modifier, compact = compact,
                     onClick = { viewModel.refresh() })
             }
+            Text(stringResource(R.string.news_change_providers_hint),
+                color = Color.White.copy(alpha = 0.5f), fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(bottom = 4.dp).testTag("news-providers-hint"))
             if (state.selection.topics.isNotEmpty()) {
                 val topicNames = state.selection.topics.map { topicLabel(it) }.joinToString(" · ")
                 val uncovered = state.selection.uncoveredProviders
