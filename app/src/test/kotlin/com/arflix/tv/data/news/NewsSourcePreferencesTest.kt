@@ -49,13 +49,20 @@ class NewsSourcePreferencesTest {
     }
 
     @Test fun pathSectionTopicsMatchWholeSegmentsOnly() {
-        val cnn = NewsProviders.presets.first { it.id == "cnn" }
-        val sport = cnn.topics.getValue(NewsTopic.SPORTS)
-        assertTrue(sport.matches("https://lite.cnn.com/2026/11/20/sport/match-report"))
-        assertFalse(sport.matches("https://lite.cnn.com/2026/11/20/politics/sport-funding-bill"))
+        val israelHayom = NewsProviders.presets.first { it.id == "israelhayom" }
+        val sport = israelHayom.topics.getValue(NewsTopic.SPORTS)
+        assertTrue(sport.matches("https://www.israelhayom.co.il/sport/israeli-soccer/article/123"))
+        assertFalse(sport.matches("https://www.israelhayom.co.il/news/politics/article/sport-funding"))
         assertFalse(sport.matches("not a url"))
         // Every preset topic has a source of one kind or the other.
         NewsProviders.presets.flatMap { it.topics.values }.forEach { assertTrue(it.feedUrl != null || it.pathSections.isNotEmpty()) }
+    }
+
+    @Test fun everyPresetIsAFeedAndRetiredPresetsDropOutOfSavedChoices() {
+        // CNN only had a scraped web page, not a feed, and was removed.
+        assertFalse(NewsProviders.presets.any { it.id == "cnn" })
+        assertEquals(listOf("fox"), NewsSourcePreferences.decode("""{"selected":["cnn","fox"]}""").selectedIds)
+        assertTrue(NewsProviders.defaultSelection.all(NewsProviders::isPreset))
     }
 
     @Test fun interleaveKeepsEachListsOrderAndDropsRepeats() {
@@ -65,13 +72,13 @@ class NewsSourcePreferencesTest {
     }
 
     @Test fun addingToggleAndRemoveRoundTrip() {
-        var selection = NewsSourceSelection(listOf("cnn"))
+        var selection = NewsSourceSelection(listOf("fox"))
         selection = NewsSourcePreferences.addCustom(selection, "", "feeds.example.co.il/rss")!!
         val custom = selection.customProviders.single()
         assertEquals("https://feeds.example.co.il/rss", custom.url)
         assertEquals("feeds.example.co.il", custom.name)
         assertEquals("he", custom.language)
-        assertEquals(listOf("cnn", custom.id), selection.selectedIds)
+        assertEquals(listOf("fox", custom.id), selection.selectedIds)
         // Same URL again does not create a second feed.
         assertEquals(selection, NewsSourcePreferences.addCustom(selection, "Again", "https://feeds.example.co.il/rss"))
         assertNull(NewsSourcePreferences.addCustom(selection, "", "not a url"))
@@ -79,7 +86,7 @@ class NewsSourcePreferencesTest {
         val decoded = NewsSourcePreferences.decode(NewsSourcePreferences.encode(selection))
         assertEquals(selection, decoded)
 
-        selection = NewsSourcePreferences.toggle(selection, "cnn")
+        selection = NewsSourcePreferences.toggle(selection, "fox")
         assertEquals(listOf(custom.id), selection.selectedIds)
         selection = NewsSourcePreferences.toggle(selection, "bbc")
         assertEquals(listOf(custom.id, "bbc"), selection.selectedIds)

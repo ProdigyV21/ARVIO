@@ -2164,12 +2164,14 @@
     <string name="news_no_sources_desc">בחרו מקורות או הוסיפו פיד RSS בהגדרות, חדשות.</string>
     <string name="news_no_articles">אין כותרות כרגע</string>
     <string name="news_load_failed">לא ניתן לטעון את %1$s</string>
-    <string name="news_read_hint">לחצו OK כדי לקרוא את הכתבה</string>
-    <string name="news_loading_article">טוען כתבה…</string>
+    <string name="news_read_hint">לחצו OK לתקציר ולקישור לכתבה המלאה</string>
     <string name="settings_desc_news">לשונית החדשות, המקורות והנושאים שלה</string>
     <string name="news_topics_section">נושאים</string>
     <string name="news_topics_desc">הצגת כל הנושאים, או רק אלה שבחרתם. פידים שהוספתם בעצמכם מוצגים תמיד.</string>
     <string name="news_change_providers_hint">ניתן לשנות את המקורות בהגדרות ← חדשות</string>
+    <string name="news_open_article">פתיחת הכתבה המלאה</string>
+    <string name="news_scan_to_read">סרקו כדי לקרוא את הכתבה המלאה בטלפון</string>
+    <string name="news_saved_on_device">המקורות והנושאים נשמרים במכשיר הזה בלבד ואינם מסונכרנים.</string>
     <string name="news_sources_section">מקורות</string>
     <string name="news_topic_all">כל הנושאים</string>
     <string name="news_topic_world">עולם</string>

@@ -1,7 +1,6 @@
 package com.arflix.tv.data.news
 
 import org.jsoup.Jsoup
-import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
 import org.jsoup.parser.Parser
 import java.time.OffsetDateTime
@@ -33,8 +32,9 @@ object NewsParsers {
         val contentHtml = item.childText("content:encoded").ifBlank {
             item.children().firstOrNull { it.tagName() == "content" && it.attr("type") != "text" }?.text().orEmpty()
         }
-        val paragraphs = if (contentHtml.isNotBlank()) htmlParagraphs(contentHtml) else emptyList()
-        val summary = plainText(descriptionHtml).ifBlank { paragraphs.firstOrNull().orEmpty() }
+        // Only a summary is kept: the feed's description, else the first paragraph of its content.
+        val summary = plainText(descriptionHtml)
+            .ifBlank { if (contentHtml.isNotBlank()) htmlParagraphs(contentHtml).firstOrNull().orEmpty() else "" }
             .let { if (it == title) "" else it }
 
         // Feeds such as the Guardian list the same picture at several sizes, smallest first.
@@ -63,7 +63,6 @@ object NewsParsers {
             imageUrl = image?.let(::upgradeYnetImage),
             publishedAt = date,
             providerId = provider.id,
-            paragraphs = paragraphs,
         )
     }
 
@@ -72,34 +71,6 @@ object NewsParsers {
         val doc = Jsoup.parse(xml, "", Parser.xmlParser())
         return (doc.selectFirst("channel > title") ?: doc.selectFirst("feed > title"))
             ?.text()?.let(::plainText)?.takeIf { it.isNotBlank() }
-    }
-
-    fun parseCnnLite(html: String, provider: NewsProvider): List<NewsArticle> {
-        val doc = Jsoup.parse(html, provider.url)
-        return doc.select("li.card--lite a[href]").asSequence().mapNotNull { anchor ->
-            val title = anchor.text().trim()
-            val link = anchor.absUrl("href")
-            if (title.isBlank() || link.isBlank()) return@mapNotNull null
-            NewsArticle(link = link, title = title, publishedAt = cnnPathDate(link), isDayOnly = true, providerId = provider.id)
-        }.distinctBy { it.link }.take(MAX_ARTICLES).toList()
-    }
-
-    /** Extracts readable text from an article page. Known sites first, then a generic `<p>` sweep. */
-    fun parseArticlePage(html: String, url: String): NewsArticleBody {
-        val doc = Jsoup.parse(html, url)
-        val known = doc.select(".paragraph--lite, .text_editor_paragraph").map { it.text().trim() }
-        val paragraphs = known.filter { it.isNotBlank() }.ifEmpty { genericParagraphs(doc) }
-        return NewsArticleBody(
-            paragraphs = paragraphs.distinct().take(MAX_PARAGRAPHS),
-            imageUrl = doc.selectFirst("meta[property=og:image]")?.absUrl("content")?.takeIf { it.isNotBlank() }
-                ?: doc.selectFirst("meta[name=twitter:image]")?.absUrl("content")?.takeIf { it.isNotBlank() },
-        )
-    }
-
-    private fun genericParagraphs(doc: Document): List<String> {
-        doc.select("script, style, nav, header, footer, aside, form, figure figcaption").remove()
-        val scope = doc.selectFirst("article") ?: doc.selectFirst("main") ?: doc.body()
-        return scope.select("p").map { it.text().trim() }.filter { it.length >= 40 }
     }
 
     fun htmlParagraphs(html: String): List<String> {
@@ -124,13 +95,6 @@ object NewsParsers {
     /** ynet's feed links its 100px "medium" crop; the "large" crop of the same image exists alongside it. */
     private fun upgradeYnetImage(url: String): String =
         if (url.contains("yit.co.il") && url.endsWith("_medium.jpg")) url.removeSuffix("_medium.jpg") + "_large.jpg" else url
-
-    private val cnnDate = Regex("""/(\d{4})/(\d{2})/(\d{2})/""")
-
-    private fun cnnPathDate(link: String): Long? = cnnDate.find(link)?.destructured?.let { (y, m, d) ->
-        runCatching { java.time.LocalDate.of(y.toInt(), m.toInt(), d.toInt()) }.getOrNull()
-            ?.atStartOfDay(java.time.ZoneOffset.UTC)?.toInstant()?.toEpochMilli()
-    }
 
     private val rfc822Lenient = DateTimeFormatter.ofPattern("EEE, d MMM yyyy HH:mm[:ss] [Z][z]", Locale.ENGLISH)
 

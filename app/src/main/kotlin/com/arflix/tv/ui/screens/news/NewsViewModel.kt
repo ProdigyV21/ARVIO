@@ -4,7 +4,6 @@ import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.arflix.tv.data.news.NewsArticle
-import com.arflix.tv.data.news.NewsArticleBody
 import com.arflix.tv.data.news.NewsMerge
 import com.arflix.tv.data.news.NewsProvider
 import com.arflix.tv.data.news.NewsRepository
@@ -30,9 +29,8 @@ data class NewsUiState(
     val isLoading: Boolean = true,
     /** Providers that failed on the last load, by display name. */
     val failedProviders: List<String> = emptyList(),
+    /** The story shown in the reader: the feed's own text and a way to open the publisher's page. */
     val openArticle: NewsArticle? = null,
-    val openBody: NewsArticleBody? = null,
-    val isBodyLoading: Boolean = false,
 ) {
     /** The tabs: followed providers that have something for the chosen topics. */
     val providers: List<NewsProvider> get() = selection.shownProviders
@@ -51,9 +49,6 @@ class NewsViewModel @Inject constructor(
     val uiState: StateFlow<NewsUiState> = _uiState.asStateFlow()
 
     private var loadJob: Job? = null
-    private var bodyJob: Job? = null
-    private val previews = MutableStateFlow<Map<String, NewsArticleBody>>(emptyMap())
-    val previewBodies: StateFlow<Map<String, NewsArticleBody>> = previews.asStateFlow()
 
     init {
         viewModelScope.launch {
@@ -104,30 +99,10 @@ class NewsViewModel @Inject constructor(
     }
 
     fun openArticle(article: NewsArticle) {
-        bodyJob?.cancel()
-        val cached = repository.cachedBody(article)
-        _uiState.update { it.copy(openArticle = article, openBody = cached, isBodyLoading = cached == null) }
-        if (cached != null) return
-        bodyJob = viewModelScope.launch {
-            val body = runCatching { repository.articleBody(article) }.getOrNull()
-            _uiState.update {
-                if (it.openArticle?.link != article.link) it
-                else it.copy(openBody = body ?: NewsArticleBody(listOf(article.summary).filter { s -> s.isNotBlank() }, article.imageUrl),
-                    isBodyLoading = false)
-            }
-        }
+        _uiState.update { it.copy(openArticle = article) }
     }
 
     fun closeArticle() {
-        bodyJob?.cancel()
-        _uiState.update { it.copy(openArticle = null, openBody = null, isBodyLoading = false) }
-    }
-
-    /** Fills the TV preview pane (image + opening lines) for headline-only feeds like CNN. */
-    suspend fun loadPreview(article: NewsArticle) {
-        if (article.imageUrl != null && article.summary.isNotBlank()) return
-        if (previews.value.containsKey(article.link)) return
-        val body = runCatching { repository.articleBody(article) }.getOrNull() ?: return
-        previews.update { it + (article.link to body) }
+        _uiState.update { it.copy(openArticle = null) }
     }
 }

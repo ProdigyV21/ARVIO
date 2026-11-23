@@ -2200,12 +2200,14 @@
     <string name="news_no_sources_desc">Pick providers or add an RSS feed in Settings, News.</string>
     <string name="news_no_articles">No headlines right now</string>
     <string name="news_load_failed">Could not load %1$s</string>
-    <string name="news_read_hint">Press OK to read the article</string>
-    <string name="news_loading_article">Loading article…</string>
+    <string name="news_read_hint">Press OK for the summary and a link to the full story</string>
     <string name="settings_desc_news">The News tab, its sources and topics</string>
     <string name="news_topics_section">Topics</string>
     <string name="news_topics_desc">Show every topic, or only the ones you pick. Feeds you added yourself always appear.</string>
     <string name="news_change_providers_hint">Providers can be changed in Settings → News</string>
+    <string name="news_open_article">Open full article</string>
+    <string name="news_scan_to_read">Scan to read the full article on your phone</string>
+    <string name="news_saved_on_device">Sources and topics are saved on this device only and are not synced.</string>
     <string name="news_sources_section">Sources</string>
     <string name="news_topic_all">All topics</string>
     <string name="news_topic_world">World</string>

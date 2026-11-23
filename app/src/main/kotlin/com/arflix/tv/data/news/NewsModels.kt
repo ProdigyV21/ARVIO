@@ -1,20 +1,12 @@
 package com.arflix.tv.data.news
 
-/** How a provider's headline list is read. */
-enum class NewsFeedFormat {
-    /** RSS 2.0 or Atom. */
-    FEED,
-    /** CNN retired its RSS feeds in 2023; its text-only "Lite" site is the stable headline source. */
-    CNN_LITE,
-}
-
+/** A news source; [url] is always an RSS 2.0 or Atom feed that the publisher offers for reading. */
 data class NewsProvider(
     val id: String,
     val name: String,
     val url: String,
     /** BCP-47 language of the provider's content, used for text direction and defaults. */
     val language: String,
-    val format: NewsFeedFormat = NewsFeedFormat.FEED,
     val isCustom: Boolean = false,
     /** Where this provider's stories on each topic come from; a topic missing here is not covered. */
     val topics: Map<NewsTopic, NewsTopicSource> = emptyMap(),
@@ -44,8 +36,7 @@ enum class NewsTopic(val id: String) {
 
 /**
  * A topic comes either from the provider's own section feed, or from its main feed narrowed to the
- * stories whose URL path has one of [pathSections] as a segment (CNN Lite has no section pages, and
- * not every site offers section feeds).
+ * stories whose URL path has one of [pathSections] as a segment (not every site offers section feeds).
  */
 data class NewsTopicSource(val feedUrl: String? = null, val pathSections: List<String> = emptyList()) {
     fun matches(link: String): Boolean {
@@ -65,31 +56,11 @@ data class NewsArticle(
     val imageUrl: String? = null,
     /** Epoch millis, or null when the feed gives no usable date. */
     val publishedAt: Long? = null,
-    /** [publishedAt] is only a calendar day (CNN Lite dates stories by URL path), not a time. */
-    val isDayOnly: Boolean = false,
     val providerId: String,
-    /** Full article text when the feed already carries it (e.g. `content:encoded`). */
-    val paragraphs: List<String> = emptyList(),
-)
-
-/** The article as shown in the reader, after the page itself has been fetched. */
-data class NewsArticleBody(
-    val paragraphs: List<String>,
-    val imageUrl: String?,
 )
 
 object NewsProviders {
     val presets: List<NewsProvider> = listOf(
-        NewsProvider("cnn", "CNN", "https://lite.cnn.com/", "en", NewsFeedFormat.CNN_LITE, topics = mapOf(
-            NewsTopic.WORLD to sections("world", "europe", "americas", "uk", "middleeast", "asia", "china", "africa", "australia", "india"),
-            NewsTopic.POLITICS to sections("politics"),
-            NewsTopic.BUSINESS to sections("business", "economy", "investing", "markets"),
-            NewsTopic.TECH to sections("tech"),
-            NewsTopic.SPORTS to sections("sport"),
-            NewsTopic.HEALTH to sections("health"),
-            NewsTopic.SCIENCE to sections("science", "climate"),
-            NewsTopic.ENTERTAINMENT to sections("entertainment", "style"),
-        )),
         // Fox has no working business feed, and its science feed stopped updating.
         NewsProvider("fox", "Fox News", "https://moxie.foxnews.com/google-publisher/latest.xml", "en", topics = mapOf(
             NewsTopic.WORLD to feed("https://moxie.foxnews.com/google-publisher/world.xml"),

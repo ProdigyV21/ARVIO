@@ -5767,6 +5767,12 @@ private fun MobileSettingsSubPage(
                         onClick = { dialog = com.arflix.tv.ui.screens.news.NewsSettingsDialog.SOURCES }
                     )
                 }
+                Text(
+                    text = stringResource(R.string.news_saved_on_device),
+                    style = ArflixTypography.caption,
+                    color = TextSecondary,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                )
             }
             "Appearance" -> {
                 MobileSettingsCategory(title = stringResource(R.string.settings_section_appearance)) {
@@ -6746,7 +6752,7 @@ private fun tvSettingsSectionDescription(section: String): String {
         "ai_subtitles" -> stringResource(R.string.settings_desc_ai_subtitles)
         "playback" -> stringResource(R.string.settings_desc_playback)
         "appearance" -> stringResource(R.string.settings_desc_appearance)
-        "news" -> stringResource(R.string.settings_desc_news)
+        "news" -> stringResource(R.string.news_saved_on_device)
         "profiles" -> stringResource(R.string.settings_desc_profiles)
         "network" -> stringResource(R.string.settings_desc_network)
         "stream_integrations" -> stringResource(R.string.settings_desc_stream_integrations)

@@ -79,12 +79,12 @@ import coil.compose.AsyncImage
 import com.arflix.tv.R
 import com.arflix.tv.data.model.Profile
 import com.arflix.tv.data.news.NewsArticle
-import com.arflix.tv.data.news.NewsArticleBody
 import com.arflix.tv.data.news.NewsProvider
 import com.arflix.tv.ui.components.AppTopBar
 import com.arflix.tv.ui.components.AppTopBarContentTopInset
 import com.arflix.tv.ui.components.CompactLoadingIndicator
 import com.arflix.tv.ui.components.LocalBottomBarInset
+import com.arflix.tv.ui.components.QrCodeImage
 import com.arflix.tv.ui.components.ReconcileTopBarFocus
 import com.arflix.tv.ui.components.SidebarItem
 import com.arflix.tv.ui.components.topBarFocusedItem
@@ -115,7 +115,6 @@ fun NewsScreen(
     onBack: () -> Unit = {},
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
-    val previews by viewModel.previewBodies.collectAsStateWithLifecycle()
     val touch = LocalDeviceType.current.isTouchDevice()
     val isRtl = LocalLayoutDirection.current == LayoutDirection.Rtl
     val hasProfile = currentProfile != null
@@ -248,20 +247,15 @@ fun NewsScreen(
                         }
                     }
                     val preview = focusedArticle
-                    LaunchedEffect(preview?.link) {
-                        if (preview != null) { delay(250); viewModel.loadPreview(preview) }
-                    }
                     if (preview != null) {
-                        NewsPreviewPane(preview, state.provider(preview.providerId), previews[preview.link],
-                            Modifier.weight(0.54f).fillMaxHeight())
+                        NewsPreviewPane(preview, state.provider(preview.providerId), Modifier.weight(0.54f).fillMaxHeight())
                     }
                 }
             }
         }
 
         state.openArticle?.let { article ->
-            NewsReader(article, state.provider(article.providerId), state.openBody, state.isBodyLoading, touch,
-                onClose = viewModel::closeArticle)
+            NewsReader(article, state.provider(article.providerId), touch, onClose = viewModel::closeArticle)
         }
     }
 }
@@ -282,14 +276,9 @@ private fun NewsEmptyState(title: String, body: String?) {
 @Composable
 private fun articleMeta(article: NewsArticle, provider: NewsProvider?): String {
     val name = provider?.name.orEmpty()
-    val context = androidx.compose.ui.platform.LocalContext.current
     val time = article.publishedAt?.let { at ->
-        if (article.isDayOnly) {
-            DateUtils.formatDateTime(context, at, DateUtils.FORMAT_SHOW_DATE or DateUtils.FORMAT_ABBREV_MONTH or DateUtils.FORMAT_UTC)
-        } else {
-            DateUtils.getRelativeTimeSpanString(at, System.currentTimeMillis(), DateUtils.MINUTE_IN_MILLIS,
-                DateUtils.FORMAT_ABBREV_RELATIVE).toString()
-        }
+        DateUtils.getRelativeTimeSpanString(at, System.currentTimeMillis(), DateUtils.MINUTE_IN_MILLIS,
+            DateUtils.FORMAT_ABBREV_RELATIVE).toString()
     }
     return listOfNotNull(name.takeIf { it.isNotBlank() }, time).joinToString(" · ")
 }
@@ -329,9 +318,9 @@ private fun NewsHeadlineRow(
 }
 
 @Composable
-private fun NewsPreviewPane(article: NewsArticle, provider: NewsProvider?, preview: NewsArticleBody?, modifier: Modifier) {
-    val image = article.imageUrl ?: preview?.imageUrl
-    val summary = article.summary.ifBlank { preview?.paragraphs?.take(2)?.joinToString(" ").orEmpty() }
+private fun NewsPreviewPane(article: NewsArticle, provider: NewsProvider?, modifier: Modifier) {
+    val image = article.imageUrl
+    val summary = article.summary
     Column(modifier.padding(top = 4.dp)) {
         if (image != null) {
             AsyncImage(model = image, contentDescription = null, contentScale = ContentScale.Crop,
@@ -392,8 +381,6 @@ private fun NewsTouchCard(article: NewsArticle, provider: NewsProvider?, wide: B
 private fun NewsReader(
     article: NewsArticle,
     provider: NewsProvider?,
-    body: NewsArticleBody?,
-    loading: Boolean,
     touch: Boolean,
     onClose: () -> Unit,
 ) {
@@ -406,9 +393,10 @@ private fun NewsReader(
         list.scrollToItem(0)
         if (!touch) runCatching { focus.requestFocus() }
     }
-    val image = body?.imageUrl ?: article.imageUrl
-    val paragraphs = body?.paragraphs?.takeIf { it.isNotEmpty() }
-        ?: listOf(article.summary).filter { it.isNotBlank() }
+    // Only the feed's own summary. The full story stays on the publisher's site: it opens in the browser
+    // (or by QR code on a TV), and the article page is never fetched or extracted here.
+    val image = article.imageUrl
+    val paragraphs = listOf(article.summary).filter { it.isNotBlank() }
     BoxWithConstraints(Modifier.fillMaxSize().background(Color.Black).testTag("news-reader")
         .focusRequester(focus)
         .onPreviewKeyEvent { event ->
@@ -441,23 +429,44 @@ private fun NewsReader(
                     style = ContentDirection, modifier = Modifier.fillMaxWidth())
                 Spacer(Modifier.height(14.dp))
             }
-            if (loading && body == null) item("loading") {
-                Text(stringResource(R.string.news_loading_article), color = Color.White.copy(alpha = 0.6f), fontSize = 16.sp)
-            }
             itemsIndexed(paragraphs) { _, paragraph ->
                 Text(paragraph, color = Color.White.copy(alpha = 0.88f), fontSize = 19.sp, lineHeight = 30.sp,
                     style = ContentDirection, modifier = Modifier.fillMaxWidth().padding(bottom = 14.dp))
             }
-            item("source") {
-                Text(article.link, color = Color.White.copy(alpha = 0.35f), fontSize = 12.sp, maxLines = 1,
-                    overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 10.dp))
-            }
+            item("source") { NewsOpenArticle(article.link, touch) }
         }
         if (touch) {
             Box(Modifier.align(Alignment.TopStart).statusBarsPadding().padding(8.dp).size(44.dp)
                 .clip(RoundedCornerShape(22.dp)).background(Color.Black.copy(alpha = 0.6f)).clickable(onClick = onClose),
                 contentAlignment = Alignment.Center) {
                 Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null, tint = Color.White)
+            }
+        }
+    }
+}
+
+/** The way to the full story on the publisher's own site: a browser on phones, a QR code on TVs. */
+@Composable
+private fun NewsOpenArticle(link: String, touch: Boolean) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    Column(Modifier.fillMaxWidth().padding(top = 10.dp).testTag("news-open-article")) {
+        if (touch) {
+            OledControl(stringResource(R.string.news_open_article), selected = true, onClick = {
+                runCatching {
+                    context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(link))
+                        .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
+                }
+            })
+        } else {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(18.dp)) {
+                Box(Modifier.size(132.dp).clip(RoundedCornerShape(10.dp)).background(Color.White).padding(8.dp)) {
+                    QrCodeImage(data = link, sizePx = 400, modifier = Modifier.fillMaxSize())
+                }
+                Column(Modifier.weight(1f)) {
+                    Text(stringResource(R.string.news_scan_to_read), color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                    Spacer(Modifier.height(6.dp))
+                    Text(link, color = Color.White.copy(alpha = 0.45f), fontSize = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                }
             }
         }
     }

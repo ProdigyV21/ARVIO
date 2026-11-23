@@ -6,12 +6,12 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** Synthetic feeds shaped like the real providers' (entity-escaped, CDATA, Atom, Lite HTML). */
+/** Synthetic feeds shaped like the real providers' (entity-escaped, CDATA, Atom). */
 class NewsParsersTest {
     private val rss = NewsProvider("rss", "Example", "https://news.example.com/rss.xml", "en")
     private val he = NewsProvider("he", "דוגמה", "https://news.example.co.il/rss.xml", "he")
 
-    @Test fun rssWithEscapedContentKeepsFullTextAndDecodesDoubleEscapedEntities() {
+    @Test fun rssKeepsOnlyTheSummaryAndDecodesDoubleEscapedEntities() {
         val xml = """
             <rss xmlns:media="http://search.yahoo.com/mrss/" xmlns:content="http://purl.org/rss/1.0/modules/content/" version="2.0">
             <channel><title>Example &amp; Co</title>
@@ -32,10 +32,20 @@ class NewsParsersTest {
         val a = items.single()
         assertEquals("First headline", a.title)
         assertEquals("The team's plan, explained.", a.summary)
-        assertEquals(listOf("Opening paragraph.", "Second linked paragraph."), a.paragraphs)
+
         assertEquals("https://img.example.com/a.jpg", a.imageUrl)
         assertEquals(java.time.OffsetDateTime.parse("2026-11-21T03:55:09Z").toInstant().toEpochMilli(), a.publishedAt)
         assertEquals("Example & Co", NewsParsers.feedTitle(xml))
+    }
+
+    @Test fun withoutADescriptionTheSummaryIsTheFirstContentParagraphOnly() {
+        val xml = """
+            <rss xmlns:content="http://purl.org/rss/1.0/modules/content/" version="2.0"><channel>
+            <item><title>Full text feed</title><link>https://news.example.com/f</link>
+              <content:encoded><![CDATA[<p>Lead paragraph.</p><p>The rest of the story.</p>]]></content:encoded>
+            </item></channel></rss>
+        """.trimIndent()
+        assertEquals("Lead paragraph.", NewsParsers.parseFeed(xml, rss).single().summary)
     }
 
     @Test fun cdataDescriptionGivesImageAndTextAndYnetCropIsUpgraded() {
@@ -80,37 +90,6 @@ class NewsParsersTest {
             </item></channel></rss>
         """.trimIndent()
         assertEquals("https://img.example.com/large.jpg", NewsParsers.parseFeed(xml, rss).single().imageUrl)
-    }
-
-    @Test fun cnnLiteListUsesAbsoluteLinksAndPathDates() {
-        val cnn = NewsProviders.presets.first { it.id == "cnn" }
-        val html = """
-            <html><body><ul>
-            <li class="card--lite"><a href="/2026/11/21/world/story-one">  Story one  </a></li>
-            <li class="card--lite"><a href="/2026/11/20/politics/story-two">Story two</a></li>
-            <li class="other"><a href="/ignored">Ignored</a></li>
-            </ul></body></html>
-        """.trimIndent()
-        val items = NewsParsers.parseCnnLite(html, cnn)
-        assertEquals(listOf("Story one", "Story two"), items.map { it.title })
-        assertEquals("https://lite.cnn.com/2026/11/21/world/story-one", items[0].link)
-        assertTrue(items[0].isDayOnly)
-        assertEquals(java.time.LocalDate.of(2026, 11, 21).atStartOfDay(java.time.ZoneOffset.UTC).toInstant().toEpochMilli(),
-            items[0].publishedAt)
-    }
-
-    @Test fun articlePagesPreferKnownBlocksThenFallBackToArticleParagraphs() {
-        val lite = """<html><head><meta property="og:image" content="https://img/c.jpg"></head><body>
-            <p class="paragraph--lite">One.</p><p class="paragraph--lite"> Two. </p><p>Footer text that is long enough to count anyway.</p></body></html>"""
-        val body = NewsParsers.parseArticlePage(lite, "https://lite.cnn.com/x")
-        assertEquals(listOf("One.", "Two."), body.paragraphs)
-        assertEquals("https://img/c.jpg", body.imageUrl)
-
-        val generic = """<html><body><nav><p>Navigation paragraph that is long enough to be counted.</p></nav>
-            <article><p>Short.</p><p>The article's real first paragraph, comfortably over forty characters.</p></article></body></html>"""
-        val fallback = NewsParsers.parseArticlePage(generic, "https://example.com/x")
-        assertEquals(listOf("The article's real first paragraph, comfortably over forty characters."), fallback.paragraphs)
-        assertNull(fallback.imageUrl)
     }
 
     @Test fun datesInCommonFeedShapesParse() {
