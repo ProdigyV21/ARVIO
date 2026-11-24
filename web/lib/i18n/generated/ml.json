@@ -1603,5 +1603,10 @@
   "Regional price · save {value0} vs. 12 monthly payments": "പ്രാദേശിക വില · 12 പ്രതിമാസ പേയ്‌മെന്റുകളെ അപേക്ഷിച്ച് {value0} ലാഭം",
   "One payment, no automatic renewal. About {value0} a month.": "ഒറ്റത്തവണ പേയ്മെന്റ്, സ്വയമേവയുള്ള പുതുക്കൽ ഇല്ല. മാസം ഏകദേശം {value0}.",
   "12-month pass · {value0}": "12 മാസ പാസ് · {value0}",
-  "Look around for free. Premium is needed to play.": "സൗജന്യമായി നോക്കൂ. പ്ലേ ചെയ്യാൻ Premium ആവശ്യമാണ്."
+  "Look around for free. Premium is needed to play.": "സൗജന്യമായി നോക്കൂ. പ്ലേ ചെയ്യാൻ Premium ആവശ്യമാണ്.",
+  "Watch {title} with ARVIO Premium": "ARVIO Premium ഉപയോഗിച്ച് {title} കാണുക",
+  "Watch this with ARVIO Premium": "ARVIO Premium ഉപയോഗിച്ച് ഇത് കാണുക",
+  "Watch Live TV with ARVIO Premium": "ARVIO Premium ഉപയോഗിച്ച് ലൈവ് ടിവി കാണുക",
+  "Download with ARVIO Premium": "ARVIO Premium ഉപയോഗിച്ച് ഡൗൺലോഡ് ചെയ്യുക",
+  "Open streams with ARVIO Premium": "ARVIO Premium ഉപയോഗിച്ച് സ്ട്രീമുകൾ തുറക്കുക"
 }

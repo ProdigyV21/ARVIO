@@ -1562,5 +1562,10 @@
   "Regional price · save {value0} vs. 12 monthly payments": "আঞ্চলিক মূল্য · ১২টি মাসিক পেমেন্টের তুলনায় {value0} সাশ্রয়",
   "One payment, no automatic renewal. About {value0} a month.": "একবার পেমেন্ট, স্বয়ংক্রিয় নবায়ন নেই। মাসে প্রায় {value0}।",
   "12-month pass · {value0}": "১২ মাসের পাস · {value0}",
-  "Look around for free. Premium is needed to play.": "বিনামূল্যে ঘুরে দেখুন। চালাতে Premium প্রয়োজন।"
+  "Look around for free. Premium is needed to play.": "বিনামূল্যে ঘুরে দেখুন। চালাতে Premium প্রয়োজন।",
+  "Watch {title} with ARVIO Premium": "ARVIO Premium দিয়ে {title} দেখুন",
+  "Watch this with ARVIO Premium": "ARVIO Premium দিয়ে এটি দেখুন",
+  "Watch Live TV with ARVIO Premium": "ARVIO Premium দিয়ে লাইভ টিভি দেখুন",
+  "Download with ARVIO Premium": "ARVIO Premium দিয়ে ডাউনলোড করুন",
+  "Open streams with ARVIO Premium": "ARVIO Premium দিয়ে স্ট্রিম খুলুন"
 }

@@ -1564,5 +1564,10 @@
   "Regional price · save {value0} vs. 12 monthly payments": "地域価格 · 月払い12回分に比べて{value0}お得",
   "One payment, no automatic renewal. About {value0} a month.": "1回限りの支払いで、自動更新はありません。月あたり約 {value0} です。",
   "12-month pass · {value0}": "12か月パス · {value0}",
-  "Look around for free. Premium is needed to play.": "閲覧は無料です。再生には Premium が必要です。"
+  "Look around for free. Premium is needed to play.": "閲覧は無料です。再生には Premium が必要です。",
+  "Watch {title} with ARVIO Premium": "ARVIO Premiumで{title}を視聴",
+  "Watch this with ARVIO Premium": "ARVIO Premiumで視聴",
+  "Watch Live TV with ARVIO Premium": "ARVIO Premiumでライブ TV を視聴",
+  "Download with ARVIO Premium": "ARVIO Premiumでダウンロード",
+  "Open streams with ARVIO Premium": "ARVIO Premiumでストリームを開く"
 }

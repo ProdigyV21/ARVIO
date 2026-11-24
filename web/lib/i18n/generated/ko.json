@@ -1564,5 +1564,10 @@
   "Regional price · save {value0} vs. 12 monthly payments": "지역 가격 · 월간 결제 12회 대비 {value0} 절약",
   "One payment, no automatic renewal. About {value0} a month.": "한 번 결제, 자동 갱신 없음. 월 약 {value0}입니다.",
   "12-month pass · {value0}": "12개월 이용권 · {value0}",
-  "Look around for free. Premium is needed to play.": "무료로 둘러보세요. 재생하려면 Premium이 필요합니다."
+  "Look around for free. Premium is needed to play.": "무료로 둘러보세요. 재생하려면 Premium이 필요합니다.",
+  "Watch {title} with ARVIO Premium": "ARVIO Premium으로 {title} 시청하기",
+  "Watch this with ARVIO Premium": "ARVIO Premium으로 시청하기",
+  "Watch Live TV with ARVIO Premium": "ARVIO Premium으로 실시간 TV 시청하기",
+  "Download with ARVIO Premium": "ARVIO Premium으로 다운로드하기",
+  "Open streams with ARVIO Premium": "ARVIO Premium으로 스트림 열기"
 }
