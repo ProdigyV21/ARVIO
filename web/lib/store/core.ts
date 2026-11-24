@@ -244,6 +244,23 @@ export function useStoreCore(initialView?: AppView) {
     };
     return () => { mdblistClient.onTokenRefreshed = undefined; };
   }, []);
+
+  useEffect(() => {
+    // Trakt refresh tokens are single use: once this browser rotates the pair, every other
+    // device still holds a dead refresh token until the new one reaches the cloud.
+    traktClient.onTokenRefreshed = async (profileId, token) => {
+      if (activeProfileIdRef.current !== profileId || traktClient.token !== token) return;
+      await saveCloudTrackingSelection(authClient, profileId, {
+        provider: "TRAKT",
+        traktToken: token,
+        simklToken: simklClient.token,
+        mdbListApiKey: mdblistClient.key,
+        trackingPreferences: loadTrackingPreferences(profileId),
+        changedDomains: ["trakt"]
+      });
+    };
+    return () => { traktClient.onTokenRefreshed = undefined; };
+  }, []);
   return { managed, personalSettings, personalSettingsRef, personalAddons, personalAddonsRef, section, setSection, initialProfileId, initialCw, initialWatchlist, categories, setCategories, catalogConfigs, setCatalogConfigs, homeServerRows, setHomeServerRows, continueWatching, setContinueWatching, watchlist, setWatchlist, watchlistMutationRef, cwSourceRef, refreshKeyRef, refreshGenerationRef, traktActivityRef, watchedKeys, setWatchedKeys, selected, setSelected, streams, setStreams, streamsRef, selectedEpisode, setSelectedEpisode, activeStream, setActiveStream, activeChannel, setActiveChannel, playingRef, addons, setAddons, addonsReady, setAddonsReady, iptvSnapshot, setIptvSnapshot, query, setQuery, results, setResults, searchState, setSearchState, settingsSyncState, setSettingsSyncState, settings, setSettings, auth, setAuth, traktConnected, setTraktConnected, mdblistConnected, setMdblistConnected, simklConnected, setSimklConnected, deviceCode, setDeviceCode, simklDeviceCode, setSimklDeviceCode, mdblistDeviceCode, setMdblistDeviceCode, busy, setBusy, busyRef, toast, setToast, cloudProfilesHydrated, setCloudProfilesHydrated, refreshInFlightRef, lastRefreshStartedRef, previousSectionRef, iptvGuideInFlightRef, lastSyncedSettingsRef, sourceGeneration, playbackGeneration, playbackPreparation, ownedPlayback, stopOwnedPlayback, guideRetryAfter, profiles, setProfiles, activeProfileId, setActiveProfileId, activeProfileIdRef, trackingPreferences, setTrackingPreferences, avatarImages, setAvatarImagesState, setAvatarImages, manageMode, setManageMode, view, setView, activeProfile, activeProfileRef, addonsRef, settingsRef, deviceCodeRef, simklDeviceCodeRef, mdblistDeviceCodeRef };
 }
 
