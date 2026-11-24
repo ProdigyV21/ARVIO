@@ -30,7 +30,7 @@ import { authClient, useAppPick } from "@/lib/store";
 import { trackPremiumEvent } from "@/lib/premiumAnalytics";
 import type { IptvChannel } from "@/lib/types";
 import { uiLocales } from "@/lib/uiLocale";
-import { matchesCategoryQuery, sharedCategoryPrefix } from "@/lib/iptvCategoryFilter";
+import { matchesCategoryQuery, sharedCategoryPrefix, withoutCategoryPrefix } from "@/lib/iptvCategoryFilter";
 
 const LAST_CHANNEL_KEY = "arvio.web.livetv.lastChannel";
 const GUIDE_BATCH_DELAY_MS = 500;
@@ -470,7 +470,7 @@ export function LiveTvScreen() {
       if (window.matchMedia("(max-width: 760px)").matches) setGroupsOpen(false);
     }}>
     {category.id === "favorites" ? <Star size={20} /> : category.id === "recent" ? <History size={20} /> : category.id === "sports" ? <Trophy size={20} /> : <LayoutGrid size={20} />}
-    <span>{category.id.startsWith("group:") && groupPrefix ? categoryText(category).slice(groupPrefix.length) : categoryText(category)}</span>{category.id !== "sports" && <em>{resolvingSavedChannels && ["favorites", "recent"].includes(category.id) && !category.count ? <RefreshCw size={14} className="is-spinning" aria-label={translateUi("Loading saved channels")} /> : category.count.toLocaleString(uiLocales())}</em>}
+    <span>{category.id.startsWith("group:") ? withoutCategoryPrefix(categoryText(category), groupPrefix) : categoryText(category)}</span>{category.id !== "sports" && <em>{resolvingSavedChannels && ["favorites", "recent"].includes(category.id) && !category.count ? <RefreshCw size={14} className="is-spinning" aria-label={translateUi("Loading saved channels")} /> : category.count.toLocaleString(uiLocales())}</em>}
   </button>;
   const openCategories = () => { setGroupsOpen(true); requestAnimationFrame(() => document.querySelector<HTMLElement>(".livetv-cats button.is-active")?.focus()); };
   const hasContent = channels.length > 0 || hasSportsAddons;

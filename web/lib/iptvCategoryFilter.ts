@@ -7,13 +7,21 @@ export function foldCategoryText(value: string): string {
   return value.normalize("NFKC").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
 }
 
-/** "Name: " when every label (at least three) starts with that same playlist name, else "". */
+/**
+ * "Name: " when every "Name: …" label (at least three, and at least half of all
+ * labels) uses that same playlist name, else "". Labels in another form, such as
+ * the sports "Events · Climbing" groups, neither count nor block it.
+ */
 export function sharedCategoryPrefix(labels: string[]): string {
-  if (labels.length < 3) return "";
-  const first = labels[0].match(/^([^:|]{1,40}):\s+/);
-  if (!first) return "";
-  const prefix = first[0];
-  return labels.every((label) => label.startsWith(prefix) && label.length > prefix.length) ? prefix : "";
+  const prefixes = labels.map((label) => label.match(/^([^:|]{1,40}):\s+(?=\S)/)?.[0] ?? null);
+  const named = prefixes.filter((prefix): prefix is string => prefix !== null);
+  if (named.length < 3 || named.length * 2 < labels.length) return "";
+  return named.every((prefix) => prefix === named[0]) ? named[0] : "";
+}
+
+/** The label without the shared prefix, when it carries it. */
+export function withoutCategoryPrefix(label: string, prefix: string): string {
+  return prefix && label.startsWith(prefix) ? label.slice(prefix.length) : label;
 }
 
 /** Labels containing every word of the query, in any order. */
