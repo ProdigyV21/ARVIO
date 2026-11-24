@@ -257,6 +257,13 @@ android {
     testOptions {
         unitTests {
             isIncludeAndroidResources = true
+            all { test ->
+                // One test JVM runs the whole suite (3,400+ tests), and Robolectric keeps a loaded
+                // Android environment per SDK level in it. Gradle's default 512 MB test heap is too
+                // tight for that: CI intermittently died with an OutOfMemoryError in
+                // ShadowArscApkAssets (FrameRateUtilsTest) while every other test passed.
+                test.maxHeapSize = "2g"
+            }
         }
     }
 
