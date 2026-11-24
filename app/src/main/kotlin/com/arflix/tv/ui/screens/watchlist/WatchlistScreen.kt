@@ -291,7 +291,7 @@ fun WatchlistScreen(
                             Key.Enter, Key.DirectionCenter, Key.NumPadEnter -> {
                                 when(topBarFocusedItem(topIndex, currentProfile != null)) {
                                     SidebarItem.HOME -> onNavigateToHome(); SidebarItem.SEARCH -> onNavigateToSearch()
-                                    SidebarItem.TV -> onNavigateToTv(); SidebarItem.SETTINGS -> onNavigateToSettings(null)
+                                    SidebarItem.TV -> onNavigateToTv(); SidebarItem.NEWS -> com.arflix.tv.ui.components.NewsNavigation.open(); SidebarItem.SETTINGS -> onNavigateToSettings(null)
                                     SidebarItem.WATCHLIST -> firstTab.requestFocus(); null -> onSwitchProfile()
                                 }; true
                             }

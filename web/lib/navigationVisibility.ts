@@ -1,6 +1,7 @@
 import { loadStored, saveStored } from "./storage";
 
-export const OPTIONAL_NAVIGATION_SECTIONS = ["search", "watchlist", "tv"] as const;
+// "news" is an Android-only tab; listing it keeps a web save from dropping the synced choice.
+export const OPTIONAL_NAVIGATION_SECTIONS = ["search", "watchlist", "tv", "news"] as const;
 export type OptionalNavigationSection = typeof OPTIONAL_NAVIGATION_SECTIONS[number];
 
 export function normalizedHiddenNavigationSections(value: unknown): OptionalNavigationSection[] {

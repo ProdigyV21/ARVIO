@@ -108,6 +108,7 @@ import androidx.compose.material.icons.filled.Subtitles
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material.icons.filled.LiveTv
+import androidx.compose.material.icons.filled.Newspaper
 import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.Widgets
@@ -339,9 +340,17 @@ private val tvGeneralSectionIds = setOf(
     "ai_subtitles",
     "playback",
     "appearance",
+    "news",
     "profiles",
     "network"
 )
+
+/** Row id of the News tab switch; 56..58 are the other optional tabs, in OPTIONAL_NAVIGATION_SECTIONS order. */
+internal const val NEWS_TAB_ROW = 61
+
+/** The optional tab a navigation switch row controls. */
+internal fun navigationSectionForRow(rowId: Int): String =
+    if (rowId == NEWS_TAB_ROW) "news" else com.arflix.tv.util.OPTIONAL_NAVIGATION_SECTIONS[rowId - 56]
 
 internal fun tvGeneralRowsForSection(section: String): List<Int> {
     return when (section) {
@@ -354,6 +363,8 @@ internal fun tvGeneralRowsForSection(section: String): List<Int> {
         "playback" -> listOf(10, 11, 12, 43, 44, 55, 13, 14, 34, 37, 16, 15, 40, 27, 53, 54, 60)
         "appearance" -> listOf(17, 49, 50, 18, 20, 21, 24, 23, 22, 41, 46, 36, 47, 56, 57) +
             (if (com.arflix.tv.ui.components.KidsNavigation.hideLiveTv) emptyList() else listOf(58)) + 59
+        // News: the tab switch, then what the tab shows. Kids profiles never get the section.
+        "news" -> if (com.arflix.tv.ui.components.KidsNavigation.hideLiveTv) emptyList() else listOf(NEWS_TAB_ROW, 62, 63)
         "profiles" -> listOf(19)
         "network" -> listOf(25, 26, 35)
         else -> emptyList()
@@ -605,6 +616,7 @@ fun SettingsScreen(
                 add("plugins")
             }
             add("appearance")
+            if (!com.arflix.tv.ui.components.KidsNavigation.hideLiveTv) add("news")
             add("network")
         }
     }
@@ -738,6 +750,10 @@ fun SettingsScreen(
     var showUiModeWarningDialog by remember { mutableStateOf(false) }
     var nextUiMode by remember { mutableStateOf("") }
     var showQualityFiltersModal by remember { mutableStateOf(false) }
+    val newsSettingsViewModel: com.arflix.tv.ui.screens.news.NewsSettingsViewModel = hiltViewModel()
+    val newsSelection by newsSettingsViewModel.selection.collectAsStateWithLifecycle()
+    var newsDialog by remember { mutableStateOf<com.arflix.tv.ui.screens.news.NewsSettingsDialog?>(null) }
+    com.arflix.tv.ui.screens.news.NewsSettingsDialogHost(newsDialog, newsSettingsViewModel) { newsDialog = null }
     var showQualityFilterEditor by remember { mutableStateOf(false) }
     var editingQualityFilterId by remember { mutableStateOf<String?>(null) }
     var qualityFilterDeviceName by remember { mutableStateOf("") }
@@ -1045,6 +1061,7 @@ fun SettingsScreen(
         showContentLanguagePicker ||
         showUiModeWarningDialog ||
         showQualityFiltersModal ||
+        newsDialog != null ||
         showQualityFilterEditor ||
         showCredits || showPlaybackCompatibility ||
         addonConfigureTarget != null ||
@@ -1463,6 +1480,7 @@ fun SettingsScreen(
                                             SidebarItem.HOME -> onNavigateToHome()
                                             SidebarItem.TV -> onNavigateToTv()
                                             SidebarItem.WATCHLIST -> onNavigateToWatchlist()
+                                            SidebarItem.NEWS -> com.arflix.tv.ui.components.NewsNavigation.open()
                                             SidebarItem.SETTINGS -> { /* Already here */ }
                                             null -> Unit
                                         }
@@ -1530,9 +1548,11 @@ fun SettingsScreen(
                                                 54 -> viewModel.clearPlaybackCache()
                                                 60 -> showPlaybackCompatibility = true
                                                 55 -> viewModel.setShowAddonStreamDetails(!uiState.showAddonStreamDetails)
-                                                in 56..58 -> {
-                                                    val section = com.arflix.tv.util.OPTIONAL_NAVIGATION_SECTIONS[
-                                                        tvGeneralRowsForSection(currentSection)[contentFocusIndex] - 56]
+                                                62 -> newsDialog = com.arflix.tv.ui.screens.news.NewsSettingsDialog.TOPICS
+                                                63 -> newsDialog = com.arflix.tv.ui.screens.news.NewsSettingsDialog.SOURCES
+                                                in 56..58, NEWS_TAB_ROW -> {
+                                                    val section = navigationSectionForRow(
+                                                        tvGeneralRowsForSection(currentSection)[contentFocusIndex])
                                                     viewModel.setNavigationSectionVisible(section, section in uiState.hiddenNavigationSections)
                                                 }
                                             }
@@ -2040,6 +2060,7 @@ fun SettingsScreen(
                                     "ai_subtitles" -> Icons.Default.AutoAwesome
                                     "playback" -> Icons.Default.PlayArrow
                                     "appearance" -> Icons.Default.Palette
+                                    "news" -> Icons.Default.Newspaper
                                     "profiles" -> Icons.Default.SwitchAccount
                                     "network" -> Icons.Default.Settings
                                     "stream_integrations" -> Icons.Default.Tune
@@ -2056,6 +2077,7 @@ fun SettingsScreen(
                                     "ai_subtitles" -> stringResource(R.string.ai_subtitles_section)
                                     "playback" -> stringResource(R.string.playback)
                                     "appearance" -> stringResource(R.string.interface_label)
+                                    "news" -> stringResource(R.string.nav_news)
                                     "profiles" -> stringResource(R.string.profiles)
                                     "network" -> stringResource(R.string.network)
                                     "stream_integrations" -> stringResource(R.string.settings_stream_integrations)
@@ -2230,7 +2252,11 @@ fun SettingsScreen(
                             showAddonStreamDetails = uiState.showAddonStreamDetails,
                             onShowAddonStreamDetailsToggle = { viewModel.setShowAddonStreamDetails(it) },
                             hiddenNavigationSections = uiState.hiddenNavigationSections,
-                            onNavigationSectionVisibleChange = viewModel::setNavigationSectionVisible
+                            onNavigationSectionVisibleChange = viewModel::setNavigationSectionVisible,
+                            newsTopicsSummary = com.arflix.tv.ui.screens.news.newsTopicsSummary(newsSelection),
+                            newsSourcesSummary = com.arflix.tv.ui.screens.news.newsSourcesSummary(newsSelection),
+                            onNewsTopicsClick = { newsDialog = com.arflix.tv.ui.screens.news.NewsSettingsDialog.TOPICS },
+                            onNewsSourcesClick = { newsDialog = com.arflix.tv.ui.screens.news.NewsSettingsDialog.SOURCES }
                         )
                         if (showAiModelDialog) {
                             AiModelDialog(
@@ -5010,6 +5036,7 @@ private fun mobileCategoryTitle(page: String): String = when (page) {
     "Playback & Controls" -> stringResource(R.string.settings_cat_playback_controls)
     "Audio & Subtitles" -> stringResource(R.string.settings_cat_audio_subtitles)
     "Appearance" -> stringResource(R.string.interface_label)
+    "News" -> stringResource(R.string.nav_news)
     "Addons" -> stringResource(R.string.addons)
     "Plugins & Extensions" -> stringResource(R.string.settings_cat_plugins_extensions)
     "Catalogs" -> stringResource(R.string.catalogs)
@@ -5095,6 +5122,7 @@ private fun MobileSettingsMainPage(
                     add("Playback & Controls" to Icons.Default.PlayArrow)
                     add("Audio & Subtitles" to Icons.Default.Speaker)
                     add("Appearance" to Icons.Default.Palette)
+                    if (!uiState.isKidsProfile) add("News" to Icons.Default.Newspaper)
                     add("Addons" to Icons.Default.Extension)
                     if (BuildConfig.FEATURE_PLUGINS_ENABLED) {
                         add("Plugins & Extensions" to Icons.Default.Extension)
@@ -5708,6 +5736,44 @@ private fun MobileSettingsSubPage(
                     }
                 }
             }
+            "News" -> {
+                val newsSettings: com.arflix.tv.ui.screens.news.NewsSettingsViewModel = hiltViewModel()
+                val selection by newsSettings.selection.collectAsStateWithLifecycle()
+                var dialog by remember { mutableStateOf<com.arflix.tv.ui.screens.news.NewsSettingsDialog?>(null) }
+                com.arflix.tv.ui.screens.news.NewsSettingsDialogHost(dialog, newsSettings) { dialog = null }
+                val visible = "news" !in uiState.hiddenNavigationSections
+                MobileSettingsCategory(title = stringResource(R.string.nav_news)) {
+                    MobileSettingsRow(
+                        icon = Icons.Default.Newspaper,
+                        title = stringResource(R.string.navigation_show_news),
+                        subtitle = stringResource(R.string.settings_profile_scoped),
+                        value = stringResource(if (visible) R.string.on else R.string.off),
+                        toggleChecked = visible,
+                        onClick = { viewModel.setNavigationSectionVisible("news", !visible) }
+                    )
+                    MobileSettingsRow(
+                        icon = Icons.Default.Tune,
+                        title = stringResource(R.string.news_topics_section),
+                        subtitle = com.arflix.tv.ui.screens.news.newsTopicsSummary(selection),
+                        value = null,
+                        onClick = { dialog = com.arflix.tv.ui.screens.news.NewsSettingsDialog.TOPICS }
+                    )
+                    MobileSettingsRow(
+                        icon = Icons.Default.Newspaper,
+                        title = stringResource(R.string.news_sources_section),
+                        subtitle = com.arflix.tv.ui.screens.news.newsSourcesSummary(selection),
+                        value = null,
+                        showDivider = false,
+                        onClick = { dialog = com.arflix.tv.ui.screens.news.NewsSettingsDialog.SOURCES }
+                    )
+                }
+                Text(
+                    text = stringResource(R.string.news_saved_on_device),
+                    style = ArflixTypography.caption,
+                    color = TextSecondary,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                )
+            }
             "Appearance" -> {
                 MobileSettingsCategory(title = stringResource(R.string.settings_section_appearance)) {
                     com.arflix.tv.ui.components.MobileHomeHeroStyleSetting()
@@ -5821,13 +5887,16 @@ private fun MobileSettingsSubPage(
                 }
                 MobileSettingsCategory(title = stringResource(R.string.navigation_sections)) {
                     com.arflix.tv.util.OPTIONAL_NAVIGATION_SECTIONS
-                        .filter { it != "tv" || !uiState.isKidsProfile }
+                        .filter { it !in com.arflix.tv.util.KIDS_HIDDEN_NAVIGATION_SECTIONS || !uiState.isKidsProfile }
+                        // The News switch lives on its own News page.
+                        .filter { it != "news" }
                         .forEach { section ->
                             val visible = section !in uiState.hiddenNavigationSections
                             MobileSettingsRow(
                                 icon = when (section) {
                                     "search" -> Icons.Default.Search
                                     "watchlist" -> Icons.Default.Bookmark
+                                    "news" -> Icons.Default.Newspaper
                                     else -> Icons.Default.LiveTv
                                 },
                                 title = navigationVisibilityTitle(section),
@@ -6662,6 +6731,7 @@ private fun tvSettingsSectionTitle(section: String): String {
         "ai_subtitles" -> stringResource(R.string.ai_subtitles_section)
         "playback" -> stringResource(R.string.playback)
         "appearance" -> stringResource(R.string.interface_label)
+        "news" -> stringResource(R.string.nav_news)
         "profiles" -> stringResource(R.string.profiles)
         "network" -> stringResource(R.string.network)
         "stream_integrations" -> stringResource(R.string.settings_stream_integrations)
@@ -6682,6 +6752,7 @@ private fun tvSettingsSectionDescription(section: String): String {
         "ai_subtitles" -> stringResource(R.string.settings_desc_ai_subtitles)
         "playback" -> stringResource(R.string.settings_desc_playback)
         "appearance" -> stringResource(R.string.settings_desc_appearance)
+        "news" -> stringResource(R.string.news_saved_on_device)
         "profiles" -> stringResource(R.string.settings_desc_profiles)
         "network" -> stringResource(R.string.settings_desc_network)
         "stream_integrations" -> stringResource(R.string.settings_desc_stream_integrations)
@@ -6853,6 +6924,11 @@ private fun tvSettingsFocusedHelp(section: String, focusedIndex: Int): TvSetting
             else -> TvSettingsHelp(stringResource(R.string.playback), stringResource(R.string.settings_help_playback_desc))
         }
         "appearance" -> TvSettingsHelp(stringResource(R.string.interface_label), stringResource(R.string.settings_help_interface_desc))
+        "news" -> when (focusedIndex) {
+            1 -> TvSettingsHelp(stringResource(R.string.news_topics_section), stringResource(R.string.news_topics_desc))
+            2 -> TvSettingsHelp(stringResource(R.string.news_sources_section), stringResource(R.string.news_sources_desc))
+            else -> TvSettingsHelp(stringResource(R.string.nav_news), stringResource(R.string.settings_desc_news))
+        }
         "profiles" -> TvSettingsHelp(stringResource(R.string.profiles), stringResource(R.string.settings_help_profiles_desc))
         "network" -> TvSettingsHelp(stringResource(R.string.network), stringResource(R.string.settings_desc_network))
         "stream_integrations" -> when (focusedIndex) {
@@ -6921,6 +6997,7 @@ private fun formatCompactCount(value: Int): String {
 private fun navigationVisibilityTitle(section: String): String = stringResource(when (section) {
     "search" -> R.string.navigation_show_search
     "watchlist" -> R.string.navigation_show_library
+    "news" -> R.string.navigation_show_news
     else -> R.string.navigation_show_tv
 })
 
@@ -7041,18 +7118,28 @@ private fun TvGeneralSettingsRows(
     showAddonStreamDetails: Boolean = false,
     onShowAddonStreamDetailsToggle: (Boolean) -> Unit = {},
     hiddenNavigationSections: Set<String> = emptySet(),
-    onNavigationSectionVisibleChange: (String, Boolean) -> Unit = { _, _ -> }
+    onNavigationSectionVisibleChange: (String, Boolean) -> Unit = { _, _ -> },
+    newsTopicsSummary: String = "",
+    newsSourcesSummary: String = "",
+    onNewsTopicsClick: () -> Unit = {},
+    onNewsSourcesClick: () -> Unit = {}
 ) {
     Column {
         tvGeneralRowsForSection(section).forEachIndexed { localIndex, rowId ->
             if (localIndex > 0) Spacer(modifier = Modifier.height(10.dp))
             when (rowId) {
-                in 56..58 -> {
-                    val section = com.arflix.tv.util.OPTIONAL_NAVIGATION_SECTIONS[rowId - 56]
+                in 56..58, NEWS_TAB_ROW -> {
+                    val section = navigationSectionForRow(rowId)
                     SettingsToggleRow(navigationVisibilityTitle(section), stringResource(R.string.settings_profile_scoped),
                         section !in hiddenNavigationSections, focusedIndex == localIndex,
                         { onNavigationSectionVisibleChange(section, it) }, Modifier.settingsFocusSlot(localIndex))
                 }
+                62 -> SettingsRow(icon = Icons.Default.Tune, title = stringResource(R.string.news_topics_section),
+                    subtitle = stringResource(R.string.news_topics_desc), value = newsTopicsSummary,
+                    isFocused = focusedIndex == localIndex, onClick = onNewsTopicsClick, modifier = Modifier.settingsFocusSlot(localIndex))
+                63 -> SettingsRow(icon = Icons.Default.Newspaper, title = stringResource(R.string.news_sources_section),
+                    subtitle = stringResource(R.string.news_sources_desc), value = newsSourcesSummary,
+                    isFocused = focusedIndex == localIndex, onClick = onNewsSourcesClick, modifier = Modifier.settingsFocusSlot(localIndex))
                 55 -> SettingsToggleRow(stringResource(R.string.show_addon_stream_details),
                     stringResource(R.string.show_addon_stream_details_desc), showAddonStreamDetails,
                     focusedIndex == localIndex, onShowAddonStreamDetailsToggle, Modifier.settingsFocusSlot(localIndex))
