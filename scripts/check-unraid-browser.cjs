@@ -45,7 +45,7 @@ async function exerciseContext(browser, baseUrl, scenario, evidenceDir) {
   const stats = {
     scenario, bootstrapRequests: 0, delayedBootstrapMs: 0,
     mockedMetadataRequests: 0, blockedExternalRequests: 0,
-    unexpectedApiRequests: 0, forbiddenServiceRequests: 0
+    unexpectedApiRequests: 0, forbiddenServiceRequests: 0, forbiddenUrls: []
   };
   const pageErrors = [];
   try {
@@ -55,7 +55,7 @@ async function exerciseContext(browser, baseUrl, scenario, evidenceDir) {
         /(?:^|\.)(?:trakt\.tv|simkl\.com|supabase\.co|google-analytics\.com|googletagmanager\.com)$/.test(url.hostname);
       const forbiddenPath = /^\/api\/(?:cloud-auth|premium|membership|entitlement|analytics|trakt|simkl|mdblist)(?:\/|$)/.test(url.pathname) ||
         url.pathname.startsWith('/.netlify/functions/');
-      if (forbiddenHost || forbiddenPath) stats.forbiddenServiceRequests += 1;
+      if (forbiddenHost || forbiddenPath) { stats.forbiddenServiceRequests += 1; stats.forbiddenUrls.push(`${route.request().method()} ${url.origin}${url.pathname}`); }
       if (url.origin !== baseUrl) {
         stats.blockedExternalRequests += 1;
         await route.abort('blockedbyclient');
@@ -156,7 +156,7 @@ async function exerciseContext(browser, baseUrl, scenario, evidenceDir) {
     await expect(page.getByRole('heading', { name: "Who's watching?", exact: true })).toBeVisible();
     await expect(page.locator('.profile-pick').filter({ hasText: profileName })).toBeVisible();
     await assertIndependentUi(page, scenario);
-    assert.equal(stats.forbiddenServiceRequests, 0, `${scenario}: no Cloud, billing, analytics or tracker requests`);
+    assert.equal(stats.forbiddenServiceRequests, 0, `${scenario}: no Cloud, billing, analytics or tracker requests; saw: ${stats.forbiddenUrls.join(", ")}`);
     assert.equal(stats.unexpectedApiRequests, 0, `${scenario}: no unmocked provider API routes`);
     assert.deepEqual(pageErrors, [], `${scenario}: no unhandled application errors`);
     return stats;
