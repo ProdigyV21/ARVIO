@@ -75,8 +75,10 @@ class MusicRepository @Inject constructor(
     fun sourceFor(library: MusicLibrary): MusicSource? {
         if (library.isEmpty) return null
         cached?.let { (saved, source) -> if (saved == library) return source }
+        val keys = mutableListOf<String>()
         val sources = buildList<MusicSource> {
             library.server?.let { server ->
+                keys += SERVER_KEY
                 add(
                     when (server.type) {
                         MusicServerType.SUBSONIC -> SubsonicSource(http, server)
@@ -84,14 +86,47 @@ class MusicRepository @Inject constructor(
                     }
                 )
             }
-            library.addons.forEach { add(MusicAddonSource(http, it)) }
+            library.addons.forEach { addon ->
+                keys += addon.id.ifBlank { addon.baseUrl }
+                add(
+                    if (addon.protocol == EclipseAddonSource.PROTOCOL) EclipseAddonSource(http, addon)
+                    else MusicAddonSource(http, addon)
+                )
+            }
         }
-        val source = CompositeMusicSource(sources)
+        val source = CompositeMusicSource(sources, keys)
         cached = library to source
         return source
     }
 
     suspend fun currentSource(): MusicSource? = sourceFor(library.first())
+
+    private val collectionsKey = stringPreferencesKey("collections_v1")
+
+    /** Liked songs, favourite albums and the user's playlists, kept on this device. */
+    val collections: Flow<MusicCollections> = context.musicDataStore.data
+        .map { prefs -> decodeCollections(prefs[collectionsKey]) }
+        .distinctUntilChanged()
+
+    private fun decodeCollections(json: String?): MusicCollections = json?.let {
+        runCatching { gson.fromJson(it, MusicCollections::class.java)?.sanitized() }.getOrNull()
+    } ?: MusicCollections()
+
+    /** A file the user picked: its name (which tells the format) and its bytes. */
+    fun readDocument(uri: android.net.Uri): Pair<String, ByteArray> {
+        val resolver = context.contentResolver
+        val name = resolver.query(uri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
+            if (cursor.moveToFirst()) cursor.getString(0) else null
+        } ?: uri.lastPathSegment.orEmpty()
+        val bytes = resolver.openInputStream(uri)?.use { it.readBytes() } ?: throw MusicServerException("Could not read $name")
+        return name to bytes
+    }
+
+    suspend fun updateCollections(transform: (MusicCollections) -> MusicCollections) {
+        context.musicDataStore.edit { prefs ->
+            prefs[collectionsKey] = gson.toJson(transform(decodeCollections(prefs[collectionsKey])))
+        }
+    }
 
     /** Reads the addon's manifest and adds it; adding the same addon again refreshes it. */
     suspend fun addAddon(url: String): MusicAddon {
@@ -132,6 +167,10 @@ class MusicRepository @Inject constructor(
 
     suspend fun disconnect() {
         context.musicDataStore.edit { it.remove(configKey) }
+    }
+
+    companion object {
+        const val SERVER_KEY = "server"
     }
 
     private suspend fun deviceId(): String {

@@ -188,3 +188,195 @@ class MusicAddonSourceTest {
         assertEquals("2~a", tracks[0].albumId)
     }
 }
+
+class MusicCollectionsTest {
+    private fun track(id: String) = MusicTrack(id, "T$id", "A", "Al", "al", 100, null, "u$id")
+    private val album = MusicAlbum("al", "Album", "A", null, null)
+
+    @Test fun favouritesToggleAndNewestComesFirst() {
+        val c = MusicCollections().toggleFavorite(track("1")).toggleFavorite(track("2")).toggleFavorite(album)
+        assertEquals(listOf("2", "1"), c.favoriteTracks.map { it.id })
+        assertTrue(c.isFavorite(album))
+        val off = c.toggleFavorite(track("1")).toggleFavorite(album)
+        assertEquals(listOf("2"), off.favoriteTracks.map { it.id })
+        assertTrue(off.favoriteAlbums.isEmpty())
+    }
+
+    @Test fun playlistsAddRemoveMoveAndSkipDuplicates() {
+        var c = MusicCollections().createPlaylist("p", "  ", listOf(track("1"), track("1"), track("2")))
+        assertEquals(MusicCollections.DEFAULT_NAME, c.playlist("p")!!.name)
+        assertEquals(listOf("1", "2"), c.playlist("p")!!.tracks.map { it.id })
+        c = c.addToPlaylist("p", listOf(track("2"), track("3")))
+        assertEquals(listOf("1", "2", "3"), c.playlist("p")!!.tracks.map { it.id })
+        c = c.moveInPlaylist("p", 2, 0).removeFromPlaylist("p", 1).renamePlaylist("p", " Gym ").renamePlaylist("p", "")
+        assertEquals(listOf("3", "2"), c.playlist("p")!!.tracks.map { it.id })
+        assertEquals("Gym", c.playlist("p")!!.name)
+        assertEquals(c, c.moveInPlaylist("p", 0, 9).removeFromPlaylist("p", 5))
+        assertTrue(c.deletePlaylist("p").playlists.isEmpty())
+    }
+
+    @Test fun importedPlaylistIsReplacedNotDuplicated() {
+        val c = MusicCollections().replaceImported("a", "Mix", listOf(track("1")), "spotify:x")
+            .replaceImported("b", "Mix", listOf(track("2"), track("3")), "spotify:x")
+        assertEquals(1, c.playlists.size)
+        assertEquals("a", c.playlists[0].id)
+        assertEquals(listOf("2", "3"), c.playlists[0].tracks.map { it.id })
+    }
+
+    @Test fun oldSavesWithMissingFieldsStillLoad() {
+        val c = com.google.gson.Gson().fromJson("""{"playlists":[{"id":"p","tracks":null}]}""", MusicCollections::class.java).sanitized()
+        assertTrue(c.favoriteTracks.isEmpty())
+        assertEquals(MusicCollections.DEFAULT_NAME, c.playlists[0].name)
+        assertTrue(c.playlists[0].tracks.isEmpty())
+    }
+}
+
+class EclipseAddonSourceTest {
+    private val http = OkHttpClient()
+    private val manifest = JsonParser.parseString(
+        """{"id":"com.example.music","name":"Example","version":"1.0.0","resources":["search","stream","catalog"],
+           "types":["track","album","playlist"],"catalogs":[{"id":"hot","type":"track","name":"Hot"},{"id":"new","type":"album","name":"New"}]}"""
+    ).asJsonObject
+
+    @Test fun manifestIsRecognisedAndKeepsCatalogTypes() {
+        assertTrue(EclipseAddonSource.isEclipseManifest(manifest))
+        val stremio = JsonParser.parseString("""{"id":"x","resources":["catalog","meta","stream"],"types":["music"]}""").asJsonObject
+        assertTrue(!EclipseAddonSource.isEclipseManifest(stremio))
+        val addon = EclipseAddonSource.parseManifest("https://a.example/tok", manifest)
+        assertEquals(EclipseAddonSource.PROTOCOL, addon.protocol)
+        assertEquals(listOf("track", "album"), addon.catalogs.map { it.type })
+    }
+
+    @Test fun tracksAlbumsAndStreamsParse() {
+        val source = EclipseAddonSource(http, EclipseAddonSource.parseManifest("https://a.example/tok", manifest))
+        val album = source.parseAlbum(JsonParser.parseString("""{"id":"9","title":"LP","artist":"Band","artworkURL":"https://img/9","year":"2019"}""").asJsonObject, "album")
+        assertEquals("album:9", album.id)
+        assertEquals(2019, album.year)
+        val playlist = source.parseAlbum(JsonParser.parseString("""{"id":"5","title":"Mix","creator":"Me"}""").asJsonObject, "playlist")
+        assertEquals("playlist:5", playlist.id)
+        assertEquals("Me", playlist.artist)
+
+        val lazy = source.parseTrack(JsonParser.parseString("""{"id":"t/1","title":"Song","artist":"Band","durationMs":181000}""").asJsonObject, album, 0)
+        assertEquals(181, lazy.durationSec)
+        assertEquals("https://img/9", lazy.coverUrl)
+        assertEquals(
+            "${MusicAddonSource.STREAM_SCHEME}://stream?base=https%3A%2F%2Fa.example%2Ftok&id=t%2F1&p=eclipse",
+            lazy.streamUrl,
+        )
+        val direct = source.parseTrack(JsonParser.parseString("""{"id":"t2","title":"S2","artist":"B","duration":200,"streamURL":"https://cdn/2.flac"}""").asJsonObject, null, null)
+        assertEquals("https://cdn/2.flac", direct.streamUrl)
+        assertEquals(200, direct.durationSec)
+    }
+
+    @Test fun searchAlbumAndStreamAgainstAServer() = kotlinx.coroutines.runBlocking {
+        val server = okhttp3.mockwebserver.MockWebServer()
+        server.dispatcher = object : okhttp3.mockwebserver.Dispatcher() {
+            override fun dispatch(request: okhttp3.mockwebserver.RecordedRequest): okhttp3.mockwebserver.MockResponse {
+                val body = when (request.requestUrl!!.encodedPath) {
+                    "/tok/manifest.json" -> manifest.toString()
+                    "/tok/search" -> """{"tracks":[{"id":"t1","title":"Song","artist":"Band"}],"playlists":[{"id":"5","title":"Mix"}]}"""
+                    "/tok/playlist/5" -> """{"id":"5","title":"Mix","tracks":[{"id":"t1","title":"Song","artist":"Band","artworkURL":"https://img/t1"}]}"""
+                    "/tok/catalog/hot" -> """{"items":[{"id":"t9","type":"track","title":"Hit","artist":"X","durationMs":90000,"artworkURL":"https://img/9"}]}"""
+                    "/tok/catalog/new" -> """{"items":[{"id":"8","type":"album","title":"Fresh","artist":"Y"}]}"""
+                    "/tok/stream/t1" -> """{"url":"https://cdn/t1.mp3","format":"mp3"}"""
+                    else -> return okhttp3.mockwebserver.MockResponse().setResponseCode(404)
+                }
+                return okhttp3.mockwebserver.MockResponse().setBody(body).setHeader("Content-Type", "application/json")
+            }
+        }
+        server.start()
+        try {
+            val base = server.url("/tok/manifest.json").toString()
+            val addon = MusicAddonSource.install(http, base)
+            assertEquals(EclipseAddonSource.PROTOCOL, addon.protocol)
+            val source = EclipseAddonSource(http, addon)
+            val found = source.search("song")
+            assertEquals("Song", found.tracks.single().title)
+            assertEquals("playlist:5", found.albums.single().id)
+            assertEquals("https://img/t1", source.albumTracks("playlist:5").single().coverUrl)
+            val shelves = source.shelves()
+            assertEquals(listOf("Hot", "New"), shelves.map { it.title })
+            assertEquals("catalog:hot", shelves[0].albums.single().id)
+            assertEquals("Hit", source.albumTracks("catalog:hot").single().title)
+            assertEquals("https://cdn/t1.mp3", MusicAddonSource.resolveStream(http, addon.baseUrl, "t1", EclipseAddonSource.PROTOCOL))
+        } finally {
+            server.shutdown()
+        }
+    }
+
+    @Test fun compositeKeysStayStableWhenSourcesChange() = kotlinx.coroutines.runBlocking {
+        val one = object : MusicSource {
+            override suspend fun albums(shelf: AlbumShelf, size: Int) = listOf(MusicAlbum("a", "A", "x", null, null))
+            override suspend fun artists() = emptyList<MusicArtist>()
+            override suspend fun artistAlbums(artistId: String) = emptyList<MusicAlbum>()
+            override suspend fun albumTracks(albumId: String) = listOf(MusicTrack("t", "T", "x", "A", albumId, 1, null, "u"))
+            override suspend fun search(query: String) = MusicSearchResult()
+            override suspend fun reportPlayed(trackId: String) = Unit
+        }
+        val before = CompositeMusicSource(listOf(one), listOf("com.example~odd"))
+        val id = before.albums(AlbumShelf.ALPHABETICAL, 1).single().id
+        assertEquals("com.example_odd~a", id)
+        val after = CompositeMusicSource(listOf(one, one), listOf("server", "com.example~odd"))
+        assertEquals("com.example_odd~a", after.albumTracks(id).single().albumId)
+    }
+}
+
+class SpotifyImportTest {
+    @Test fun exportifyCsvWithQuotesAndSeveralArtists() {
+        val csv = "﻿\"Track URI\",\"Track Name\",\"Album Name\",\"Artist Name(s)\",\"Duration (ms)\"\r\n" +
+            "\"spotify:track:1\",\"Hello, \"\"World\"\"\",\"Album\",\"Band,Guest\",\"200000\"\r\n" +
+            "\"spotify:track:2\",\"Second\",\"\",\"Solo\",\"\"\r\n"
+        val playlist = SpotifyImport.parse("Road_Trip.csv", csv.toByteArray())
+        assertEquals(1, playlist.size)
+        assertEquals("Road Trip", playlist[0].name)
+        assertEquals(ImportedTrack("Hello, \"World\"", "Band", "Album", 200000), playlist[0].tracks[0])
+        assertEquals("Solo", playlist[0].tracks[1].artist)
+        assertTrue(SpotifyImport.parse("Liked_Songs.csv", csv.toByteArray())[0].liked)
+    }
+
+    @Test fun spotifyDataExportJsonAndZip() {
+        val library = """{"tracks":[{"artist":"A","album":"B","track":"Song","uri":"spotify:track:x"}],"albums":[]}"""
+        val playlists = """{"playlists":[{"name":"Gym","items":[{"track":{"trackName":"Run","artistName":"C","albumName":"D"}},{"episode":null}]}]}"""
+        val liked = SpotifyImport.parse("YourLibrary.json", library.toByteArray()).single()
+        assertTrue(liked.liked)
+        assertEquals("Song", liked.tracks.single().title)
+        val bytes = java.io.ByteArrayOutputStream().also { out ->
+            java.util.zip.ZipOutputStream(out).use { zip ->
+                zip.putNextEntry(java.util.zip.ZipEntry("Spotify Account Data/YourLibrary.json")); zip.write(library.toByteArray()); zip.closeEntry()
+                zip.putNextEntry(java.util.zip.ZipEntry("Spotify Account Data/Playlist1.json")); zip.write(playlists.toByteArray()); zip.closeEntry()
+            }
+        }.toByteArray()
+        val all = SpotifyImport.parse("my_spotify_data.zip", bytes)
+        assertEquals(listOf(SpotifyImport.LIKED_NAME, "Gym"), all.map { it.name })
+        assertEquals("Run", all[1].tracks.single().title)
+    }
+
+    private fun found(title: String, artist: String, sec: Int = 0) = MusicTrack(title, title, artist, "", null, sec, null, "u")
+
+    @Test fun matchingIgnoresDecorationsButNeedsTheArtist() {
+        val wanted = ImportedTrack("Bohemian Rhapsody - Remastered 2011", "Queen", durationMs = 354000)
+        assertTrue(SpotifyImport.score(wanted, found("Bohemian Rhapsody", "Queen", 355)) >= SpotifyImport.MATCH_THRESHOLD)
+        assertTrue(SpotifyImport.score(wanted, found("Bohemian Rhapsody (Live)", "Queen")) >= SpotifyImport.MATCH_THRESHOLD)
+        assertTrue(SpotifyImport.score(wanted, found("Bohemian Rhapsody", "Cover Band", 354)) < SpotifyImport.MATCH_THRESHOLD)
+        assertTrue(SpotifyImport.score(wanted, found("Another Song", "Queen", 354)) < SpotifyImport.MATCH_THRESHOLD)
+        assertTrue(SpotifyImport.score(ImportedTrack("Café", "Beyoncé"), found("Cafe", "Beyonce")) >= SpotifyImport.MATCH_THRESHOLD)
+    }
+
+    @Test fun matchPicksTheBestAndLeavesMissingOut() = kotlinx.coroutines.runBlocking {
+        val source = object : MusicSource {
+            override suspend fun albums(shelf: AlbumShelf, size: Int) = emptyList<MusicAlbum>()
+            override suspend fun artists() = emptyList<MusicArtist>()
+            override suspend fun artistAlbums(artistId: String) = emptyList<MusicAlbum>()
+            override suspend fun albumTracks(albumId: String) = emptyList<MusicTrack>()
+            override suspend fun search(query: String) = MusicSearchResult(
+                tracks = if (query.contains("Run")) listOf(found("Run (Remix)", "C"), found("Run", "C")) else emptyList()
+            )
+            override suspend fun reportPlayed(trackId: String) = Unit
+        }
+        var last = 0 to 0
+        val result = SpotifyImport.match(source, listOf(ImportedTrack("Run", "C"), ImportedTrack("Nope", "Z"))) { d, t -> last = d to t }
+        assertEquals("Run", result[0]!!.title)
+        assertNull(result[1])
+        assertEquals(2 to 2, last)
+    }
+}

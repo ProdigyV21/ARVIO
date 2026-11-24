@@ -48,7 +48,7 @@ class MusicPlaybackService : MediaSessionService() {
             } else {
                 val base = uri.getQueryParameter("base") ?: throw IOException("Missing addon")
                 val id = uri.getQueryParameter("id") ?: throw IOException("Missing track")
-                val stream = runCatching { MusicAddonSource.resolveStream(http, base, id) }
+                val stream = runCatching { MusicAddonSource.resolveStream(http, base, id, uri.getQueryParameter("p")) }
                     .getOrElse { throw IOException(it.message, it) }
                 spec.withUri(Uri.parse(stream))
             }

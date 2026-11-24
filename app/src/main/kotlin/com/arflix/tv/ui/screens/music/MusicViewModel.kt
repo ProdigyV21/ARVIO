@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.arflix.tv.music.AlbumShelf
 import com.arflix.tv.music.MusicAlbum
 import com.arflix.tv.music.MusicAddon
+import com.arflix.tv.music.MusicCollections
 import com.arflix.tv.music.MusicArtist
 import com.arflix.tv.music.MusicLibrary
 import com.arflix.tv.music.MusicPlaybackState
@@ -16,7 +17,11 @@ import com.arflix.tv.music.MusicServerType
 import com.arflix.tv.music.MusicShelf
 import com.arflix.tv.music.MusicSource
 import com.arflix.tv.music.MusicTrack
+import android.net.Uri
+import com.arflix.tv.music.SpotifyImport
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -24,9 +29,10 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.util.UUID
 import javax.inject.Inject
 
-enum class MusicTab { HOME, ALBUMS, ARTISTS }
+enum class MusicTab { HOME, MINE, ALBUMS, ARTISTS }
 
 sealed interface MusicPage {
     data class Album(
@@ -42,6 +48,13 @@ sealed interface MusicPage {
         val loading: Boolean = true,
         val error: String? = null,
     ) : MusicPage
+
+    /** One of the user's own playlists, or their liked songs ([LIKED]); read live from the collections. */
+    data class Playlist(val id: String) : MusicPage
+
+    companion object {
+        const val LIKED = "liked"
+    }
 }
 
 data class MusicUiState(
@@ -62,10 +75,24 @@ data class MusicUiState(
     val results: MusicSearchResult? = null,
     val pages: List<MusicPage> = emptyList(),
     val playerOpen: Boolean = false,
+    val collections: MusicCollections = MusicCollections(),
+    /** Tracks waiting for the user to pick a playlist to add them to. */
+    val addingToPlaylist: List<MusicTrack>? = null,
+    /** Songs looked up so far and in all, while a Spotify import runs. */
+    val importProgress: Pair<Int, Int>? = null,
+    val importResult: SpotifyImportResult? = null,
 ) {
     val config: MusicServerConfig? get() = library.server
     val hasSources: Boolean get() = !library.isEmpty
 }
+
+/** How a Spotify import went; [error] when it could not run at all. */
+data class SpotifyImportResult(
+    val playlists: Int = 0,
+    val found: Int = 0,
+    val total: Int = 0,
+    val error: String? = null,
+)
 
 /** What the Music screens can ask for; the view model in the app, a stand-in in screenshot tests. */
 interface MusicActions {
@@ -92,6 +119,22 @@ interface MusicActions {
     fun toggleShuffle()
     fun cycleRepeat()
     fun playAlbum(album: MusicAlbum)
+
+    fun toggleFavorite(track: MusicTrack)
+    fun toggleFavorite(album: MusicAlbum)
+    fun openPlaylist(id: String)
+    /** Makes a playlist; with tracks it also adds them, as from "Add to playlist". */
+    fun createPlaylist(name: String, tracks: List<MusicTrack> = emptyList())
+    fun renamePlaylist(id: String, name: String)
+    fun deletePlaylist(id: String)
+    fun removeFromPlaylist(id: String, index: Int)
+    fun movePlaylistTrack(id: String, from: Int, to: Int)
+    /** Opens (or with null closes) the playlist picker for these tracks. */
+    fun showAddToPlaylist(tracks: List<MusicTrack>?)
+    fun addToPlaylist(id: String, tracks: List<MusicTrack>)
+    /** Reads Spotify export files the user picked and rebuilds those playlists from their own sources. */
+    fun importSpotify(files: List<Uri>)
+    fun dismissImportResult()
 }
 
 @HiltViewModel
@@ -112,10 +155,83 @@ class MusicViewModel @Inject constructor(
                 val changed = library != _state.value.library
                 if (!changed && _state.value.configLoaded) return@collect
                 // A new or removed source starts the library over, but keeps the open player.
-                _state.update { MusicUiState(configLoaded = true, library = library, playerOpen = it.playerOpen) }
+                _state.update {
+                    MusicUiState(configLoaded = true, library = library, playerOpen = it.playerOpen, collections = it.collections)
+                }
                 if (!library.isEmpty) loadHome()
             }
         }
+        viewModelScope.launch {
+            repository.collections.collect { collections -> _state.update { it.copy(collections = collections) } }
+        }
+    }
+
+    private fun edit(transform: (MusicCollections) -> MusicCollections) {
+        viewModelScope.launch { repository.updateCollections(transform) }
+    }
+
+    override fun toggleFavorite(track: MusicTrack) = edit { it.toggleFavorite(track) }
+    override fun toggleFavorite(album: MusicAlbum) = edit { it.toggleFavorite(album) }
+
+    override fun openPlaylist(id: String) = _state.update { it.copy(pages = it.pages + MusicPage.Playlist(id)) }
+
+    override fun createPlaylist(name: String, tracks: List<MusicTrack>) {
+        _state.update { it.copy(addingToPlaylist = null) }
+        edit { it.createPlaylist(UUID.randomUUID().toString(), name, tracks) }
+    }
+
+    override fun renamePlaylist(id: String, name: String) = edit { it.renamePlaylist(id, name) }
+
+    override fun deletePlaylist(id: String) {
+        _state.update { state -> state.copy(pages = state.pages.filterNot { it is MusicPage.Playlist && it.id == id }) }
+        edit { it.deletePlaylist(id) }
+    }
+
+    override fun removeFromPlaylist(id: String, index: Int) = edit { it.removeFromPlaylist(id, index) }
+    override fun movePlaylistTrack(id: String, from: Int, to: Int) = edit { it.moveInPlaylist(id, from, to) }
+    override fun showAddToPlaylist(tracks: List<MusicTrack>?) = _state.update { it.copy(addingToPlaylist = tracks?.takeIf { t -> t.isNotEmpty() }) }
+
+    override fun importSpotify(files: List<Uri>) {
+        if (files.isEmpty() || _state.value.importProgress != null) return
+        val source = source() ?: return
+        _state.update { it.copy(importProgress = 0 to 0, importResult = null) }
+        viewModelScope.launch {
+            val result = runCatching {
+                val playlists = withContext(Dispatchers.IO) {
+                    files.flatMap { uri -> repository.readDocument(uri).let { (name, bytes) -> SpotifyImport.parse(name, bytes) } }
+                }
+                if (playlists.isEmpty()) return@runCatching SpotifyImportResult(error = "no_playlists")
+                // A song on several playlists is looked up once.
+                val unique = playlists.flatMap { it.tracks }.distinct()
+                val matches = SpotifyImport.match(source, unique) { done, total ->
+                    _state.update { it.copy(importProgress = done to total) }
+                }
+                val byTrack = unique.zip(matches).toMap()
+                repository.updateCollections { collections ->
+                    playlists.fold(collections) { acc, playlist ->
+                        val tracks = playlist.tracks.mapNotNull { byTrack[it] }
+                        when {
+                            tracks.isEmpty() -> acc
+                            playlist.liked -> tracks.asReversed().fold(acc) { c, t -> if (c.isFavorite(t)) c else c.toggleFavorite(t) }
+                            else -> acc.replaceImported(UUID.randomUUID().toString(), playlist.name, tracks, "spotify:" + playlist.name)
+                        }
+                    }
+                }
+                SpotifyImportResult(
+                    playlists = playlists.size,
+                    found = playlists.sumOf { p -> p.tracks.count { byTrack[it] != null } },
+                    total = playlists.sumOf { it.tracks.size },
+                )
+            }.getOrElse { SpotifyImportResult(error = it.message ?: it.javaClass.simpleName) }
+            _state.update { it.copy(importProgress = null, importResult = result) }
+        }
+    }
+
+    override fun dismissImportResult() = _state.update { it.copy(importResult = null) }
+
+    override fun addToPlaylist(id: String, tracks: List<MusicTrack>) {
+        _state.update { it.copy(addingToPlaylist = null) }
+        edit { it.addToPlaylist(id, tracks) }
     }
 
     private fun source(): MusicSource? = repository.sourceFor(_state.value.library)
@@ -182,7 +298,7 @@ class MusicViewModel @Inject constructor(
                     .onSuccess { artists -> _state.update { it.copy(artists = artists) } }
                     .onFailure { error -> _state.update { it.copy(artists = emptyList(), error = error.message) } }
             }
-            MusicTab.HOME -> Unit
+            MusicTab.HOME, MusicTab.MINE -> Unit
         }
     }
 
@@ -246,6 +362,7 @@ class MusicViewModel @Inject constructor(
     override fun back(): Boolean {
         val current = _state.value
         return when {
+            current.addingToPlaylist != null -> { _state.update { it.copy(addingToPlaylist = null) }; true }
             current.playerOpen -> { _state.update { it.copy(playerOpen = false) }; true }
             current.pages.isNotEmpty() -> { _state.update { it.copy(pages = it.pages.dropLast(1)) }; true }
             current.query.isNotEmpty() -> { setQuery(""); true }

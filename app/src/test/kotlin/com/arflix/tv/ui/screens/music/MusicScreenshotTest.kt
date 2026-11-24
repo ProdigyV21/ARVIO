@@ -29,6 +29,7 @@ import org.robolectric.Shadows.shadowOf
 import com.arflix.tv.music.MusicAddon
 import com.arflix.tv.music.MusicAlbum
 import com.arflix.tv.music.MusicArtist
+import com.arflix.tv.music.MusicCollections
 import com.arflix.tv.music.MusicLibrary
 import com.arflix.tv.music.MusicPlaybackState
 import com.arflix.tv.music.MusicServerType
@@ -86,6 +87,18 @@ class MusicScreenshotTest {
         override fun toggleShuffle() = Unit
         override fun cycleRepeat() = Unit
         override fun playAlbum(album: MusicAlbum) = Unit
+        override fun toggleFavorite(track: MusicTrack) = Unit
+        override fun toggleFavorite(album: MusicAlbum) = Unit
+        override fun openPlaylist(id: String) = Unit
+        override fun createPlaylist(name: String, tracks: List<MusicTrack>) = Unit
+        override fun renamePlaylist(id: String, name: String) = Unit
+        override fun deletePlaylist(id: String) = Unit
+        override fun removeFromPlaylist(id: String, index: Int) = Unit
+        override fun movePlaylistTrack(id: String, from: Int, to: Int) = Unit
+        override fun showAddToPlaylist(tracks: List<MusicTrack>?) = Unit
+        override fun addToPlaylist(id: String, tracks: List<MusicTrack>) = Unit
+        override fun importSpotify(files: List<android.net.Uri>) = Unit
+        override fun dismissImportResult() = Unit
     }
 
     /** Sample covers: colour gradients written to disk, loaded like real artwork. */
@@ -214,13 +227,40 @@ class MusicScreenshotTest {
 
     @Test fun albumPage() = render(
         "music-3-album",
-        sample.home.copy(pages = listOf(MusicPage.Album(sample.album, sample.tracks, loading = false))),
+        sample.home.copy(collections = collectionsOf(sample), pages = listOf(MusicPage.Album(sample.album, sample.tracks, loading = false))),
         playingOf(sample),
     )
 
     @Test fun artistsTab() = render("music-4-artists", sample.home.copy(tab = MusicTab.ARTISTS, artists = sample.artists), playingOf(sample))
 
-    @Test fun player() = render("music-5-player", sample.home.copy(playerOpen = true), playingOf(sample))
+    @Test fun player() = render("music-5-player", sample.home.copy(playerOpen = true, collections = collectionsOf(sample)), playingOf(sample))
+
+    /** A few liked songs, a favourite album and two playlists made from the sample tracks. */
+    private fun collectionsOf(s: Sample): MusicCollections {
+        val tracks = s.tracks
+        return MusicCollections(favoriteAlbums = listOf(s.album) + s.home.shelves.flatMap { it.albums }.filter { it.coverUrl != null }.take(3))
+            .let { c -> tracks.take(5).fold(c) { acc, t -> acc.toggleFavorite(t) } }
+            .createPlaylist("p1", "Late night", tracks.drop(2).take(6))
+            .createPlaylist("p2", "Gym", tracks.reversed().take(4))
+    }
+
+    @Test fun myMusic() = render("music-6-my-music", sample.home.copy(tab = MusicTab.MINE, collections = collectionsOf(sample)), playingOf(sample))
+
+    @Test fun playlistPage() = render(
+        "music-7-playlist",
+        sample.home.copy(collections = collectionsOf(sample), pages = listOf(MusicPage.Playlist("p1"))),
+        playingOf(sample),
+    )
+
+    @Test fun addToPlaylist() = render(
+        "music-8-add-to-playlist",
+        sample.home.copy(
+            collections = collectionsOf(sample),
+            pages = listOf(MusicPage.Album(sample.album, sample.tracks, loading = false)),
+            addingToPlaylist = sample.tracks.take(1),
+        ),
+        playingOf(sample),
+    )
 
     private fun render(name: String, state: MusicUiState, playback: MusicPlaybackState) {
         assumeTrue(!out.isNullOrBlank())
@@ -244,9 +284,28 @@ class MusicScreenshotTest {
         }
         val view = compose.activity.window.decorView
         val bitmap = Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888)
-        compose.runOnUiThread { view.draw(Canvas(bitmap)) }
+        compose.runOnUiThread {
+            val canvas = Canvas(bitmap)
+            view.draw(canvas)
+            // Dialogs open in windows of their own: dim the screen and draw each one centred, as Android shows it.
+            dialogWindows(view).forEach { dialog ->
+                canvas.drawColor(0x99000000.toInt())
+                canvas.save()
+                canvas.translate((bitmap.width - dialog.width) / 2f, (bitmap.height - dialog.height) / 2f)
+                dialog.draw(canvas)
+                canvas.restore()
+            }
+        }
         File(out!!).mkdirs()
         File(out, "$name.png").outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
+    }
+
+    /** Root views of the windows other than the activity's own, such as an open dialog. */
+    private fun dialogWindows(activityRoot: android.view.View): List<android.view.View> {
+        val global = Class.forName("android.view.WindowManagerGlobal")
+        val instance = global.getMethod("getInstance").invoke(null)
+        val views = global.getDeclaredField("mViews").apply { isAccessible = true }.get(instance) as List<*>
+        return views.filterIsInstance<android.view.View>().filter { it !== activityRoot && it.width > 0 && it.height > 0 }
     }
 
     /** The tab as it sits in the app: the bottom navigation bar over its lower edge. */

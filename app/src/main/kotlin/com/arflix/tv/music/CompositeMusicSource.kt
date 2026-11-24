@@ -5,18 +5,24 @@ import kotlinx.coroutines.coroutineScope
 
 /**
  * All the user's music sources (their server and any addons) as one library. Every id is
- * prefixed with its source's position ("2~abc"), so a later call goes back to the source the
- * item came from.
+ * prefixed with its source's key ("server~abc", "tv.arvio.music.audius~xyz"), so a later call
+ * goes back to the source the item came from, also for favourites saved before another source
+ * was added or removed. [keys] defaults to the sources' positions.
  */
-class CompositeMusicSource(private val sources: List<MusicSource>) : MusicSource {
+class CompositeMusicSource(
+    private val sources: List<MusicSource>,
+    keys: List<String> = sources.indices.map { it.toString() },
+) : MusicSource {
 
-    private fun tag(index: Int, id: String) = "$index$SEPARATOR$id"
+    private val keys: List<String> = keys.map { it.replace(SEPARATOR, "_") }
+
+    private fun tag(index: Int, id: String) = "${keys[index]}$SEPARATOR$id"
     private fun tagOrNull(index: Int, id: String?) = id?.let { tag(index, it) }
 
-    private fun route(id: String): Pair<MusicSource, String>? {
-        val index = id.substringBefore(SEPARATOR, "").toIntOrNull() ?: return null
-        val source = sources.getOrNull(index) ?: return null
-        return source to id.substringAfter(SEPARATOR)
+    /** The position of the source an id belongs to, and the id as that source knows it. */
+    private fun route(id: String): Pair<Int, String>? {
+        val index = keys.indexOf(id.substringBefore(SEPARATOR, "")).takeIf { it >= 0 } ?: return null
+        return index to id.substringAfter(SEPARATOR)
     }
 
     private fun MusicAlbum.tagged(i: Int) = copy(id = tag(i, id), artistId = tagOrNull(i, artistId))
@@ -45,15 +51,13 @@ class CompositeMusicSource(private val sources: List<MusicSource>) : MusicSource
         each { i, source -> source.artists().map { it.tagged(i) } }.sortedBy { it.name.lowercase() }
 
     override suspend fun artistAlbums(artistId: String): List<MusicAlbum> {
-        val (source, id) = route(artistId) ?: return emptyList()
-        val index = sources.indexOf(source)
-        return source.artistAlbums(id).map { it.tagged(index) }
+        val (index, id) = route(artistId) ?: return emptyList()
+        return sources[index].artistAlbums(id).map { it.tagged(index) }
     }
 
     override suspend fun albumTracks(albumId: String): List<MusicTrack> {
-        val (source, id) = route(albumId) ?: return emptyList()
-        val index = sources.indexOf(source)
-        return source.albumTracks(id).map { it.tagged(index) }
+        val (index, id) = route(albumId) ?: return emptyList()
+        return sources[index].albumTracks(id).map { it.tagged(index) }
     }
 
     override suspend fun search(query: String): MusicSearchResult = coroutineScope {
@@ -68,8 +72,8 @@ class CompositeMusicSource(private val sources: List<MusicSource>) : MusicSource
     }
 
     override suspend fun reportPlayed(trackId: String) {
-        val (source, id) = route(trackId) ?: return
-        source.reportPlayed(id)
+        val (index, id) = route(trackId) ?: return
+        sources[index].reportPlayed(id)
     }
 
     companion object {
