@@ -41,7 +41,9 @@ docker compose --env-file .env.local up -d --build
 docker compose --env-file .env.local ps
 ```
 
-Open **http://localhost:3000**. This builds the same webapp as the Node setup,
+Open **http://localhost:3000**. This builds the same webapp as the Node setup
+(from `Dockerfile.selfhost`; `Dockerfile` is the Unraid/CI distribution image, which needs
+CI-only inputs and is not meant for a plain clone),
 runs as a non-root user, and binds only to loopback by default. Your TMDB key
 and OAuth secrets are runtime variables, not Docker build arguments. Optional
 public tracker/Telegram application credentials and your resolver URL are read
