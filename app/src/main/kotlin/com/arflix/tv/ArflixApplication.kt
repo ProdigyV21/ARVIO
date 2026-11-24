@@ -5,6 +5,7 @@ import android.app.Application
 import android.content.ComponentCallbacks2
 import android.graphics.Bitmap
 import android.os.Build
+import android.os.Process
 import android.util.Log
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
@@ -16,6 +17,7 @@ import androidx.work.WorkManager
 import androidx.work.workDataOf
 import coil.ImageLoader
 import coil.ImageLoaderFactory
+import coil.decode.BitmapFactoryDecoder
 import coil.decode.GifDecoder
 import coil.decode.ImageDecoderDecoder
 import coil.decode.SvgDecoder
@@ -45,7 +47,10 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import com.arflix.tv.util.settingsDataStore
+import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
+import kotlinx.coroutines.asCoroutineDispatcher
 import javax.inject.Inject
 
 /**
@@ -268,6 +273,12 @@ class ArflixApplication : Application(), Configuration.Provider, ImageLoaderFact
             // on the home hero. Error = transparent so failed loads are invisible
             // (the card surface background is the fallback visual).
             .error(android.R.color.transparent)
+            .apply {
+                // A TV trace showed four parallel decodes taking about a third of the CPU of a
+                // 4-core box while Home scrolled, which starved the main thread. On TV, decode
+                // on two low-priority threads so frames win and artwork fills in just behind.
+                if (isTvDevice) decoderDispatcher(tvImageDecodeDispatcher)
+            }
             .components {
                 add(SvgDecoder.Factory())
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
@@ -275,9 +286,21 @@ class ArflixApplication : Application(), Configuration.Provider, ImageLoaderFact
                 } else {
                     add(GifDecoder.Factory())
                 }
+                // Last, so SVG and animated images still reach their own decoders first.
+                if (isTvDevice) add(BitmapFactoryDecoder.Factory(maxParallelism = TV_IMAGE_DECODE_THREADS))
             }
             .build()
             .also { appImageLoader = it }
+    }
+
+    private val tvImageDecodeDispatcher by lazy {
+        val count = AtomicInteger()
+        Executors.newFixedThreadPool(TV_IMAGE_DECODE_THREADS) { runnable ->
+            Thread({
+                Process.setThreadPriority(Process.THREAD_PRIORITY_BACKGROUND + Process.THREAD_PRIORITY_MORE_FAVORABLE)
+                runnable.run()
+            }, "image-decode-${count.incrementAndGet()}").apply { isDaemon = true }
+        }.asCoroutineDispatcher()
     }
 
     private fun currentProcessName(): String? = if (Build.VERSION.SDK_INT >= 28) {
@@ -370,6 +393,8 @@ class ArflixApplication : Application(), Configuration.Provider, ImageLoaderFact
     }
 
     companion object {
+        private const val TV_IMAGE_DECODE_THREADS = 2
+
         lateinit var instance: ArflixApplication
             private set
 

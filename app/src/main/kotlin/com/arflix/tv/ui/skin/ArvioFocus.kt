@@ -33,6 +33,9 @@ import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
@@ -242,6 +245,8 @@ fun ArvioFocusableSurface(
     onClick: (() -> Unit)? = null,
     onLongClick: (() -> Unit)? = null,
     onFocusChanged: (Boolean) -> Unit = {},
+    /** When set, the surface is one node with this label and its content adds no semantics. */
+    semanticsLabel: String? = null,
     content: @Composable BoxScope.(isFocused: Boolean) -> Unit,
 ) {
     var isFocused by remember { mutableStateOf(false) }
@@ -249,6 +254,11 @@ fun ArvioFocusableSurface(
 
     Box(
         modifier = modifier
+            .then(
+                if (semanticsLabel != null) {
+                    Modifier.semantics { contentDescription = semanticsLabel }
+                } else Modifier
+            )
             .arvioFocusable(
                 enabled = enabled,
                 enableSystemFocus = enableSystemFocus,
@@ -280,6 +290,7 @@ fun ArvioFocusableSurface(
                 .matchParentSize()
                 .clip(shape)
                 .background(backgroundColor)
+                .then(if (semanticsLabel != null) Modifier.clearAndSetSemantics {} else Modifier)
         ) {
             content(visualFocused)
         }
