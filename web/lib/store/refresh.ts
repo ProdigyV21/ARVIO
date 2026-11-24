@@ -7,7 +7,7 @@ import { useCallback, useEffect } from "react";
 import { shouldRefreshAutomatically } from "../automaticRefresh";
 import { loadLocalAddons, normalizeAddons, saveLocalAddons } from "../addons";
 import { mergeCatalogs } from "../catalogs";
-import { getContinueWatching, pullCloudContinueWatchingDismissals, pullCloudPayload, pullCloudTrackingSelection, pullCloudWatchedKeys, pullCloudWatchlist, saveCloudAddons, saveCloudTrackingSelection } from "../cloud";
+import { chooseTraktToken, getContinueWatching, pullCloudContinueWatchingDismissals, pullCloudPayload, pullCloudTrackingSelection, pullCloudWatchedKeys, pullCloudWatchlist, saveCloudAddons, saveCloudTrackingSelection } from "../cloud";
 import { completionTimes, includeIptvContinueWatching, mergePartialContinueWatching, mergeTrackerContinueWatching, pruneCompletedResume } from "../continueWatching";
 import { episodeAvailabilityKey } from "../episodeAvailability";
 import { savePlaylists } from "../iptv";
@@ -112,7 +112,20 @@ export function useRefreshData(store: StoreCore) {
               if (!isCurrent()) return;
             }
           } else {
-            traktClient.setToken(cloudTracking.traktToken);
+            // A browser-rotated token that is newer than the cloud copy stays; it is republished below.
+            const chosenTrakt = chooseTraktToken(traktClient.token, cloudTracking.traktToken);
+            const keepsLocalTrakt = Boolean(chosenTrakt) && chosenTrakt === traktClient.token && chosenTrakt !== cloudTracking.traktToken;
+            traktClient.setToken(chosenTrakt);
+            if (keepsLocalTrakt && chosenTrakt) {
+              void saveCloudTrackingSelection(authClient, profileId, {
+                provider: "TRAKT",
+                traktToken: chosenTrakt,
+                simklToken: simklClient.token,
+                mdbListApiKey: mdblistClient.key,
+                trackingPreferences: loadTrackingPreferences(profileId),
+                changedDomains: ["trakt"]
+              }).catch(() => undefined);
+            }
             if (!simklClient.isV2Connected) simklClient.setToken(cloudTracking.simklToken);
             mdblistClient.setKey(cloudTracking.mdbListApiKey);
             if (cloudTracking.mdbListAccessToken) {
