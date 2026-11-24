@@ -45,7 +45,7 @@ async function exerciseContext(browser, baseUrl, scenario, evidenceDir) {
   const stats = {
     scenario, bootstrapRequests: 0, delayedBootstrapMs: 0,
     mockedMetadataRequests: 0, blockedExternalRequests: 0,
-    unexpectedApiRequests: 0, forbiddenServiceRequests: 0, forbiddenUrls: []
+    unexpectedApiRequests: 0, forbiddenServiceRequests: 0, forbiddenUrls: [], unexpectedUrls: []
   };
   const pageErrors = [];
   try {
@@ -93,6 +93,7 @@ async function exerciseContext(browser, baseUrl, scenario, evidenceDir) {
       }
       if (url.pathname.startsWith('/api/') || forbiddenPath) {
         stats.unexpectedApiRequests += 1;
+        stats.unexpectedUrls.push(`${route.request().method()} ${url.pathname}`);
         await route.abort('blockedbyclient');
         return;
       }
@@ -166,7 +167,7 @@ async function exerciseContext(browser, baseUrl, scenario, evidenceDir) {
     await expect(page.locator('.profile-pick').filter({ hasText: profileName })).toBeVisible();
     await assertIndependentUi(page, scenario);
     assert.equal(stats.forbiddenServiceRequests, 0, `${scenario}: no Cloud, billing, analytics or tracker requests; saw: ${stats.forbiddenUrls.join(", ")}`);
-    assert.equal(stats.unexpectedApiRequests, 0, `${scenario}: no unmocked provider API routes`);
+    assert.equal(stats.unexpectedApiRequests, 0, `${scenario}: no unmocked provider API routes; saw: ${stats.unexpectedUrls.join(", ")}`);
     assert.deepEqual(pageErrors, [], `${scenario}: no unhandled application errors`);
     return stats;
   } finally {
