@@ -1,11 +1,13 @@
 import {
   Input, UrlSource, ALL_FORMATS, Output, Mp4OutputFormat, StreamTarget,
   EncodedPacketSink, EncodedVideoPacketSource, EncodedAudioPacketSource,
-  AudioSampleSink, AudioSampleSource,
+  AudioSampleSink, AudioSampleSource, AudioSample, canEncodeAudio,
 } from "mediabunny";
-import { preferredAudioIndex, type RemuxCommand, type RemuxEvent, type RemuxProbe } from "./remuxProtocol";
+import { convertedAudioLayout, preferredAudioIndex, type RemuxCommand, type RemuxEvent, type RemuxProbe } from "./remuxProtocol";
 import { probeDolbyVision, canExtractHdr10BaseLayer, extractHdr10BaseLayer, type DolbyVisionProbeResult } from "./dolbyVision";
 import { RemuxBufferBudget } from "./remuxBufferBudget";
+import { dialogueDownmix } from "./dialogueDownmix";
+import { MkvSubtitleTap } from "./mkvSubtitles";
 
 const port = self as unknown as { postMessage: (message: RemuxEvent, transfer?: Transferable[]) => void; onmessage: ((event: MessageEvent<RemuxCommand>) => void) | null };
 let input: Input;
@@ -15,6 +17,7 @@ let clock = 0;
 let output: Output | undefined;
 let nextId = 0;
 let aacEncoderRegistered = false;
+let surroundOutput = false;
 let dolbyVision: DolbyVisionProbeResult | undefined;
 const acknowledgements = new Map<number, () => void>();
 const sleep = () => new Promise<void>((resolve) => setTimeout(resolve, 80));
@@ -27,6 +30,17 @@ function httpFailureMessage(status: number) {
 }
 
 async function probeInput(command: Extract<RemuxCommand, { type: "probe" }>) {
+  surroundOutput = !!command.surround;
+  // Text subtitles inside an MKV, read from the same downloaded bytes (mkvSubtitles).
+  let tapOff = false;
+  const subtitleTap = new MkvSubtitleTap(
+    (tracks) => { if (tracks.length) port.postMessage({ type: "subtitle-tracks", tracks }); else tapOff = true; },
+    (cues) => port.postMessage({ type: "subtitle-cues", cues }));
+  const tapOffset = (response: Response) => {
+    if (response.status === 200) return 0;
+    const start = response.headers.get("content-range")?.match(/bytes\s+(\d+)-/i)?.[1];
+    return start === undefined ? null : Number(start);
+  };
   let networkRetries = 0;
   // IPTV panels count every open request as a connection and register one
   // for every redirect they issue (#849): read one range at a time, and send
@@ -83,13 +97,21 @@ async function probeInput(command: Extract<RemuxCommand, { type: "probe" }>) {
       if (!response.body) { init?.signal?.removeEventListener("abort", abort); return response; }
       const reader = response.body.getReader();
       const finish = () => { clearTimeout(timer); init?.signal?.removeEventListener("abort", abort); };
+      let tapAt = tapOffset(response);
       return new Response(new ReadableStream({
         async pull(sink) {
           timer = setTimeout(abort, 15000);
           try {
             const next = await reader.read();
             clearTimeout(timer);
-            if (next.done) { finish(); sink.close(); } else sink.enqueue(next.value);
+            if (next.done) { finish(); sink.close(); return; }
+            if (tapAt !== null && !tapOff) {
+              // Not Matroska (no EBML header at the start): stop looking.
+              if (tapAt === 0 && !(next.value[0] === 0x1a && next.value[1] === 0x45 && next.value[2] === 0xdf && next.value[3] === 0xa3)) tapOff = true;
+              else try { subtitleTap.feed(tapAt, next.value); } catch { tapOff = true; }
+              tapAt += next.value.length;
+            }
+            sink.enqueue(next.value);
           } catch (error) { finish(); sink.error(error); }
         },
         cancel(reason) { finish(); controller.abort(); return reader.cancel(reason); }
@@ -195,8 +217,15 @@ async function produce(command: Extract<RemuxCommand, { type: "start" }>) {
   output = current;
   const videoSource = new EncodedVideoPacketSource(video.codec);
   current.addVideoTrack(videoSource, { rotation: video.rotation });
-  const audioSource = audio?.codec ? transcode
-    ? new AudioSampleSource({ codec: "aac", bitrate: 192000, transform: { numberOfChannels: 2, sampleRate: 48000 },
+  // Converted audio stays 5.1 on surround output when the AAC encoder can do it;
+  // stereo otherwise (laptop speakers, headphones, unknown output).
+  const layout = transcode ? convertedAudioLayout(audio?.numberOfChannels, surroundOutput,
+    surroundOutput && (audio?.numberOfChannels ?? 0) >= 6
+      ? await canEncodeAudio("aac", { numberOfChannels: 6, sampleRate: 48000, bitrate: 384000 }).catch(() => false) : false)
+    : null;
+  if (!active()) return;
+  const audioSource = audio?.codec ? transcode && layout
+    ? new AudioSampleSource({ codec: "aac", bitrate: layout.bitrate, transform: { numberOfChannels: layout.numberOfChannels, sampleRate: 48000 },
       onEncodedPacket: (packet) => budget.add(packet.data.byteLength) })
     : new EncodedAudioPacketSource(audio.codec) : undefined;
   audioFinished = !audioSource;
@@ -227,10 +256,24 @@ async function produce(command: Extract<RemuxCommand, { type: "start" }>) {
   const audioTask = async () => {
     if (!audio || !audioSource) return;
     if (audioSource instanceof AudioSampleSource) {
+      // 5.1 converted to stereo uses the speech-friendly downmix (dialogueDownmix).
+      const speechMix = layout?.numberOfChannels === 2 && audio.numberOfChannels === 6;
       for await (const sample of new AudioSampleSink(audio).samples(first.timestamp)) {
         try {
           if (!active()) throw new Error("Cancelled");
-          await audioSource.add(sample);
+          if (speechMix && sample.numberOfChannels === 6) {
+            const planes = Array.from({ length: 6 }, (_, planeIndex) => {
+              const plane = new Float32Array(sample.numberOfFrames);
+              sample.copyTo(plane, { planeIndex, format: "f32-planar" });
+              return plane;
+            });
+            const [left, right] = dialogueDownmix(planes);
+            const data = new Float32Array(left.length * 2);
+            data.set(left, 0);
+            data.set(right, left.length);
+            const stereo = new AudioSample({ data, format: "f32-planar", numberOfChannels: 2, sampleRate: sample.sampleRate, timestamp: sample.timestamp });
+            try { await audioSource.add(stereo); } finally { stereo.close(); }
+          } else await audioSource.add(sample);
           audioTimestamp = Math.max(audioTimestamp, sample.timestamp);
           // Queue the next packet before waiting: its timestamp lets the muxer
           // flush across a delayed start or a gap in the audio track.

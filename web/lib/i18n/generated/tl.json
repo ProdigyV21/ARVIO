@@ -1583,5 +1583,6 @@
   "Open streams with ARVIO Premium": "Magbukas ng mga stream gamit ang ARVIO Premium",
   "Filter categories": "I-filter ang mga kategorya",
   "Clear filter": "I-clear ang filter",
-  "No categories match \"{value0}\".": "Walang kategoryang tumutugma sa \"{value0}\"."
+  "No categories match \"{value0}\".": "Walang kategoryang tumutugma sa \"{value0}\".",
+  "Chromecast": "Chromecast"
 }

@@ -195,6 +195,67 @@ export function showAirPlayPicker(video: HTMLVideoElement | null) {
   try { (video as WebkitVideo | null)?.webkitShowPlaybackTargetPicker?.(); return true; } catch { return false; }
 }
 
+// ---------- Chromecast (Chrome's Remote Playback API) ----------
+// Chrome on Android and desktop hands a <video> to a Chromecast on the same
+// network through the standard Remote Playback API: no Cast SDK script and no
+// ARVIO server in between, the Chromecast fetches the file itself. Safari uses
+// the same API for AirPlay, which has its own button, so this stays off there.
+
+type RemotePlayback = EventTarget & {
+  state: "disconnected" | "connecting" | "connected";
+  watchAvailability: (callback: (available: boolean) => void) => Promise<number>;
+  cancelWatchAvailability: (id?: number) => Promise<void>;
+  prompt: () => Promise<void>;
+};
+
+function remoteOf(video: HTMLVideoElement | null): RemotePlayback | null {
+  if (!video || typeof (video as WebkitVideo).webkitShowPlaybackTargetPicker === "function") return null;
+  const remote = (video as HTMLVideoElement & { remote?: RemotePlayback }).remote;
+  return remote && typeof remote.prompt === "function" && typeof remote.watchAvailability === "function" ? remote : null;
+}
+
+/**
+ * Calls back with whether a Chromecast can take this video now, and with the
+ * cast state. Re-checks when the source changes; a browser that cannot watch
+ * availability (or a source fed through MediaSource) reports false.
+ */
+export function watchCast(video: HTMLVideoElement, listener: (state: { available: boolean; connected: boolean }) => void) {
+  const remote = remoteOf(video);
+  if (!remote) { listener({ available: false, connected: false }); return () => {}; }
+  let available = false;
+  let watchId: number | null = null;
+  let stopped = false;
+  const emit = () => listener({ available: available && !video.disableRemotePlayback, connected: remote.state !== "disconnected" });
+  const watch = () => {
+    if (watchId != null) { void remote.cancelWatchAvailability(watchId).catch(() => undefined); watchId = null; }
+    if (video.disableRemotePlayback) { available = false; emit(); return; }
+    remote.watchAvailability((next) => { available = next; if (!stopped) emit(); })
+      .then((id) => { if (stopped) void remote.cancelWatchAvailability(id).catch(() => undefined); else watchId = id; })
+      .catch(() => { available = false; if (!stopped) emit(); });
+  };
+  const media = ["loadedmetadata", "emptied"];
+  for (const name of media) video.addEventListener(name, watch);
+  const states = ["connecting", "connect", "disconnect"];
+  for (const name of states) remote.addEventListener(name, emit);
+  watch();
+  return () => {
+    stopped = true;
+    for (const name of media) video.removeEventListener(name, watch);
+    for (const name of states) remote.removeEventListener(name, emit);
+    if (watchId != null) void remote.cancelWatchAvailability(watchId).catch(() => undefined);
+  };
+}
+
+/** Opens Chrome's own device picker (or the stop-casting dialog while casting). */
+export async function promptCast(video: HTMLVideoElement | null): Promise<boolean> {
+  const remote = remoteOf(video);
+  if (!remote || video?.disableRemotePlayback) return false;
+  try { await remote.prompt(); return true; } catch (error) {
+    // Closing the picker is a choice, not a failure.
+    return (error as { name?: string })?.name === "NotAllowedError" || (error as { name?: string })?.name === "AbortError";
+  }
+}
+
 // ---------- Media Session (lock screen / Control Center / headset keys) ----------
 
 export type MediaSessionDetails = {

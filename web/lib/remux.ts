@@ -1,5 +1,6 @@
 import { mediaSourceConstructor } from "./capabilities";
 import type { RemuxCommand, RemuxEvent, RemuxProbe } from "./remuxProtocol";
+import type { MkvSubtitleCue, MkvSubtitleTrack } from "./mkvSubtitles";
 export type { RemuxAudioTrack, RemuxProbe } from "./remuxProtocol";
 
 export type RemuxHandle = {
@@ -11,6 +12,72 @@ export type RemuxHandle = {
 type RemuxOptions = { signal?: AbortSignal; onError?: (message: string) => void; expectDolbyVision?: boolean; fallbackUrl?: string;
   /** An IPTV panel file: one range read at a time, and the panel's redirect reused (see remux.worker.ts). */
   iptv?: boolean };
+
+const MAX_QUEUED_CUES = 5000;
+
+/**
+ * The MKV's own text subtitles (read by the worker from the downloaded bytes)
+ * as <track> elements on the video, so the subtitle menu lists them like any
+ * embedded track. Cues arrive while the file downloads; a re-read after a seek
+ * does not add duplicates. Removed again when this conversion closes.
+ */
+function mkvSubtitleTracks() {
+  let video: HTMLVideoElement | undefined;
+  let tracks: MkvSubtitleTrack[] = [];
+  let queued: MkvSubtitleCue[] = [];
+  const elements = new Map<number, HTMLTrackElement>();
+  const seen = new Set<string>();
+  const label = (track: MkvSubtitleTrack, index: number) =>
+    [track.name, track.language?.toUpperCase(), track.forced ? "Forced" : ""].filter(Boolean).join(" · ") || `Subtitles ${index + 1}`;
+  const add = (cue: MkvSubtitleCue) => {
+    const key = `${cue.track}|${cue.start.toFixed(3)}|${cue.text}`;
+    const target = elements.get(cue.track)?.track;
+    if (!target || seen.has(key) || typeof VTTCue === "undefined") return;
+    seen.add(key);
+    try { target.addCue(new VTTCue(cue.start, cue.end, cue.text)); } catch { /* malformed cue */ }
+  };
+  const attach = () => {
+    if (!video || !tracks.length || elements.size) return;
+    tracks.forEach((track, index) => {
+      const element = document.createElement("track");
+      element.kind = "subtitles";
+      element.label = label(track, index);
+      if (track.language) element.srclang = track.language;
+      element.dataset.arvioMkv = "1";
+      video!.appendChild(element);
+      element.track.mode = "disabled";
+      elements.set(track.number, element);
+    });
+    const pending = queued;
+    queued = [];
+    pending.forEach(add);
+  };
+  return {
+    handle(data: Extract<RemuxEvent, { type: "subtitle-tracks" | "subtitle-cues" }>) {
+      if (data.type === "subtitle-tracks") { tracks = data.tracks; attach(); return; }
+      if (elements.size) data.cues.forEach(add);
+      else queued = [...queued, ...data.cues].slice(-MAX_QUEUED_CUES);
+    },
+    attachTo(element: HTMLVideoElement) { video = element; attach(); },
+    remove() { elements.forEach((element) => element.remove()); elements.clear(); seen.clear(); queued = []; video = undefined; }
+  };
+}
+
+let surroundCache: boolean | undefined;
+/** True when the audio output reports 6+ channels (HDMI to a receiver, surround speakers). */
+function surroundOutput() {
+  if (surroundCache !== undefined) return surroundCache;
+  surroundCache = false;
+  try {
+    const scope = globalThis as { AudioContext?: typeof AudioContext; webkitAudioContext?: typeof AudioContext };
+    const Context = scope.AudioContext ?? scope.webkitAudioContext;
+    if (!Context) return false;
+    const context = new Context();
+    surroundCache = context.destination.maxChannelCount >= 6;
+    void context.close().catch(() => undefined);
+  } catch { /* no Web Audio: stereo */ }
+  return surroundCache;
+}
 
 export async function probeAndPrepareRemux(
   url: string, requestHeaders?: Record<string, string>, preferredAudioLang?: string,
@@ -54,6 +121,8 @@ async function prepareRemux(
   let generation = 0;
   let clockTimer: ReturnType<typeof setInterval> | undefined;
   const cleanups = new Set<() => void>();
+  const subtitles = mkvSubtitleTracks();
+  cleanups.add(() => subtitles.remove());
   const destroy = () => {
     if (destroyed) return;
     destroyed = true;
@@ -99,10 +168,11 @@ async function prepareRemux(
       cleanups.add(cancel);
       worker.onerror = () => finish(undefined, "Browser conversion worker failed to load");
       worker.onmessage = ({ data }: MessageEvent<RemuxEvent>) => {
+        if (data.type === "subtitle-tracks" || data.type === "subtitle-cues") { subtitles.handle(data); return; }
         if (data.type === "probe") finish(data.probe);
         if (data.type === "error") finish(undefined, data.message);
       };
-      send({ type: "probe", url, headers: requestHeaders, audioCodecs, language: preferredAudioLang, expectDolbyVision: options.expectDolbyVision, iptv: options.iptv });
+      send({ type: "probe", url, headers: requestHeaders, audioCodecs, language: preferredAudioLang, expectDolbyVision: options.expectDolbyVision, iptv: options.iptv, surround: surroundOutput() });
     });
     probe.videoPlayable = probe.videoPlayable && !!probe.videoCodec && Mse.isTypeSupported(`video/mp4; codecs="${probe.videoCodec}"`);
     if (!probe.videoPlayable && !probe.videoReason) probe.videoReason = `This browser cannot decode the selected video track (${probe.videoCodec ?? "unknown codec"}).`;
@@ -178,7 +248,9 @@ async function prepareRemux(
     video.addEventListener("seeking", onSeek);
     cleanups.add(() => video.removeEventListener("seeking", onSeek));
     worker.onerror = () => fail(new Error("Browser conversion worker stopped"));
+    subtitles.attachTo(video);
     worker.onmessage = ({ data }: MessageEvent<RemuxEvent>) => {
+      if (data.type === "subtitle-tracks" || data.type === "subtitle-cues") { subtitles.handle(data); return; }
       if (data.type === "probe") return;
       if (data.generation !== generation || destroyed) {
         if (data.type === "chunk") send({ type: "ack", id: data.id });

@@ -1,10 +1,11 @@
 // Part of the player overlay (see components/player/PlayerOverlay.tsx).
-import { Pause, Play, Maximize, X, Minimize, ArrowLeft, Airplay, PictureInPicture2, RotateCcw, RotateCw, VolumeX, Volume2, Subtitles, AudioLines, Folder, SkipForward, Settings } from "lucide-react";
+import { Pause, Play, Maximize, X, Minimize, ArrowLeft, Airplay, PictureInPicture2, Cast, RotateCcw, RotateCw, VolumeX, Volume2, Subtitles, AudioLines, Folder, SkipForward, Settings } from "lucide-react";
 import { showAirPlayPicker } from "@/lib/playerPlatform";
 import { fmt, SKIP_SECONDS, type PlayerPanel } from "./helpers";
 import type { useLivePlayerDock } from "../useLivePlayerDock";
 import type { StreamSource } from "@/lib/types";
 import type { PlaybackHandle } from "@/lib/player";
+import type { SeekPreview } from "@/lib/trickplay";
 import { useTranslation } from "@/lib/i18n";
 import { memo, type RefObject, type Dispatch, type SetStateAction } from "react";
 
@@ -26,7 +27,7 @@ export function LiveDockControls({ buffering, dock, error, onClose, playing, tog
  * Title, AirPlay / picture in picture and close. Memoized: nothing it shows
  * changes while the clock ticks, so time updates skip it.
  */
-export const PlayerTopBar = memo(function PlayerTopBar({ airPlayAllowed, airPlayAvailable, airPlayBlockedReason, mediaMeta, onClose, onToast, pauseOverview, pipActive, pipAvailable, playing, stream, title, togglePip, videoRef }: { airPlayAllowed: boolean; airPlayAvailable: boolean; airPlayBlockedReason: string | null; mediaMeta: string; onClose: () => void; onToast: (message: string) => void; pauseOverview: string; pipActive: boolean; pipAvailable: boolean; playing: boolean; stream: StreamSource; title: string; togglePip: () => void; videoRef: RefObject<HTMLVideoElement | null> }) {
+export const PlayerTopBar = memo(function PlayerTopBar({ airPlayAllowed, airPlayAvailable, airPlayBlockedReason, castAvailable = false, castConnected = false, mediaMeta, onClose, onToast, pauseOverview, pipActive, pipAvailable, playing, stream, title, togglePip, toggleCast, videoRef }: { airPlayAllowed: boolean; airPlayAvailable: boolean; airPlayBlockedReason: string | null; castAvailable?: boolean; castConnected?: boolean; mediaMeta: string; onClose: () => void; onToast: (message: string) => void; pauseOverview: string; pipActive: boolean; pipAvailable: boolean; playing: boolean; stream: StreamSource; title: string; togglePip: () => void; toggleCast?: () => void; videoRef: RefObject<HTMLVideoElement | null> }) {
   const translateUi = useTranslation();
   return (<>
       <div className="player-top">
@@ -43,6 +44,7 @@ export const PlayerTopBar = memo(function PlayerTopBar({ airPlayAllowed, airPlay
           {airPlayAvailable && (airPlayAllowed
             ? <button type="button" className="player-icon-btn player-platform-btn" onClick={() => showAirPlayPicker(videoRef.current)} aria-label={translateUi("AirPlay")} title={translateUi("AirPlay")}><Airplay size={20} /></button>
             : <button type="button" className="player-icon-btn player-platform-btn is-unavailable" onClick={() => onToast(airPlayBlockedReason ?? "AirPlay is not available for this stream.")} aria-label={translateUi("AirPlay unavailable")} title={translateUi(airPlayBlockedReason ?? "AirPlay is not available for this stream.")}><Airplay size={20} /></button>)}
+          {castAvailable && toggleCast && <button type="button" className={`player-icon-btn player-platform-btn ${castConnected ? "is-active" : ""}`} onClick={toggleCast} aria-label={translateUi("Chromecast")} title={translateUi("Chromecast")} aria-pressed={castConnected}><Cast size={20} /></button>}
           {pipAvailable && <button type="button" className={`player-icon-btn player-platform-btn ${pipActive ? "is-active" : ""}`} onClick={togglePip} aria-label={translateUi("Picture in picture")} title={translateUi("Picture in picture")}><PictureInPicture2 size={20} /></button>}
           <button type="button" className="player-icon-btn" onClick={onClose} aria-label={translateUi("Close")}><X size={22} /></button>
         </div>
@@ -51,7 +53,7 @@ export const PlayerTopBar = memo(function PlayerTopBar({ airPlayAllowed, airPlay
 });
 
 /** The bottom bar: scrubber, play/seek, volume, time and the panel buttons. */
-export function PlayerControlsBar({ activePanel, appleMobile, badges, bufPct, canAdvance, duration, error, fullscreen, hoverPct, hoverTime, liveTv, muted, openPanel, pct, playing, playNextNow, scrubDisplayTime, seekBy, setHoverPct, setHoverTime, setScrubTo, toggleFullscreen, togglePlay, transportRef, videoRef, volume }: { activePanel: PlayerPanel; appleMobile: boolean; badges: string[]; bufPct: number; canAdvance: boolean; duration: number; error: boolean; fullscreen: boolean; hoverPct: number; hoverTime: number | null; liveTv: boolean; muted: boolean; openPanel: (panel: Exclude<PlayerPanel, null>) => void; pct: number; playing: boolean; playNextNow: () => void; scrubDisplayTime: number; seekBy: (delta: number) => void; setHoverPct: Dispatch<SetStateAction<number>>; setHoverTime: Dispatch<SetStateAction<number | null>>; setScrubTo: Dispatch<SetStateAction<number | null>>; toggleFullscreen: () => void; togglePlay: () => void; transportRef: RefObject<PlaybackHandle | null>; videoRef: RefObject<HTMLVideoElement | null>; volume: number }) {
+export function PlayerControlsBar({ activePanel, appleMobile, badges, bufPct, canAdvance, duration, error, fullscreen, hoverPct, hoverTime, liveTv, muted, openPanel, pct, playing, playNextNow, scrubDisplayTime, seekBy, seekPreview, setHoverPct, setHoverTime, setScrubTo, toggleFullscreen, togglePlay, transportRef, videoRef, volume }: { activePanel: PlayerPanel; appleMobile: boolean; badges: string[]; bufPct: number; canAdvance: boolean; duration: number; error: boolean; fullscreen: boolean; hoverPct: number; hoverTime: number | null; liveTv: boolean; muted: boolean; openPanel: (panel: Exclude<PlayerPanel, null>) => void; pct: number; playing: boolean; playNextNow: () => void; scrubDisplayTime: number; seekBy: (delta: number) => void; seekPreview?: SeekPreview | null; setHoverPct: Dispatch<SetStateAction<number>>; setHoverTime: Dispatch<SetStateAction<number | null>>; setScrubTo: Dispatch<SetStateAction<number | null>>; toggleFullscreen: () => void; togglePlay: () => void; transportRef: RefObject<PlaybackHandle | null>; videoRef: RefObject<HTMLVideoElement | null>; volume: number }) {
   const translateUi = useTranslation();
   return (<>
       <div className="player-controls">
@@ -74,6 +76,13 @@ export function PlayerControlsBar({ activePanel, appleMobile, badges, bufPct, ca
                 // instead of hanging off the edge near 0:00 and the finish.
                 style={{ left: `${Math.min(96, Math.max(4, hoverPct))}%` }}
               >
+                {seekPreview && (seekPreview.kind === "tile"
+                  ? <span className="scrubber-preview" aria-hidden="true" style={{
+                      backgroundImage: `url("${seekPreview.url}")`,
+                      backgroundSize: `${seekPreview.columns * 100}% ${seekPreview.rows * 100}%`,
+                      backgroundPosition: `${seekPreview.columns > 1 ? (seekPreview.column / (seekPreview.columns - 1)) * 100 : 0}% ${seekPreview.rows > 1 ? (seekPreview.row / (seekPreview.rows - 1)) * 100 : 0}%`
+                    }} />
+                  : <img className="scrubber-preview" src={seekPreview.url} alt="" aria-hidden="true" />)}
                 {fmt(hoverTime)}
               </span>
             )}

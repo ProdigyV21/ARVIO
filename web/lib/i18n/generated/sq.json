@@ -1575,5 +1575,6 @@
   "Open streams with ARVIO Premium": "Hap transmetimet me ARVIO Premium",
   "Filter categories": "Filtro kategoritë",
   "Clear filter": "Pastro filtrin",
-  "No categories match \"{value0}\".": "Asnjë kategori nuk përputhet me \"{value0}\"."
+  "No categories match \"{value0}\".": "Asnjë kategori nuk përputhet me \"{value0}\".",
+  "Chromecast": "Chromecast"
 }

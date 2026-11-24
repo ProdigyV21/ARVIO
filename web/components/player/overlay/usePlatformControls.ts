@@ -1,6 +1,6 @@
 // Part of the player overlay (see components/player/PlayerOverlay.tsx).
 import { useState, useEffect, useCallback, useRef, type RefObject } from "react";
-import { pipStrategy, isPipActive, airPlayUsable, onPipChange, airPlaySupported, watchAirPlayAvailability, togglePictureInPicture, bindMediaSession, updateMediaPosition } from "@/lib/playerPlatform";
+import { pipStrategy, isPipActive, airPlayUsable, onPipChange, airPlaySupported, watchAirPlayAvailability, togglePictureInPicture, watchCast, promptCast, bindMediaSession, updateMediaPosition } from "@/lib/playerPlatform";
 import { SKIP_SECONDS } from "./helpers";
 import type { MediaItem, StreamSource } from "@/lib/types";
 import type { useTranslation } from "@/lib/i18n";
@@ -13,6 +13,7 @@ export function usePlatformControls({ canAdvance, item, liveTv, onAdvance, onToa
   const [pipActive, setPipActive] = useState(false);
   const [airPlayAvailable, setAirPlayAvailable] = useState(false);
   const [airPlayAllowed, setAirPlayAllowed] = useState(false);
+  const [cast, setCast] = useState({ available: false, connected: false });
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return undefined;
@@ -28,7 +29,9 @@ export function usePlatformControls({ canAdvance, item, liveTv, onAdvance, onToa
     for (const name of media) video.addEventListener(name, refresh);
     const stopPip = onPipChange(video, refresh);
     const stopAirPlay = airPlaySupported() ? watchAirPlayAvailability(video, setAirPlayAvailable) : () => {};
+    const stopCast = liveTv ? () => {} : watchCast(video, (next) => setCast((current) => (current.available === next.available && current.connected === next.connected ? current : next)));
     return () => {
+      stopCast();
       for (const name of media) video.removeEventListener(name, refresh);
       stopPip();
       stopAirPlay();
@@ -39,6 +42,9 @@ export function usePlatformControls({ canAdvance, item, liveTv, onAdvance, onToa
       if (!ok) onToast("Picture in picture is not available for this video.");
     });
   }, [onToast]);
+  // The button only shows while Chrome reports a Chromecast for this video, and
+  // Chrome's own picker explains anything that goes wrong after that.
+  const toggleCast = useCallback(() => { void promptCast(videoRef.current); }, []);
 
   // Lock screen, Control Center, headset and car controls (Media Session).
   // Handlers read through a ref so seeking/advancing never re-registers them.
@@ -84,5 +90,5 @@ export function usePlatformControls({ canAdvance, item, liveTv, onAdvance, onToa
     // translateUi only formats the static "Live TV" line.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [title, subtitleLabel, episodeTitle, item?.image, item?.backdrop, item?.episodeStill, stream.addonName, liveTv, canAdvance]);
-  return { pipAvailable, pipActive, airPlayAvailable, airPlayAllowed, togglePip };
+  return { pipAvailable, pipActive, airPlayAvailable, airPlayAllowed, togglePip, castAvailable: cast.available || cast.connected, castConnected: cast.connected, toggleCast };
 }

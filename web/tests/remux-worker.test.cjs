@@ -81,6 +81,8 @@ function workerHarness(t, packets, fetch = async () => { throw new Error('Unexpe
     mediabunny: { ...mb, Input: InputMock, UrlSource: UrlSourceMock, EncodedPacketSink: PacketSinkMock, Output },
     './remuxProtocol': load('lib/remuxProtocol.ts'),
     './remuxBufferBudget': { RemuxBufferBudget: Budget },
+    './dialogueDownmix': load('lib/dialogueDownmix.ts'),
+    './mkvSubtitles': load('lib/mkvSubtitles.ts'),
     './dolbyVision': overrides.dolbyVision ?? { probeDolbyVision: async () => { throw new Error('Non-HEVC must not trigger Dolby Vision reads'); }, canExtractHdr10BaseLayer: () => false }
   }, {
     self: port, WritableStream, fetch, Error, TypeError,

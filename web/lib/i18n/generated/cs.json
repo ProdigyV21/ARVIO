@@ -1573,5 +1573,6 @@
   "Open streams with ARVIO Premium": "Otevírejte streamy s ARVIO Premium",
   "Filter categories": "Filtrovat kategorie",
   "Clear filter": "Vymazat filtr",
-  "No categories match \"{value0}\".": "Žádné kategorie neodpovídají „{value0}“."
+  "No categories match \"{value0}\".": "Žádné kategorie neodpovídají „{value0}“.",
+  "Chromecast": "Chromecast"
 }

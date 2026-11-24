@@ -1417,5 +1417,6 @@
   "Open streams with ARVIO Premium": "Streams mit ARVIO Premium öffnen",
   "Filter categories": "Kategorien filtern",
   "Clear filter": "Filter löschen",
-  "No categories match \"{value0}\".": "Keine Kategorien passen zu „{value0}“."
+  "No categories match \"{value0}\".": "Keine Kategorien passen zu „{value0}“.",
+  "Chromecast": "Chromecast"
 }

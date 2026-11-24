@@ -1576,5 +1576,6 @@
   "Open streams with ARVIO Premium": "Deschide fluxuri cu ARVIO Premium",
   "Filter categories": "Filtrează categoriile",
   "Clear filter": "Șterge filtrul",
-  "No categories match \"{value0}\".": "Nicio categorie nu corespunde cu „{value0}”."
+  "No categories match \"{value0}\".": "Nicio categorie nu corespunde cu „{value0}”.",
+  "Chromecast": "Chromecast"
 }

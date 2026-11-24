@@ -1574,5 +1574,6 @@
   "Open streams with ARVIO Premium": "Buka stream dengan ARVIO Premium",
   "Filter categories": "Filter kategori",
   "Clear filter": "Hapus filter",
-  "No categories match \"{value0}\".": "Tidak ada kategori yang cocok dengan \"{value0}\"."
+  "No categories match \"{value0}\".": "Tidak ada kategori yang cocok dengan \"{value0}\".",
+  "Chromecast": "Chromecast"
 }

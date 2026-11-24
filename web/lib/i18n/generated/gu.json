@@ -1611,5 +1611,6 @@
   "Open streams with ARVIO Premium": "ARVIO Premium સાથે સ્ટ્રીમ ખોલો",
   "Filter categories": "કેટેગરી ફિલ્ટર કરો",
   "Clear filter": "ફિલ્ટર સાફ કરો",
-  "No categories match \"{value0}\".": "\"{value0}\" સાથે કોઈ કેટેગરી મેળ ખાતી નથી."
+  "No categories match \"{value0}\".": "\"{value0}\" સાથે કોઈ કેટેગરી મેળ ખાતી નથી.",
+  "Chromecast": "Chromecast"
 }

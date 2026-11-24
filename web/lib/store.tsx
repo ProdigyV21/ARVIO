@@ -68,7 +68,7 @@ export function AppProvider({
   const { updateSettings } = useUpdateSettings(core);
   const { isWatched, markWatchedLocally } = useWatchState(core);
   const { mergeStreams, appendVodSources, appendHomeServerSources, appendTelegramSources, openDetails, loadEpisodeStreams, closeDetails } = useDetailsSources(core);
-  const { playStream, advanceEpisode, playTrailer, playChannel, recordChannelPlayback, playCatchup, closePlayer } =
+  const { playStream, advanceEpisode, prefetchNextEpisode, playTrailer, playChannel, recordChannelPlayback, playCatchup, closePlayer } =
     usePlaybackActions({ ...core, mergeStreams, appendVodSources, appendHomeServerSources, appendTelegramSources });
   const { loadCatalogRow, installAddon, removeAddon, setAddonsState } = useAddonActions({ ...core, updateSettings });
   const { signIn, signOut } = useAccountActions({ ...core, refreshData });
@@ -118,6 +118,7 @@ export function AppProvider({
     selectedEpisode,
     loadEpisodeStreams,
     advanceEpisode,
+    prefetchNextEpisode,
     activeStream,
     activeChannel,
     addons,
@@ -184,7 +185,7 @@ export function AppProvider({
   }), [
     view, cloudProfilesHydrated, cloudLoginRequired, managedStatus, profiles, activeProfile, activeProfileId, avatarImages, manageMode,
     selectProfile, createProfile, updateProfileAction, deleteProfileAction, switchProfile, goToLogin, backToProfiles,
-    section, categories, catalogConfigs, loadCatalogRow, homeServerRows, continueWatching, watchlist, isWatched, selected, streams, selectedEpisode, loadEpisodeStreams, advanceEpisode, activeStream, activeChannel,
+    section, categories, catalogConfigs, loadCatalogRow, homeServerRows, continueWatching, watchlist, isWatched, selected, streams, selectedEpisode, loadEpisodeStreams, advanceEpisode, prefetchNextEpisode, activeStream, activeChannel,
     addons, addonsReady, iptvSnapshot, query, results, searchState, settingsSyncState, settings, auth, traktConnected, mdblistConnected, simklConnected, trackingPreferences, deviceCode, simklDeviceCode, mdblistDeviceCode, busy, toast,
     updateSettings, refreshData, openDetails, closeDetails, playStream, playTrailer, playChannel, recordChannelPlayback, playCatchup, closePlayer,
     refreshIptv, loadIptvGuide, favoriteTvChannels,

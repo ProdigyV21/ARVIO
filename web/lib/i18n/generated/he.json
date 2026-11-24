@@ -1536,5 +1536,6 @@
   "Open streams with ARVIO Premium": "פתחו שידורים עם ARVIO Premium",
   "Filter categories": "סינון קטגוריות",
   "Clear filter": "ניקוי המסנן",
-  "No categories match \"{value0}\".": "אין קטגוריות שתואמות ל-\"{value0}\"."
+  "No categories match \"{value0}\".": "אין קטגוריות שתואמות ל-\"{value0}\".",
+  "Chromecast": "Chromecast"
 }

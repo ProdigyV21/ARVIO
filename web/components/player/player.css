@@ -831,6 +831,7 @@
   font-weight: 650;
   font-size: 14px;
   cursor: pointer;
+  text-decoration: none;
 }
 @media (hover: hover) and (pointer: fine) {
   .player-error-external:hover {
@@ -1184,3 +1185,8 @@
 [dir="rtl"] .player-controls :is(.lucide-arrow-left, .lucide-arrow-right, .lucide-chevron-left, .lucide-chevron-right) {
   scale: none;
 }
+
+/* Seek preview above the hover time (home-server trickplay). The readout sits
+   under the picture; tiles are cropped with background-position. */
+.scrubber-hover-time:has(.scrubber-preview) { display: grid; justify-items: center; gap: 6px; padding: 5px 5px 6px; }
+.scrubber-preview { display: block; width: clamp(140px, 16vw, 220px); aspect-ratio: 16 / 9; border-radius: 5px; background-color: #000; background-repeat: no-repeat; object-fit: cover; }

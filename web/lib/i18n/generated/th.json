@@ -1572,5 +1572,6 @@
   "Open streams with ARVIO Premium": "เปิดสตรีมด้วย ARVIO Premium",
   "Filter categories": "กรองหมวดหมู่",
   "Clear filter": "ล้างตัวกรอง",
-  "No categories match \"{value0}\".": "ไม่มีหมวดหมู่ที่ตรงกับ \"{value0}\""
+  "No categories match \"{value0}\".": "ไม่มีหมวดหมู่ที่ตรงกับ \"{value0}\"",
+  "Chromecast": "Chromecast"
 }

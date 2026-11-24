@@ -1,4 +1,5 @@
 import { languageCode, sameLanguage } from "./languages";
+import type { MkvSubtitleCue, MkvSubtitleTrack } from "./mkvSubtitles";
 
 export type RemuxAudioTrack = {
   index: number; codec: string; label: string; language?: string; channels?: number;
@@ -10,7 +11,9 @@ export type RemuxProbe = {
   audioTracks: RemuxAudioTrack[]; chosenAudioIndex: number; duration: number;
 };
 export type RemuxCommand =
-  | { type: "probe"; url: string; headers?: Record<string, string>; audioCodecs: string[]; language?: string; expectDolbyVision?: boolean; iptv?: boolean }
+  | { type: "probe"; url: string; headers?: Record<string, string>; audioCodecs: string[]; language?: string; expectDolbyVision?: boolean; iptv?: boolean;
+      /** The audio output has 6+ channels (a receiver or surround speakers): keep 5.1 when converting. */
+      surround?: boolean }
   | { type: "start"; generation: number; time: number; audioIndex: number }
   | { type: "clock"; time: number }
   | { type: "ack"; id: number };
@@ -18,7 +21,9 @@ export type RemuxEvent =
   | { type: "probe"; probe: RemuxProbe }
   | { type: "chunk"; generation: number; id: number; data: ArrayBuffer }
   | { type: "end"; generation: number }
-  | { type: "error"; generation: number; message: string };
+  | { type: "error"; generation: number; message: string }
+  | { type: "subtitle-tracks"; tracks: MkvSubtitleTrack[] }
+  | { type: "subtitle-cues"; cues: MkvSubtitleCue[] };
 
 export function preferredAudioIndex(tracks: RemuxAudioTrack[], language = "") {
   const languages: Record<string, string[]> = {
@@ -35,4 +40,11 @@ export function preferredAudioIndex(tracks: RemuxAudioTrack[], language = "") {
   // Keep provider/default order; a compatible stereo track beats unnecessary conversion.
   const pool = matching.length ? matching : playable;
   return (pool.find((track) => track.passthrough) ?? pool[0])?.index ?? -1;
+}
+
+/** Channels and bitrate for converted (AAC) audio: 5.1 only for a 5.1+ source on surround output. */
+export function convertedAudioLayout(sourceChannels: number | undefined, surround: boolean, encoderSupports6: boolean) {
+  return surround && encoderSupports6 && (sourceChannels ?? 0) >= 6
+    ? { numberOfChannels: 6, bitrate: 384000 }
+    : { numberOfChannels: 2, bitrate: 192000 };
 }
