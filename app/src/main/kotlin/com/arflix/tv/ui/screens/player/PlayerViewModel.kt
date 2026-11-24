@@ -7504,10 +7504,10 @@ class PlayerViewModel @Inject constructor(
     private fun localizeSubtitle(sub: Subtitle, raw: String): Subtitle {
         return runCatching {
             val dir = java.io.File(context.cacheDir, "matched_subs").apply { mkdirs() }
-            // Keep the directory bounded; files are ~100KB and keyed stably per subtitle.
+            // Keep the directory bounded; files are ~100KB and keyed by subtitle and by its text.
             dir.listFiles()?.sortedBy { it.lastModified() }?.dropLast(39)?.forEach { it.delete() }
             val ext = if (raw.trimStart().startsWith("WEBVTT")) "vtt" else "srt"
-            val file = java.io.File(dir, "${"${sub.provider}|${sub.id}".hashCode().toUInt()}.$ext")
+            val file = java.io.File(dir, localSubtitleFileName(sub.provider, sub.id, raw, ext))
             file.writeText(raw)
             sub.copy(url = file.toURI().toString())
         }.getOrDefault(sub)
