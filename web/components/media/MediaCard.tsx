@@ -16,6 +16,7 @@ import { getCardExtras, peekCardExtras, prefetchDetails, resolveTmdbId } from "@
 import type { CardExtras } from "@/lib/cardExtras";
 import type { MediaItem } from "@/lib/types";
 import { ImdbLogo, RankRibbon, useNearViewport } from "./CardBits";
+import { readableReleaseName } from "@/lib/releaseName";
 
 // Rendered card widths (CSS px) per layout, for the browser to pick a TMDB
 // rendition from the srcset: ~2.4 cards across on phones, ~293px on a laptop.
@@ -80,7 +81,9 @@ function MediaCardBase({ item, onOpen, onFocus, posterMode, rank, hideService }:
   const artwork = effectivePosterMode ? (image || backdrop) : (episodeArtwork || backdrop || image);
   const imgLoaded = Boolean(artwork && loadedArtwork === artwork);
   const imgFailed = Boolean(artwork && failedArtwork === artwork);
-  const year = item.releaseDate?.slice(0, 4) || item.year || (item.mediaType === "tv" ? "Series" : "Movie");
+  // Addon file libraries (debrid) name items after the release file.
+  const release = item.addonNativeId ? readableReleaseName(item.title) : null;
+  const year = item.releaseDate?.slice(0, 4) || item.year || release?.year || (item.mediaType === "tv" ? "Series" : "Movie");
 
   useEffect(() => {
     let active = true;
@@ -257,7 +260,7 @@ function MediaCardBase({ item, onOpen, onFocus, posterMode, rank, hideService }:
           </span>
         )}
       </div>
-      <strong>{item.title}</strong>
+      <strong title={release ? item.title : undefined}>{release?.title ?? item.title}</strong>
       {episodeLine ? (
         <div className="card-episode-line">
           {isUpNext && <span className="card-upnext">{translateUi("Up next")}</span>}

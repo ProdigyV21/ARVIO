@@ -1,11 +1,12 @@
 import type { MediaItem } from "@/lib/types";
+import { uiLocales } from "@/lib/uiLocale";
 
 /** Human date for an ISO day ("2024-02-27" → "Feb 27, 2024"). */
 export function formatDate(date: string | null | undefined) {
   if (!date) return "";
   const parsed = new Date(`${date.slice(0, 10)}T00:00:00`);
   if (Number.isNaN(parsed.getTime())) return date;
-  return parsed.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+  return parsed.toLocaleDateString(uiLocales(), { year: "numeric", month: "short", day: "numeric" });
 }
 
 /** TMDB reviews are raw HTML/markdown from users: show them as plain text. */

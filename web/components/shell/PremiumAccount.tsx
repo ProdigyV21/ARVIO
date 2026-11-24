@@ -11,6 +11,7 @@ import { accessEndsAt } from "@/lib/entitlementPolicy";
 import { config } from "@/lib/config";
 import { WHATS_NEW } from "@/lib/whatsNew";
 import { MembershipCheckout } from "./MembershipCheckout";
+import { uiLocales } from "@/lib/uiLocale";
 
 // "Give a month, get a month": the account's invite link.
 function InviteFriends() {
@@ -68,8 +69,8 @@ export function PremiumAccount() {
     <h2 id="premium-account-title"><BadgeCheck size={20} /> {translateUi(" ARVIO Web Premium")}</h2>
     <p className="premium-account-status">{paid ? translateUi(state?.plan === "yearly" ? "12-month pass active" : "Membership active") : translateUi("Not a member yet")}</p>
     <p className="premium-account-email">{auth.email}</p>
-    {state?.reason === "grace" && state.graceEndsAt && <p>{translateUi("Your renewal hasn't come through yet. Access continues until {date}.", { date: new Date(state.graceEndsAt).toLocaleDateString() })}</p>}
-    {paid && end && <p>{translateUi("Access until")}: {new Date(end).toLocaleString()}</p>}
+    {state?.reason === "grace" && state.graceEndsAt && <p>{translateUi("Your renewal hasn't come through yet. Access continues until {date}.", { date: new Date(state.graceEndsAt).toLocaleDateString(uiLocales()) })}</p>}
+    {paid && end && <p>{translateUi("Access until")}: {new Date(end).toLocaleString(uiLocales())}</p>}
     <p>{translateUi("Browser access on iPhone, iPad, Windows, Mac and Linux. The Android app and Cloud dashboard remain free.")}</p>
     <div className="premium-account-actions">
       {yearly && state?.plan !== "yearly" && <MembershipCheckout className="paywall-primary" entry="account_settings_yearly" href={yearly} onEntitled={applied} activeWhen={paid ? (next) => next.plan === "yearly" : undefined}>

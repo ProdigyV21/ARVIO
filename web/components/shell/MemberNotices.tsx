@@ -9,6 +9,7 @@ import type { EntitlementState } from "@/lib/entitlement";
 import { kofiSubscribeUrl } from "@/lib/entitlement";
 import { markWhatsNewSeen, unseenWhatsNew } from "@/lib/whatsNew";
 import { ExitSurvey } from "./PremiumOffer";
+import { uiLocales } from "@/lib/uiLocale";
 
 const CHECKLIST_DAYS = 14;
 
@@ -67,7 +68,7 @@ function GraceBanner({ state }: { state: EntitlementState }) {
   const translateUi = useTranslation();
   const [hidden, setHidden] = useState(false);
   if (hidden || state.reason !== "grace" || !state.graceEndsAt) return null;
-  const until = new Date(state.graceEndsAt).toLocaleDateString(undefined, { day: "numeric", month: "long" });
+  const until = new Date(state.graceEndsAt).toLocaleDateString(uiLocales(), { day: "numeric", month: "long" });
   return <aside className="member-notice member-grace" role="status">
     <button type="button" className="member-notice-close" aria-label={translateUi("Close")} onClick={() => setHidden(true)}><X size={16} /></button>
     <p className="member-notice-title"><AlertTriangle size={15} /> {translateUi("Payment not received yet")}</p>

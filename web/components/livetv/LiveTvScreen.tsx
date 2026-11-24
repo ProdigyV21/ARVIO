@@ -29,6 +29,7 @@ import { loadStored, saveStored } from "@/lib/storage";
 import { authClient, useAppPick } from "@/lib/store";
 import { trackPremiumEvent } from "@/lib/premiumAnalytics";
 import type { IptvChannel } from "@/lib/types";
+import { uiLocales } from "@/lib/uiLocale";
 
 const LAST_CHANNEL_KEY = "arvio.web.livetv.lastChannel";
 const GUIDE_BATCH_DELAY_MS = 500;
@@ -461,7 +462,7 @@ export function LiveTvScreen() {
       if (window.matchMedia("(max-width: 760px)").matches) setGroupsOpen(false);
     }}>
     {category.id === "favorites" ? <Star size={20} /> : category.id === "recent" ? <History size={20} /> : category.id === "sports" ? <Trophy size={20} /> : <LayoutGrid size={20} />}
-    <span>{categoryText(category)}</span>{category.id !== "sports" && <em>{resolvingSavedChannels && ["favorites", "recent"].includes(category.id) && !category.count ? <RefreshCw size={14} className="is-spinning" aria-label={translateUi("Loading saved channels")} /> : category.count.toLocaleString()}</em>}
+    <span>{categoryText(category)}</span>{category.id !== "sports" && <em>{resolvingSavedChannels && ["favorites", "recent"].includes(category.id) && !category.count ? <RefreshCw size={14} className="is-spinning" aria-label={translateUi("Loading saved channels")} /> : category.count.toLocaleString(uiLocales())}</em>}
   </button>;
   const openCategories = () => { setGroupsOpen(true); requestAnimationFrame(() => document.querySelector<HTMLElement>(".livetv-cats button.is-active")?.focus()); };
   const hasContent = channels.length > 0 || hasSportsAddons;
@@ -582,7 +583,7 @@ export function LiveTvScreen() {
             <div className="livetv-list-head">
               <button type="button" className="livetv-chipbtn" title={translateUi("Toggle categories")} aria-label={translateUi("Toggle categories")} aria-expanded={groupsOpen} onClick={() => setGroupsOpen(!groupsOpen)}><PanelLeft size={20} /></button>
               <h3>{translateUi(activeCategoryLabel)}</h3>
-              <span>{visibleChannels.length.toLocaleString()}</span>
+              <span>{visibleChannels.length.toLocaleString(uiLocales())}</span>
               <div className="livetv-view-toggle" role="group" aria-label={translateUi("Channel view")}>
                 <button type="button" className={view === "list" ? "is-active" : ""} aria-pressed={view === "list"} onClick={() => setView("list")} title={translateUi("List view")} aria-label={translateUi("List view")}><List size={18} /></button>
                 <button type="button" className={view === "guide" ? "is-active" : ""} aria-pressed={view === "guide"} onClick={() => setView("guide")} title={translateUi("Guide view")} aria-label={translateUi("Guide view")}><LayoutGrid size={18} /></button>
@@ -598,8 +599,9 @@ export function LiveTvScreen() {
             </div>
             {renderedChannels.length === 0 && (
               <div className="livetv-list-empty">
-                <Search size={28} />
-                <p>{resolvingSavedChannels && ["favorites", "recent"].includes(activeCategory) ? translateUi("Loading saved channels...")
+                {isLoadingTv && !channels.length ? <RefreshCw size={28} className="is-spinning" /> : <Search size={28} />}
+                <p>{isLoadingTv && !channels.length ? translateUi("Loading channels…")
+                  : resolvingSavedChannels && ["favorites", "recent"].includes(activeCategory) ? translateUi("Loading saved channels...")
                   : needle ? translateUi("No channels or programmes match \"{value0}\".", { value0: query.trim() })
                   : activeCategory === "favorites" ? translateUi("No favorite channels yet. Hold OK on a channel, or use its star, to add one.")
                   : translateUi("No channels in this category.")}</p>
@@ -697,7 +699,8 @@ export function LiveTvScreen() {
         </div>
       )}
 
-      {(playlists.length > 0 || portals.length > 0) && !channels.length && !hasWarnings && activeCategory !== "sports" && (
+      {/* With sports addons the full layout is already up and its channel list says it is loading. */}
+      {(playlists.length > 0 || portals.length > 0) && !channels.length && !hasWarnings && activeCategory !== "sports" && !(hasContent && isLoadingTv) && (
         <section className="livetv-empty">
           <ChevronDown size={36} className={isLoadingTv ? "is-spinning" : ""} />
           <h3>{isLoadingTv ? translateUi("Loading channels…") : translateUi("No channels yet")}</h3>

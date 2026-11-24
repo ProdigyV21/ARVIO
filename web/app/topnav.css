@@ -43,3 +43,21 @@
   .app-shell .rail-view-all:focus-visible .rail-view-all-art,
   .app-shell .custom-collection-tile:focus-visible { outline-width: 4px; outline-offset: 4px; }
 }
+
+/* Scrolled: the bar itself stays transparent (no band, as chosen for the
+   immersive look), but each control gets its own frosted pill so the tab
+   labels stay readable over posters and artwork. */
+.sidebar.is-scrolled .nav-item,
+.sidebar.is-scrolled .settings-gear,
+.sidebar.is-scrolled .trial-membership-link {
+  background-color: rgba(8, 10, 12, 0.72);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08), 0 10px 28px rgba(0, 0, 0, 0.38);
+  backdrop-filter: blur(16px) saturate(1.2);
+  -webkit-backdrop-filter: blur(16px) saturate(1.2);
+}
+.sidebar.is-scrolled .nav-item.is-active {
+  background-color: rgba(58, 60, 62, 0.9);
+}
+.sidebar.is-scrolled .profile-name-text {
+  text-shadow: 0 0 2px rgba(0, 0, 0, 0.9), 0 1px 10px rgba(0, 0, 0, 0.9);
+}

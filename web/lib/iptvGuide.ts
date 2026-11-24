@@ -2,6 +2,7 @@
 // search matching and readable playlist errors. Kept free of React so the
 // guide, Settings and tests can share them.
 import type { IptvChannel, IptvNowNext, IptvProgram } from "./types";
+import { uiLocales, uiLocaleKey } from "./uiLocale";
 
 export type ClockFormat = "12h" | "24h" | undefined;
 
@@ -9,11 +10,11 @@ export type ClockFormat = "12h" | "24h" | undefined;
 // render with 55k channels). Build each formatter once per clock format.
 const timeFormatters = new Map<string, Intl.DateTimeFormat>();
 function timeFormatter(clockFormat: ClockFormat) {
-  const key = clockFormat ?? "auto";
+  const key = `${clockFormat ?? "auto"}:${uiLocaleKey()}`;
   let formatter = timeFormatters.get(key);
   if (!formatter) {
     try {
-      formatter = new Intl.DateTimeFormat([], clockFormat === "24h"
+      formatter = new Intl.DateTimeFormat(uiLocales(), clockFormat === "24h"
         ? { hour: "2-digit", minute: "2-digit", hourCycle: "h23" }
         // 12h and locale default: "9:00 PM", never "09:00 PM".
         : { hour: "numeric", minute: "2-digit", ...(clockFormat === "12h" ? { hour12: true } : {}) });
@@ -32,10 +33,10 @@ export function formatGuideTime(ms: number, clockFormat?: ClockFormat): string {
 
 const dayFormatters = new Map<string, Intl.DateTimeFormat>();
 export function formatGuideDay(ms: number, withTime = false, clockFormat?: ClockFormat): string {
-  const key = `${withTime}:${clockFormat ?? "auto"}`;
+  const key = `${withTime}:${clockFormat ?? "auto"}:${uiLocaleKey()}`;
   let formatter = dayFormatters.get(key);
   if (!formatter) {
-    formatter = new Intl.DateTimeFormat([], withTime
+    formatter = new Intl.DateTimeFormat(uiLocales(), withTime
       ? { weekday: "short", hour: clockFormat === "24h" ? "2-digit" : "numeric", minute: "2-digit", ...(clockFormat ? { hourCycle: clockFormat === "24h" ? "h23" : "h12" } : {}) }
       : { weekday: "short", day: "numeric", month: "short" });
     dayFormatters.set(key, formatter);
