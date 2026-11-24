@@ -26,9 +26,10 @@ export async function GET(request: NextRequest, context: { params: Promise<{ pat
     target = new URL(`${netlifyBackendUrl}/tmdb-proxy`);
     target.searchParams.set("path", `/${path.join("/")}`);
     input.searchParams.forEach((value, key) => target.searchParams.set(key, value));
-    // cv busts the Next data cache — v2 invalidates entries poisoned by the
-    // query-less CDN cache-key bug (fixed upstream with Netlify-Vary: query).
-    target.searchParams.set("cv", calendarRequest ? "calendar-3" : "2");
+    // cv busts the Next data cache — v3 drops entries poisoned by the proxy's
+    // edge cache answering unrelated queries (fixed upstream: tmdb-proxy is no
+    // longer edge-cached).
+    target.searchParams.set("cv", calendarRequest ? "calendar-4" : "3");
   } else if (tmdbKey) {
     target = new URL(`https://api.themoviedb.org/3/${path.join("/")}`);
     input.searchParams.forEach((value, key) => target.searchParams.set(key, value));
