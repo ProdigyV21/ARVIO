@@ -1567,5 +1567,8 @@
   "Watch this with ARVIO Premium": "این را با ARVIO Premium تماشا کنید",
   "Watch Live TV with ARVIO Premium": "تلویزیون زنده را با ARVIO Premium تماشا کنید",
   "Download with ARVIO Premium": "با ARVIO Premium دانلود کنید",
-  "Open streams with ARVIO Premium": "استریم‌ها را با ARVIO Premium باز کنید"
+  "Open streams with ARVIO Premium": "استریم‌ها را با ARVIO Premium باز کنید",
+  "Filter categories": "فیلتر دسته‌ها",
+  "Clear filter": "پاک کردن فیلتر",
+  "No categories match \"{value0}\".": "هیچ دسته‌ای با «{value0}» مطابقت ندارد."
 }

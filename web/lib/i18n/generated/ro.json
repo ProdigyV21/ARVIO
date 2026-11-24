@@ -1573,5 +1573,8 @@
   "Watch this with ARVIO Premium": "Urmărește asta cu ARVIO Premium",
   "Watch Live TV with ARVIO Premium": "Urmărește TV în direct cu ARVIO Premium",
   "Download with ARVIO Premium": "Descarcă cu ARVIO Premium",
-  "Open streams with ARVIO Premium": "Deschide fluxuri cu ARVIO Premium"
+  "Open streams with ARVIO Premium": "Deschide fluxuri cu ARVIO Premium",
+  "Filter categories": "Filtrează categoriile",
+  "Clear filter": "Șterge filtrul",
+  "No categories match \"{value0}\".": "Nicio categorie nu corespunde cu „{value0}”."
 }

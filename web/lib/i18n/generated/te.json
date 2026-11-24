@@ -1566,5 +1566,8 @@
   "Watch this with ARVIO Premium": "ARVIO Premium తో దీన్ని చూడండి",
   "Watch Live TV with ARVIO Premium": "ARVIO Premium తో లైవ్ టీవీ చూడండి",
   "Download with ARVIO Premium": "ARVIO Premium తో డౌన్‌లోడ్ చేయండి",
-  "Open streams with ARVIO Premium": "ARVIO Premium తో స్ట్రీమ్‌లను తెరవండి"
+  "Open streams with ARVIO Premium": "ARVIO Premium తో స్ట్రీమ్‌లను తెరవండి",
+  "Filter categories": "వర్గాలను ఫిల్టర్ చేయండి",
+  "Clear filter": "ఫిల్టర్‌ను క్లియర్ చేయండి",
+  "No categories match \"{value0}\".": "\"{value0}\"కి సరిపోలే వర్గాలు లేవు."
 }

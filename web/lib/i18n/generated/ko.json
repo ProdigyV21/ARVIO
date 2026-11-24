@@ -1569,5 +1569,8 @@
   "Watch this with ARVIO Premium": "ARVIO Premium으로 시청하기",
   "Watch Live TV with ARVIO Premium": "ARVIO Premium으로 실시간 TV 시청하기",
   "Download with ARVIO Premium": "ARVIO Premium으로 다운로드하기",
-  "Open streams with ARVIO Premium": "ARVIO Premium으로 스트림 열기"
+  "Open streams with ARVIO Premium": "ARVIO Premium으로 스트림 열기",
+  "Filter categories": "카테고리 필터",
+  "Clear filter": "필터 지우기",
+  "No categories match \"{value0}\".": "\"{value0}\"과(와) 일치하는 카테고리가 없습니다."
 }

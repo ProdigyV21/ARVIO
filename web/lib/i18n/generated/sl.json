@@ -1569,5 +1569,8 @@
   "Watch this with ARVIO Premium": "Glejte to z ARVIO Premium",
   "Watch Live TV with ARVIO Premium": "Glejte TV v živo z ARVIO Premium",
   "Download with ARVIO Premium": "Prenašajte z ARVIO Premium",
-  "Open streams with ARVIO Premium": "Odpirajte pretoke z ARVIO Premium"
+  "Open streams with ARVIO Premium": "Odpirajte pretoke z ARVIO Premium",
+  "Filter categories": "Filtriraj kategorije",
+  "Clear filter": "Počisti filter",
+  "No categories match \"{value0}\".": "Nobena kategorija se ne ujema z »{value0}«."
 }

@@ -1525,5 +1525,8 @@
   "Watch this with ARVIO Premium": "Kijk dit met ARVIO Premium",
   "Watch Live TV with ARVIO Premium": "Kijk live tv met ARVIO Premium",
   "Download with ARVIO Premium": "Download met ARVIO Premium",
-  "Open streams with ARVIO Premium": "Open streams met ARVIO Premium"
+  "Open streams with ARVIO Premium": "Open streams met ARVIO Premium",
+  "Filter categories": "Categorieën filteren",
+  "Clear filter": "Filter wissen",
+  "No categories match \"{value0}\".": "Geen categorieën gevonden voor \"{value0}\"."
 }

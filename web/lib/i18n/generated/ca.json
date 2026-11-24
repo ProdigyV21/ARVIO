@@ -1570,5 +1570,8 @@
   "Watch this with ARVIO Premium": "Mira-ho amb ARVIO Premium",
   "Watch Live TV with ARVIO Premium": "Mira la TV en directe amb ARVIO Premium",
   "Download with ARVIO Premium": "Baixa amb ARVIO Premium",
-  "Open streams with ARVIO Premium": "Obre fluxos amb ARVIO Premium"
+  "Open streams with ARVIO Premium": "Obre fluxos amb ARVIO Premium",
+  "Filter categories": "Filtra les categories",
+  "Clear filter": "Esborra el filtre",
+  "No categories match \"{value0}\".": "Cap categoria coincideix amb \"{value0}\"."
 }

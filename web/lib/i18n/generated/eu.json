@@ -1570,5 +1570,8 @@
   "Watch this with ARVIO Premium": "Ikusi hau ARVIO Premiumekin",
   "Watch Live TV with ARVIO Premium": "Ikusi zuzeneko telebista ARVIO Premiumekin",
   "Download with ARVIO Premium": "Deskargatu ARVIO Premiumekin",
-  "Open streams with ARVIO Premium": "Ireki streamak ARVIO Premiumekin"
+  "Open streams with ARVIO Premium": "Ireki streamak ARVIO Premiumekin",
+  "Filter categories": "Iragazi kategoriak",
+  "Clear filter": "Garbitu iragazkia",
+  "No categories match \"{value0}\".": "Ez dago \"{value0}\"-rekin bat datorren kategoriarik."
 }

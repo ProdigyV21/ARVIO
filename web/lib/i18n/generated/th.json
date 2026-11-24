@@ -1569,5 +1569,8 @@
   "Watch this with ARVIO Premium": "ดูเรื่องนี้ด้วย ARVIO Premium",
   "Watch Live TV with ARVIO Premium": "ดูทีวีสดด้วย ARVIO Premium",
   "Download with ARVIO Premium": "ดาวน์โหลดด้วย ARVIO Premium",
-  "Open streams with ARVIO Premium": "เปิดสตรีมด้วย ARVIO Premium"
+  "Open streams with ARVIO Premium": "เปิดสตรีมด้วย ARVIO Premium",
+  "Filter categories": "กรองหมวดหมู่",
+  "Clear filter": "ล้างตัวกรอง",
+  "No categories match \"{value0}\".": "ไม่มีหมวดหมู่ที่ตรงกับ \"{value0}\""
 }

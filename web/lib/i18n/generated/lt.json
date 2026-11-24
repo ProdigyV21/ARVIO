@@ -1570,5 +1570,8 @@
   "Watch this with ARVIO Premium": "Žiūrėkite tai su ARVIO Premium",
   "Watch Live TV with ARVIO Premium": "Žiūrėkite tiesioginę TV su ARVIO Premium",
   "Download with ARVIO Premium": "Atsisiųskite su ARVIO Premium",
-  "Open streams with ARVIO Premium": "Atidarykite srautus su ARVIO Premium"
+  "Open streams with ARVIO Premium": "Atidarykite srautus su ARVIO Premium",
+  "Filter categories": "Filtruoti kategorijas",
+  "Clear filter": "Išvalyti filtrą",
+  "No categories match \"{value0}\".": "Nėra kategorijų, atitinkančių „{value0}“."
 }

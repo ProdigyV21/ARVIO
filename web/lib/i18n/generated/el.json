@@ -1568,5 +1568,8 @@
   "Watch this with ARVIO Premium": "Δείτε το με το ARVIO Premium",
   "Watch Live TV with ARVIO Premium": "Δείτε ζωντανή TV με το ARVIO Premium",
   "Download with ARVIO Premium": "Λήψη με το ARVIO Premium",
-  "Open streams with ARVIO Premium": "Ανοίξτε ροές με το ARVIO Premium"
+  "Open streams with ARVIO Premium": "Ανοίξτε ροές με το ARVIO Premium",
+  "Filter categories": "Φιλτράρισμα κατηγοριών",
+  "Clear filter": "Απαλοιφή φίλτρου",
+  "No categories match \"{value0}\".": "Καμία κατηγορία δεν ταιριάζει με «{value0}»."
 }

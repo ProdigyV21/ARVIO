@@ -1571,5 +1571,8 @@
   "Watch this with ARVIO Premium": "Se dette med ARVIO Premium",
   "Watch Live TV with ARVIO Premium": "Se direkte-TV med ARVIO Premium",
   "Download with ARVIO Premium": "Last ned med ARVIO Premium",
-  "Open streams with ARVIO Premium": "Åpne strømmer med ARVIO Premium"
+  "Open streams with ARVIO Premium": "Åpne strømmer med ARVIO Premium",
+  "Filter categories": "Filtrer kategorier",
+  "Clear filter": "Fjern filter",
+  "No categories match \"{value0}\".": "Ingen kategorier samsvarer med «{value0}»."
 }
