@@ -1574,5 +1574,6 @@
   "Open streams with ARVIO Premium": "Maak strome oop met ARVIO Premium",
   "Filter categories": "Filtreer kategorieë",
   "Clear filter": "Vee filter uit",
-  "No categories match \"{value0}\".": "Geen kategorieë pas by \"{value0}\" nie."
+  "No categories match \"{value0}\".": "Geen kategorieë pas by \"{value0}\" nie.",
+  "Chromecast": "Chromecast"
 }

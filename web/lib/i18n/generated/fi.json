@@ -1574,5 +1574,6 @@
   "Open streams with ARVIO Premium": "Avaa striimit ARVIO Premiumilla",
   "Filter categories": "Suodata luokkia",
   "Clear filter": "Tyhjennä suodatin",
-  "No categories match \"{value0}\".": "Mikään luokka ei vastaa hakua \"{value0}\"."
+  "No categories match \"{value0}\".": "Mikään luokka ei vastaa hakua \"{value0}\".",
+  "Chromecast": "Chromecast"
 }

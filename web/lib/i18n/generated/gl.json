@@ -1574,5 +1574,6 @@
   "Open streams with ARVIO Premium": "Abre fluxos con ARVIO Premium",
   "Filter categories": "Filtrar categorías",
   "Clear filter": "Borrar filtro",
-  "No categories match \"{value0}\".": "Ningunha categoría coincide con \"{value0}\"."
+  "No categories match \"{value0}\".": "Ningunha categoría coincide con \"{value0}\".",
+  "Chromecast": "Chromecast"
 }

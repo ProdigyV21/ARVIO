@@ -1,4 +1,5 @@
 import { isUncachedDebridStream, parseDebridStream } from "./debrid";
+import { exceedsConnection } from "./connectionBudget";
 import { audioDecodableForDevice, isBrowserPlayableStream, isDirectPlayableStream, playbackPlan, videoDecodableForDevice, type PlaybackPlan } from "./streamCompatibility";
 import type { StreamSource } from "./types";
 
@@ -93,6 +94,9 @@ export function sourcePickerScore(stream: StreamSource, target: PlaybackTarget =
     // The missing half: undecodable AUDIO was scored normally, so DDP/Atmos
     // releases (nearly every modern streaming rip) ranked top and then failed.
     if (!audioDecodableForDevice(stream)) score -= 900;
+    // Above the bitrate this device's connection proved it can carry: it would
+    // start slowly and stall, so a smaller release of the same title wins.
+    if (exceedsConnection(streamSizeBytes(stream))) score -= 400;
   }
   if (text.includes("cam") || text.includes("hdcam") || text.includes("telesync") || text.includes("ts ")) score -= 500;
   // Uncached debrid torrents must download server-side before playing — sink

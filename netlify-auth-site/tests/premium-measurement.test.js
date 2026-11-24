@@ -756,3 +756,19 @@ test('protected report includes new checkout detail records without counting fut
   assert.equal(report.paymentActivation.confirmedNewMemberships, 0);
   assert.equal(report.uniqueAccounts.membership_cta_viewed, 1);
 });
+
+test('successful starts carry bounded startup buckets and an earlier-days tally', () => {
+  const clean = funnel._test.sanitizeMetadata({ playback_type: 'vod', platform: 'ipad', method: 'remux', container: 'mkv', host_type: 'debrid',
+    startup: '2_5s', starts_remux: 4, starts_direct: 9999, start_under_2s: -3, stalls: 1.5, start_5_10s: 'many' });
+  assert.deepEqual(clean, { playback_type: 'vod', platform: 'ipad', method: 'remux', container: 'mkv', host_type: 'debrid', startup: '2_5s', starts_remux: 4, starts_direct: 500 });
+  assert.equal(funnel._test.sanitizeMetadata({ startup: 'https://private' }).startup, undefined);
+  const summary = funnel._test.summarizePlaybackStarts([
+    { eventName: 'playback_started', metadata: clean },
+    { eventName: 'playback_started', metadata: { platform: 'chromium_desktop', method: 'direct', startup: 'under_2s' } },
+    { eventName: 'playback_failed', metadata: { platform: 'ipad' } }
+  ]);
+  assert.equal(summary.firstStartOfDay.accountDays, 2);
+  assert.deepEqual(summary.firstStartOfDay.byStartup, { '2_5s': 1, under_2s: 1 });
+  assert.equal(summary.earlierDays.reports, 1);
+  assert.deepEqual(summary.earlierDays.starts, { direct: 500, remux: 4, hls: 0, other: 0 });
+});

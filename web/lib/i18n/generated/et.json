@@ -1572,5 +1572,6 @@
   "Open streams with ARVIO Premium": "Ava vood ARVIO Premiumiga",
   "Filter categories": "Filtreeri kategooriaid",
   "Clear filter": "Tühjenda filter",
-  "No categories match \"{value0}\".": "Ükski kategooria ei vasta päringule \"{value0}\"."
+  "No categories match \"{value0}\".": "Ükski kategooria ei vasta päringule \"{value0}\".",
+  "Chromecast": "Chromecast"
 }

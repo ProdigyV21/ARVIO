@@ -1611,5 +1611,6 @@
   "Open streams with ARVIO Premium": "ARVIO Premium ഉപയോഗിച്ച് സ്ട്രീമുകൾ തുറക്കുക",
   "Filter categories": "വിഭാഗങ്ങൾ ഫിൽട്ടർ ചെയ്യുക",
   "Clear filter": "ഫിൽട്ടർ മായ്ക്കുക",
-  "No categories match \"{value0}\".": "\"{value0}\" എന്നതുമായി പൊരുത്തപ്പെടുന്ന വിഭാഗങ്ങളൊന്നുമില്ല."
+  "No categories match \"{value0}\".": "\"{value0}\" എന്നതുമായി പൊരുത്തപ്പെടുന്ന വിഭാഗങ്ങളൊന്നുമില്ല.",
+  "Chromecast": "Chromecast"
 }

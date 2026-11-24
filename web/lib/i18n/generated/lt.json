@@ -1573,5 +1573,6 @@
   "Open streams with ARVIO Premium": "Atidarykite srautus su ARVIO Premium",
   "Filter categories": "Filtruoti kategorijas",
   "Clear filter": "Išvalyti filtrą",
-  "No categories match \"{value0}\".": "Nėra kategorijų, atitinkančių „{value0}“."
+  "No categories match \"{value0}\".": "Nėra kategorijų, atitinkančių „{value0}“.",
+  "Chromecast": "Chromecast"
 }

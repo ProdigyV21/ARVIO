@@ -1575,5 +1575,6 @@
   "Open streams with ARVIO Premium": "Öppna strömmar med ARVIO Premium",
   "Filter categories": "Filtrera kategorier",
   "Clear filter": "Rensa filter",
-  "No categories match \"{value0}\".": "Inga kategorier matchar ”{value0}”."
+  "No categories match \"{value0}\".": "Inga kategorier matchar ”{value0}”.",
+  "Chromecast": "Chromecast"
 }

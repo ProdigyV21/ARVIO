@@ -1570,5 +1570,6 @@
   "Open streams with ARVIO Premium": "استریم‌ها را با ARVIO Premium باز کنید",
   "Filter categories": "فیلتر دسته‌ها",
   "Clear filter": "پاک کردن فیلتر",
-  "No categories match \"{value0}\".": "هیچ دسته‌ای با «{value0}» مطابقت ندارد."
+  "No categories match \"{value0}\".": "هیچ دسته‌ای با «{value0}» مطابقت ندارد.",
+  "Chromecast": "Chromecast"
 }
