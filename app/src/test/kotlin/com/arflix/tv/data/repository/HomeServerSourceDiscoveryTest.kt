@@ -142,6 +142,26 @@ class HomeServerSourceDiscoveryTest {
         }
     }
 
+    @Test fun `PlaybackInfo declares no client bitrate ceiling`() = runBlocking {
+        // Silo transcodes a source of unknown bitrate whenever a ceiling is sent, even a huge one.
+        val playbackInfoUrls = java.util.Collections.synchronizedList(mutableListOf<okhttp3.HttpUrl>())
+        val repository = repository(HomeServerKind.JELLYFIN, "https://example.invalid/compat") { request ->
+            when (request.url.encodedPath) {
+                "/compat/Users/test/Items" -> 200 to """{"Items":[{"Id":"movie","Name":"Shared Film","Type":"Movie","ProductionYear":2024,"ProviderIds":{"Imdb":"tt42","Tmdb":"42"}}]}"""
+                "/compat/Items/movie/PlaybackInfo" -> {
+                    playbackInfoUrls.add(request.url)
+                    200 to """{"PlaySessionId":"session","MediaSources":[{"Id":"version","Container":"mkv","SupportsDirectPlay":true,"SupportsDirectStream":true,"SupportsTranscoding":true}]}"""
+                }
+                else -> error("Unexpected request ${request.url.encodedPath}")
+            }
+        }
+        repository.resolveMovieSources("tt42", "Shared Film", 2024, 42)
+        assertEquals(1, playbackInfoUrls.size)
+        val url = playbackInfoUrls.single()
+        assertTrue(url.queryParameterNames.none { it.equals("MaxStreamingBitrate", ignoreCase = true) })
+        assertEquals("true", url.queryParameter("IsPlayback"))
+    }
+
     @Test fun `direct play without a supplied URL retains session and skips HLS`() = runBlocking {
         val repository = siloRepository(""""SupportsDirectPlay":true,"SupportsDirectStream":true,"SupportsTranscoding":true,
             "TranscodingUrl":"/Videos/movie/master.m3u8"""")
