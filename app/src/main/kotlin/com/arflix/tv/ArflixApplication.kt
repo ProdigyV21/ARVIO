@@ -263,6 +263,11 @@ class ArflixApplication : Application(), Configuration.Provider, ImageLoaderFact
             // (the card surface background is the fallback visual).
             .error(android.R.color.transparent)
             .components {
+                // On TV, keep decoded artwork as software bitmaps. A hardware bitmap costs an
+                // extra copy and a GPU upload on the decode path for every card, which competes
+                // with the main thread on 4-core TVs. Card requests ask for hardware bitmaps
+                // themselves, so this is applied as an interceptor rather than a default.
+                if (isTvDevice) add(SoftwareBitmapInterceptor)
                 add(SvgDecoder.Factory())
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
                     add(ImageDecoderDecoder.Factory())
@@ -390,4 +395,10 @@ class ArflixApplication : Application(), Configuration.Provider, ImageLoaderFact
             }
         }
     }
+}
+
+/** Turns off hardware bitmaps for every request, including ones that asked for them. */
+private object SoftwareBitmapInterceptor : coil.intercept.Interceptor {
+    override suspend fun intercept(chain: coil.intercept.Interceptor.Chain): coil.request.ImageResult =
+        chain.proceed(chain.request.newBuilder().allowHardware(false).build())
 }
