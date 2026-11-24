@@ -101,6 +101,35 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
+  selfhost:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - name: Build the self-host image from a plain checkout, as the README describes
+        working-directory: web
+        run: |
+          cp .env.selfhost.example .env.local
+          docker compose --env-file .env.local build
+      - name: Start it and wait for its health endpoint
+        working-directory: web
+        run: |
+          docker compose --env-file .env.local up -d
+          for attempt in $(seq 1 40); do
+            if curl -fsS http://127.0.0.1:3000/version.json >/dev/null; then echo "ready after $attempt tries"; exit 0; fi
+            sleep 3
+          done
+          docker compose --env-file .env.local logs --tail 80
+          exit 1
+      - name: Stop it
+        if: always()
+        working-directory: web
+        run: docker compose --env-file .env.local down -v
+
   publish:
     if: github.repository == 'ProdigyV21/ARVIO' && github.event_name == 'workflow_dispatch' && inputs.publish_preview
     needs: container

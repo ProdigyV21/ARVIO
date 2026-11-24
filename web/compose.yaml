@@ -2,6 +2,7 @@ services:
   arvio:
     build:
       context: .
+      dockerfile: Dockerfile.selfhost
     ports:
       - "${ARVIO_BIND_ADDRESS:-127.0.0.1}:${ARVIO_PORT:-3000}:3000"
     env_file:
