@@ -37,7 +37,7 @@
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"SoftwareApplication","name":"ARVIO","applicationCategory":"MultimediaApplication","operatingSystem":"Android TV, Google TV, Android","url":"https://arvio.tv/","inLanguage":"en","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"downloadUrl":"https://play.google.com/store/apps/details?id=com.arvio.tv","codeRepository":"https://github.com/ProdigyV21/ARVIO","description":"Free, open-source Android TV media player for Jellyfin, Plex, Emby, IPTV and compatible addons. Get the ARVIO APK, connect your sources and track with Trakt or Simkl."}</script>
 
   <title>ARVIO — Free Android TV Media Player &amp; APK</title>
-  <link rel="stylesheet" href="/assets/home-v3.css?v=1">
+  <link rel="stylesheet" href="/assets/home-v3.css?v=2">
 <script defer src="/assets/premium-journey.js?v=2"></script>
 <script defer src="/assets/premium-pricing.js?v=1"></script>
 </head>
@@ -53,22 +53,24 @@
 </header>
 <main id="main">
 <section class="hero hero-v3" id="top">
-  <div class="hero-glow" aria-hidden="true"></div>
   <div class="hero-copy">
-    <a class="release" href="https://github.com/ProdigyV21/ARVIO/releases/tag/v2.3.1" data-release-label="LATEST RELEASE"><span class="dot"></span> ARVIO 2.3.1 IS HERE <span aria-hidden="true">↗</span></a>
     <h1><span class="line">Start on the TV.</span><span class="line headline-accent">Finish on the iPad.</span></h1>
     <p class="hero-lead">Your Jellyfin, Plex and Emby servers, live TV and addons in one app. Profiles, watchlist and progress follow you to every screen.</p>
     <div class="actions" id="hero-actions"><a class="button white hero-apk" href="https://github.com/ProdigyV21/ARVIO/releases/latest"><span class="hero-label">Get the free app</span><span class="hero-label" hidden>Free app for Android &amp; TV</span> <span aria-hidden="true">↗</span></a><a class="button glass hero-web" href="https://web.arvio.tv/" data-premium-placement="hero-membership"><span class="hero-label">Open ARVIO Web</span><span class="hero-label" hidden>Use ARVIO on this device</span> <span aria-hidden="true">↗</span></a></div>
     <script>/* Progressive enhancement: iPhone, iPad, Mac and Windows visitors see ARVIO Web first; Android keeps the free app first and still sees ARVIO Web for their other screens. */(function(){var n=navigator,u=n.userAgent||'',p=(n.userAgentData&&n.userAgentData.platform)||n.platform||'',d=/Android/i.test(u+' '+p)?'android':/iPhone|iPod/.test(u)?'iphone':/iPad/.test(u)||(/Macintosh/.test(u)&&n.maxTouchPoints>1)?'ipad':/Macintosh|Mac OS X/.test(u)||/^mac/i.test(p)?'mac':/Windows/.test(u)||/^win/i.test(p)?'windows':'',a=document.getElementById('hero-actions');if(!d||!a)return;document.documentElement.setAttribute('data-device',d);if(d==='android')return;var apk=a.querySelector('.hero-apk'),web=a.querySelector('.hero-web');a.insertBefore(web,apk);apk.classList.replace('white','glass');web.classList.replace('glass','white');[apk,web].forEach(function(l){l.querySelectorAll('.hero-label').forEach(function(s){s.hidden=!s.hidden;});});})();</script>
     <p class="hero-note"><span>Free on Android TV, Fire TV and phones</span><span class="sep" aria-hidden="true">·</span><span>ARVIO Web for iPad, iPhone and laptop: <span data-plan-price-summary>$2.99/month, or $20 for 12 months.</span></span></p>
-    <div class="hero-downloads"><a class="hero-store" href="https://play.google.com/store/apps/details?id=com.arvio.tv" aria-label="Get ARVIO on Google Play"><img src="/assets/badge-google-play.png" width="646" height="250" alt="Get it on Google Play"></a><a class="hero-github" href="https://github.com/ProdigyV21/ARVIO" aria-label="View ARVIO source on GitHub"><span class="hero-github-badge" aria-hidden="true"><img src="/assets/github-lockup-white.svg" width="448" height="127" alt=""></span></a><a class="hero-tour-link" href="#demo">Watch the 85-second tour</a></div>
+    <div class="hero-downloads"><a class="hero-store" href="https://play.google.com/store/apps/details?id=com.arvio.tv" aria-label="Get ARVIO on Google Play"><img src="/assets/badge-google-play.png" width="646" height="250" alt="Get it on Google Play"></a><a class="hero-github" href="https://github.com/ProdigyV21/ARVIO" aria-label="View ARVIO source on GitHub"><span class="hero-github-badge" aria-hidden="true"><img src="/assets/github-lockup-white.svg" width="448" height="127" alt=""></span></a><a class="release" href="https://github.com/ProdigyV21/ARVIO/releases/tag/v2.3.1" data-release-label="LATEST RELEASE"><span class="dot"></span> ARVIO 2.3.1 IS HERE <span aria-hidden="true">↗</span></a><a class="hero-tour-link" href="#demo">Watch the 85-second tour</a></div>
   </div>
-  <div class="hero-stage" id="screens-you-own" role="img" aria-label="ARVIO on an Android phone, a TV and an iPad, showing the same series and progress">
-    <figure class="device device-phone"><img src="/assets/screenshots-v2/phone/01-home.webp" width="1080" height="2400" alt="" fetchpriority="low"></figure>
-    <figure class="device device-tv"><img src="/assets/screenshots-v2/tv/02-details.webp" width="1920" height="1080" alt="" fetchpriority="high"></figure>
-    <figure class="device device-tablet"><img src="/assets/screenshots-v2/tablet/02-details.webp" width="2560" height="1480" alt=""></figure>
-    <span class="stage-pill pill-sync"><span class="dot"></span> Same profiles and watchlist</span>
-    <span class="stage-pill pill-resume"><span class="dot"></span> Picks up where you left off</span>
+</section>
+<section class="handoff" id="screens-you-own" aria-label="The same series on a TV, an iPad and a phone">
+  <div class="handoff-sticky">
+    <div class="handoff-stage" role="img" aria-label="ARVIO on a TV, an iPad and an Android phone, showing the same series and progress">
+      <figure class="device device-tv"><img class="ambient" src="/assets/screenshots-v2/tv/02-details.webp" width="1920" height="1080" alt="" aria-hidden="true"><img src="/assets/screenshots-v2/tv/02-details.webp" width="1920" height="1080" alt="" fetchpriority="high"><span class="tv-paused" aria-hidden="true"><svg viewBox="0 0 24 24" width="28" height="28"><rect x="6" y="5" width="4" height="14" rx="1.2"/><rect x="14" y="5" width="4" height="14" rx="1.2"/></svg></span></figure>
+      <figure class="device device-tablet"><img src="/assets/screenshots-v2/tablet/02-details.webp" width="2560" height="1480" alt=""></figure>
+      <figure class="device device-phone"><img src="/assets/screenshots-v2/phone/01-home.webp" width="1080" height="2400" alt="" loading="lazy"></figure>
+      <div class="resume-chip" aria-hidden="true"><span class="resume-text"><span class="cap cap-tv">Paused on the TV</span><span class="cap cap-ipad">Resumed on the iPad</span></span><span class="resume-bar"><i></i></span></div>
+    </div>
+    <p class="handoff-note">Same account, same profiles, same spot. ARVIO Cloud keeps your watchlist and progress in step on every screen.</p>
   </div>
 </section>
 <section class="connections wrap" aria-label="Compatible services"><p>WORKS WITH THE SERVICES YOU ALREADY USE</p><div><span><a href="/jellyfin-android-tv/">Jellyfin</a></span><span><a href="/plex-emby-jellyfin/">Plex</a></span><span><a href="/plex-emby-jellyfin/">Emby</a></span><span><a href="/live-tv-epg/">IPTV</a></span><span><a href="/stremio-addons-android-tv/" hreflang="en">Addons</a></span><span><a href="/trakt-simkl-sync/">Trakt</a></span><span><a href="/trakt-simkl-sync/">Simkl</a></span></div><small>Your own accounts, libraries and sources. ARVIO includes no media or subscriptions.</small></section>
@@ -134,5 +136,6 @@
 <script type="application/json" id="home-copy">{}</script>
 <script src="/assets/home-v2.js?v=4" defer></script>
 <script src="/assets/promo-video.js?v=2" defer></script>
+<script src="/assets/handoff.js?v=1" defer></script>
 </body>
 </html>
