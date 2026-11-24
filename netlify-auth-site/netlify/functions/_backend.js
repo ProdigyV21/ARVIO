@@ -1449,11 +1449,14 @@ async function handleTmdbProxy(event) {
       statusCode: response.status,
       headers: {
         ...JSON_HEADERS,
-        "cache-control": response.ok ? "public, max-age=3600, stale-while-revalidate=86400" : "no-store",
-        // CRITICAL: Netlify's CDN cache key excludes the query string by default,
-        // so without this every /discover request shares ONE cache entry and all
-        // provider rows show identical content. Vary on the full query.
-        "netlify-vary": "query"
+        // Clients (web data cache, app HTTP cache) key on the full URL, so they
+        // may keep a copy. Netlify's edge must not: it kept serving one cached
+        // body for unrelated queries (an episode object for "The Matrix"
+        // searches) even with Netlify-Vary: query, and its hit rate on this
+        // function was ~4%, so the shared edge copy buys almost nothing.
+        "cache-control": response.ok ? "public, max-age=3600" : "no-store",
+        "netlify-cdn-cache-control": "no-store",
+        "cdn-cache-control": "no-store"
       },
       body: text
     };
