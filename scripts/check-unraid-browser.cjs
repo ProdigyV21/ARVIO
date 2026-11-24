@@ -113,18 +113,21 @@ async function exerciseContext(browser, baseUrl, scenario, evidenceDir) {
     await profile.click();
     await expect(page.locator('.settings-gear')).toBeVisible();
     await page.locator('.settings-gear').click();
-    await expect(page.getByRole('heading', { name: 'Local Account', exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Local account', exact: true })).toBeVisible();
     await expect(page.getByText('Profiles and settings are saved in this browser. ARVIO Cloud is not connected.', { exact: true }))
       .toBeVisible();
     await assertIndependentUi(page, scenario);
 
     assert.equal(await page.getByRole('button', { name: 'Telegram', exact: true }).count(), 0,
       'Disabled integration must not offer a Telegram account action.');
+    // The settings page is split into sections; the tracker panels live under Connected services.
+    await page.locator('.st-nav-item').filter({ hasText: 'Connected services' }).click();
+    await expect(page.getByRole('heading', { name: 'Connected services', exact: true })).toBeVisible();
+    const providerPanel = (provider) => page.locator('.st-group').filter({
+      has: page.getByRole('heading', { name: provider, exact: true })
+    });
     for (const provider of ['Trakt', 'Simkl']) {
-      const panel = page.locator('.settings-panel-card').filter({
-        has: page.getByRole('heading', { name: provider, exact: true })
-      });
-      const button = panel.getByRole('button', { name: 'Start device link', exact: true });
+      const button = providerPanel(provider).getByRole('button', { name: `Connect ${provider}`, exact: true });
       await expect(button).toBeVisible();
       if (scenario === 'bootstrap-blocked') await expect(button).toBeDisabled();
       else await expect(button).toBeEnabled();
@@ -136,8 +139,8 @@ async function exerciseContext(browser, baseUrl, scenario, evidenceDir) {
     });
     if (scenario === 'bootstrap-blocked') {
       assert.equal(runtimeIds, null, 'Blocked bootstrap does not invent or reuse runtime credentials.');
-      await expect(page.getByText('Trakt client id is missing.', { exact: true })).toBeVisible();
-      await expect(page.getByText('Simkl client configuration is missing.', { exact: true })).toBeVisible();
+      await expect(providerPanel('Trakt').getByText('Missing config', { exact: true })).toBeVisible();
+      await expect(providerPanel('Simkl').getByText('Missing config', { exact: true })).toBeVisible();
     } else {
       assert.deepEqual(runtimeIds, EXPECTED_PUBLIC_IDS, 'UI receives only the expected dummy public tracker IDs.');
       assert.ok(stats.delayedBootstrapMs >= BOOTSTRAP_DELAY_MS - 100, 'Bootstrap was deliberately delayed.');
