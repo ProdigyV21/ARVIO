@@ -37,15 +37,15 @@ export function WebFeaturePreview({ checkout, isSignedIn, expired = false, onCon
     <div className="web-preview-layout">
       <div className="web-preview-content">
         <section className="web-preview-hero" aria-labelledby="web-preview-title">
-          <p className="web-preview-eyebrow"><span />ARVIO WEB · PREMIUM</p>
           <h1 id="web-preview-title">{translateUi("Your browser. Your ARVIO.")}</h1>
           <p className="web-preview-lead">{translateUi("Take your existing ARVIO setup to Windows, Mac, iPhone, iPad and smart-TV browsers. Your profiles, libraries, addons and progress stay connected through ARVIO Cloud.")}</p>
+          {!isSignedIn && <p className="web-preview-carryover"><Cloud size={16} /><span>{translateUi("Your profiles, watchlist and addons from the Android app are already there. Already a member? Sign in to continue.")}</span></p>}
           <div className="web-preview-platforms"><Monitor size={16} /><span>Windows · Mac · Linux · iPhone · iPad · {translateUi("Smart-TV browsers")}</span></div>
           {/* Phones: the main action without scrolling past the screenshots. */}
           <div className="web-preview-hero-cta">{checkout}<p>
             {translateUi("Monthly · $2.99")}
             {kofiYearlyUrl() && <> / {translateUi("12-month pass · {value0}", { value0: yearlyPrice })}</>}
-            {". "}{translateUi("You only pay when you press Play.")}
+            {". "}{translateUi("Look around for free. Premium is needed to play.")}
           </p></div>
           <AndroidAppNote />
         </section>
@@ -82,8 +82,7 @@ export function WebFeaturePreview({ checkout, isSignedIn, expired = false, onCon
           <li><Check size={16} />{translateUi("Same profiles, libraries and watch progress")}</li>
         </ul>
         <div className="web-preview-checkout">{checkout}</div>
-        <p className="web-preview-unlock"><ShieldCheck size={16} /><span>{translateUi("Look around first: sign in with your ARVIO account and you only pay when you press Play.")}</span></p>
-        {!isSignedIn && <p className="web-preview-account-note">{translateUi("Your profiles, watchlist and addons from the Android app are already there. Already a member? Sign in to continue.")}</p>}
+        <p className="web-preview-unlock"><ShieldCheck size={16} /><span>{translateUi("Look around for free. Premium is needed to play.")}</span></p>
         <div className="web-preview-free"><p>{translateUi("Android and TV app remains completely free")}</p><a href="https://github.com/ProdigyV21/ARVIO/blob/main/web/README.md" target="_blank" rel="noopener noreferrer">{translateUi("Self-host ARVIO Web for free.")}<ArrowRight size={13} /></a></div>
       </aside>
     </div>

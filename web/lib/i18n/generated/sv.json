@@ -1566,5 +1566,11 @@
   "Maximum of 10 IPTV playlists reached": "Max 10 IPTV-spellistor har nåtts",
   "Regional price · save {value0} vs. 12 monthly payments": "Regionalt pris · spara {value0} jämfört med 12 månadsbetalningar",
   "One payment, no automatic renewal. About {value0} a month.": "En enda betalning, ingen automatisk förnyelse. Cirka {value0} i månaden.",
-  "12-month pass · {value0}": "12-månaderspass · {value0}"
+  "12-month pass · {value0}": "12-månaderspass · {value0}",
+  "Look around for free. Premium is needed to play.": "Titta runt gratis. Premium krävs för att spela upp.",
+  "Watch {title} with ARVIO Premium": "Se {title} med ARVIO Premium",
+  "Watch this with ARVIO Premium": "Se detta med ARVIO Premium",
+  "Watch Live TV with ARVIO Premium": "Se live-tv med ARVIO Premium",
+  "Download with ARVIO Premium": "Ladda ner med ARVIO Premium",
+  "Open streams with ARVIO Premium": "Öppna strömmar med ARVIO Premium"
 }

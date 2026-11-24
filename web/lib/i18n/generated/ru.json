@@ -1563,5 +1563,11 @@
   "Maximum of 10 IPTV playlists reached": "Достигнут максимум — 10 плейлистов IPTV",
   "Regional price · save {value0} vs. 12 monthly payments": "Региональная цена · экономия {value0} по сравнению с 12 ежемесячными платежами",
   "One payment, no automatic renewal. About {value0} a month.": "Один платёж, без автопродления. Около {value0} в месяц.",
-  "12-month pass · {value0}": "Пропуск на 12 месяцев · {value0}"
+  "12-month pass · {value0}": "Пропуск на 12 месяцев · {value0}",
+  "Look around for free. Premium is needed to play.": "Смотрите бесплатно. Для воспроизведения нужен Premium.",
+  "Watch {title} with ARVIO Premium": "Смотрите {title} с ARVIO Premium",
+  "Watch this with ARVIO Premium": "Смотрите это с ARVIO Premium",
+  "Watch Live TV with ARVIO Premium": "Смотрите прямой эфир с ARVIO Premium",
+  "Download with ARVIO Premium": "Скачивайте с ARVIO Premium",
+  "Open streams with ARVIO Premium": "Открывайте потоки с ARVIO Premium"
 }

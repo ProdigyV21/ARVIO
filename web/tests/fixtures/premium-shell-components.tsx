@@ -27,3 +27,4 @@ export const PartnerLinkHandler = marker('partner-link');
 export function installTvNav() {}
 export function installGamepadNav() {}
 export function focusAfterViewChange() { return () => {}; }
+export function isTvBrowser() { return false; }

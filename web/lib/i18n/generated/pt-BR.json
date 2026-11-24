@@ -1426,5 +1426,11 @@
   "Maximum of 10 IPTV playlists reached": "Limite de 10 listas IPTV atingido",
   "Regional price · save {value0} vs. 12 monthly payments": "Preço regional · economize {value0} em relação a 12 pagamentos mensais",
   "One payment, no automatic renewal. About {value0} a month.": "Pagamento único, sem renovação automática. Cerca de {value0} por mês.",
-  "12-month pass · {value0}": "Passe de 12 meses · {value0}"
+  "12-month pass · {value0}": "Passe de 12 meses · {value0}",
+  "Look around for free. Premium is needed to play.": "Explore de graça. Para reproduzir, é preciso ter Premium.",
+  "Watch {title} with ARVIO Premium": "Assista a {title} com o ARVIO Premium",
+  "Watch this with ARVIO Premium": "Assista com o ARVIO Premium",
+  "Watch Live TV with ARVIO Premium": "Assista TV ao vivo com o ARVIO Premium",
+  "Download with ARVIO Premium": "Baixe com o ARVIO Premium",
+  "Open streams with ARVIO Premium": "Abra streams com o ARVIO Premium"
 }

@@ -240,7 +240,10 @@
 .premium-offer { position: fixed; inset: 0; margin: auto; width: min(560px, calc(100vw - 24px)); max-height: calc(100dvh - 24px); overflow-y: auto; padding: 26px; border: 1px solid #3a3f43; border-radius: 16px; background: #111416; color: #f4f5f6; box-shadow: 0 24px 90px #0009; text-align: start; }
 .premium-offer::backdrop { background: #000c; }
 .premium-offer h2 { margin: 0 0 10px; padding-inline-end: 28px; font-size: 22px; line-height: 1.3; letter-spacing: -.02em; }
-.premium-offer-eyebrow { display: flex; align-items: center; gap: 7px; margin: 0 0 12px; color: #9adebf; font-size: 11px; font-weight: 600; letter-spacing: .14em; }
+.premium-offer .membership-close { z-index: 2; border-radius: 999px; background: #0b0d0ecc; }
+.premium-offer-artwork { position: relative; height: 168px; margin: -26px -26px 18px; overflow: hidden; border-radius: 15px 15px 0 0; background: #0b0d0e; }
+.premium-offer-artwork img { width: 100%; height: 100%; object-fit: cover; object-position: center 25%; }
+.premium-offer-artwork::after { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, #11141600 35%, #111416 100%); }
 .premium-offer-lead { margin: 0 0 16px; color: #aab0b6; font-size: 14px; line-height: 1.6; }
 .premium-offer-video { display: block; width: 100%; aspect-ratio: 16 / 9; border: 1px solid #2e3337; border-radius: 10px; background: #000; object-fit: cover; }
 .premium-offer-plans { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
@@ -267,6 +270,7 @@
 .premium-exit-actions { display: flex; align-items: center; gap: 12px; margin-top: 10px; }
 @media (max-width: 560px) {
   .premium-offer { padding: 20px 16px; }
+  .premium-offer-artwork { height: 140px; margin: -20px -16px 14px; }
   .premium-offer-plans { grid-template-columns: minmax(0, 1fr); } }
 
 /* Member notices: grace banner, first-days checklist, what's new. */

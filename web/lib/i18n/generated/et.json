@@ -1563,5 +1563,11 @@
   "Maximum of 10 IPTV playlists reached": "Saavutatud on maksimaalselt 10 IPTV esitusloendit",
   "Regional price · save {value0} vs. 12 monthly payments": "Piirkondlik hind · säästa {value0} võrreldes 12 kuumaksega",
   "One payment, no automatic renewal. About {value0} a month.": "Ühekordne makse, automaatset uuendamist pole. Umbes {value0} kuus.",
-  "12-month pass · {value0}": "12 kuu pass · {value0}"
+  "12-month pass · {value0}": "12 kuu pass · {value0}",
+  "Look around for free. Premium is needed to play.": "Vaata ringi tasuta. Esitamiseks on vaja Premiumit.",
+  "Watch {title} with ARVIO Premium": "Vaata {title} ARVIO Premiumiga",
+  "Watch this with ARVIO Premium": "Vaata seda ARVIO Premiumiga",
+  "Watch Live TV with ARVIO Premium": "Vaata otse-TV-d ARVIO Premiumiga",
+  "Download with ARVIO Premium": "Laadi alla ARVIO Premiumiga",
+  "Open streams with ARVIO Premium": "Ava vood ARVIO Premiumiga"
 }

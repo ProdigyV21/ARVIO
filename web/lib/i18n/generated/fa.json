@@ -1561,5 +1561,11 @@
   "Maximum of 10 IPTV playlists reached": "به حداکثر ۱۰ فهرست پخش IPTV رسیدید",
   "Regional price · save {value0} vs. 12 monthly payments": "قیمت منطقه‌ای · {value0} صرفه‌جویی در مقایسه با ۱۲ پرداخت ماهانه",
   "One payment, no automatic renewal. About {value0} a month.": "یک بار پرداخت، بدون تمدید خودکار. حدود {value0} در ماه.",
-  "12-month pass · {value0}": "اشتراک ۱۲ ماهه · {value0}"
+  "12-month pass · {value0}": "اشتراک ۱۲ ماهه · {value0}",
+  "Look around for free. Premium is needed to play.": "رایگان نگاهی بیندازید. برای پخش به Premium نیاز دارید.",
+  "Watch {title} with ARVIO Premium": "{title} را با ARVIO Premium تماشا کنید",
+  "Watch this with ARVIO Premium": "این را با ARVIO Premium تماشا کنید",
+  "Watch Live TV with ARVIO Premium": "تلویزیون زنده را با ARVIO Premium تماشا کنید",
+  "Download with ARVIO Premium": "با ARVIO Premium دانلود کنید",
+  "Open streams with ARVIO Premium": "استریم‌ها را با ARVIO Premium باز کنید"
 }

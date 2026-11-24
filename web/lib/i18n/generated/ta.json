@@ -1562,5 +1562,11 @@
   "Maximum of 10 IPTV playlists reached": "அதிகபட்சம் 10 IPTV பிளேலிஸ்ட்களின் வரம்பை எட்டியது",
   "Regional price · save {value0} vs. 12 monthly payments": "பிராந்திய விலை · 12 மாதாந்திரக் கட்டணங்களுடன் ஒப்பிடும்போது {value0} சேமிப்பு",
   "One payment, no automatic renewal. About {value0} a month.": "ஒரே கட்டணம், தானியங்கு புதுப்பித்தல் இல்லை. மாதத்திற்குச் சுமார் {value0}.",
-  "12-month pass · {value0}": "12 மாத பாஸ் · {value0}"
+  "12-month pass · {value0}": "12 மாத பாஸ் · {value0}",
+  "Look around for free. Premium is needed to play.": "இலவசமாகப் பாருங்கள். இயக்க Premium தேவை.",
+  "Watch {title} with ARVIO Premium": "ARVIO Premium மூலம் {title} பாருங்கள்",
+  "Watch this with ARVIO Premium": "ARVIO Premium மூலம் இதைப் பாருங்கள்",
+  "Watch Live TV with ARVIO Premium": "ARVIO Premium மூலம் நேரலை டிவி பாருங்கள்",
+  "Download with ARVIO Premium": "ARVIO Premium மூலம் பதிவிறக்குங்கள்",
+  "Open streams with ARVIO Premium": "ARVIO Premium மூலம் ஸ்ட்ரீம்களைத் திறக்கவும்"
 }
