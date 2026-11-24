@@ -1569,5 +1569,8 @@
   "Watch this with ARVIO Premium": "Vaata seda ARVIO Premiumiga",
   "Watch Live TV with ARVIO Premium": "Vaata otse-TV-d ARVIO Premiumiga",
   "Download with ARVIO Premium": "Laadi alla ARVIO Premiumiga",
-  "Open streams with ARVIO Premium": "Ava vood ARVIO Premiumiga"
+  "Open streams with ARVIO Premium": "Ava vood ARVIO Premiumiga",
+  "Filter categories": "Filtreeri kategooriaid",
+  "Clear filter": "Tühjenda filter",
+  "No categories match \"{value0}\".": "Ükski kategooria ei vasta päringule \"{value0}\"."
 }

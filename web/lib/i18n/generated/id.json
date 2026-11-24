@@ -1571,5 +1571,8 @@
   "Watch this with ARVIO Premium": "Tonton ini dengan ARVIO Premium",
   "Watch Live TV with ARVIO Premium": "Tonton TV Langsung dengan ARVIO Premium",
   "Download with ARVIO Premium": "Unduh dengan ARVIO Premium",
-  "Open streams with ARVIO Premium": "Buka stream dengan ARVIO Premium"
+  "Open streams with ARVIO Premium": "Buka stream dengan ARVIO Premium",
+  "Filter categories": "Filter kategori",
+  "Clear filter": "Hapus filter",
+  "No categories match \"{value0}\".": "Tidak ada kategori yang cocok dengan \"{value0}\"."
 }

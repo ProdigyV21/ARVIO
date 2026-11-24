@@ -1572,5 +1572,8 @@
   "Watch this with ARVIO Premium": "Shiko këtë me ARVIO Premium",
   "Watch Live TV with ARVIO Premium": "Shiko TV live me ARVIO Premium",
   "Download with ARVIO Premium": "Shkarko me ARVIO Premium",
-  "Open streams with ARVIO Premium": "Hap transmetimet me ARVIO Premium"
+  "Open streams with ARVIO Premium": "Hap transmetimet me ARVIO Premium",
+  "Filter categories": "Filtro kategoritë",
+  "Clear filter": "Pastro filtrin",
+  "No categories match \"{value0}\".": "Asnjë kategori nuk përputhet me \"{value0}\"."
 }

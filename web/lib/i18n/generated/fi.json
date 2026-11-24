@@ -1571,5 +1571,8 @@
   "Watch this with ARVIO Premium": "Katso tämä ARVIO Premiumilla",
   "Watch Live TV with ARVIO Premium": "Katso suoraa TV:tä ARVIO Premiumilla",
   "Download with ARVIO Premium": "Lataa ARVIO Premiumilla",
-  "Open streams with ARVIO Premium": "Avaa striimit ARVIO Premiumilla"
+  "Open streams with ARVIO Premium": "Avaa striimit ARVIO Premiumilla",
+  "Filter categories": "Suodata luokkia",
+  "Clear filter": "Tyhjennä suodatin",
+  "No categories match \"{value0}\".": "Mikään luokka ei vastaa hakua \"{value0}\"."
 }

@@ -1414,5 +1414,8 @@
   "Watch this with ARVIO Premium": "Mit ARVIO Premium ansehen",
   "Watch Live TV with ARVIO Premium": "Live-TV mit ARVIO Premium ansehen",
   "Download with ARVIO Premium": "Mit ARVIO Premium herunterladen",
-  "Open streams with ARVIO Premium": "Streams mit ARVIO Premium öffnen"
+  "Open streams with ARVIO Premium": "Streams mit ARVIO Premium öffnen",
+  "Filter categories": "Kategorien filtern",
+  "Clear filter": "Filter löschen",
+  "No categories match \"{value0}\".": "Keine Kategorien passen zu „{value0}“."
 }

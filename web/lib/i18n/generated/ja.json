@@ -1569,5 +1569,8 @@
   "Watch this with ARVIO Premium": "ARVIO Premiumで視聴",
   "Watch Live TV with ARVIO Premium": "ARVIO Premiumでライブ TV を視聴",
   "Download with ARVIO Premium": "ARVIO Premiumでダウンロード",
-  "Open streams with ARVIO Premium": "ARVIO Premiumでストリームを開く"
+  "Open streams with ARVIO Premium": "ARVIO Premiumでストリームを開く",
+  "Filter categories": "カテゴリを絞り込む",
+  "Clear filter": "フィルターをクリア",
+  "No categories match \"{value0}\".": "「{value0}」に一致するカテゴリはありません。"
 }

@@ -1568,5 +1568,8 @@
   "Watch this with ARVIO Premium": "ARVIO Premium மூலம் இதைப் பாருங்கள்",
   "Watch Live TV with ARVIO Premium": "ARVIO Premium மூலம் நேரலை டிவி பாருங்கள்",
   "Download with ARVIO Premium": "ARVIO Premium மூலம் பதிவிறக்குங்கள்",
-  "Open streams with ARVIO Premium": "ARVIO Premium மூலம் ஸ்ட்ரீம்களைத் திறக்கவும்"
+  "Open streams with ARVIO Premium": "ARVIO Premium மூலம் ஸ்ட்ரீம்களைத் திறக்கவும்",
+  "Filter categories": "வகைகளை வடிகட்டு",
+  "Clear filter": "வடிகட்டியை அழி",
+  "No categories match \"{value0}\".": "\"{value0}\" உடன் பொருந்தும் வகைகள் இல்லை."
 }

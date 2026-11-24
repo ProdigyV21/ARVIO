@@ -1567,5 +1567,8 @@
   "Watch this with ARVIO Premium": "شاهد هذا مع ARVIO Premium",
   "Watch Live TV with ARVIO Premium": "شاهد البث المباشر مع ARVIO Premium",
   "Download with ARVIO Premium": "نزّل مع ARVIO Premium",
-  "Open streams with ARVIO Premium": "افتح البث مع ARVIO Premium"
+  "Open streams with ARVIO Premium": "افتح البث مع ARVIO Premium",
+  "Filter categories": "تصفية الفئات",
+  "Clear filter": "مسح عامل التصفية",
+  "No categories match \"{value0}\".": "لا توجد فئات تطابق \"{value0}\"."
 }

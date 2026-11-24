@@ -1605,5 +1605,8 @@
   "Watch this with ARVIO Premium": "ARVIO Premium सह हे पहा",
   "Watch Live TV with ARVIO Premium": "ARVIO Premium सह लाइव्ह टीव्ही पहा",
   "Download with ARVIO Premium": "ARVIO Premium सह डाउनलोड करा",
-  "Open streams with ARVIO Premium": "ARVIO Premium सह स्ट्रीम उघडा"
+  "Open streams with ARVIO Premium": "ARVIO Premium सह स्ट्रीम उघडा",
+  "Filter categories": "श्रेणी फिल्टर करा",
+  "Clear filter": "फिल्टर साफ करा",
+  "No categories match \"{value0}\".": "\"{value0}\" शी जुळणारी कोणतीही श्रेणी नाही."
 }

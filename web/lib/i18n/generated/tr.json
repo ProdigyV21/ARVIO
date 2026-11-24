@@ -1569,5 +1569,8 @@
   "Watch this with ARVIO Premium": "ARVIO Premium ile izleyin",
   "Watch Live TV with ARVIO Premium": "Canlı TV'yi ARVIO Premium ile izleyin",
   "Download with ARVIO Premium": "ARVIO Premium ile indirin",
-  "Open streams with ARVIO Premium": "Yayınları ARVIO Premium ile açın"
+  "Open streams with ARVIO Premium": "Yayınları ARVIO Premium ile açın",
+  "Filter categories": "Kategorileri filtrele",
+  "Clear filter": "Filtreyi temizle",
+  "No categories match \"{value0}\".": "\"{value0}\" ile eşleşen kategori yok."
 }

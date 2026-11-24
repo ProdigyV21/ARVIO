@@ -1569,5 +1569,8 @@
   "Watch this with ARVIO Premium": "Tazama hii ukiwa na ARVIO Premium",
   "Watch Live TV with ARVIO Premium": "Tazama TV mubashara ukiwa na ARVIO Premium",
   "Download with ARVIO Premium": "Pakua ukiwa na ARVIO Premium",
-  "Open streams with ARVIO Premium": "Fungua mitiririko ukiwa na ARVIO Premium"
+  "Open streams with ARVIO Premium": "Fungua mitiririko ukiwa na ARVIO Premium",
+  "Filter categories": "Chuja kategoria",
+  "Clear filter": "Futa kichujio",
+  "No categories match \"{value0}\".": "Hakuna kategoria inayolingana na \"{value0}\"."
 }

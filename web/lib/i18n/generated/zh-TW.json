@@ -1567,5 +1567,8 @@
   "Watch this with ARVIO Premium": "使用 ARVIO Premium 觀看",
   "Watch Live TV with ARVIO Premium": "使用 ARVIO Premium 觀看直播電視",
   "Download with ARVIO Premium": "使用 ARVIO Premium 下載",
-  "Open streams with ARVIO Premium": "使用 ARVIO Premium 開啟串流"
+  "Open streams with ARVIO Premium": "使用 ARVIO Premium 開啟串流",
+  "Filter categories": "篩選分類",
+  "Clear filter": "清除篩選",
+  "No categories match \"{value0}\".": "沒有符合「{value0}」的分類。"
 }

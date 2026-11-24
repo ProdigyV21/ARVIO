@@ -1569,5 +1569,8 @@
   "Watch this with ARVIO Premium": "Nézd ezt ARVIO Premiummal",
   "Watch Live TV with ARVIO Premium": "Nézz élő TV-t ARVIO Premiummal",
   "Download with ARVIO Premium": "Tölts le ARVIO Premiummal",
-  "Open streams with ARVIO Premium": "Nyiss meg streameket ARVIO Premiummal"
+  "Open streams with ARVIO Premium": "Nyiss meg streameket ARVIO Premiummal",
+  "Filter categories": "Kategóriák szűrése",
+  "Clear filter": "Szűrő törlése",
+  "No categories match \"{value0}\".": "Nincs a(z) „{value0}” keresésnek megfelelő kategória."
 }
