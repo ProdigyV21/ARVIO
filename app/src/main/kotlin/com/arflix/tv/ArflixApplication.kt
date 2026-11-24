@@ -243,7 +243,13 @@ class ArflixApplication : Application(), Configuration.Provider, ImageLoaderFact
                     // image budget instead of a percent of largeHeap memory so
                     // low-RAM TVs do not drift into zram pressure while rows
                     // are being scrolled.
-                    .maxSizeBytes(imageMemoryCacheBytes(isTvDevice, isLowRamDevice))
+                    .maxSizeBytes(minOf(com.arflix.tv.util.playbackMemoryBudget(this).artworkBytes,
+                        when {
+                            isTvDevice && isLowRamDevice -> 32 * 1024 * 1024
+                            isTvDevice -> 48 * 1024 * 1024
+                            else -> 64 * 1024 * 1024
+                        }
+                    ))
                     .build()
             }
             .diskCache {
@@ -316,23 +322,6 @@ class ArflixApplication : Application(), Configuration.Provider, ImageLoaderFact
         } catch (e: Exception) {
             AppLogger.recordException(e)
         }
-    }
-
-    private fun imageMemoryCacheBytes(isTvDevice: Boolean, isLowRamDevice: Boolean): Int {
-        val budget = com.arflix.tv.util.playbackMemoryBudget(this)
-        // TVs above the low-RAM line (more than ~2.3 GB) have room for a larger image cache.
-        // With 48 MB a 2.4 GB TV decoded 336 images in 22 s of scrolling Home back and forth,
-        // and every re-decode costs CPU and GC on a 4-core box. 2 GB and low-RAM TVs keep the
-        // fixed budget that protects them from zram pressure.
-        if (isTvDevice && !isLowRamDevice && !budget.lowPhysicalRam) return 96 * 1024 * 1024
-        return minOf(
-            budget.artworkBytes,
-            when {
-                isTvDevice && isLowRamDevice -> 32 * 1024 * 1024
-                isTvDevice -> 48 * 1024 * 1024
-                else -> 64 * 1024 * 1024
-            }
-        )
     }
 
     private fun isLowRamDevice(): Boolean {
