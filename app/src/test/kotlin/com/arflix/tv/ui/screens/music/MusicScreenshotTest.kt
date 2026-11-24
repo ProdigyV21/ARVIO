@@ -20,6 +20,7 @@ import androidx.media3.common.Player
 import androidx.test.core.app.ApplicationProvider
 import coil.Coil
 import coil.ImageLoader
+import coil.map.Mapper
 import com.arflix.tv.music.MusicAddonSource
 import kotlinx.coroutines.runBlocking
 import okhttp3.OkHttpClient
@@ -158,6 +159,9 @@ class MusicScreenshotTest {
 
     private val liveAddon: String? = System.getenv("ARVIO_SCREENSHOTS_LIVE")?.takeIf { it.isNotBlank() }
 
+    /** Live album ids to leave out, comma separated, e.g. one with unsuitable cover art. */
+    private val skip: Set<String> = System.getenv("ARVIO_SCREENSHOTS_SKIP").orEmpty().split(',').map { it.trim() }.filter { it.isNotEmpty() }.toSet()
+
     private class Sample(val home: MusicUiState, val album: MusicAlbum, val tracks: List<MusicTrack>, val artists: List<MusicArtist>)
 
     /** Downloads a cover once, so the screenshot loads it from disk like the sample covers. */
@@ -181,7 +185,7 @@ class MusicScreenshotTest {
             val addon = MusicAddonSource.install(http, addonUrl)
             val source = MusicAddonSource(http, addon)
             val shelves = source.shelves().map { shelf ->
-                shelf.copy(albums = shelf.albums.take(8).map { it.copy(coverUrl = download(http, it.coverUrl)) })
+                shelf.copy(albums = shelf.albums.filterNot { it.id in skip }.take(8).map { it.copy(coverUrl = download(http, it.coverUrl)) })
             }
             // The first playlist-like album makes a better album page than a 100-track chart.
             val picked = shelves.drop(1).firstOrNull()?.albums?.firstOrNull() ?: shelves.first().albums.first()
@@ -222,7 +226,10 @@ class MusicScreenshotTest {
         assumeTrue(!out.isNullOrBlank())
         // Software bitmaps, so covers can be drawn into the screenshot canvas.
         Coil.setImageLoader(
-            ImageLoader.Builder(ApplicationProvider.getApplicationContext<Application>()).allowHardware(false).crossfade(false).build()
+            ImageLoader.Builder(ApplicationProvider.getApplicationContext<Application>()).allowHardware(false).crossfade(false)
+                // A Windows path like C:\x.png would otherwise be read as a URI with scheme "C".
+                .components { add(Mapper<String, File> { data, _ -> File(data).takeIf { it.isAbsolute && it.isFile } }) }
+                .build()
         )
         compose.mainClock.autoAdvance = false
         compose.setContent {
