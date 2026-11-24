@@ -981,7 +981,7 @@ fun StreamSelector(
                                 .weight(1f)
                                 .arvioDpadFocusGroup()
                         ) {
-                            items(flatPresentations.size, key = { streamKeys[it] }) { index ->
+                            items(flatPresentations.size, key = { streamKeys[it] }, contentType = { "StreamSelector.flatPresentations" }) { index ->
                                 val presentation = flatPresentations[index]
                                 MobileStreamCard(
                                     presentation = presentation,
@@ -1176,7 +1176,7 @@ private fun OledSourceSelectorTv(
                             .arvioDpadFocusGroup()
                     ) {
                         flatPresentations.forEachIndexed { index, presentation ->
-                            item(key = streamKeys[index]) {
+                            item(key = streamKeys[index], contentType = "StreamSelector.item") {
                                 OledSourceRow(
                                     presentation = presentation,
                                     showAddonStreamDetails = showAddonStreamDetails,
@@ -2044,7 +2044,7 @@ private fun SourceAddonRail(
                 modifier = Modifier.fillMaxSize()
             ) {
                 tabLabels.forEachIndexed { index, label ->
-                    item(key = tabKeys.getOrElse(index) { "source_addon:fallback:$index" }) {
+                    item(key = tabKeys.getOrElse(index) { "source_addon:fallback:$index" }, contentType = "StreamSelector.item2") {
                         AddonRailItem(
                             text = label,
                             isSelected = index == selectedTabIndex,

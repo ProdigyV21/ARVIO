@@ -249,7 +249,7 @@ fun SkeletonCategoryRow(
                 contentPadding = PaddingValues(start = 16.dp, end = 48.dp),
                 horizontalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                items(cardCount) {
+                items(cardCount, contentType = { "SkeletonLoader.cardCount" }) {
                     when (cardType) {
                         SkeletonCardType.POSTER -> SkeletonPosterCard()
                         SkeletonCardType.MEDIA -> SkeletonMediaCard()
@@ -263,7 +263,7 @@ fun SkeletonCategoryRow(
                 contentPadding = PaddingValues(end = 48.dp),
                 horizontalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                items(cardCount) {
+                items(cardCount, contentType = { "SkeletonLoader.cardCount2" }) {
                     when (cardType) {
                         SkeletonCardType.POSTER -> SkeletonPosterCard()
                         SkeletonCardType.MEDIA -> SkeletonMediaCard()

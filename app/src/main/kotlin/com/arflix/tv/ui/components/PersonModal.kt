@@ -372,7 +372,7 @@ fun PersonModal(
                                 contentPadding = PaddingValues(end = 24.dp),
                                 horizontalArrangement = Arrangement.spacedBy(16.dp)
                             ) {
-                                itemsIndexed(person.knownFor) { index, item ->
+                                itemsIndexed(person.knownFor, contentType = { _, _ -> "PersonModal.person" }) { index, item ->
                                     HorizontalKnownForCard(
                                         item = item,
                                         isFocused = index == focusedKnownForIndex
@@ -519,7 +519,7 @@ private fun MobilePersonContent(
                 contentPadding = PaddingValues(end = 16.dp),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                itemsIndexed(person.knownFor) { index, item ->
+                itemsIndexed(person.knownFor, contentType = { _, _ -> "PersonModal.person2" }) { index, item ->
                     Column(
                         modifier = Modifier
                             .width(110.dp)

@@ -208,7 +208,7 @@ internal fun DiscoverFilterPanel(
             verticalArrangement = Arrangement.spacedBy(8.dp),
             modifier = Modifier.fillMaxWidth().heightIn(max = maxContentHeight).padding(top = 10.dp)
         ) {
-            items(lines, key = { it.key }) { line ->
+            items(lines, key = { it.key }, contentType = { "DiscoverFilterPanel.lines" }) { line ->
                 when (line) {
                     is PanelLine.Entries -> PanelEntriesLine(
                         line = line,

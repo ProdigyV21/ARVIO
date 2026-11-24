@@ -5898,7 +5898,7 @@ fun FullscreenSourcesOverlay(
                             verticalArrangement = Arrangement.spacedBy(8.dp),
                             modifier = Modifier.fillMaxWidth().weight(1f)
                         ) {
-                            items(variants, key = { it.id }) { variant ->
+                            items(variants, key = { it.id }, contentType = { "LiveTvScreen.variants" }) { variant ->
                                 val isSelected = variant.id == currentChannel?.id
                                 var isFocused by remember { mutableStateOf(false) }
 

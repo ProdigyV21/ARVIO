@@ -241,7 +241,7 @@ fun LandscapeHomeRowsLayer(
                         ),
                         horizontalArrangement = Arrangement.spacedBy(landscapeItemSpacing)
                     ) {
-                        items(8, key = { "skeleton_ls_${category.id}_$it" }) {
+                        items(8, key = { "skeleton_ls_${category.id}_$it" }, contentType = { "LandscapeHomeRowsLayer.rows" }) {
                             if (isRowPortrait) {
                                 SkeletonPosterCard(width = rowCardWidth)
                             } else {

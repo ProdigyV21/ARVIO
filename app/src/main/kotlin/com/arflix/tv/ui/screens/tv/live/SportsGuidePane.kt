@@ -637,7 +637,7 @@ internal fun SportsGuidePane(
                     }
                     Box(Modifier.fillMaxWidth().height(1.dp).background(LiveColors.Divider))
                 }
-                items(event?.addonSources.orEmpty(), key = { "addon:${it.key}" }) { source ->
+                items(event?.addonSources.orEmpty(), key = { "addon:${it.key}" }, contentType = { "SportsGuidePane.event" }) { source ->
                     SportsAddonSourceRow(source, (canOpenChannel || source.isLive(now)) && (source.startsAt == null || source.startsAt <= now), resolveAddon,
                         if (sourceChannels.isEmpty() && source == event?.addonSources?.firstOrNull()) initialFocus else null) { stream ->
                         onPlayAddon(source, stream)

@@ -591,7 +591,7 @@ fun CategorySidebar(
                     .weight(1f),
                 verticalArrangement = Arrangement.spacedBy(2.dp),
             ) {
-                itemsIndexed(visibleTopCategories, key = { _, cat -> "top:${cat.id}" }) { index, cat ->
+                itemsIndexed(visibleTopCategories, key = { _, cat -> "top:${cat.id}" }, contentType = { _, _ -> "CategorySidebar.visibleTopCategories" }) { index, cat ->
                     val isAllGroup = cat.id == "all" && cat.children.isNotEmpty()
                     val isOpen = isAllGroup && expandedAll
                     val itemKey = "top:${cat.id}"
@@ -732,6 +732,7 @@ fun CategorySidebar(
                             itemsIndexed(
                                 section.categories.distinctBy { it.id },
                                 key = { _, cat -> "playlist:${section.id}:${cat.id}" },
+                                contentType = { _, _ -> "CategorySidebar.section" },
                             ) { _, cat ->
                                 val catKey = "playlist:${section.id}:${cat.id}"
                                 val catRequester = rememberCategoryRequester(
@@ -763,8 +764,8 @@ fun CategorySidebar(
                         }
                     }
                 } else if (tree.global.categories.isNotEmpty()) {
-                    item { SectionHeader(liveSectionLabel(tree.global.label), contentVisible) }
-                    itemsIndexed(tree.global.categories.distinctBy { it.id }, key = { _, cat -> "global:${cat.id}" }) { _, cat ->
+                    item(contentType = "CategorySidebar.item") { SectionHeader(liveSectionLabel(tree.global.label), contentVisible) }
+                    itemsIndexed(tree.global.categories.distinctBy { it.id }, key = { _, cat -> "global:${cat.id}" }, contentType = { _, _ -> "CategorySidebar.tree" }) { _, cat ->
                         val catKey = "global:${cat.id}"
                         val catRequester = rememberCategoryRequester(
                             key = catKey,
@@ -795,8 +796,8 @@ fun CategorySidebar(
                     }
                 }
                 if (tree.countries.categories.isNotEmpty()) {
-                    item { SectionHeader(liveSectionLabel(tree.countries.label), contentVisible) }
-                    itemsIndexed(tree.countries.categories.distinctBy { it.id }, key = { _, country -> "country:${country.id}" }) { _, country ->
+                    item(contentType = "CategorySidebar.item2") { SectionHeader(liveSectionLabel(tree.countries.label), contentVisible) }
+                    itemsIndexed(tree.countries.categories.distinctBy { it.id }, key = { _, country -> "country:${country.id}" }, contentType = { _, _ -> "CategorySidebar.tree2" }) { _, country ->
                         val isExpanded = expandedCountry == country.id
                         val countryKey = "country:${country.id}"
                         val countryRequester = rememberCategoryRequester(
@@ -867,8 +868,8 @@ fun CategorySidebar(
                     }
                 }
                 if (tree.adult.categories.isNotEmpty()) {
-                    item { SectionHeader(liveSectionLabel(tree.adult.label), contentVisible) }
-                    itemsIndexed(tree.adult.categories, key = { index, cat -> "adult:${cat.id}:$index" }) { index, cat ->
+                    item(contentType = "CategorySidebar.item3") { SectionHeader(liveSectionLabel(tree.adult.label), contentVisible) }
+                    itemsIndexed(tree.adult.categories, key = { index, cat -> "adult:${cat.id}:$index" }, contentType = { _, _ -> "CategorySidebar.tree3" }) { index, cat ->
                         val adultKey = "adult:${cat.id}:$index"
                         val adultRequester = rememberCategoryRequester(
                             key = adultKey,
