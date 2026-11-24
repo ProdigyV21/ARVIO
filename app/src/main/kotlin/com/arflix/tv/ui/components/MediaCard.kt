@@ -163,6 +163,7 @@ fun MediaCard(
     } else {
         baseImageUrl
     }
+    android.os.Trace.beginSection("Card:requests")
     val shape = rememberArvioCardShape(ArvioSkin.radius.md)
 
     val jumpBorderWidth = 2.5.dp
@@ -225,6 +226,7 @@ fun MediaCard(
             .width(width)
             .zIndex(if (visualFocused && raiseOnFocus) 1f else 0f)
     ) {
+        android.os.Trace.endSection(); android.os.Trace.beginSection("Card:surface")
         ArvioFocusableSurface(
             modifier = Modifier
                 .fillMaxWidth()
@@ -253,6 +255,7 @@ fun MediaCard(
         ) { _ ->
             Box(modifier = Modifier.fillMaxSize()) {
                 // Channel logos can be transparent: never leave placeholder text behind them.
+                android.os.Trace.beginSection("Card:artwork")
                 if (!artworkIsOpaque && artworkPainter == null) Box(
                     modifier = Modifier
                         .fillMaxSize()
@@ -299,6 +302,7 @@ fun MediaCard(
                         ),
                     )
                 }
+                android.os.Trace.endSection(); android.os.Trace.beginSection("Card:overlays")
                 if (overlayBrush != null) {
                     Box(
                         modifier = Modifier
@@ -368,6 +372,7 @@ fun MediaCard(
                 // clearlogo crowds the poster art and looks double-stamped.
                 // Collection tiles already embed their own branding, so they
                 // stay logo-free in both layouts.
+                android.os.Trace.endSection(); android.os.Trace.beginSection("Card:logo")
                 if (logoRequest != null && isLandscape && !isCollectionTile) {
                     AsyncImage(
                         model = logoRequest,
@@ -387,6 +392,7 @@ fun MediaCard(
                 }
 
                 // Subtle green watched badge
+                android.os.Trace.endSection(); android.os.Trace.beginSection("Card:badges")
                 if (item.isWatched) {
                     WatchedBadge(
                         Modifier.align(Alignment.BottomEnd)
@@ -419,6 +425,7 @@ fun MediaCard(
                 }
 
                 // ── Continue Watching badges ──
+                android.os.Trace.endSection(); android.os.Trace.beginSection("Card:progress")
                 if (showProgress) {
                     // A narrow poster cannot hold both top badges in full, so the right one is shortened too.
                     val compactBadges = !isLandscape && width < CONTINUE_WATCHING_FULL_BADGE_MIN_WIDTH
@@ -507,9 +514,11 @@ fun MediaCard(
                         }
                     }
                 }
+                android.os.Trace.endSection()
             }
         }
 
+        android.os.Trace.endSection(); android.os.Trace.beginSection("Card:text")
         if (showTitle && !showCollectionTitleOverlay) {
             Spacer(modifier = Modifier.height(ArvioSkin.spacing.x2))
 
@@ -572,6 +581,7 @@ fun MediaCard(
                 )
             }
         }
+        android.os.Trace.endSection()
     }
 }
 
