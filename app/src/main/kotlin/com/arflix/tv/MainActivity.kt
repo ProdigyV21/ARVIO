@@ -423,8 +423,6 @@ class MainActivity : ComponentActivity() {
                 LocalAppLanguage provides appLanguage,
                 LocalDeviceType provides effectiveDeviceType,
                 LocalHasTouchScreen provides hasTouchScreen,
-                com.arflix.tv.ui.components.LocalLightweightSemantics provides
-                    com.arflix.tv.ui.components.rememberLightweightSemantics(),
                 androidx.compose.ui.platform.LocalLayoutDirection provides
                     if (isRtl) androidx.compose.ui.unit.LayoutDirection.Rtl
                     else androidx.compose.ui.unit.LayoutDirection.Ltr

@@ -26,7 +26,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.painter.Painter
@@ -126,9 +125,6 @@ fun MediaCard(
     var isFocused by remember { mutableStateOf(false) }
     val visualFocused = isFocusedOverride || isFocused
     val isMobile = LocalDeviceType.current.isTouchDevice()
-    // A non-screen-reader accessibility service is on: the card is one labelled node.
-    val lightweightSemantics = LocalLightweightSemantics.current
-    val textSemantics = if (lightweightSemantics) Modifier.clearAndSetSemantics {} else Modifier
 
     val aspectRatio = if (isLandscape) 16f / 9f else 2f / 3f
     // Landscape cards should prefer wide artwork/backdrops.
@@ -254,7 +250,6 @@ fun MediaCard(
                 isFocused = it
                 if (it) onFocused()
             },
-            semanticsLabel = if (lightweightSemantics) item.title else null,
         ) { _ ->
             Box(modifier = Modifier.fillMaxSize()) {
                 // Channel logos can be transparent: never leave placeholder text behind them.
@@ -520,7 +515,6 @@ fun MediaCard(
 
             Text(
                 text = item.title,
-                modifier = textSemantics,
                 style = if (isMobile) ArvioSkin.typography.cardTitle.copy(
                     fontSize = 14.sp,
                     shadow = androidx.compose.ui.graphics.Shadow(
@@ -565,7 +559,6 @@ fun MediaCard(
                 }
                 Text(
                     text = subtitle,
-                    modifier = textSemantics,
                     style = ArvioSkin.typography.caption.copy(
                         shadow = androidx.compose.ui.graphics.Shadow(
                             color = androidx.compose.ui.graphics.Color.Black,
