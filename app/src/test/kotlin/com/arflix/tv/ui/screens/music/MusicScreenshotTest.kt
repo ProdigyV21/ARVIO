@@ -15,7 +15,16 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.unit.dp
+import android.os.Looper
 import androidx.media3.common.Player
+import androidx.test.core.app.ApplicationProvider
+import coil.Coil
+import coil.ImageLoader
+import com.arflix.tv.music.MusicAddonSource
+import kotlinx.coroutines.runBlocking
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import org.robolectric.Shadows.shadowOf
 import com.arflix.tv.music.MusicAddon
 import com.arflix.tv.music.MusicAlbum
 import com.arflix.tv.music.MusicArtist
@@ -39,8 +48,10 @@ import org.robolectric.annotation.GraphicsMode
 import java.io.File
 
 /**
- * Renders the Music tab with sample data to PNGs, for reviewing the phone layout without a
- * device. Only runs when the ARVIO_SCREENSHOTS environment variable names an output folder.
+ * Renders the Music tab to PNGs, for reviewing the phone layout without a device. Only runs when
+ * the ARVIO_SCREENSHOTS environment variable names an output folder. With ARVIO_SCREENSHOTS_LIVE
+ * set to a music addon address, the shelves, album and covers come from that addon instead of
+ * the built-in sample data.
  */
 @RunWith(RobolectricTestRunner::class)
 @ConscryptMode(ConscryptMode.Mode.OFF)
@@ -144,27 +155,75 @@ class MusicScreenshotTest {
         repeatMode = Player.REPEAT_MODE_OFF,
     )
 
+
+    private val liveAddon: String? = System.getenv("ARVIO_SCREENSHOTS_LIVE")?.takeIf { it.isNotBlank() }
+
+    private class Sample(val home: MusicUiState, val album: MusicAlbum, val tracks: List<MusicTrack>, val artists: List<MusicArtist>)
+
+    /** Downloads a cover once, so the screenshot loads it from disk like the sample covers. */
+    private fun download(http: OkHttpClient, url: String?): String? {
+        if (url.isNullOrBlank()) return null
+        val dir = File(System.getProperty("java.io.tmpdir"), "arvio-music-live").apply { mkdirs() }
+        val file = File(dir, "${url.hashCode().toUInt()}.img")
+        if (!file.exists()) runCatching {
+            http.newCall(Request.Builder().url(url).build()).execute().use { response ->
+                if (!response.isSuccessful) return null
+                file.outputStream().use { out -> response.body!!.byteStream().copyTo(out) }
+            }
+        }.onFailure { return null }
+        return file.absolutePath
+    }
+
+    private val sample: Sample by lazy {
+        val addonUrl = liveAddon ?: return@lazy Sample(home, album, tracks, sampleArtists)
+        runBlocking {
+            val http = OkHttpClient()
+            val addon = MusicAddonSource.install(http, addonUrl)
+            val source = MusicAddonSource(http, addon)
+            val shelves = source.shelves().map { shelf ->
+                shelf.copy(albums = shelf.albums.take(8).map { it.copy(coverUrl = download(http, it.coverUrl)) })
+            }
+            // The first playlist-like album makes a better album page than a 100-track chart.
+            val picked = shelves.drop(1).firstOrNull()?.albums?.firstOrNull() ?: shelves.first().albums.first()
+            val liveTracks = source.albumTracks(picked.id).take(12).map { it.copy(coverUrl = download(http, it.coverUrl) ?: picked.coverUrl) }
+            val liveArtists = shelves.flatMap { it.albums }.filter { it.coverUrl != null }
+                .groupBy { it.artist }.entries.take(8)
+                .map { (name, albums) -> MusicArtist(albums.first().artistId ?: name, name, albums.first().coverUrl, albums.size) }
+            Sample(
+                MusicUiState(configLoaded = true, library = MusicLibrary(addons = listOf(addon)), shelves = shelves),
+                picked, liveTracks, liveArtists,
+            )
+        }
+    }
+
+    private val sampleArtists by lazy {
+        listOf("Neon Coast", "Lena Vos", "Mira Holt", "Orbit Ensemble", "Kairo", "June Avery")
+            .mapIndexed { i, name -> MusicArtist("a$i", name, cover("a$i", palette[i].first, palette[i].second), 2 + i) }
+    }
+
+    private fun playingOf(s: Sample) = playing.copy(queue = s.tracks, index = minOf(1, s.tracks.lastIndex).coerceAtLeast(0),
+        durationMs = (s.tracks.getOrNull(1)?.durationSec ?: 173) * 1000L)
+
     @Test fun connectScreen() = render("music-1-add-source", MusicUiState(configLoaded = true), MusicPlaybackState())
 
-    @Test fun homeScreen() = render("music-2-home", home, playing)
+    @Test fun homeScreen() = render("music-2-home", sample.home, playingOf(sample))
 
     @Test fun albumPage() = render(
         "music-3-album",
-        home.copy(pages = listOf(MusicPage.Album(album, tracks, loading = false))),
-        playing,
+        sample.home.copy(pages = listOf(MusicPage.Album(sample.album, sample.tracks, loading = false))),
+        playingOf(sample),
     )
 
-    @Test fun artistsTab() = render(
-        "music-4-artists",
-        home.copy(tab = MusicTab.ARTISTS, artists = listOf("Neon Coast", "Lena Vos", "Mira Holt", "Orbit Ensemble", "Kairo", "June Avery")
-            .mapIndexed { i, name -> MusicArtist("a$i", name, cover("a$i", palette[i].first, palette[i].second), 2 + i) }),
-        playing,
-    )
+    @Test fun artistsTab() = render("music-4-artists", sample.home.copy(tab = MusicTab.ARTISTS, artists = sample.artists), playingOf(sample))
 
-    @Test fun player() = render("music-5-player", home.copy(playerOpen = true), playing)
+    @Test fun player() = render("music-5-player", sample.home.copy(playerOpen = true), playingOf(sample))
 
     private fun render(name: String, state: MusicUiState, playback: MusicPlaybackState) {
         assumeTrue(!out.isNullOrBlank())
+        // Software bitmaps, so covers can be drawn into the screenshot canvas.
+        Coil.setImageLoader(
+            ImageLoader.Builder(ApplicationProvider.getApplicationContext<Application>()).allowHardware(false).crossfade(false).build()
+        )
         compose.mainClock.autoAdvance = false
         compose.setContent {
             CompositionLocalProvider(LocalDeviceType provides DeviceType.PHONE) {
@@ -174,6 +233,7 @@ class MusicScreenshotTest {
         repeat(30) {
             compose.mainClock.advanceTimeBy(100)
             Thread.sleep(60) // covers decode off the main thread
+            shadowOf(Looper.getMainLooper()).idle() // and are handed back on it
         }
         val view = compose.activity.window.decorView
         val bitmap = Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888)
