@@ -112,6 +112,16 @@ class MusicRepository @Inject constructor(
         runCatching { gson.fromJson(it, MusicCollections::class.java)?.sanitized() }.getOrNull()
     } ?: MusicCollections()
 
+    /** A file the user picked: its name (which tells the format) and its bytes. */
+    fun readDocument(uri: android.net.Uri): Pair<String, ByteArray> {
+        val resolver = context.contentResolver
+        val name = resolver.query(uri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
+            if (cursor.moveToFirst()) cursor.getString(0) else null
+        } ?: uri.lastPathSegment.orEmpty()
+        val bytes = resolver.openInputStream(uri)?.use { it.readBytes() } ?: throw MusicServerException("Could not read $name")
+        return name to bytes
+    }
+
     suspend fun updateCollections(transform: (MusicCollections) -> MusicCollections) {
         context.musicDataStore.edit { prefs ->
             prefs[collectionsKey] = gson.toJson(transform(decodeCollections(prefs[collectionsKey])))

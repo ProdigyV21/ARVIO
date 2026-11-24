@@ -97,6 +97,8 @@ class MusicScreenshotTest {
         override fun movePlaylistTrack(id: String, from: Int, to: Int) = Unit
         override fun showAddToPlaylist(tracks: List<MusicTrack>?) = Unit
         override fun addToPlaylist(id: String, tracks: List<MusicTrack>) = Unit
+        override fun importSpotify(files: List<android.net.Uri>) = Unit
+        override fun dismissImportResult() = Unit
     }
 
     /** Sample covers: colour gradients written to disk, loaded like real artwork. */

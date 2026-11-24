@@ -17,7 +17,11 @@ import com.arflix.tv.music.MusicServerType
 import com.arflix.tv.music.MusicShelf
 import com.arflix.tv.music.MusicSource
 import com.arflix.tv.music.MusicTrack
+import android.net.Uri
+import com.arflix.tv.music.SpotifyImport
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -74,10 +78,21 @@ data class MusicUiState(
     val collections: MusicCollections = MusicCollections(),
     /** Tracks waiting for the user to pick a playlist to add them to. */
     val addingToPlaylist: List<MusicTrack>? = null,
+    /** Songs looked up so far and in all, while a Spotify import runs. */
+    val importProgress: Pair<Int, Int>? = null,
+    val importResult: SpotifyImportResult? = null,
 ) {
     val config: MusicServerConfig? get() = library.server
     val hasSources: Boolean get() = !library.isEmpty
 }
+
+/** How a Spotify import went; [error] when it could not run at all. */
+data class SpotifyImportResult(
+    val playlists: Int = 0,
+    val found: Int = 0,
+    val total: Int = 0,
+    val error: String? = null,
+)
 
 /** What the Music screens can ask for; the view model in the app, a stand-in in screenshot tests. */
 interface MusicActions {
@@ -117,6 +132,9 @@ interface MusicActions {
     /** Opens (or with null closes) the playlist picker for these tracks. */
     fun showAddToPlaylist(tracks: List<MusicTrack>?)
     fun addToPlaylist(id: String, tracks: List<MusicTrack>)
+    /** Reads Spotify export files the user picked and rebuilds those playlists from their own sources. */
+    fun importSpotify(files: List<Uri>)
+    fun dismissImportResult()
 }
 
 @HiltViewModel
@@ -172,6 +190,44 @@ class MusicViewModel @Inject constructor(
     override fun removeFromPlaylist(id: String, index: Int) = edit { it.removeFromPlaylist(id, index) }
     override fun movePlaylistTrack(id: String, from: Int, to: Int) = edit { it.moveInPlaylist(id, from, to) }
     override fun showAddToPlaylist(tracks: List<MusicTrack>?) = _state.update { it.copy(addingToPlaylist = tracks?.takeIf { t -> t.isNotEmpty() }) }
+
+    override fun importSpotify(files: List<Uri>) {
+        if (files.isEmpty() || _state.value.importProgress != null) return
+        val source = source() ?: return
+        _state.update { it.copy(importProgress = 0 to 0, importResult = null) }
+        viewModelScope.launch {
+            val result = runCatching {
+                val playlists = withContext(Dispatchers.IO) {
+                    files.flatMap { uri -> repository.readDocument(uri).let { (name, bytes) -> SpotifyImport.parse(name, bytes) } }
+                }
+                if (playlists.isEmpty()) return@runCatching SpotifyImportResult(error = "no_playlists")
+                // A song on several playlists is looked up once.
+                val unique = playlists.flatMap { it.tracks }.distinct()
+                val matches = SpotifyImport.match(source, unique) { done, total ->
+                    _state.update { it.copy(importProgress = done to total) }
+                }
+                val byTrack = unique.zip(matches).toMap()
+                repository.updateCollections { collections ->
+                    playlists.fold(collections) { acc, playlist ->
+                        val tracks = playlist.tracks.mapNotNull { byTrack[it] }
+                        when {
+                            tracks.isEmpty() -> acc
+                            playlist.liked -> tracks.asReversed().fold(acc) { c, t -> if (c.isFavorite(t)) c else c.toggleFavorite(t) }
+                            else -> acc.replaceImported(UUID.randomUUID().toString(), playlist.name, tracks, "spotify:" + playlist.name)
+                        }
+                    }
+                }
+                SpotifyImportResult(
+                    playlists = playlists.size,
+                    found = playlists.sumOf { p -> p.tracks.count { byTrack[it] != null } },
+                    total = playlists.sumOf { it.tracks.size },
+                )
+            }.getOrElse { SpotifyImportResult(error = it.message ?: it.javaClass.simpleName) }
+            _state.update { it.copy(importProgress = null, importResult = result) }
+        }
+    }
+
+    override fun dismissImportResult() = _state.update { it.copy(importResult = null) }
 
     override fun addToPlaylist(id: String, tracks: List<MusicTrack>) {
         _state.update { it.copy(addingToPlaylist = null) }

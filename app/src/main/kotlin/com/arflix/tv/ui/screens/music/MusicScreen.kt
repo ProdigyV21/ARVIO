@@ -1,6 +1,8 @@
 package com.arflix.tv.ui.screens.music
 
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
@@ -47,6 +49,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Album
+import androidx.compose.material.icons.filled.FileUpload
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.LibraryMusic
@@ -519,7 +522,7 @@ private fun LibraryView(
 
         when (state.tab) {
             MusicTab.HOME -> HomeShelves(state, accent, bottomPadding, viewModel)
-            MusicTab.MINE -> MyMusicView(state.collections, accent, bottomPadding, viewModel)
+            MusicTab.MINE -> MyMusicView(state, accent, bottomPadding, viewModel)
             MusicTab.ALBUMS -> {
                 val albums = state.allAlbums
                 if (albums == null) LoadingBox() else AlbumGrid(albums, bottomPadding, viewModel)
@@ -1141,12 +1144,58 @@ internal fun formatTime(ms: Long): String {
 // My music: liked songs, favourite albums and the user's own playlists
 
 @Composable
-private fun MyMusicView(collections: MusicCollections, accent: Color, bottomPadding: Dp, viewModel: MusicActions) {
+private fun MyMusicView(state: MusicUiState, accent: Color, bottomPadding: Dp, viewModel: MusicActions) {
+    val collections = state.collections
     var creating by remember { mutableStateOf(false) }
+    var explainingImport by remember { mutableStateOf(false) }
+    val pickFiles = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
+        viewModel.importSpotify(uris)
+    }
     LazyColumn(Modifier.fillMaxSize().testTag("music-mine"), contentPadding = PaddingValues(top = 8.dp, bottom = bottomPadding)) {
         item {
-            Row(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+            Row(
+                Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
                 PillButton(stringResource(R.string.music_new_playlist), Icons.Default.Add, accent, filled = false, enabled = true) { creating = true }
+                PillButton(
+                    stringResource(R.string.music_import_spotify), Icons.Default.FileUpload, accent,
+                    filled = false, enabled = state.importProgress == null,
+                ) { explainingImport = true }
+            }
+        }
+        state.importProgress?.let { (done, total) ->
+            item(key = "import-progress") {
+                Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    CircularProgressIndicator(color = accent, strokeWidth = 2.dp, modifier = Modifier.size(20.dp))
+                    Spacer(Modifier.width(12.dp))
+                    Text(
+                        if (total == 0) stringResource(R.string.music_import_reading)
+                        else stringResource(R.string.music_import_progress, done, total),
+                        color = Muted, fontSize = 14.sp,
+                    )
+                }
+            }
+        }
+        state.importResult?.let { result ->
+            item(key = "import-result") {
+                Row(
+                    Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp)
+                        .clip(RoundedCornerShape(12.dp)).background(Surface).padding(start = 14.dp, top = 6.dp, bottom = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        when {
+                            result.error == "no_playlists" -> stringResource(R.string.music_import_nothing)
+                            result.error != null -> stringResource(R.string.music_import_failed, result.error)
+                            else -> pluralStringResource(R.plurals.music_import_done, result.playlists, result.playlists, result.found, result.total)
+                        },
+                        color = Color.White, fontSize = 14.sp, lineHeight = 19.sp, modifier = Modifier.weight(1f),
+                    )
+                    IconButton(onClick = viewModel::dismissImportResult) {
+                        Icon(Icons.Default.Close, stringResource(R.string.music_cancel), tint = Faint)
+                    }
+                }
             }
         }
         item(key = "liked") {
@@ -1188,6 +1237,25 @@ private fun MyMusicView(collections: MusicCollections, accent: Color, bottomPadd
             confirm = stringResource(R.string.music_create),
             onConfirm = { creating = false; viewModel.createPlaylist(it) },
             onDismiss = { creating = false },
+        )
+    }
+    if (explainingImport) {
+        AlertDialog(
+            onDismissRequest = { explainingImport = false },
+            containerColor = BackgroundElevated,
+            title = { Text(stringResource(R.string.music_import_spotify), color = Color.White) },
+            text = {
+                Text(stringResource(R.string.music_import_explain), color = Muted, fontSize = 14.sp, lineHeight = 20.sp)
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    explainingImport = false
+                    pickFiles.launch(arrayOf("text/csv", "text/comma-separated-values", "text/plain", "application/json", "application/zip", "application/octet-stream"))
+                }) { Text(stringResource(R.string.music_import_choose), color = accent) }
+            },
+            dismissButton = {
+                TextButton(onClick = { explainingImport = false }) { Text(stringResource(R.string.music_cancel), color = Muted) }
+            },
         )
     }
 }

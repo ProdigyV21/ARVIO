@@ -320,3 +320,63 @@ class EclipseAddonSourceTest {
         assertEquals("com.example_odd~a", after.albumTracks(id).single().albumId)
     }
 }
+
+class SpotifyImportTest {
+    @Test fun exportifyCsvWithQuotesAndSeveralArtists() {
+        val csv = "﻿\"Track URI\",\"Track Name\",\"Album Name\",\"Artist Name(s)\",\"Duration (ms)\"\r\n" +
+            "\"spotify:track:1\",\"Hello, \"\"World\"\"\",\"Album\",\"Band,Guest\",\"200000\"\r\n" +
+            "\"spotify:track:2\",\"Second\",\"\",\"Solo\",\"\"\r\n"
+        val playlist = SpotifyImport.parse("Road_Trip.csv", csv.toByteArray())
+        assertEquals(1, playlist.size)
+        assertEquals("Road Trip", playlist[0].name)
+        assertEquals(ImportedTrack("Hello, \"World\"", "Band", "Album", 200000), playlist[0].tracks[0])
+        assertEquals("Solo", playlist[0].tracks[1].artist)
+        assertTrue(SpotifyImport.parse("Liked_Songs.csv", csv.toByteArray())[0].liked)
+    }
+
+    @Test fun spotifyDataExportJsonAndZip() {
+        val library = """{"tracks":[{"artist":"A","album":"B","track":"Song","uri":"spotify:track:x"}],"albums":[]}"""
+        val playlists = """{"playlists":[{"name":"Gym","items":[{"track":{"trackName":"Run","artistName":"C","albumName":"D"}},{"episode":null}]}]}"""
+        val liked = SpotifyImport.parse("YourLibrary.json", library.toByteArray()).single()
+        assertTrue(liked.liked)
+        assertEquals("Song", liked.tracks.single().title)
+        val bytes = java.io.ByteArrayOutputStream().also { out ->
+            java.util.zip.ZipOutputStream(out).use { zip ->
+                zip.putNextEntry(java.util.zip.ZipEntry("Spotify Account Data/YourLibrary.json")); zip.write(library.toByteArray()); zip.closeEntry()
+                zip.putNextEntry(java.util.zip.ZipEntry("Spotify Account Data/Playlist1.json")); zip.write(playlists.toByteArray()); zip.closeEntry()
+            }
+        }.toByteArray()
+        val all = SpotifyImport.parse("my_spotify_data.zip", bytes)
+        assertEquals(listOf(SpotifyImport.LIKED_NAME, "Gym"), all.map { it.name })
+        assertEquals("Run", all[1].tracks.single().title)
+    }
+
+    private fun found(title: String, artist: String, sec: Int = 0) = MusicTrack(title, title, artist, "", null, sec, null, "u")
+
+    @Test fun matchingIgnoresDecorationsButNeedsTheArtist() {
+        val wanted = ImportedTrack("Bohemian Rhapsody - Remastered 2011", "Queen", durationMs = 354000)
+        assertTrue(SpotifyImport.score(wanted, found("Bohemian Rhapsody", "Queen", 355)) >= SpotifyImport.MATCH_THRESHOLD)
+        assertTrue(SpotifyImport.score(wanted, found("Bohemian Rhapsody (Live)", "Queen")) >= SpotifyImport.MATCH_THRESHOLD)
+        assertTrue(SpotifyImport.score(wanted, found("Bohemian Rhapsody", "Cover Band", 354)) < SpotifyImport.MATCH_THRESHOLD)
+        assertTrue(SpotifyImport.score(wanted, found("Another Song", "Queen", 354)) < SpotifyImport.MATCH_THRESHOLD)
+        assertTrue(SpotifyImport.score(ImportedTrack("Café", "Beyoncé"), found("Cafe", "Beyonce")) >= SpotifyImport.MATCH_THRESHOLD)
+    }
+
+    @Test fun matchPicksTheBestAndLeavesMissingOut() = kotlinx.coroutines.runBlocking {
+        val source = object : MusicSource {
+            override suspend fun albums(shelf: AlbumShelf, size: Int) = emptyList<MusicAlbum>()
+            override suspend fun artists() = emptyList<MusicArtist>()
+            override suspend fun artistAlbums(artistId: String) = emptyList<MusicAlbum>()
+            override suspend fun albumTracks(albumId: String) = emptyList<MusicTrack>()
+            override suspend fun search(query: String) = MusicSearchResult(
+                tracks = if (query.contains("Run")) listOf(found("Run (Remix)", "C"), found("Run", "C")) else emptyList()
+            )
+            override suspend fun reportPlayed(trackId: String) = Unit
+        }
+        var last = 0 to 0
+        val result = SpotifyImport.match(source, listOf(ImportedTrack("Run", "C"), ImportedTrack("Nope", "Z"))) { d, t -> last = d to t }
+        assertEquals("Run", result[0]!!.title)
+        assertNull(result[1])
+        assertEquals(2 to 2, last)
+    }
+}

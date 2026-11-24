@@ -70,8 +70,19 @@
     <string name="music_liked_empty">No liked songs yet. Tap the heart in the player or use the ⋮ menu next to a song.</string>
     <string name="music_playlist_gone">This playlist no longer exists.</string>
     <string name="music_shelf_favorites">Your favourites</string>
+    <string name="music_import_spotify">Import from Spotify</string>
+    <string name="music_import_choose">Choose files</string>
+    <string name="music_import_explain">ARVIO can rebuild your Spotify playlists and liked songs from your own music sources. Spotify itself is not played.\n\n1. Export your library: at exportify.app (CSV per playlist, including Liked Songs), or with Spotify\'s own \"Download your data\" (the zip, or YourLibrary.json and Playlist files).\n2. Choose those files here.\n\nSongs your sources don\'t have are left out.</string>
+    <string name="music_import_reading">Reading your Spotify files…</string>
+    <string name="music_import_progress">Looking up songs: %1$d of %2$d</string>
+    <string name="music_import_nothing">No Spotify playlists or liked songs found in those files.</string>
+    <string name="music_import_failed">Import failed: %1$s</string>
     <plurals name="music_track_count">
         <item quantity="one">%d song</item>
         <item quantity="other">%d songs</item>
+    </plurals>
+    <plurals name="music_import_done">
+        <item quantity="one">Imported %1$d playlist: %2$d of %3$d songs found in your sources.</item>
+        <item quantity="other">Imported %1$d playlists: %2$d of %3$d songs found in your sources.</item>
     </plurals>
 </resources>
