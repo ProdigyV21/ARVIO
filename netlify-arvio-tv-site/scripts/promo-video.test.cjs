@@ -156,10 +156,12 @@ for (const file of ['index.html', 'es/index.html', 'pt-br/index.html']) {
     assert.match(html, /data-src="\/assets\/promo\/arvio-tour-web.mp4"/);
     assert.match(html, /href="\/assets\/promo\/arvio-tour-720p.mp4" download/);
     assert.match(html, /promo-video.js\?v=2/);
-    const hero = html.match(/<section class="hero hero-v2"[^>]*>([\s\S]*?)<\/section>/)?.[1];
-    assert.ok(hero?.includes('id="promo-video"'), 'The video must be inside the first-screen hero');
-    assert.ok(hero.includes('id="demo"'), 'README links must still target the tour');
-    assert.equal((html.match(/<video\b/g) || []).length, 1, 'Do not duplicate the video below the hero');
+    const hero = html.match(/<section class="hero hero-v3"[^>]*>([\s\S]*?)<\/section>/)?.[1];
+    assert.ok(hero?.includes('href="#demo"'), 'The hero links to the tour');
+    const tour = html.match(/<section id="demo"[^>]*>([\s\S]*?)<\/section>/)?.[1];
+    assert.ok(tour?.includes('id="promo-video"'), 'The tour section holds the video');
+    assert.ok(html.includes('id="demo"'), 'README links must still target the tour');
+    assert.equal((html.match(/<video\b/g) || []).length, 1, 'Only one tour video');
     assert.doesNotMatch(hero, /id="hero-screen"|class="scene-phone"|class="chapter-dock"/);
   });
 }

@@ -3301,6 +3301,8 @@ html { background: #000; }
 .web-preview-unlock { display: flex; align-items: flex-start; gap: 8px; padding-top: 19px; border-top: 1px solid #ffffff12; color: #c3cbd1; font-size: 11px; line-height: 1.7; }
 .web-preview-unlock svg { flex-shrink: 0; margin-top: 2px; color: #93a49b; }
 .web-preview-account-note { margin: 13px 0 0; color: #97a0a8; font-size: 11px; line-height: 1.75; }
+.web-preview-carryover { display: flex; align-items: flex-start; gap: 10px; max-width: 620px; margin: 18px 0 0; padding: 14px 16px; border-radius: 14px; background: #9efbd512; border: 1px solid #9efbd533; color: #d8efe6; font-size: 14px; line-height: 1.6; }
+.web-preview-carryover svg { flex-shrink: 0; margin-top: 3px; color: #9efbd5; }
 .web-preview-free { margin-top: 22px; padding-top: 18px; border-top: 1px solid #ffffff12; font-size: 11px; line-height: 1.6; color: #97a0a8; }
 .web-preview-free p { margin: 0 0 6px; }
 .web-preview-free a { display: inline-flex; gap: 5px; align-items: center; min-height: 44px; color: #c7cfd4; text-decoration: underline; text-underline-offset: 3px; }

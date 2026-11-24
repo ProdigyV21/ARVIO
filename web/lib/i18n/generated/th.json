@@ -1563,5 +1563,6 @@
   "Maximum of 10 IPTV playlists reached": "ครบจำนวนสูงสุด 10 เพลย์ลิสต์ IPTV แล้ว",
   "Regional price · save {value0} vs. 12 monthly payments": "ราคาตามภูมิภาค · ประหยัด {value0} เมื่อเทียบกับการจ่ายรายเดือน 12 ครั้ง",
   "One payment, no automatic renewal. About {value0} a month.": "ชำระครั้งเดียว ไม่ต่ออายุอัตโนมัติ ประมาณ {value0} ต่อเดือน",
-  "12-month pass · {value0}": "แพ็กเกจ 12 เดือน · {value0}"
+  "12-month pass · {value0}": "แพ็กเกจ 12 เดือน · {value0}",
+  "Look around for free. Premium is needed to play.": "ดูได้ฟรี ต้องใช้ Premium เพื่อเล่น"
 }

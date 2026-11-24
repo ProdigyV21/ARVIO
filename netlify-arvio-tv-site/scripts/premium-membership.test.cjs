@@ -132,7 +132,9 @@ test('English, Spanish and Portuguese homepages send Premium CTAs to ARVIO Web a
     const visibleMarkup = html.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gu, '');
     assert.doesNotMatch(visibleMarkup, /coffee|café|cafezinho/iu, file);
     const premiumSection = visibleMarkup.match(/<section id="premium"[\s\S]*?<\/section>/u)[0];
-    assert.match(premiumSection, /class="premium-support">[^<]+<\/p><\/div><div class="premium-visual">/u, `${file}: support line is last`);
+    // Both doors live in one section: the free app and ARVIO Web with its plans.
+    assert.match(premiumSection, /class="door door-app[\s\S]*class="door door-web/u, `${file}: free app door comes before ARVIO Web`);
+    assert.match(premiumSection, /play\.google\.com\/store\/apps\/details\?id=com\.arvio\.tv/u, `${file}: free app door links Google Play`);
     if (file !== 'index.html') assert.ok(!visibleMarkup.includes('Look around first. You only pay when you press Play.'));
   }
 });
@@ -151,7 +153,7 @@ test('Homepage hero puts the free app first by default and swaps for iPhone, iPa
   };
   for (const [expected, [userAgent, maxTouchPoints]] of Object.entries(agents)) {
     const label = hidden => ({ hidden });
-    const make = name => ({ name, classes: new Set(name === 'apk' ? ['white'] : ['mint-button']), labels: [label(false), label(true)] });
+    const make = name => ({ name, classes: new Set(name === 'apk' ? ['white'] : ['glass']), labels: [label(false), label(true)] });
     const apk = make('apk'), webLink = make('web');
     for (const link of [apk, webLink]) {
       link.classList = { replace: (a, b) => link.classes.delete(a) && link.classes.add(b) };
@@ -166,7 +168,7 @@ test('Homepage hero puts the free app first by default and swaps for iPhone, iPa
     assert.equal(attributes['data-device'], expected || undefined, expected);
     if (['iphone', 'ipad', 'mac', 'windows'].includes(expected)) {
       assert.deepEqual(order.map(link => link.name), ['web', 'apk'], expected);
-      assert.ok(apk.classes.has('glass') && webLink.classes.has('mint-button'), expected);
+      assert.ok(apk.classes.has('glass') && webLink.classes.has('white'), expected);
       assert.deepEqual(webLink.labels.map(item => item.hidden), [true, false], expected);
     } else {
       assert.deepEqual(order.map(link => link.name), ['apk', 'web'], expected || 'unknown');
