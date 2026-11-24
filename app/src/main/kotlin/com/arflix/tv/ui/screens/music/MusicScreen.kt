@@ -65,6 +65,7 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -118,10 +119,28 @@ private val MiniPlayerHeight = 64.dp
 @Composable
 fun MusicScreen(
     viewModel: MusicViewModel = hiltViewModel(),
+    onFullscreenChanged: (Boolean) -> Unit = {},
     onBack: () -> Unit = {},
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val playback by viewModel.playback.collectAsStateWithLifecycle()
+    // The full player covers the whole screen, bottom bar included.
+    val fullscreen = state.playerOpen && playback.current != null
+    DisposableEffect(fullscreen) {
+        onFullscreenChanged(fullscreen)
+        onDispose { onFullscreenChanged(false) }
+    }
+    MusicContent(state, playback, viewModel, onBack)
+}
+
+/** The Music tab from its state alone, so screenshot tests can render it with sample data. */
+@Composable
+internal fun MusicContent(
+    state: MusicUiState,
+    playback: MusicPlaybackState,
+    viewModel: MusicActions,
+    onBack: () -> Unit = {},
+) {
     val accent = resolveAccentColor(fallback = Color.White)
 
     var addingSource by rememberSaveable { mutableStateOf(false) }
@@ -394,7 +413,7 @@ private fun LibraryView(
     playback: MusicPlaybackState,
     accent: Color,
     bottomPadding: Dp,
-    viewModel: MusicViewModel,
+    viewModel: MusicActions,
     onAddSource: () -> Unit,
 ) {
     Column(Modifier.fillMaxSize().statusBarsPadding()) {
@@ -503,7 +522,7 @@ private fun LibraryView(
 }
 
 @Composable
-private fun HomeShelves(state: MusicUiState, accent: Color, bottomPadding: Dp, viewModel: MusicViewModel) {
+private fun HomeShelves(state: MusicUiState, accent: Color, bottomPadding: Dp, viewModel: MusicActions) {
     val shelves = state.shelves
     when {
         state.loading && shelves.isEmpty() -> LoadingBox()
@@ -546,7 +565,7 @@ private fun HomeShelves(state: MusicUiState, accent: Color, bottomPadding: Dp, v
 }
 
 @Composable
-private fun AlbumGrid(albums: List<MusicAlbum>, bottomPadding: Dp, viewModel: MusicViewModel, header: (@Composable () -> Unit)? = null) {
+private fun AlbumGrid(albums: List<MusicAlbum>, bottomPadding: Dp, viewModel: MusicActions, header: (@Composable () -> Unit)? = null) {
     LazyVerticalGrid(
         columns = GridCells.Adaptive(150.dp),
         modifier = Modifier.fillMaxSize(),
@@ -565,7 +584,7 @@ private fun SearchResultsView(
     playback: MusicPlaybackState,
     accent: Color,
     bottomPadding: Dp,
-    viewModel: MusicViewModel,
+    viewModel: MusicActions,
 ) {
     val results = state.results
     when {
@@ -615,7 +634,7 @@ private fun AlbumPageView(
     playback: MusicPlaybackState,
     accent: Color,
     bottomPadding: Dp,
-    viewModel: MusicViewModel,
+    viewModel: MusicActions,
 ) {
     val album = page.album
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = bottomPadding)) {
@@ -682,7 +701,7 @@ private fun AlbumPageView(
 }
 
 @Composable
-private fun ArtistPageView(page: MusicPage.Artist, accent: Color, bottomPadding: Dp, viewModel: MusicViewModel) {
+private fun ArtistPageView(page: MusicPage.Artist, accent: Color, bottomPadding: Dp, viewModel: MusicActions) {
     Column(Modifier.fillMaxSize().statusBarsPadding()) {
         BackRow(viewModel)
         Row(
@@ -711,7 +730,7 @@ private fun ArtistPageView(page: MusicPage.Artist, accent: Color, bottomPadding:
 }
 
 @Composable
-private fun BackRow(viewModel: MusicViewModel) {
+private fun BackRow(viewModel: MusicActions) {
     Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp)) {
         IconButton(onClick = { viewModel.back() }) {
             Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.music_back), tint = Color.White)
@@ -915,7 +934,7 @@ private fun PlayPauseIcon(playback: MusicPlaybackState, tint: Color, onClick: ()
 }
 
 @Composable
-private fun FullPlayer(track: MusicTrack, playback: MusicPlaybackState, accent: Color, viewModel: MusicViewModel) {
+private fun FullPlayer(track: MusicTrack, playback: MusicPlaybackState, accent: Color, viewModel: MusicActions) {
     Box(Modifier.fillMaxSize().background(Color.Black).clickable(enabled = false) {}.testTag("music-player")) {
         Cover(track.coverUrl, Modifier.fillMaxSize().blur(80.dp), shape = RoundedCornerShape(0.dp), icon = Icons.Default.MusicNote)
         Box(

@@ -67,11 +67,38 @@ data class MusicUiState(
     val hasSources: Boolean get() = !library.isEmpty
 }
 
+/** What the Music screens can ask for; the view model in the app, a stand-in in screenshot tests. */
+interface MusicActions {
+    fun connect(type: MusicServerType, url: String, username: String, password: String)
+    fun addAddon(url: String)
+    fun disconnect()
+    fun removeAddon(addon: MusicAddon)
+    fun refresh()
+    fun selectTab(tab: MusicTab)
+    fun setQuery(query: String)
+    fun openAlbum(album: MusicAlbum)
+    fun openArtist(artist: MusicArtist)
+    fun openArtist(id: String?, name: String)
+    /** Returns false when there was nothing to close, so the caller can leave the tab. */
+    fun back(): Boolean
+    fun setPlayerOpen(open: Boolean)
+    fun play(tracks: List<MusicTrack>, index: Int = 0)
+    fun shuffle(tracks: List<MusicTrack>)
+    fun togglePlay()
+    fun next()
+    fun previous()
+    fun seekTo(positionMs: Long)
+    fun skipTo(index: Int)
+    fun toggleShuffle()
+    fun cycleRepeat()
+    fun playAlbum(album: MusicAlbum)
+}
+
 @HiltViewModel
 class MusicViewModel @Inject constructor(
     private val repository: MusicRepository,
     private val player: MusicPlayer,
-) : ViewModel() {
+) : ViewModel(), MusicActions {
 
     private val _state = MutableStateFlow(MusicUiState())
     val state: StateFlow<MusicUiState> = _state.asStateFlow()
@@ -93,7 +120,7 @@ class MusicViewModel @Inject constructor(
 
     private fun source(): MusicSource? = repository.sourceFor(_state.value.library)
 
-    fun connect(type: MusicServerType, url: String, username: String, password: String) {
+    override fun connect(type: MusicServerType, url: String, username: String, password: String) {
         if (_state.value.connecting) return
         _state.update { it.copy(connecting = true, connectError = null) }
         viewModelScope.launch {
@@ -105,12 +132,12 @@ class MusicViewModel @Inject constructor(
         }
     }
 
-    fun disconnect() {
+    override fun disconnect() {
         player.stop()
         viewModelScope.launch { repository.disconnect() }
     }
 
-    fun addAddon(url: String) {
+    override fun addAddon(url: String) {
         if (_state.value.addingAddon) return
         _state.update { it.copy(addingAddon = true, addonError = null) }
         viewModelScope.launch {
@@ -124,12 +151,12 @@ class MusicViewModel @Inject constructor(
 
     fun clearAddonError() = _state.update { it.copy(addonError = null) }
 
-    fun removeAddon(addon: MusicAddon) {
+    override fun removeAddon(addon: MusicAddon) {
         player.stop()
         viewModelScope.launch { repository.removeAddon(addon.baseUrl) }
     }
 
-    fun refresh() = loadHome()
+    override fun refresh() = loadHome()
 
     private fun loadHome() {
         val source = source() ?: return
@@ -141,7 +168,7 @@ class MusicViewModel @Inject constructor(
         }
     }
 
-    fun selectTab(tab: MusicTab) {
+    override fun selectTab(tab: MusicTab) {
         _state.update { it.copy(tab = tab) }
         val source = source() ?: return
         when (tab) {
@@ -159,7 +186,7 @@ class MusicViewModel @Inject constructor(
         }
     }
 
-    fun setQuery(query: String) {
+    override fun setQuery(query: String) {
         _state.update { it.copy(query = query) }
         searchJob?.cancel()
         val source = source() ?: return
@@ -175,7 +202,7 @@ class MusicViewModel @Inject constructor(
         }
     }
 
-    fun openAlbum(album: MusicAlbum) {
+    override fun openAlbum(album: MusicAlbum) {
         val source = source() ?: return
         _state.update { it.copy(pages = it.pages + MusicPage.Album(album)) }
         viewModelScope.launch {
@@ -189,7 +216,7 @@ class MusicViewModel @Inject constructor(
         }
     }
 
-    fun openArtist(artist: MusicArtist) {
+    override fun openArtist(artist: MusicArtist) {
         val source = source() ?: return
         _state.update { it.copy(pages = it.pages + MusicPage.Artist(artist)) }
         viewModelScope.launch {
@@ -204,7 +231,7 @@ class MusicViewModel @Inject constructor(
     }
 
     /** Opens the artist of an album or track when only the name and id are known. */
-    fun openArtist(id: String?, name: String) {
+    override fun openArtist(id: String?, name: String) {
         if (id.isNullOrBlank()) return
         openArtist(MusicArtist(id = id, name = name, coverUrl = null))
     }
@@ -216,7 +243,7 @@ class MusicViewModel @Inject constructor(
     }
 
     /** Returns false when there was nothing to close, so the caller can leave the tab. */
-    fun back(): Boolean {
+    override fun back(): Boolean {
         val current = _state.value
         return when {
             current.playerOpen -> { _state.update { it.copy(playerOpen = false) }; true }
@@ -226,20 +253,20 @@ class MusicViewModel @Inject constructor(
         }
     }
 
-    fun setPlayerOpen(open: Boolean) = _state.update { it.copy(playerOpen = open) }
+    override fun setPlayerOpen(open: Boolean) = _state.update { it.copy(playerOpen = open) }
 
-    fun play(tracks: List<MusicTrack>, index: Int = 0) = player.playQueue(tracks, index)
-    fun shuffle(tracks: List<MusicTrack>) = player.playQueue(tracks, shuffle = true)
-    fun togglePlay() = player.togglePlay()
-    fun next() = player.next()
-    fun previous() = player.previous()
-    fun seekTo(positionMs: Long) = player.seekTo(positionMs)
-    fun skipTo(index: Int) = player.skipTo(index)
-    fun toggleShuffle() = player.toggleShuffle()
-    fun cycleRepeat() = player.cycleRepeat()
+    override fun play(tracks: List<MusicTrack>, index: Int) = player.playQueue(tracks, index)
+    override fun shuffle(tracks: List<MusicTrack>) = player.playQueue(tracks, shuffle = true)
+    override fun togglePlay() = player.togglePlay()
+    override fun next() = player.next()
+    override fun previous() = player.previous()
+    override fun seekTo(positionMs: Long) = player.seekTo(positionMs)
+    override fun skipTo(index: Int) = player.skipTo(index)
+    override fun toggleShuffle() = player.toggleShuffle()
+    override fun cycleRepeat() = player.cycleRepeat()
 
     /** Plays a whole album from the home shelves without opening it first. */
-    fun playAlbum(album: MusicAlbum) {
+    override fun playAlbum(album: MusicAlbum) {
         val source = source() ?: return
         viewModelScope.launch {
             runCatching { source.albumTracks(album.id) }.onSuccess { player.playQueue(it) }

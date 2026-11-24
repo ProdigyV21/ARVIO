@@ -410,7 +410,7 @@ fun AppNavigation(
         // Music: the user's own music server. A touch-only tab; TV has no entry to it.
         composable(Screen.Music.route) {
             NavigationRailScreen(navigationRailInset, bottomInset = navigationRailBottomInset) {
-                MusicScreen(onBack = { navigateHome() })
+                MusicScreen(onFullscreenChanged = onOverlayFullscreenChanged, onBack = { navigateHome() })
             }
         }
 
