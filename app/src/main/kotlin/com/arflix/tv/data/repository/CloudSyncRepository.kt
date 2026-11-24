@@ -236,6 +236,20 @@ class CloudSyncRepository @Inject constructor(
     var isPushDirty: Boolean = false
         private set
 
+    private val remoteRevision = RemoteRevisionTracker()
+
+    /**
+     * True when another device saved the account document since the last check. Costs one tiny
+     * request and downloads nothing; a failed read is never reported as a change.
+     */
+    suspend fun remoteChangedSinceLastCheck(): Boolean =
+        remoteRevision.observe(authRepository.getAccountSyncRevision().getOrNull())
+
+    /** Call after this device pulled, so that pull is not mistaken for another device's save. */
+    suspend fun rememberRemoteRevision() {
+        remoteRevision.rebase(authRepository.getAccountSyncRevision().getOrNull())
+    }
+
     fun markLocalStateDirty() {
         val dirtyAt = System.currentTimeMillis()
         synchronized(dirtyStateLock) {

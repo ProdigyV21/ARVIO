@@ -2380,6 +2380,31 @@ async function saveSnapshotToBlobs(event, identity, snapshot, condition) {
   return normalized;
 }
 
+/**
+ * A cheap "did the account document change?" signal for clients that poll. It reads only the
+ * metadata of the stored document (no body), and the etag changes on every write, so two equal
+ * revisions mean nothing was saved in between. Returns null when the account has no document yet.
+ */
+async function loadSnapshotRevision(event, identity) {
+  const stores = snapshotStores(event);
+  const key = snapshotKeys(identity).supabase;
+  let meta;
+  try {
+    meta = await stores.account.getMetadata(key, { consistency: "strong" });
+  } catch (error) {
+    if (String(error?.message || "").includes("uncachedEdgeURL")) {
+      meta = await stores.account.getMetadata(key);
+    } else if (error?.status === 404 || error?.name === "BlobNotFoundError") {
+      return null;
+    } else {
+      throw error;
+    }
+  }
+  if (!meta) return null;
+  const revision = String(meta.etag || meta.metadata?.updatedAt || "").trim();
+  return revision || null;
+}
+
 async function appendSnapshotEvent(event, identity, snapshot) {
   const stores = snapshotStores(event);
   const cursor = Date.now();
@@ -3096,6 +3121,7 @@ module.exports = {
   snapshotKeys,
   loadSnapshotFromBlobs,
   loadSnapshotForUpdate,
+  loadSnapshotRevision,
   saveSnapshotToBlobs,
   appendSnapshotEvent,
   listBlobKeys,
