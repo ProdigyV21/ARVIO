@@ -1572,5 +1572,6 @@
   "Open streams with ARVIO Premium": "ARVIO Premiumでストリームを開く",
   "Filter categories": "カテゴリを絞り込む",
   "Clear filter": "フィルターをクリア",
-  "No categories match \"{value0}\".": "「{value0}」に一致するカテゴリはありません。"
+  "No categories match \"{value0}\".": "「{value0}」に一致するカテゴリはありません。",
+  "Chromecast": "Chromecast"
 }

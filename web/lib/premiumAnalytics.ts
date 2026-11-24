@@ -278,7 +278,9 @@ export async function trackPremiumDaily(
   auth: AuthClient,
   eventName: PremiumFunnelEvent,
   metadata: Record<string, string | number | boolean> = {},
-  now = new Date()
+  now = new Date(),
+  /** Called once, only when this call actually delivered the event (not a same-day repeat). */
+  onSent?: () => void
 ) {
   if (!analyticsAllowed() || !config.paywallEnabled || !auth.session) return false;
   const accountId = auth.session.userId;
@@ -302,6 +304,7 @@ export async function trackPremiumDaily(
       dailyRecorded.set(key, date);
       storageSet(disk, key, date);
     }
+    if (recorded) onSent?.();
     return recorded;
   } finally { inFlight.delete(key); }
 }

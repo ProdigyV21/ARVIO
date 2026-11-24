@@ -40,10 +40,11 @@ export function PlayerOverlay() {
     streams,
     playStream,
     advanceEpisode,
+    prefetchNextEpisode,
     setToast,
     closePlayer,
     openDetails
-  } = useAppPick("activeStream", "activeChannel", "selected", "selectedEpisode", "settings", "addons", "updateSettings", "activeProfile", "streams", "playStream", "advanceEpisode", "setToast", "closePlayer", "openDetails");
+  } = useAppPick("activeStream", "activeChannel", "selected", "selectedEpisode", "settings", "addons", "updateSettings", "activeProfile", "streams", "playStream", "advanceEpisode", "prefetchNextEpisode", "setToast", "closePlayer", "openDetails");
 
   // Stalker portals hand out short-lived play tokens: the player asks for a
   // fresh link when every connection to the current one failed.
@@ -102,6 +103,7 @@ export function PlayerOverlay() {
       canAdvance={canAdvance}
       onSelectStream={playStream}
       onAdvance={advanceEpisode}
+      onPrefetchNext={prefetchNextEpisode}
       onToast={setToast}
       onClose={closePlayer}
     />

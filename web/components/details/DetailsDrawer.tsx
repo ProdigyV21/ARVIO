@@ -27,6 +27,10 @@ import { syncClient, syncSeasonWatched } from "@/lib/sync";
 import { getLogoUrl, getPersonDetails } from "@/lib/tmdb";
 import type { EpisodeInfo, MediaItem, PersonCredit, PersonDetails, ReviewInfo, WatchHistoryEntry } from "@/lib/types";
 import { EpisodeCard } from "./EpisodeCard";
+import { preconnectOrigin } from "@/lib/preconnect";
+import { arvioAppLink } from "@/lib/appLink";
+import { isAndroid } from "@/lib/externalPlayers";
+import { config as appConfig } from "@/lib/config";
 import { loadDetails, loadReviews, loadSeasonEpisodes } from "./detailsLoaders";
 import { buildDetailMeta, cleanReviewText, formatDate } from "./detailsText";
 import { SourcePickerModal, useCompactSources } from "./SourcePicker";
@@ -154,6 +158,8 @@ function DetailsView({ item }: { item: MediaItem }) {
   }, [starting, activeStream]);
   const [logo, setLogo] = useState<string | null>(null);
   const [relayTraktLink, setRelayTraktLink] = useState(false);
+  // Pressing Play resolves the stream through the resolver: warm that connection now.
+  useEffect(() => { preconnectOrigin(appConfig.resolverUrl); }, []);
   useEffect(() => { let active = true; void relaySupportsTraktLink().then((ok) => { if (active) setRelayTraktLink(ok); }); return () => { active = false; }; }, []);
   // Trakt's own page, found through Simkl's id mapping; the relay redirect and
   // a title search remain the fallbacks.
@@ -249,6 +255,8 @@ function DetailsView({ item }: { item: MediaItem }) {
 
   const isTv = displayItem.mediaType === "tv";
   const inWatchlist = watchlist.some((entry) => entry.mediaType === item.mediaType && entry.id === item.id);
+  // Android phones and tablets: hand the title to the ARVIO app (full codec support).
+  const appLink = useMemo(() => (isAndroid() ? arvioAppLink(displayItem, displayItem.mediaType === "tv" ? selectedEpisode : null) : null), [displayItem, selectedEpisode]);
   const detailWatched = isWatched(displayItem, selectedEpisode?.season, selectedEpisode?.episode);
 
   // ---------- Resume, from any entry point ----------
@@ -505,6 +513,7 @@ function DetailsView({ item }: { item: MediaItem }) {
           <div className="detail-links">
             <a href={simklUrl} target="_blank" rel="noopener noreferrer" className="detail-link">{translateUi("View on Simkl")}</a>
             <a href={traktPage ?? traktLinkUrl(displayItem, relayTraktLink)} target="_blank" rel="noopener noreferrer" className="detail-link">{translateUi("View on Trakt")}</a>
+            {appLink ? <a href={appLink} className="detail-link">{translateUi("Open in {value0}", { value0: "ARVIO" })}</a> : null}
           </div>
           {!streams.length && !isTv && busy !== "Finding sources" && (
             <p className="detail-action-hint">{translateUi("Sources will appear here when an installed addon returns results.")}</p>

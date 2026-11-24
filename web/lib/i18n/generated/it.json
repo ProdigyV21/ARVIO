@@ -1578,5 +1578,6 @@
   "Open streams with ARVIO Premium": "Apri gli stream con ARVIO Premium",
   "Filter categories": "Filtra categorie",
   "Clear filter": "Cancella filtro",
-  "No categories match \"{value0}\".": "Nessuna categoria corrisponde a \"{value0}\"."
+  "No categories match \"{value0}\".": "Nessuna categoria corrisponde a \"{value0}\".",
+  "Chromecast": "Chromecast"
 }

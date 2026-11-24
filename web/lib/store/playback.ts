@@ -4,7 +4,7 @@ import { browserAutoplayCandidates } from "../browserAutoplay";
 import { needsAudioConversion } from "../autoplayVerify";
 import { isPreferredAutoplaySource, loadAutoplayPreference, orderByPreference } from "../autoplaySelection";
 import { recordBrowserPlaybackFailure, playbackPlan } from "../streamCompatibility";
-import { useCallback } from "react";
+import { useCallback, useRef } from "react";
 import { getStreamsProgressive } from "../addons";
 import { isDisabledTelegramSource, TELEGRAM_DISABLED_MESSAGE } from "../config";
 import { cachedDebridDirectUrl, parseDebridStream } from "../debrid";
@@ -163,17 +163,59 @@ export function usePlaybackActions(store: StoreCore & Pick<ReturnType<typeof use
     })();
   }, [selected, activeProfile, selectedEpisode]);
 
+  // The next episode's source search, started while the end credits run (Up
+  // next) so that advancing starts at once. Searching is only reading addon
+  // lists: no debrid link is resolved and nothing is downloaded until Play.
+  type NextSearch = { key: string; at: number; rows: Map<string, StreamSource>; listeners: Set<(rows: StreamSource[]) => void>; done: Promise<void> };
+  const nextSearchRef = useRef<NextSearch | null>(null);
+  const resolveNextEpisode = useCallback(async () => {
+    if (!selected || selected.mediaType !== "tv" || !selectedEpisode) return null;
+    const next = nextLocalEpisode({ ...selected, timeRemainingLabel: "Up next", seasonNumber: selectedEpisode.season, episodeNumber: selectedEpisode.episode + 1 });
+    if (next?.seasonNumber == null || next.episodeNumber == null) return { item: selected, next: null, episode: null };
+    const episodes = await getSeasonEpisodes(selected.tmdbId ?? selected.id, next.seasonNumber);
+    const episode = episodes.find((item) => item.episodeNumber === next.episodeNumber) ?? null;
+    return { item: selected, next: { season: next.seasonNumber, episode: next.episodeNumber }, episode };
+  }, [selected, selectedEpisode]);
+  const startNextSearch = useCallback((item: MediaItem, season: number, episode: number): NextSearch => {
+    const key = `${item.mediaType}:${item.id}:${season}:${episode}`;
+    const current = nextSearchRef.current;
+    // A search older than ten minutes may hold expired links: search again.
+    if (current?.key === key && Date.now() - current.at < 10 * 60_000) return current;
+    const search: NextSearch = { key, at: Date.now(), rows: new Map(), listeners: new Set(), done: Promise.resolve() };
+    const add = (rows: StreamSource[]) => {
+      for (const row of rows) search.rows.set(`${row.addonId ?? row.addonName ?? ""}|${row.url}`, row);
+      search.listeners.forEach((listener) => listener(rows));
+    };
+    // All source types participate; one unavailable provider does not hold up another.
+    search.done = Promise.allSettled([
+      getStreamsProgressive(addonsRef.current, item, season, episode, add).then(add),
+      appendHomeServerSources(item, season, episode).then(add),
+      appendVodSources(item, season, episode).then(add),
+      appendTelegramSources(item, season, episode).then(add)
+    ]).then(() => undefined);
+    nextSearchRef.current = search;
+    return search;
+  }, [appendHomeServerSources, appendVodSources, appendTelegramSources]);
+  /** Called when Up next appears: look the next episode's sources up ahead of time. */
+  const prefetchNextEpisode = useCallback(async () => {
+    try {
+      const found = await resolveNextEpisode();
+      if (!found?.next || !found.episode || (found.episode.airDate && Date.parse(found.episode.airDate) > Date.now())) return;
+      startNextSearch(found.item, found.next.season, found.next.episode);
+    } catch { /* advancing searches again */ }
+  }, [resolveNextEpisode, startNextSearch]);
+
   const advanceEpisode = useCallback(async (): Promise<boolean> => {
     if (!selected || selected.mediaType !== "tv" || !selectedEpisode) return false;
     const generation = ++sourceGeneration.current;
     const playback = ++playbackGeneration.current;
     const isCurrent = () => sourceGeneration.current === generation && playbackGeneration.current === playback;
     try {
-      const next = nextLocalEpisode({ ...selected, timeRemainingLabel: "Up next", seasonNumber: selectedEpisode.season, episodeNumber: selectedEpisode.episode + 1 });
-      if (next?.seasonNumber == null || next.episodeNumber == null) { setToast("You have reached the last available episode."); return false; }
-      const episodes = await getSeasonEpisodes(selected.tmdbId ?? selected.id, next.seasonNumber);
+      const found = await resolveNextEpisode();
+      if (!found?.next) { setToast("You have reached the last available episode."); return false; }
       if (!isCurrent()) return false;
-      const episode = episodes.find((item) => item.episodeNumber === next.episodeNumber);
+      const { episode } = found;
+      const next = { seasonNumber: found.next.season, episodeNumber: found.next.episode };
       if (!episode || (episode.airDate && Date.parse(episode.airDate) > Date.now())) { setToast("The next episode is not available yet."); return false; }
       let started = false;
       // Same bounded preference as the details Play button: a debrid source or
@@ -192,21 +234,20 @@ export function usePlaybackActions(store: StoreCore & Pick<ReturnType<typeof use
         const candidate = candidates[0];
         if (!candidate) return;
         started = true;
-        setSelectedEpisode({ season: next.seasonNumber!, episode: next.episodeNumber! });
+        setSelectedEpisode({ season: next.seasonNumber, episode: next.episodeNumber });
         setSelected((item) => item ? { ...item, seasonNumber: next.seasonNumber, episodeNumber: next.episodeNumber, episodeTitle: episode.name, episodeStill: episode.still } : item);
         setActiveStream(null);
         playStream({ ...candidate, autoSelect: true, resumePositionSeconds: 0 }, { forceBrowser: true });
       };
       setStreams([]);
       const publish = (rows: StreamSource[]) => { if (sourceGeneration.current === generation) { mergeStreams(rows); choose(rows); } };
+      const search = startNextSearch(found.item, next.seasonNumber, next.episodeNumber);
+      // Rows found ahead of time (Up next) count at once; later ones as they arrive.
+      search.listeners.add(publish);
+      publish([...search.rows.values()]);
       const settleTimer = window.setTimeout(() => { settled = true; choose([]); }, 2500);
-      // All source types participate; one unavailable provider does not hold up another.
-      await Promise.allSettled([
-        getStreamsProgressive(addonsRef.current, selected, next.seasonNumber, next.episodeNumber, publish).then(publish),
-        appendHomeServerSources(selected, next.seasonNumber, next.episodeNumber).then(choose),
-        appendVodSources(selected, next.seasonNumber, next.episodeNumber).then(choose),
-        appendTelegramSources(selected, next.seasonNumber, next.episodeNumber).then(choose)
-      ]);
+      await search.done;
+      search.listeners.delete(publish);
       window.clearTimeout(settleTimer);
       settled = true;
       choose([]);
@@ -216,7 +257,7 @@ export function usePlaybackActions(store: StoreCore & Pick<ReturnType<typeof use
       if (isCurrent()) setToast("Could not load the next episode. Please retry.");
       return false;
     }
-  }, [selected, selectedEpisode, playStream, mergeStreams, appendHomeServerSources, appendVodSources, appendTelegramSources]);
+  }, [selected, selectedEpisode, playStream, mergeStreams, resolveNextEpisode, startNextSearch]);
 
   const playTrailer = useCallback(async (item: MediaItem) => {
     let url = item.trailerUrl ?? null;
@@ -338,5 +379,5 @@ export function usePlaybackActions(store: StoreCore & Pick<ReturnType<typeof use
     setActiveStream(null);
     setActiveChannel(null);
   }, []);
-  return { playStream, advanceEpisode, playTrailer, openLiveExternally, recordChannelPlayback, playChannel, playCatchup, closePlayer };
+  return { playStream, advanceEpisode, prefetchNextEpisode, playTrailer, openLiveExternally, recordChannelPlayback, playChannel, playCatchup, closePlayer };
 }

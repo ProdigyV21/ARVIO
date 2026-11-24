@@ -1572,5 +1572,6 @@
   "Open streams with ARVIO Premium": "Fungua mitiririko ukiwa na ARVIO Premium",
   "Filter categories": "Chuja kategoria",
   "Clear filter": "Futa kichujio",
-  "No categories match \"{value0}\".": "Hakuna kategoria inayolingana na \"{value0}\"."
+  "No categories match \"{value0}\".": "Hakuna kategoria inayolingana na \"{value0}\".",
+  "Chromecast": "Chromecast"
 }

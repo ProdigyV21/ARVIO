@@ -1574,5 +1574,6 @@
   "Open streams with ARVIO Premium": "Atveriet straumes ar ARVIO Premium",
   "Filter categories": "Filtrēt kategorijas",
   "Clear filter": "Notīrīt filtru",
-  "No categories match \"{value0}\".": "Neviena kategorija neatbilst “{value0}”."
+  "No categories match \"{value0}\".": "Neviena kategorija neatbilst “{value0}”.",
+  "Chromecast": "Chromecast"
 }

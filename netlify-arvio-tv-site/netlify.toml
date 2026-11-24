@@ -1,4 +1,8 @@
 [build]
+  # Static site: only its own folder matters.
+  # Exit 0 = skip. Deploy previews are never built (owner request, Nov 2026), and
+  # production skips commits that leave this site's sources unchanged.
+  ignore = 'if [ "$CONTEXT" = "deploy-preview" ]; then exit 0; fi; git diff --quiet "$CACHED_COMMIT_REF" "$COMMIT_REF" -- .'
   command = "echo Static site ready"
   publish = "."
 

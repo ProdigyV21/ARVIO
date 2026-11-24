@@ -1571,5 +1571,6 @@
   "Open streams with ARVIO Premium": "ARVIO Premium மூலம் ஸ்ட்ரீம்களைத் திறக்கவும்",
   "Filter categories": "வகைகளை வடிகட்டு",
   "Clear filter": "வடிகட்டியை அழி",
-  "No categories match \"{value0}\".": "\"{value0}\" உடன் பொருந்தும் வகைகள் இல்லை."
+  "No categories match \"{value0}\".": "\"{value0}\" உடன் பொருந்தும் வகைகள் இல்லை.",
+  "Chromecast": "Chromecast"
 }

@@ -1573,5 +1573,6 @@
   "Open streams with ARVIO Premium": "Mở luồng phát với ARVIO Premium",
   "Filter categories": "Lọc danh mục",
   "Clear filter": "Xóa bộ lọc",
-  "No categories match \"{value0}\".": "Không có danh mục nào khớp với \"{value0}\"."
+  "No categories match \"{value0}\".": "Không có danh mục nào khớp với \"{value0}\".",
+  "Chromecast": "Chromecast"
 }

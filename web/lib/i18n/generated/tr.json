@@ -1572,5 +1572,6 @@
   "Open streams with ARVIO Premium": "Yayınları ARVIO Premium ile açın",
   "Filter categories": "Kategorileri filtrele",
   "Clear filter": "Filtreyi temizle",
-  "No categories match \"{value0}\".": "\"{value0}\" ile eşleşen kategori yok."
+  "No categories match \"{value0}\".": "\"{value0}\" ile eşleşen kategori yok.",
+  "Chromecast": "Chromecast"
 }

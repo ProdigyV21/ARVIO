@@ -1572,5 +1572,6 @@
   "Open streams with ARVIO Premium": "Nyiss meg streameket ARVIO Premiummal",
   "Filter categories": "Kategóriák szűrése",
   "Clear filter": "Szűrő törlése",
-  "No categories match \"{value0}\".": "Nincs a(z) „{value0}” keresésnek megfelelő kategória."
+  "No categories match \"{value0}\".": "Nincs a(z) „{value0}” keresésnek megfelelő kategória.",
+  "Chromecast": "Chromecast"
 }

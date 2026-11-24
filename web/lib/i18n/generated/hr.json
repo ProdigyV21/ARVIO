@@ -1575,5 +1575,6 @@
   "Open streams with ARVIO Premium": "Otvarajte streamove uz ARVIO Premium",
   "Filter categories": "Filtriraj kategorije",
   "Clear filter": "Očisti filtar",
-  "No categories match \"{value0}\".": "Nijedna kategorija ne odgovara \"{value0}\"."
+  "No categories match \"{value0}\".": "Nijedna kategorija ne odgovara \"{value0}\".",
+  "Chromecast": "Chromecast"
 }

@@ -1528,5 +1528,6 @@
   "Open streams with ARVIO Premium": "Open streams met ARVIO Premium",
   "Filter categories": "Categorieën filteren",
   "Clear filter": "Filter wissen",
-  "No categories match \"{value0}\".": "Geen categorieën gevonden voor \"{value0}\"."
+  "No categories match \"{value0}\".": "Geen categorieën gevonden voor \"{value0}\".",
+  "Chromecast": "Chromecast"
 }

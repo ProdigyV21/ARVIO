@@ -11,6 +11,7 @@ import { loadHomeServerRows } from "../homeserver";
 import { loadPlaylists } from "../iptv";
 import { migrateLegacyIptvKeys } from "../stalkerPortals";
 import { loadStored, saveStored } from "../storage";
+import { setRankingRuntime } from "../connectionBudget";
 import type { TraktDeviceCode } from "../trakt";
 import type { TraktActivitySnapshot } from "../traktActivity";
 import type { AccountRevisionSnapshot } from "../accountChange";
@@ -54,6 +55,10 @@ export function useStoreCore(initialView?: AppView) {
   const accountRevisionRef = useRef<AccountRevisionSnapshot>(null);
   const [watchedKeys, setWatchedKeys] = useState<Set<string>>(() => new Set());
   const [selected, setSelected] = useState<MediaItem | null>(null);
+  // Source ranking compares each file's bitrate with what this connection carries (connectionBudget).
+  useEffect(() => {
+    setRankingRuntime(selected?.durationSeconds ? selected.durationSeconds / 60 : selected?.duration, selected?.mediaType);
+  }, [selected?.duration, selected?.durationSeconds, selected?.mediaType]);
   const [streams, setStreams] = useState<StreamSource[]>([]);
   const streamsRef = useRef(streams);
   streamsRef.current = streams;
