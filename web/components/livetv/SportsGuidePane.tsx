@@ -14,6 +14,7 @@ import { VirtualList } from "@/components/ui/VirtualList";
 import { ChannelLogo } from "@/components/livetv/ChannelLogo";
 import { channelPlaylistId } from "@/lib/stalkerPortals";
 import { sizedSportsImage } from "@/lib/sportsImageSize";
+import { uiLocales } from "@/lib/uiLocale";
 
 const NO_ADDONS: InstalledAddon[] = [];
 export function SportsGuidePane({ channels, guide, onPlay, onEnter, onOpenCategories, providerNames = {}, addons = NO_ADDONS, clockFormat }: {
@@ -157,8 +158,8 @@ export function SportsGuidePane({ channels, guide, onPlay, onEnter, onOpenCatego
     if (isOnAir(event, now)) return "ON AIR";
     const date = new Date(event.programme.startUtcMillis);
     const today = new Date(now), tomorrow = new Date(now); tomorrow.setDate(tomorrow.getDate() + 1);
-    const day = date.toDateString() === today.toDateString() ? "Today" : date.toDateString() === tomorrow.toDateString() ? "Tomorrow" : new Intl.DateTimeFormat([], { weekday: "short", day: "numeric", month: "short" }).format(date);
-    return `${day} ${new Intl.DateTimeFormat([], { hour: "numeric", minute: "2-digit", ...(clockFormat ? { hour12: clockFormat === "12h" } : {}) }).format(date)}`;
+    const day = date.toDateString() === today.toDateString() ? "Today" : date.toDateString() === tomorrow.toDateString() ? "Tomorrow" : new Intl.DateTimeFormat(uiLocales(), { weekday: "short", day: "numeric", month: "short" }).format(date);
+    return `${day} ${new Intl.DateTimeFormat(uiLocales(), { hour: "numeric", minute: "2-digit", ...(clockFormat ? { hour12: clockFormat === "12h" } : {}) }).format(date)}`;
   };
   return <section ref={root} className="tv-sports" aria-label={translateUi("Sports")}>
     <h2><button className="tv-sports-drawer" type="button" aria-label={translateUi("Categories")} onClick={onOpenCategories}><PanelLeft size={22} /></button>{translateUi("Sports")}</h2>
