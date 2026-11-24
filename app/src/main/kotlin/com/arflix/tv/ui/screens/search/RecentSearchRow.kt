@@ -112,7 +112,7 @@ internal fun RecentSearchRow(
             bottom = 4.dp
         )
     ) {
-        item(key = "label") {
+        item(key = "label", contentType = "RecentSearchRow.label") {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Default.History, contentDescription = null,
                     tint = Color.White.copy(alpha = 0.6f), modifier = Modifier.size(15.dp))
@@ -124,7 +124,7 @@ internal fun RecentSearchRow(
                 )
             }
         }
-        itemsIndexed(queries, key = { _, query -> "q:$query" }) { index, query ->
+        itemsIndexed(queries, key = { _, query -> "q:$query" }, contentType = { _, _ -> "RecentSearchRow.queries" }) { index, query ->
             ChipBox(
                 focused = painted(index),
                 isTouchDevice = isTouchDevice,
@@ -134,7 +134,7 @@ internal fun RecentSearchRow(
                 ChipText(query)
             }
         }
-        item(key = "clear") {
+        item(key = "clear", contentType = "RecentSearchRow.clear") {
             val focused = painted(queries.size)
             ChipBox(
                 focused = focused,

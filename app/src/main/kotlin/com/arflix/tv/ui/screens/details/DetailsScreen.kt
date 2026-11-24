@@ -1802,7 +1802,7 @@ internal fun DetailsContent(
                                         contentPadding = PaddingValues(start = 16.dp, end = 16.dp),
                                         horizontalArrangement = Arrangement.spacedBy(12.dp)
                                     ) {
-                                        items(4) {
+                                        items(4, contentType = { "DetailsScreen.rows" }) {
                                             SkeletonEpisodeCard()
                                         }
                                     }
@@ -2687,7 +2687,7 @@ private fun DetailsTvRows(
     ) {
         if (item.mediaType == MediaType.TV && (episodes.isNotEmpty() || isSeasonLoading)) {
             if (totalSeasons > 1) {
-                item {
+                item(contentType = "DetailsScreen.item") {
                     DetailsSeasonRail(
                         totalSeasons = totalSeasons,
                         currentSeason = currentSeason,
@@ -2703,7 +2703,7 @@ private fun DetailsTvRows(
                 }
             }
 
-            item {
+            item(contentType = "DetailsScreen.item2") {
                 DetailsEpisodeRail(
                     episodes = episodes,
                     episodePlaybackProgress = episodePlaybackProgress,
@@ -2721,7 +2721,7 @@ private fun DetailsTvRows(
         }
 
         if (item.mediaType == MediaType.TV && episodes.isNotEmpty() && showEpisodeRatings && hasAnyValidRating) {
-            item {
+            item(contentType = "DetailsScreen.item3") {
                 DetailsEpisodeRatingsRail(
                     episodes = episodes,
                     totalSeasons = totalSeasons,
@@ -2737,8 +2737,8 @@ private fun DetailsTvRows(
         }
 
         if (cast.isNotEmpty()) {
-            item { Spacer(modifier = Modifier.height(4.dp)) }
-            item {
+            item(contentType = "DetailsScreen.spacer") { Spacer(modifier = Modifier.height(4.dp)) }
+            item(contentType = "DetailsScreen.item5") {
                 DetailsCastRail(
                     cast = cast,
                     castIndex = castIndex,
@@ -2751,8 +2751,8 @@ private fun DetailsTvRows(
         }
 
         if (reviews.isNotEmpty()) {
-            item { Spacer(modifier = Modifier.height(4.dp)) }
-            item {
+            item(contentType = "DetailsScreen.spacer") { Spacer(modifier = Modifier.height(4.dp)) }
+            item(contentType = "DetailsScreen.item7") {
                 DetailsReviewRail(
                     reviews = reviews,
                     reviewIndex = reviewIndex,
@@ -2765,8 +2765,8 @@ private fun DetailsTvRows(
 
         // Collection items row — shown when this movie belongs to a TMDB collection
         if (collectionItems.isNotEmpty()) {
-            item { Spacer(modifier = Modifier.height(4.dp)) }
-            item {
+            item(contentType = "DetailsScreen.spacer") { Spacer(modifier = Modifier.height(4.dp)) }
+            item(contentType = "DetailsScreen.item9") {
                 DetailsCollectionRail(
                     collectionItems = collectionItems,
                     collectionName = collectionName,
@@ -2781,8 +2781,8 @@ private fun DetailsTvRows(
         }
 
         if (similar.isNotEmpty()) {
-            item { Spacer(modifier = Modifier.height(4.dp)) }
-            item {
+            item(contentType = "DetailsScreen.spacer") { Spacer(modifier = Modifier.height(4.dp)) }
+            item(contentType = "DetailsScreen.item11") {
                 DetailsSimilarRail(
                     similar = similar,
                     similarLogoUrls = similarLogoUrls,
@@ -2796,7 +2796,7 @@ private fun DetailsTvRows(
             }
         }
 
-        item { Spacer(modifier = Modifier.height(20.dp)) }
+        item(contentType = "DetailsScreen.spacer") { Spacer(modifier = Modifier.height(20.dp)) }
     } }
 }
 
@@ -2848,7 +2848,7 @@ private fun DetailsSeasonRail(
         ),
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        itemsIndexed(seasonItems, key = { _, s -> s }) { index, season ->
+        itemsIndexed(seasonItems, key = { _, s -> s }, contentType = { _, _ -> "DetailsScreen.seasonItems" }) { index, season ->
             val progress = seasonProgress[season]
             val currentSeasonProgress = if (season == currentSeason && episodes.isNotEmpty()) {
                 Pair(episodes.count { it.isWatched }, episodes.size)
@@ -3183,13 +3183,14 @@ private fun DetailsEpisodeRail(
             horizontalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             if (isSeasonLoading) {
-                items(4) {
+                items(4, contentType = { "DetailsScreen.rows2" }) {
                     SkeletonEpisodeCard(modifier = Modifier.width(episodeCardWidth))
                 }
             } else {
                 itemsIndexed(
                     episodes,
-                    key = { index, ep -> "${ep.seasonNumber}_${ep.episodeNumber}_$index" }
+                    key = { index, ep -> "${ep.seasonNumber}_${ep.episodeNumber}_$index" },
+                    contentType = { _, _ -> "DetailsScreen.episodes" },
                 ) { index, episode ->
                     val isFocused = currentFocusedSection == FocusSection.EPISODES && index == currentEpisodeIndex
                     val onClickForEpisode = remember(index) {
@@ -3269,7 +3270,8 @@ private fun DetailsCastRail(
         ) {
             itemsIndexed(
                 cast,
-                key = { index, c -> "${c.id}_${c.character}_$index" }
+                key = { index, c -> "${c.id}_${c.character}_$index" },
+                contentType = { _, _ -> "DetailsScreen.cast" },
             ) { index, castMember ->
                 val onClickForCast = remember(index) {
                     { currentOnCastClick.value(index) }
@@ -3331,7 +3333,8 @@ private fun DetailsReviewRail(
         ) {
             itemsIndexed(
                 reviews,
-                key = { index, r -> "${r.id}_$index" }
+                key = { index, r -> "${r.id}_$index" },
+                contentType = { _, _ -> "DetailsScreen.reviews" },
             ) { index, review ->
                 ReviewCard(
                     review = review,
@@ -3402,7 +3405,8 @@ private fun DetailsSimilarRail(
             ) {
                 itemsIndexed(
                     similar,
-                    key = { index, m -> "${m.mediaType.name}_${m.id}_$index" }
+                    key = { index, m -> "${m.mediaType.name}_${m.id}_$index" },
+                    contentType = { _, _ -> "DetailsScreen.similar" },
                 ) { index, mediaItem ->
                     val onClickForSimilar = remember(index) {
                         { currentOnSimilarClick.value(index) }
@@ -3489,7 +3493,8 @@ private fun DetailsCollectionRail(
             ) {
                 itemsIndexed(
                     collectionItems,
-                    key = { index, m -> "col_${m.mediaType.name}_${m.id}_$index" }
+                    key = { index, m -> "col_${m.mediaType.name}_${m.id}_$index" },
+                    contentType = { _, _ -> "DetailsScreen.collectionItems" },
                 ) { index, mediaItem ->
                     val onClickForCollection = remember(index) {
                         { currentOnCollectionClick.value(index) }

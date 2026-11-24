@@ -47,8 +47,15 @@ internal fun tvPivotScrollDistance(
     val initialTarget = parentFraction * containerSize - childFraction * itemSize
     val spaceAvailable = containerSize - initialTarget
     val target = if (childSmallerThanParent && spaceAvailable < itemSize) containerSize - itemSize else initialTarget
-    return offset - target
+    val distance = offset - target
+    // A nudge of a few pixels for an item that is already fully on screen only makes the
+    // list twitch (focus scaling and rounding cause these); leave it where it is.
+    val fullyVisible = offset >= 0f && offset + itemSize <= containerSize
+    return if (fullyVisible && abs(distance) < TV_PIVOT_DEAD_ZONE_PX) 0f else distance
 }
+
+/** Scrolls smaller than this (in px) are skipped for items that are already fully visible. */
+internal const val TV_PIVOT_DEAD_ZONE_PX = 12f
 
 /**
  * Wraps a lazy list so D-pad focus scrolls it like TvLazyRow/TvLazyColumn did.

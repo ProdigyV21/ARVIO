@@ -47,6 +47,19 @@ class TvPivotScrollTest {
         assertEquals(900f, tvPivotScrollDistance(900f, 100f, 1000f, parentFraction = 0f), 0.001f)
     }
 
+    @Test fun tinyNudgesForFullyVisibleItemsAreSkipped() {
+        // 5px away from the pivot and fully on screen: no twitch.
+        assertEquals(0f, tvPivotScrollDistance(offset = 305f, size = 100f, containerSize = 1000f), 0.001f)
+        assertEquals(0f, tvPivotScrollDistance(offset = 295f, size = 100f, containerSize = 1000f), 0.001f)
+        // Anything from 12px up still scrolls.
+        assertEquals(12f, tvPivotScrollDistance(offset = 312f, size = 100f, containerSize = 1000f), 0.001f)
+        assertEquals(30f, tvPivotScrollDistance(offset = 330f, size = 100f, containerSize = 1000f), 0.001f)
+        // An item that is partly off the leading edge must still be brought fully into view.
+        assertEquals(-5f, tvPivotScrollDistance(offset = -5f, size = 100f, containerSize = 1000f, parentFraction = 0f), 0.001f)
+        // Same for one hanging over the trailing edge.
+        assertEquals(8f, tvPivotScrollDistance(offset = 908f, size = 100f, containerSize = 1000f, parentFraction = 0.9f), 0.001f)
+    }
+
     @OptIn(ExperimentalTestApi::class)
     @Test fun dpadRightScrollsTheRowToThePivotWithoutCrashing() {
         lateinit var state: LazyListState

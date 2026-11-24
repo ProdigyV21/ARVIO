@@ -318,7 +318,7 @@ internal fun CommunityAddonsBrowser(
                         verticalArrangement = Arrangement.spacedBy(if (isTouch) 8.dp else 10.dp),
                         contentPadding = PaddingValues(bottom = if (isTouch) 32.dp else 24.dp)
                     ) {
-                        items(visible, key = { it.transportUrl }) { addon ->
+                        items(visible, key = { it.transportUrl }, contentType = { "CommunityAddonsBrowser.visible" }) { addon ->
                             val requester = remember { FocusRequester() }
                             DisposableEffect(addon.transportUrl) {
                                 rowRequesters[addon.transportUrl] = requester

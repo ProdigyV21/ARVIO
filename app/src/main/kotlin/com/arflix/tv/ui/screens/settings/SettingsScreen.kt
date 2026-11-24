@@ -3755,7 +3755,7 @@ private fun QualityFiltersModal(
                             .fillMaxWidth()
                             .heightIn(max = 460.dp)
                     ) {
-                        itemsIndexed(filters) { index, filter ->
+                        itemsIndexed(filters, contentType = { _, _ -> "SettingsScreen.filters" }) { index, filter ->
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -5050,7 +5050,7 @@ private fun MobileSettingsMainPage(
         ),
         verticalArrangement = Arrangement.spacedBy(20.dp)
     ) {
-        item {
+        item(contentType = "SettingsScreen.item") {
             MobileSettingsCategory(title = stringResource(R.string.settings_section_languages)) {
                 MobileSettingsRow(
                     icon = Icons.Default.Language,
@@ -5088,7 +5088,7 @@ private fun MobileSettingsMainPage(
             }
         }
 
-        item {
+        item(contentType = "SettingsScreen.item2") {
             MobileSettingsCategory(title = stringResource(R.string.settings_section_categories)) {
                 val categories = buildList {
                     add("Stream Integrations" to Icons.Default.Tune)
@@ -5126,7 +5126,7 @@ private fun MobileSettingsMainPage(
             }
         }
 
-        item {
+        item(contentType = "SettingsScreen.item3") {
             MobileSettingsCategory(title = stringResource(R.string.settings_section_user_account)) {
                 MobileSettingsRow(
                     icon = Icons.Default.Person,
@@ -9079,7 +9079,7 @@ internal fun CatalogDiscoveryModal(
                                 modifier = Modifier.fillMaxSize(),
                                 verticalArrangement = Arrangement.spacedBy(12.dp)
                             ) {
-                                itemsIndexed(results, key = { _, item -> item.id }) { _, item ->
+                                itemsIndexed(results, key = { _, item -> item.id }, contentType = { _, _ -> "SettingsScreen.results" }) { _, item ->
                                     val isAdded = normalizeCatalogDiscoveryUrl(item.sourceUrl) in normalizedAddedCatalogUrls
                                     CatalogDiscoveryResultRow(
                                         result = item,
@@ -9874,7 +9874,7 @@ private fun CatalogsSettings(
             }
         }
         LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
-          item(key = "heading") {
+          item(key = "heading", contentType = "SettingsScreen.heading") {
             header()
             if (selectionMode) {
                 Row(modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -9886,15 +9886,15 @@ private fun CatalogsSettings(
             }
             Text(text = stringResource(R.string.catalogs), style = ArflixTypography.caption, color = TextSecondary.copy(alpha = 0.65f), modifier = Modifier.padding(bottom = 20.dp))
           }
-          item(key = "add") {
+          item(key = "add", contentType = "SettingsScreen.add") {
             SettingsRow(icon = Icons.Default.Add, title = stringResource(R.string.add_catalog), subtitle = stringResource(R.string.add_catalog_desc), value = stringResource(R.string.settings_badge_add), isFocused = focusedIndex == 0, onClick = onAddCatalog, modifier = Modifier.settingsFocusSlot(0))
             Spacer(modifier = Modifier.height(16.dp))
           }
-          item(key = "import") {
+          item(key = "import", contentType = "SettingsScreen.import") {
             SettingsRow(icon = Icons.Default.Widgets, title = stringResource(R.string.settings_catalog_pack_import_title), subtitle = stringResource(R.string.settings_catalog_pack_import_desc), value = stringResource(R.string.settings_catalog_pack_import_badge), isFocused = focusedIndex == 1, onClick = onImportCatalogPack, modifier = Modifier.settingsFocusSlot(1))
             Spacer(modifier = Modifier.height(16.dp))
           }
-          item(key = "collections") {
+          item(key = "collections", contentType = "SettingsScreen.collections") {
             SettingsRow(icon = if (builtInCollectionsEnabled) Icons.Default.Visibility else Icons.Default.VisibilityOff, title = stringResource(R.string.settings_builtin_collections_title), subtitle = stringResource(R.string.settings_builtin_collections_desc), value = stringResource(if (builtInCollectionsEnabled) R.string.on else R.string.off), isFocused = focusedIndex == 2, onClick = onToggleBuiltInCollections, modifier = Modifier.settingsFocusSlot(2))
             Spacer(modifier = Modifier.height(16.dp))
           }
@@ -12686,7 +12686,7 @@ private fun SubtitlePickerModal(
                     state = listState,
                     modifier = Modifier.heightIn(max = 360.dp).arvioDpadFocusGroup()
                 ) {
-                    itemsIndexed(options) { index, option ->
+                    itemsIndexed(options, contentType = { _, _ -> "SettingsScreen.options" }) { index, option ->
                         val isFocused = index == safeIndex
                         val isSelected = option.equals(selected, ignoreCase = true)
                         val optionFocusColor = resolveAccentColor(fallback = Pink)
@@ -13153,7 +13153,8 @@ private fun IptvCategoriesSettings(
                 ) {
                     itemsIndexed(
                         items = orderedGroups,
-                        key = { _, group -> com.arflix.tv.data.model.PlaylistGroupKey.build(playlistId, group) }
+                        key = { _, group -> com.arflix.tv.data.model.PlaylistGroupKey.build(playlistId, group) },
+                        contentType = { _, _ -> "SettingsScreen.items" },
                     ) { index, group ->
                         val rowFocusIndex = index + firstGroupIndex
                         val isRowFocused = focusedIndex == rowFocusIndex
@@ -13442,7 +13443,8 @@ private fun StalkerCatalogCategoryList(
             ) {
                 itemsIndexed(
                     items = categories,
-                    key = { _, category -> category.id }
+                    key = { _, category -> category.id },
+                    contentType = { _, _ -> "SettingsScreen.items2" },
                 ) { index, category ->
                     MobileStalkerCatalogRow(
                         title = category.title,
@@ -13465,7 +13467,8 @@ private fun StalkerCatalogCategoryList(
         ) {
             itemsIndexed(
                 items = categories,
-                key = { _, category -> category.id }
+                key = { _, category -> category.id },
+                contentType = { _, _ -> "SettingsScreen.items3" },
             ) { index, category ->
                 val rowFocusIndex = index + firstCategoryIndex
                 val isRowFocused = focusedIndex == rowFocusIndex
@@ -13567,7 +13570,8 @@ private fun MobileIptvCategoryReorderList(
         ) {
             itemsIndexed(
                 items = orderedGroups,
-                key = { _, group -> com.arflix.tv.data.model.PlaylistGroupKey.build(playlistId, group) }
+                key = { _, group -> com.arflix.tv.data.model.PlaylistGroupKey.build(playlistId, group) },
+                contentType = { _, _ -> "SettingsScreen.items4" },
             ) { index, group ->
                 val groupKey = com.arflix.tv.data.model.PlaylistGroupKey.build(playlistId, group)
                 MobileIptvCategoryRow(
@@ -14330,19 +14334,19 @@ private fun YouTubeCollectionModal(
                     modifier = Modifier.padding(top = 2.dp, bottom = 12.dp)
                 )
                 LazyColumn(state = listState, modifier = Modifier.fillMaxWidth().weight(1f, fill = false)) {
-                    item(key = "add") {
+                    item(key = "add", contentType = "SettingsScreen.add2") {
                         YouTubeModalRow(
                             title = stringResource(R.string.youtube_add_link), subtitle = stringResource(R.string.youtube_add_link_desc),
                             isFocused = focusedIndex == 0, onClick = { focusedIndex = 0; activate(0) }
                         ) { YouTubeActionChip(Icons.Default.Add, highlighted = focusedIndex == 0, onClick = { focusedIndex = 0; activate(0) }) }
                     }
-                    item(key = "rename") {
+                    item(key = "rename", contentType = "SettingsScreen.rename") {
                         YouTubeModalRow(
                             title = stringResource(R.string.youtube_rename_row), subtitle = catalog.title,
                             isFocused = focusedIndex == 1, onClick = { focusedIndex = 1; activate(1) }
                         ) { YouTubeActionChip(Icons.Default.Edit, highlighted = focusedIndex == 1, onClick = { focusedIndex = 1; activate(1) }) }
                     }
-                    itemsIndexed(videos, key = { _, video -> video.id }) { index, video ->
+                    itemsIndexed(videos, key = { _, video -> video.id }, contentType = { _, _ -> "SettingsScreen.videos" }) { index, video ->
                         val rowIndex = index + 2
                         val rowFocused = focusedIndex == rowIndex
                         val armed = armedVideoId == video.id

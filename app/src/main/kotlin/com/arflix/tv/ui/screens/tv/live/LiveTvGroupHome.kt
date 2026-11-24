@@ -252,6 +252,7 @@ fun LiveTvGroupHome(
         items(
             items = groups,
             key = { group -> "group_plank_${group.id}" },
+            contentType = { "LiveTvGroupHome.items" },
         ) { group ->
             GroupPlankTile(
                 category = group,

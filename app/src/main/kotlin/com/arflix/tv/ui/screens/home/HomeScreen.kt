@@ -3602,7 +3602,7 @@ private fun MobileHomeRowsLayer(
                         ),
                         horizontalArrangement = Arrangement.spacedBy(mobileItemSpacing)
                     ) {
-                        items(8, key = { "skeleton_${category.id}_$it" }) {
+                        items(8, key = { "skeleton_${category.id}_$it" }, contentType = { "HomeScreen.rows" }) {
                             if (isPortrait) {
                                 SkeletonPosterCard(width = rowMobileItemWidth)
                             } else {

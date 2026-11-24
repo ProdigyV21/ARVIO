@@ -135,7 +135,7 @@ internal fun DiscoverFilterRow(
             bottom = 4.dp
         )
     ) {
-        itemsIndexed(chips, key = { _, chip -> chip.key }) { index, chip ->
+        itemsIndexed(chips, key = { _, chip -> chip.key }, contentType = { _, _ -> "DiscoverFilterBar.chips" }) { index, chip ->
             val chipModifier = Modifier.testTag("search-filter-${chip.key}")
             val focused = !isTouchDevice && isRowFocused && focusedIndex == index
             if (chip.segments != null) {

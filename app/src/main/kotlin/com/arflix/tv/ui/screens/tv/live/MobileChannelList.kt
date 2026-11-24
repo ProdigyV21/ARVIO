@@ -34,7 +34,7 @@ internal fun MobileChannelList(channels: List<EnrichedChannel>, guide: Map<Strin
             .distinctUntilChanged().collect { (first, last) -> report(first, last) }
     }
     LazyColumn(modifier.testTag("mobile-channel-list"), state = scroll, contentPadding = PaddingValues(bottom = 24.dp)) {
-        items(channels, key = { it.id }) { channel ->
+        items(channels, key = { it.id }, contentType = { "MobileChannelList.channels" }) { channel ->
             val playing = channel.id == playingId
             val foreground = if (playing) Color.Black else Color.White
             val secondary = if (playing) Color.DarkGray else Color.LightGray

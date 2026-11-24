@@ -1,5 +1,6 @@
 package com.arflix.tv.ui.skin
 
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -12,6 +13,8 @@ import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -32,6 +35,9 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+
+private val RestScale: State<Float> = object : State<Float> { override val value: Float = 1f }
+private val NoRestBorder: State<Float> = object : State<Float> { override val value: Float = 0f }
 
 @OptIn(ExperimentalFoundationApi::class)
 fun Modifier.arvioFocusable(
@@ -70,25 +76,36 @@ fun Modifier.arvioFocusable(
     }
 
     val tokens = ArvioSkin.focus
-    val animatedScale = if (animateFocus) {
-        animateFloatAsState(
-            targetValue = targetScale,
-            animationSpec = tween(durationMillis = 105, easing = tokens.easing),
-            label = "arvio_focus_scale",
-        )
-    } else {
-        androidx.compose.runtime.rememberUpdatedState(targetScale)
+    // A row holds dozens of cards and nearly all of them are never focused. Only once a card
+    // has been focused or pressed does it get an animation (and its coroutine); the rest stay
+    // plain, which keeps composing and scrolling a row cheap.
+    val scaleEngaged = remember { BooleanArray(1) }
+    if (targetScale != 1f) scaleEngaged[0] = true
+    val animatedScale: State<Float> = when {
+        !animateFocus -> androidx.compose.runtime.rememberUpdatedState(targetScale)
+        scaleEngaged[0] -> {
+            val scale = remember { Animatable(1f) }
+            LaunchedEffect(targetScale) {
+                scale.animateTo(targetScale, tween(durationMillis = 105, easing = tokens.easing))
+            }
+            scale.asState()
+        }
+        else -> RestScale
     }
 
     // Focus ownership changes immediately; fading out leaves two highlighted cards.
     val highlightAlpha = if (visualFocused) 1f else 0f
 
     // Subtle luminous edge always visible on cards that opt in (glass morphism).
-    val restBorderAlpha = animateFloatAsState(
-        targetValue = if (showRestBorder && !visualFocused) 0.4f else 0f,
-        animationSpec = tween(durationMillis = 150, easing = tokens.easing),
-        label = "arvio_rest_border",
-    )
+    val restBorderAlpha: State<Float> = if (showRestBorder) {
+        animateFloatAsState(
+            targetValue = if (!visualFocused) 0.4f else 0f,
+            animationSpec = tween(durationMillis = 150, easing = tokens.easing),
+            label = "arvio_rest_border",
+        )
+    } else {
+        NoRestBorder
+    }
 
     val originX = if (visualFocused) focusedTransformOriginX.coerceIn(0f, 1f) else 0.5f
     val focusTransformOrigin = TransformOrigin(originX, 0.5f)
