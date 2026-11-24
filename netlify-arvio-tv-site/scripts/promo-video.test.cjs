@@ -156,7 +156,7 @@ for (const file of ['index.html', 'es/index.html', 'pt-br/index.html']) {
     assert.match(html, /data-src="\/assets\/promo\/arvio-tour-web.mp4"/);
     assert.match(html, /href="\/assets\/promo\/arvio-tour-720p.mp4" download/);
     assert.match(html, /promo-video.js\?v=2/);
-    const hero = html.match(/<section class="hero hero-v3"[^>]*>([\s\S]*?)<\/section>/)?.[1];
+    const hero = html.match(/<section class="hero hero-v\d+"[^>]*>([\s\S]*?)<\/section>/)?.[1];
     assert.ok(hero?.includes('href="#demo"'), 'The hero links to the tour');
     const tour = html.match(/<section id="demo"[^>]*>([\s\S]*?)<\/section>/)?.[1];
     assert.ok(tour?.includes('id="promo-video"'), 'The tour section holds the video');
