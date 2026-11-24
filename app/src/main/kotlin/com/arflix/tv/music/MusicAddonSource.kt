@@ -19,6 +19,8 @@ data class MusicAddon(
     val id: String,
     val name: String,
     val catalogs: List<MusicAddonCatalog> = emptyList(),
+    /** Null for the Stremio-style protocol, [EclipseAddonSource.PROTOCOL] for an Eclipse addon. */
+    val protocol: String? = null,
 )
 
 data class MusicAddonCatalog(
@@ -27,6 +29,8 @@ data class MusicAddonCatalog(
     /** Only answers a search, so it is not a home shelf. */
     val searchOnly: Boolean,
     val searchable: Boolean,
+    /** What the catalog lists (album, playlist, track, artist); only Eclipse addons say. */
+    val type: String? = null,
 )
 
 /**
@@ -141,12 +145,14 @@ class MusicAddonSource(
         const val STREAM_SCHEME = "arvio-music-addon"
 
         /** A placeholder URI the playback service resolves to the addon's stream when the track plays. */
-        fun addonStreamUri(baseUrl: String, trackId: String): String =
+        fun addonStreamUri(baseUrl: String, trackId: String, protocol: String? = null): String =
             "$STREAM_SCHEME://stream?base=" + URLEncoder.encode(baseUrl, "UTF-8") +
-                "&id=" + URLEncoder.encode(trackId, "UTF-8")
+                "&id=" + URLEncoder.encode(trackId, "UTF-8") +
+                (protocol?.let { "&p=" + URLEncoder.encode(it, "UTF-8") } ?: "")
 
         /** Asks the addon for a track's stream; blocking, for the player's loading thread. */
-        fun resolveStream(http: OkHttpClient, baseUrl: String, trackId: String): String {
+        fun resolveStream(http: OkHttpClient, baseUrl: String, trackId: String, protocol: String? = null): String {
+            if (protocol == EclipseAddonSource.PROTOCOL) return EclipseAddonSource.resolveStream(http, baseUrl, trackId)
             val url = baseUrl.toHttpUrl().newBuilder()
                 .addPathSegment("stream").addPathSegment("track").addPathSegment("$trackId.json").build()
             return fetchJson(http, url).list("streams").firstNotNullOfOrNull { it.str("url") }
@@ -165,7 +171,8 @@ class MusicAddonSource(
             val base = normalizeAddonUrl(input)
             if (base.isEmpty()) throw MusicServerException("Enter the addon address")
             val manifest = fetchJson(http, "$base/manifest.json".toHttpUrl())
-            parseManifest(base, manifest)
+            if (EclipseAddonSource.isEclipseManifest(manifest)) EclipseAddonSource.parseManifest(base, manifest)
+            else parseManifest(base, manifest)
         }
 
         fun parseManifest(base: String, manifest: JsonObject): MusicAddon {
