@@ -55,6 +55,7 @@ import com.arflix.tv.ui.screens.settings.telegram.TelegramSettingsScreen
 import com.arflix.tv.ui.screens.tv.live.LiveTvScreen
 import com.arflix.tv.ui.screens.watchlist.WatchlistScreen
 import com.arflix.tv.ui.screens.news.NewsScreen
+import com.arflix.tv.ui.screens.music.MusicScreen
 import com.arflix.tv.ui.screens.watchlist.calendar.ReleaseCalendarViewModel
 import com.arflix.tv.ui.screens.home.HOME_COMING_UP_ROW_ID
 import com.arflix.tv.ui.screens.profile.ProfileSelectionScreen
@@ -93,6 +94,7 @@ sealed class Screen(val route: String) {
     data object Search : Screen("search")
     data object Watchlist : Screen("watchlist")
     data object News : Screen("news")
+    data object Music : Screen("music")
     data object CollectionDetails : Screen(
         "collections/{catalogId}?serviceRow={serviceRow}&serviceFilter={serviceFilter}"
     ) {
@@ -402,6 +404,13 @@ fun AppNavigation(
                     },
                     onBack = { navigateHome() }
                 )
+            }
+        }
+
+        // Music: the user's own music server. A touch-only tab; TV has no entry to it.
+        composable(Screen.Music.route) {
+            NavigationRailScreen(navigationRailInset, bottomInset = navigationRailBottomInset) {
+                MusicScreen(onFullscreenChanged = onOverlayFullscreenChanged, onBack = { navigateHome() })
             }
         }
 

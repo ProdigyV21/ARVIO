@@ -7,6 +7,10 @@
     <!-- Permissions -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- Music tab: keeps the user's own music playing in the background, with media controls. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="com.google.android.gms.permission.AD_ID" tools:node="remove" />
     <uses-permission android:name="android.permission.ACCESS_ADSERVICES_AD_ID" tools:node="remove" />
     <uses-permission android:name="android.permission.ACCESS_ADSERVICES_ATTRIBUTION" tools:node="remove" />
@@ -22,9 +26,6 @@
     <!-- ARVIO only uses Discord Rich Presence, not the SDK's voice stack. -->
     <uses-permission
         android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE"
-        tools:node="remove" />
-    <uses-permission
-        android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"
         tools:node="remove" />
     <uses-permission
         android:name="android.permission.MODIFY_AUDIO_SETTINGS"
@@ -224,6 +225,15 @@
                 <action android:name="${applicationId}.INSTALL_COMPLETE" />
             </intent-filter>
         </receiver>
+
+        <service
+            android:name=".music.MusicPlaybackService"
+            android:exported="true"
+            android:foregroundServiceType="mediaPlayback">
+            <intent-filter>
+                <action android:name="androidx.media3.session.MediaSessionService" />
+            </intent-filter>
+        </service>
 
         <service
             android:name=".ui.screens.player.preview.KeyframeWorkerService"

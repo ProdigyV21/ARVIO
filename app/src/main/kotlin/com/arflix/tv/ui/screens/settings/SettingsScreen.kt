@@ -107,6 +107,7 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Subtitles
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.filled.VolumeUp
+import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.material.icons.filled.LiveTv
 import androidx.compose.material.icons.filled.Newspaper
 import androidx.compose.material.icons.filled.Tv
@@ -5897,6 +5898,7 @@ private fun MobileSettingsSubPage(
                                     "search" -> Icons.Default.Search
                                     "watchlist" -> Icons.Default.Bookmark
                                     "news" -> Icons.Default.Newspaper
+                                    "music" -> Icons.Default.LibraryMusic
                                     else -> Icons.Default.LiveTv
                                 },
                                 title = navigationVisibilityTitle(section),
@@ -6998,6 +7000,7 @@ private fun navigationVisibilityTitle(section: String): String = stringResource(
     "search" -> R.string.navigation_show_search
     "watchlist" -> R.string.navigation_show_library
     "news" -> R.string.navigation_show_news
+    "music" -> R.string.navigation_show_music
     else -> R.string.navigation_show_tv
 })
 
