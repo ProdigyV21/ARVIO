@@ -340,13 +340,17 @@ export function VideoPlayer({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [liveTv, settings.audioLanguage]);
 
-  // Startup time runs from opening the player (or a manual source change after
-  // playback had started) to the first frame; automatic source hops in between
-  // count as part of the wait. null = this start is already counted.
+  // Startup time runs from opening a title (or the next episode) to its first
+  // frame; source hops, URL refreshes and restarts in between count as part of
+  // the wait, never as another start. null = this title's start is counted.
   const startupClockRef = useRef<number | null>(typeof performance === "undefined" ? 0 : performance.now());
+  const startKey = `${item?.mediaType ?? ""}:${item?.id ?? ""}:${selectedEpisode?.season ?? item?.seasonNumber ?? ""}:${selectedEpisode?.episode ?? item?.episodeNumber ?? ""}`;
+  const countedKeyRef = useRef(startKey);
   useEffect(() => {
-    if (startupClockRef.current === null) startupClockRef.current = performance.now();
-  }, [stream.url]);
+    if (countedKeyRef.current === startKey) return;
+    countedKeyRef.current = startKey;
+    startupClockRef.current = performance.now();
+  }, [startKey]);
   useEffect(() => {
     setBooted(false);
     const video = videoRef.current;
