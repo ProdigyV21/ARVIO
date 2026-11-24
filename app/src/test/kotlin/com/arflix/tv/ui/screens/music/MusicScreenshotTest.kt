@@ -282,9 +282,28 @@ class MusicScreenshotTest {
         }
         val view = compose.activity.window.decorView
         val bitmap = Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888)
-        compose.runOnUiThread { view.draw(Canvas(bitmap)) }
+        compose.runOnUiThread {
+            val canvas = Canvas(bitmap)
+            view.draw(canvas)
+            // Dialogs open in windows of their own: dim the screen and draw each one centred, as Android shows it.
+            dialogWindows(view).forEach { dialog ->
+                canvas.drawColor(0x99000000.toInt())
+                canvas.save()
+                canvas.translate((bitmap.width - dialog.width) / 2f, (bitmap.height - dialog.height) / 2f)
+                dialog.draw(canvas)
+                canvas.restore()
+            }
+        }
         File(out!!).mkdirs()
         File(out, "$name.png").outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
+    }
+
+    /** Root views of the windows other than the activity's own, such as an open dialog. */
+    private fun dialogWindows(activityRoot: android.view.View): List<android.view.View> {
+        val global = Class.forName("android.view.WindowManagerGlobal")
+        val instance = global.getMethod("getInstance").invoke(null)
+        val views = global.getDeclaredField("mViews").apply { isAccessible = true }.get(instance) as List<*>
+        return views.filterIsInstance<android.view.View>().filter { it !== activityRoot && it.width > 0 && it.height > 0 }
     }
 
     /** The tab as it sits in the app: the bottom navigation bar over its lower edge. */
