@@ -802,6 +802,16 @@ async function fetchRawPayload(auth: AuthClient): Promise<RawPayload> {
 }
 
 /** Read the full account_sync_state payload object (shared with Android). */
+/**
+ * The revision of the stored account document: it changes whenever any device saves, and reading
+ * it downloads nothing. Null when the account cannot use the backend or the server has no value.
+ */
+export async function pullCloudRevision(auth: AuthClient): Promise<string | null> {
+  if (!auth.session || !canUseBackendSync(auth)) return null;
+  const result = await backendRequest<{ revision?: unknown }>(auth, "account-sync-cursor");
+  return typeof result.revision === "string" && result.revision ? result.revision : null;
+}
+
 export async function pullRawPayload(auth: AuthClient): Promise<RawPayload> {
   if (!auth.session) return {};
   const userId = auth.session.userId;

@@ -1855,6 +1855,21 @@ class AuthRepository @Inject constructor(
         }
     }
 
+    /**
+     * The server's revision of the account document: it changes whenever any device saves, and reading
+     * it downloads nothing. Null when the server does not report one or cloud sync is not Netlify-backed.
+     */
+    suspend fun getAccountSyncRevision(): Result<String?> {
+        return runCatching {
+            if (!Constants.USE_NETLIFY_CLOUD_SYNC) return@runCatching null
+            val response = callNetlifyFunction(
+                url = Constants.NETLIFY_ACCOUNT_SYNC_CURSOR_URL,
+                body = JSONObject().toString()
+            )
+            JSONObject(response).optString("revision", "").takeIf { it.isNotBlank() && it != "null" }
+        }
+    }
+
     suspend fun pushAccountSyncItems(itemsJson: String): Result<String> {
         return runCatching {
             if (Constants.USE_NETLIFY_CLOUD_SYNC) {

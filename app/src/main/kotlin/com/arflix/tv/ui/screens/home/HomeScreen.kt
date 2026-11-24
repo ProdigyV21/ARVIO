@@ -127,6 +127,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -891,8 +892,19 @@ fun HomeScreen(
         }
     }
 
+    // While Home is on screen, ask once a minute whether another device saved to the account.
+    // The server answers with a revision (nothing is downloaded); a pull happens only on a change.
+    LaunchedEffect(lifecycleOwner) {
+        lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            while (true) {
+                delay(60_000L)
+                viewModel.checkForRemoteCloudChange()
+            }
+        }
+    }
+
     // The startup preload bypasses the kids filter, so a kids profile never falls back to it.
-    val rawDisplayCategoriesBase = if (uiState.categories.isNotEmpty() || kidsFilterState.isActive) {
+    val rawDisplayCategoriesBase =if (uiState.categories.isNotEmpty() || kidsFilterState.isActive) {
         uiState.categories
     } else {
         preloadedCategories
