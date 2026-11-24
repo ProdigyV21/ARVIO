@@ -3,7 +3,7 @@
     <string name="nav_music">Muziek</string>
     <string name="navigation_show_music">Muziek tonen</string>
     <string name="music_connect_title">Je eigen muziek in ARVIO</string>
-    <string name="music_connect_body">Stream de muziekcollectie van je eigen server. ARVIO werkt met Navidrome en andere Subsonic-servers, en met Jellyfin.</string>
+    <string name="music_connect_body">Speel muziek af van muziek-addons die je zelf toevoegt, net als bij films, of van je eigen server (Navidrome en andere Subsonic-servers, of Jellyfin). ARVIO levert zelf geen muziek.</string>
     <string name="music_server_url">Serveradres</string>
     <string name="music_server_url_hint">bijv. 192.168.1.10:4533</string>
     <string name="music_username">Gebruikersnaam</string>
@@ -34,6 +34,11 @@
     <string name="music_previous">Vorige</string>
     <string name="music_pause">Pauzeren</string>
     <string name="music_repeat">Herhalen</string>
+    <string name="music_addon_url">Addon-adres</string>
+    <string name="music_add_addon">Addon toevoegen</string>
+    <string name="music_add_source">Bron toevoegen</string>
+    <string name="music_remove_addon">%1$s verwijderen</string>
+    <string name="music_addon_failed">Addon toevoegen mislukt: %1$s</string>
     <plurals name="music_track_count">
         <item quantity="one">%d nummer</item>
         <item quantity="other">%d nummers</item>

@@ -3,7 +3,7 @@
     <string name="nav_music">Music</string>
     <string name="navigation_show_music">Show Music</string>
     <string name="music_connect_title">Your own music in ARVIO</string>
-    <string name="music_connect_body">Stream the music collection from your own server. ARVIO works with Navidrome and other Subsonic servers, and with Jellyfin.</string>
+    <string name="music_connect_body">Play music from music addons you add, just like film addons, or from your own server (Navidrome and other Subsonic servers, or Jellyfin). ARVIO itself does not provide any music.</string>
     <string name="music_server_subsonic">Navidrome / Subsonic</string>
     <string name="music_server_jellyfin">Jellyfin</string>
     <string name="music_server_url">Server address</string>
@@ -38,6 +38,14 @@
     <string name="music_previous">Previous</string>
     <string name="music_pause">Pause</string>
     <string name="music_repeat">Repeat</string>
+    <string name="music_source_addon">Addon</string>
+    <string name="music_server_subsonic_short">Navidrome</string>
+    <string name="music_addon_url">Addon address</string>
+    <string name="music_addon_url_hint">https://…/manifest.json</string>
+    <string name="music_add_addon">Add addon</string>
+    <string name="music_add_source">Add source</string>
+    <string name="music_remove_addon">Remove %1$s</string>
+    <string name="music_addon_failed">Could not add the addon: %1$s</string>
     <plurals name="music_track_count">
         <item quantity="one">%d song</item>
         <item quantity="other">%d songs</item>

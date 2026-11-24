@@ -1,5 +1,8 @@
 package com.arflix.tv.music
 
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
+
 /** The kind of personal music server the Music tab is connected to. */
 enum class MusicServerType { SUBSONIC, JELLYFIN }
 
@@ -59,10 +62,29 @@ data class MusicSearchResult(
 /** The album lists the Music home and Albums tab show. */
 enum class AlbumShelf { NEWEST, RECENT, FREQUENT, RANDOM, ALPHABETICAL }
 
+/** One row on the Music home: a standard list ([kind]) or an addon catalog ([title]). */
+data class MusicShelf(
+    val key: String,
+    val albums: List<MusicAlbum>,
+    val kind: AlbumShelf? = null,
+    val title: String? = null,
+)
+
 class MusicServerException(message: String) : Exception(message)
 
 /** One personal music server, whatever API it speaks. */
 interface MusicSource {
+    /** The home rows; a server gives its standard lists, an addon its catalogs. */
+    suspend fun shelves(): List<MusicShelf> = coroutineScope {
+        listOf(AlbumShelf.NEWEST, AlbumShelf.RECENT, AlbumShelf.FREQUENT, AlbumShelf.RANDOM).map { kind ->
+            async {
+                val albums = if (kind == AlbumShelf.NEWEST) albums(kind, 24)
+                else runCatching { albums(kind, 24) }.getOrDefault(emptyList())
+                MusicShelf(key = kind.name, albums = albums, kind = kind)
+            }
+        }.map { it.await() }.filter { it.albums.isNotEmpty() }
+    }
+
     suspend fun albums(shelf: AlbumShelf, size: Int = 30): List<MusicAlbum>
     suspend fun artists(): List<MusicArtist>
     suspend fun artistAlbums(artistId: String): List<MusicAlbum>

@@ -1,3 +1,5 @@
+import { audiusAddon, isAudiusAddonPath } from "./musicAudius";
+
 type Env = {
   RESOLVER_KV?: KVNamespace;
   ALLOWED_ORIGINS?: string;
@@ -293,6 +295,10 @@ export default {
       // and their (large) response bandwidth off the Netlify bill.
       if (url.pathname === "/proxy" && (request.method === "GET" || request.method === "POST")) {
         return apiProxy(request, env);
+      }
+      // Music addon for Audius (music artists share for free), added in the app by URL.
+      if (isAudiusAddonPath(url.pathname) && request.method === "GET") {
+        return audiusAddon(request);
       }
       if (url.pathname === "/health") {
         return json({ ok: true, service: "arvio-resolver", features: ["trakt-link"] }, request, env);

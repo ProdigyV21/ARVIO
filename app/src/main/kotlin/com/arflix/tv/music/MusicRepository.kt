@@ -9,6 +9,7 @@ import androidx.datastore.preferences.preferencesDataStore
 import com.google.gson.Gson
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -21,8 +22,17 @@ import javax.inject.Singleton
 /** Kept apart from the synced settings: the server login belongs to this device only. */
 private val Context.musicDataStore: DataStore<Preferences> by preferencesDataStore(name = "music_server")
 
+/** The sources the Music tab plays from. */
+data class MusicLibrary(
+    val server: MusicServerConfig? = null,
+    val addons: List<MusicAddon> = emptyList(),
+) {
+    val isEmpty: Boolean get() = server == null && addons.isEmpty()
+}
+
 /**
- * The user's own music server: saving the connection and handing out a client for it.
+ * The user's music sources (their own server and music addons): saving them and handing out
+ * one client for all of them.
  */
 @Singleton
 class MusicRepository @Inject constructor(
@@ -41,23 +51,63 @@ class MusicRepository @Inject constructor(
         .readTimeout(30, TimeUnit.SECONDS)
         .build()
 
+    private val addonsKey = stringPreferencesKey("addons_v1")
+
     val config: Flow<MusicServerConfig?> = context.musicDataStore.data
         .map { prefs -> prefs[configKey]?.let { runCatching { gson.fromJson(it, MusicServerConfig::class.java) }.getOrNull() } }
         .distinctUntilChanged()
 
-    private var cached: Pair<MusicServerConfig, MusicSource>? = null
+    val addons: Flow<List<MusicAddon>> = context.musicDataStore.data
+        .map { prefs -> decodeAddons(prefs[addonsKey]) }
+        .distinctUntilChanged()
 
-    fun sourceFor(config: MusicServerConfig): MusicSource {
-        cached?.let { (saved, source) -> if (saved == config) return source }
-        val source = when (config.type) {
-            MusicServerType.SUBSONIC -> SubsonicSource(http, config)
-            MusicServerType.JELLYFIN -> JellyfinMusicSource(http, config)
+    /** Everything the Music tab plays from: the user's server and their music addons. */
+    val library: Flow<MusicLibrary> = combine(config, addons) { server, addons -> MusicLibrary(server, addons) }
+        .distinctUntilChanged()
+
+    private fun decodeAddons(json: String?): List<MusicAddon> = runCatching {
+        gson.fromJson(json ?: "[]", Array<MusicAddon>::class.java)?.toList().orEmpty()
+            .filter { !it.baseUrl.isNullOrBlank() }
+    }.getOrDefault(emptyList())
+
+    private var cached: Pair<MusicLibrary, MusicSource>? = null
+
+    fun sourceFor(library: MusicLibrary): MusicSource? {
+        if (library.isEmpty) return null
+        cached?.let { (saved, source) -> if (saved == library) return source }
+        val sources = buildList<MusicSource> {
+            library.server?.let { server ->
+                add(
+                    when (server.type) {
+                        MusicServerType.SUBSONIC -> SubsonicSource(http, server)
+                        MusicServerType.JELLYFIN -> JellyfinMusicSource(http, server)
+                    }
+                )
+            }
+            library.addons.forEach { add(MusicAddonSource(http, it)) }
         }
-        cached = config to source
+        val source = CompositeMusicSource(sources)
+        cached = library to source
         return source
     }
 
-    suspend fun currentSource(): MusicSource? = config.first()?.let { sourceFor(it) }
+    suspend fun currentSource(): MusicSource? = sourceFor(library.first())
+
+    /** Reads the addon's manifest and adds it; adding the same addon again refreshes it. */
+    suspend fun addAddon(url: String): MusicAddon {
+        val addon = MusicAddonSource.install(http, url)
+        context.musicDataStore.edit { prefs ->
+            val current = decodeAddons(prefs[addonsKey]).filter { it.baseUrl != addon.baseUrl && it.id != addon.id }
+            prefs[addonsKey] = gson.toJson(current + addon)
+        }
+        return addon
+    }
+
+    suspend fun removeAddon(baseUrl: String) {
+        context.musicDataStore.edit { prefs ->
+            prefs[addonsKey] = gson.toJson(decodeAddons(prefs[addonsKey]).filter { it.baseUrl != baseUrl })
+        }
+    }
 
     /** Checks the login against the server and saves it only when it works. */
     suspend fun connect(type: MusicServerType, url: String, username: String, password: String): MusicServerConfig {
@@ -82,7 +132,6 @@ class MusicRepository @Inject constructor(
 
     suspend fun disconnect() {
         context.musicDataStore.edit { it.remove(configKey) }
-        cached = null
     }
 
     private suspend fun deviceId(): String {

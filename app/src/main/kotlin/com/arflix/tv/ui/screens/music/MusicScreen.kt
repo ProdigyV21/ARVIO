@@ -65,6 +65,7 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -95,6 +96,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.common.Player
 import coil.compose.AsyncImage
 import com.arflix.tv.R
+import com.arflix.tv.music.AlbumShelf
 import com.arflix.tv.music.MusicAlbum
 import com.arflix.tv.music.MusicArtist
 import com.arflix.tv.music.MusicPlaybackState
@@ -122,16 +124,23 @@ fun MusicScreen(
     val playback by viewModel.playback.collectAsStateWithLifecycle()
     val accent = resolveAccentColor(fallback = Color.White)
 
-    BackHandler { if (!viewModel.back()) onBack() }
+    var addingSource by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(state.library) { addingSource = false }
+
+    BackHandler {
+        if (addingSource && state.hasSources) addingSource = false
+        else if (!viewModel.back()) onBack()
+    }
 
     Box(Modifier.fillMaxSize().background(Color.Black).testTag("music-screen")) {
         when {
             !state.configLoaded -> Unit
-            state.config == null -> ConnectView(
-                connecting = state.connecting,
-                error = state.connectError,
+            !state.hasSources || addingSource -> ConnectView(
+                state = state,
                 accent = accent,
                 onConnect = viewModel::connect,
+                onAddAddon = viewModel::addAddon,
+                onClose = if (state.hasSources) ({ addingSource = false }) else null,
             )
             else -> {
                 val bottomPadding = LocalBottomBarInset.current +
@@ -139,13 +148,13 @@ fun MusicScreen(
                 when (val page = state.pages.lastOrNull()) {
                     is MusicPage.Album -> AlbumPageView(page, playback, accent, bottomPadding, viewModel)
                     is MusicPage.Artist -> ArtistPageView(page, accent, bottomPadding, viewModel)
-                    null -> LibraryView(state, playback, accent, bottomPadding, viewModel)
+                    null -> LibraryView(state, playback, accent, bottomPadding, viewModel) { addingSource = true }
                 }
             }
         }
 
         val current = playback.current
-        if (current != null && state.config != null) {
+        if (current != null && state.hasSources && !addingSource) {
             MiniPlayer(
                 track = current,
                 playback = playback,
@@ -172,19 +181,35 @@ fun MusicScreen(
 // ---------------------------------------------------------------------------------------------
 // Connecting a server
 
+/** How a source is added: an addon URL, or a login on the user's own server. */
+private enum class SourceKind { ADDON, SUBSONIC, JELLYFIN }
+
 @Composable
 private fun ConnectView(
-    connecting: Boolean,
-    error: String?,
+    state: MusicUiState,
     accent: Color,
     onConnect: (MusicServerType, String, String, String) -> Unit,
+    onAddAddon: (String) -> Unit,
+    onClose: (() -> Unit)?,
 ) {
-    var type by rememberSaveable { mutableStateOf(MusicServerType.SUBSONIC) }
+    var kind by rememberSaveable { mutableStateOf(SourceKind.ADDON) }
     var url by rememberSaveable { mutableStateOf("") }
     var username by rememberSaveable { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
-    val canConnect = url.isNotBlank() && username.isNotBlank() && !connecting
-    val submit = { if (canConnect) onConnect(type, url, username, password) }
+    val isAddon = kind == SourceKind.ADDON
+    val connecting = if (isAddon) state.addingAddon else state.connecting
+    val error = if (isAddon) state.addonError?.let { stringResource(R.string.music_addon_failed, it) }
+    else state.connectError?.let { stringResource(R.string.music_connect_failed, it) }
+    val canConnect = url.isNotBlank() && (isAddon || username.isNotBlank()) && !connecting
+    val submit = {
+        if (canConnect) {
+            when (kind) {
+                SourceKind.ADDON -> onAddAddon(url)
+                SourceKind.SUBSONIC -> onConnect(MusicServerType.SUBSONIC, url, username, password)
+                SourceKind.JELLYFIN -> onConnect(MusicServerType.JELLYFIN, url, username, password)
+            }
+        }
+    }
 
     Column(
         Modifier
@@ -192,9 +217,16 @@ private fun ConnectView(
             .statusBarsPadding()
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 24.dp)
-            .padding(top = 48.dp, bottom = LocalBottomBarInset.current + 24.dp),
+            .padding(top = if (onClose != null) 8.dp else 48.dp, bottom = LocalBottomBarInset.current + 24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
+        if (onClose != null) {
+            Row(Modifier.fillMaxWidth()) {
+                IconButton(onClick = onClose) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.music_back), tint = Color.White)
+                }
+            }
+        }
         Box(
             Modifier.size(72.dp).clip(CircleShape).background(accent.copy(alpha = 0.14f)),
             contentAlignment = Alignment.Center,
@@ -220,16 +252,17 @@ private fun ConnectView(
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 listOf(
-                    MusicServerType.SUBSONIC to R.string.music_server_subsonic,
-                    MusicServerType.JELLYFIN to R.string.music_server_jellyfin,
+                    SourceKind.ADDON to R.string.music_source_addon,
+                    SourceKind.SUBSONIC to R.string.music_server_subsonic_short,
+                    SourceKind.JELLYFIN to R.string.music_server_jellyfin,
                 ).forEach { (option, label) ->
-                    val selected = option == type
+                    val selected = option == kind
                     Box(
                         Modifier
                             .weight(1f)
                             .clip(RoundedCornerShape(9.dp))
                             .background(if (selected) accent else Color.Transparent)
-                            .clickable { type = option }
+                            .clickable { kind = option }
                             .padding(vertical = 10.dp),
                         contentAlignment = Alignment.Center,
                     ) {
@@ -244,30 +277,37 @@ private fun ConnectView(
             Spacer(Modifier.height(16.dp))
             MusicField(
                 value = url, onValue = { url = it },
-                label = stringResource(R.string.music_server_url),
-                placeholder = stringResource(R.string.music_server_url_hint),
+                label = stringResource(if (isAddon) R.string.music_addon_url else R.string.music_server_url),
+                placeholder = stringResource(if (isAddon) R.string.music_addon_url_hint else R.string.music_server_url_hint),
                 accent = accent,
-                keyboard = KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Next, autoCorrectEnabled = false),
-            )
-            Spacer(Modifier.height(12.dp))
-            MusicField(
-                value = username, onValue = { username = it },
-                label = stringResource(R.string.music_username),
-                accent = accent,
-                keyboard = KeyboardOptions(imeAction = ImeAction.Next, autoCorrectEnabled = false),
-            )
-            Spacer(Modifier.height(12.dp))
-            MusicField(
-                value = password, onValue = { password = it },
-                label = stringResource(R.string.music_password),
-                accent = accent,
-                password = true,
-                keyboard = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done),
+                keyboard = KeyboardOptions(
+                    keyboardType = KeyboardType.Uri,
+                    imeAction = if (isAddon) ImeAction.Done else ImeAction.Next,
+                    autoCorrectEnabled = false,
+                ),
                 onDone = submit,
             )
+            if (!isAddon) {
+                Spacer(Modifier.height(12.dp))
+                MusicField(
+                    value = username, onValue = { username = it },
+                    label = stringResource(R.string.music_username),
+                    accent = accent,
+                    keyboard = KeyboardOptions(imeAction = ImeAction.Next, autoCorrectEnabled = false),
+                )
+                Spacer(Modifier.height(12.dp))
+                MusicField(
+                    value = password, onValue = { password = it },
+                    label = stringResource(R.string.music_password),
+                    accent = accent,
+                    password = true,
+                    keyboard = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done),
+                    onDone = submit,
+                )
+            }
             if (error != null) {
                 Spacer(Modifier.height(12.dp))
-                Text(stringResource(R.string.music_connect_failed, error), color = Color(0xFFE74C3C), fontSize = 13.sp)
+                Text(error, color = Color(0xFFE74C3C), fontSize = 13.sp)
             }
             Spacer(Modifier.height(20.dp))
             Box(
@@ -283,7 +323,10 @@ private fun ConnectView(
                 if (connecting) {
                     CircularProgressIndicator(color = contentOn(accent), strokeWidth = 2.dp, modifier = Modifier.size(22.dp))
                 } else {
-                    Text(stringResource(R.string.music_connect), color = contentOn(accent), fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                    Text(
+                        stringResource(if (isAddon) R.string.music_add_addon else R.string.music_connect),
+                        color = contentOn(accent), fontSize = 16.sp, fontWeight = FontWeight.Bold,
+                    )
                 }
             }
         }
@@ -352,6 +395,7 @@ private fun LibraryView(
     accent: Color,
     bottomPadding: Dp,
     viewModel: MusicViewModel,
+    onAddSource: () -> Unit,
 ) {
     Column(Modifier.fillMaxSize().statusBarsPadding()) {
         Row(
@@ -376,9 +420,22 @@ private fun LibraryView(
                             modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp).widthIn(max = 260.dp),
                         )
                     }
+                    state.library.addons.forEach { addon ->
+                        Text(addon.name, color = Faint, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.music_remove_addon, addon.name), color = Color.White) },
+                            onClick = { menu = false; viewModel.removeAddon(addon) },
+                        )
+                    }
+                    if (state.config != null) {
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.music_disconnect), color = Color.White) },
+                            onClick = { menu = false; viewModel.disconnect() },
+                        )
+                    }
                     DropdownMenuItem(
-                        text = { Text(stringResource(R.string.music_disconnect), color = Color.White) },
-                        onClick = { menu = false; viewModel.disconnect() },
+                        text = { Text(stringResource(R.string.music_add_source), color = Color.White) },
+                        onClick = { menu = false; onAddSource() },
                     )
                 }
             }
@@ -447,12 +504,7 @@ private fun LibraryView(
 
 @Composable
 private fun HomeShelves(state: MusicUiState, accent: Color, bottomPadding: Dp, viewModel: MusicViewModel) {
-    val shelves = listOf(
-        R.string.music_shelf_newest to state.newest,
-        R.string.music_shelf_recent to state.recent,
-        R.string.music_shelf_frequent to state.frequent,
-        R.string.music_shelf_random to state.random,
-    ).filter { it.second.isNotEmpty() }
+    val shelves = state.shelves
     when {
         state.loading && shelves.isEmpty() -> LoadingBox()
         state.error != null && shelves.isEmpty() -> MessageBox(
@@ -466,9 +518,17 @@ private fun HomeShelves(state: MusicUiState, accent: Color, bottomPadding: Dp, v
             Modifier.fillMaxSize(),
             contentPadding = PaddingValues(top = 8.dp, bottom = bottomPadding),
         ) {
-            items(shelves, key = { it.first }) { (title, albums) ->
+            items(shelves, key = { it.key }) { shelf ->
+                val title = when (shelf.kind) {
+                    AlbumShelf.NEWEST -> stringResource(R.string.music_shelf_newest)
+                    AlbumShelf.RECENT -> stringResource(R.string.music_shelf_recent)
+                    AlbumShelf.FREQUENT -> stringResource(R.string.music_shelf_frequent)
+                    AlbumShelf.RANDOM -> stringResource(R.string.music_shelf_random)
+                    else -> shelf.title.orEmpty()
+                }
+                val albums = shelf.albums
                 Text(
-                    stringResource(title),
+                    title,
                     color = Color.White, fontSize = 19.sp, fontWeight = FontWeight.Bold,
                     modifier = Modifier.padding(start = 20.dp, top = 16.dp, bottom = 10.dp),
                 )

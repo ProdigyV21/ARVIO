@@ -4,19 +4,20 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.arflix.tv.music.AlbumShelf
 import com.arflix.tv.music.MusicAlbum
+import com.arflix.tv.music.MusicAddon
 import com.arflix.tv.music.MusicArtist
+import com.arflix.tv.music.MusicLibrary
 import com.arflix.tv.music.MusicPlaybackState
 import com.arflix.tv.music.MusicPlayer
 import com.arflix.tv.music.MusicRepository
 import com.arflix.tv.music.MusicSearchResult
 import com.arflix.tv.music.MusicServerConfig
 import com.arflix.tv.music.MusicServerType
+import com.arflix.tv.music.MusicShelf
 import com.arflix.tv.music.MusicSource
 import com.arflix.tv.music.MusicTrack
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.async
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -45,16 +46,15 @@ sealed interface MusicPage {
 
 data class MusicUiState(
     val configLoaded: Boolean = false,
-    val config: MusicServerConfig? = null,
+    val library: MusicLibrary = MusicLibrary(),
     val connecting: Boolean = false,
     val connectError: String? = null,
+    val addingAddon: Boolean = false,
+    val addonError: String? = null,
     val tab: MusicTab = MusicTab.HOME,
     val loading: Boolean = false,
     val error: String? = null,
-    val newest: List<MusicAlbum> = emptyList(),
-    val recent: List<MusicAlbum> = emptyList(),
-    val frequent: List<MusicAlbum> = emptyList(),
-    val random: List<MusicAlbum> = emptyList(),
+    val shelves: List<MusicShelf> = emptyList(),
     val allAlbums: List<MusicAlbum>? = null,
     val artists: List<MusicArtist>? = null,
     val query: String = "",
@@ -62,7 +62,10 @@ data class MusicUiState(
     val results: MusicSearchResult? = null,
     val pages: List<MusicPage> = emptyList(),
     val playerOpen: Boolean = false,
-)
+) {
+    val config: MusicServerConfig? get() = library.server
+    val hasSources: Boolean get() = !library.isEmpty
+}
 
 @HiltViewModel
 class MusicViewModel @Inject constructor(
@@ -78,18 +81,17 @@ class MusicViewModel @Inject constructor(
 
     init {
         viewModelScope.launch {
-            repository.config.collect { config ->
-                val changed = config != _state.value.config
-                _state.update { it.copy(configLoaded = true, config = config) }
-                if (config != null && changed) {
-                    _state.update { MusicUiState(configLoaded = true, config = config) }
-                    loadHome()
-                }
+            repository.library.collect { library ->
+                val changed = library != _state.value.library
+                if (!changed && _state.value.configLoaded) return@collect
+                // A new or removed source starts the library over, but keeps the open player.
+                _state.update { MusicUiState(configLoaded = true, library = library, playerOpen = it.playerOpen) }
+                if (!library.isEmpty) loadHome()
             }
         }
     }
 
-    private fun source(): MusicSource? = _state.value.config?.let { repository.sourceFor(it) }
+    private fun source(): MusicSource? = repository.sourceFor(_state.value.library)
 
     fun connect(type: MusicServerType, url: String, username: String, password: String) {
         if (_state.value.connecting) return
@@ -105,10 +107,26 @@ class MusicViewModel @Inject constructor(
 
     fun disconnect() {
         player.stop()
+        viewModelScope.launch { repository.disconnect() }
+    }
+
+    fun addAddon(url: String) {
+        if (_state.value.addingAddon) return
+        _state.update { it.copy(addingAddon = true, addonError = null) }
         viewModelScope.launch {
-            repository.disconnect()
-            _state.update { MusicUiState(configLoaded = true) }
+            runCatching { repository.addAddon(url) }
+                .onSuccess { _state.update { it.copy(addingAddon = false) } }
+                .onFailure { error ->
+                    _state.update { it.copy(addingAddon = false, addonError = error.message ?: error.javaClass.simpleName) }
+                }
         }
+    }
+
+    fun clearAddonError() = _state.update { it.copy(addonError = null) }
+
+    fun removeAddon(addon: MusicAddon) {
+        player.stop()
+        viewModelScope.launch { repository.removeAddon(addon.baseUrl) }
     }
 
     fun refresh() = loadHome()
@@ -117,21 +135,9 @@ class MusicViewModel @Inject constructor(
         val source = source() ?: return
         _state.update { it.copy(loading = true, error = null) }
         viewModelScope.launch {
-            runCatching { coroutineScope {
-                val newest = async { source.albums(AlbumShelf.NEWEST, 24) }
-                val recent = async { runCatching { source.albums(AlbumShelf.RECENT, 24) }.getOrDefault(emptyList()) }
-                val frequent = async { runCatching { source.albums(AlbumShelf.FREQUENT, 24) }.getOrDefault(emptyList()) }
-                val random = async { runCatching { source.albums(AlbumShelf.RANDOM, 24) }.getOrDefault(emptyList()) }
-                _state.update {
-                    it.copy(
-                        loading = false,
-                        newest = newest.await(),
-                        recent = recent.await(),
-                        frequent = frequent.await(),
-                        random = random.await(),
-                    )
-                }
-            } }.onFailure { error -> _state.update { it.copy(loading = false, error = error.message) } }
+            runCatching { source.shelves() }
+                .onSuccess { shelves -> _state.update { it.copy(loading = false, shelves = shelves) } }
+                .onFailure { error -> _state.update { it.copy(loading = false, error = error.message) } }
         }
     }
 

@@ -116,3 +116,75 @@ class MusicSourcesTest {
         )
     }
 }
+
+class MusicAddonSourceTest {
+    private val http = OkHttpClient()
+
+    private val manifest = JsonParser.parseString(
+        """{"id":"tv.arvio.music.audius","name":"Audius","types":["music"],"catalogs":[
+             {"type":"music","id":"trending","name":"Trending"},
+             {"type":"movie","id":"films","name":"Films"},
+             {"type":"music","id":"search","name":"Search","extra":[{"name":"search","isRequired":true}]}]}"""
+    ).asJsonObject
+
+    @Test fun addonUrlsAreNormalized() {
+        assertEquals("https://resolve.arvio.tv/music/audius", MusicAddonSource.normalizeAddonUrl("https://resolve.arvio.tv/music/audius/manifest.json"))
+        assertEquals("https://resolve.arvio.tv/music/audius", MusicAddonSource.normalizeAddonUrl("stremio://resolve.arvio.tv/music/audius/manifest.json"))
+        assertEquals("https://addon.example.com", MusicAddonSource.normalizeAddonUrl("addon.example.com/"))
+    }
+
+    @Test fun manifestKeepsOnlyMusicCatalogs() {
+        val addon = MusicAddonSource.parseManifest("https://a.example", manifest)
+        assertEquals("Audius", addon.name)
+        assertEquals(listOf("trending", "search"), addon.catalogs.map { it.id })
+        assertEquals(listOf(false, true), addon.catalogs.map { it.searchOnly })
+        try {
+            MusicAddonSource.parseManifest("https://a.example", JsonParser.parseString("""{"id":"x","types":["movie"],"catalogs":[]}""").asJsonObject)
+            fail()
+        } catch (e: MusicServerException) {
+            assertEquals("This is not a music addon", e.message)
+        }
+    }
+
+    @Test fun tracksUseTheirOwnStreamOrAskTheAddonLater() {
+        val source = MusicAddonSource(http, MusicAddonSource.parseManifest("https://a.example/music", manifest))
+        val album = source.parseAlbum(JsonParser.parseString("""{"id":"playlist:1","name":"PL","artist":"Band","poster":"https://img/1","releaseInfo":"2021"}""").asJsonObject)
+        assertEquals(2021, album.year)
+        val direct = source.parseTrack(JsonParser.parseString("""{"id":"t1","title":"Song","duration":200,"streams":[{"url":"https://cdn/t1.mp3"}]}""").asJsonObject, album, 0)
+        assertEquals("https://cdn/t1.mp3", direct.streamUrl)
+        assertEquals("Band", direct.artist)
+        assertEquals("https://img/1", direct.coverUrl)
+        assertEquals(1, direct.trackNumber)
+        val lazy = source.parseTrack(JsonParser.parseString("""{"id":"t 2","title":"Song 2"}""").asJsonObject, album, 1)
+        assertTrue(lazy.streamUrl.startsWith("${MusicAddonSource.STREAM_SCHEME}://stream?base=https%3A%2F%2Fa.example%2Fmusic&id=t+2"))
+    }
+
+    @Test fun compositeRoutesIdsBackToTheirSource() = kotlinx.coroutines.runBlocking {
+        class Fake(val tag: String) : MusicSource {
+            var lastAlbum: String? = null
+            override suspend fun albums(shelf: AlbumShelf, size: Int) = listOf(MusicAlbum("a", "$tag album", "x", "ar", null))
+            override suspend fun artists() = emptyList<MusicArtist>()
+            override suspend fun artistAlbums(artistId: String) = emptyList<MusicAlbum>()
+            override suspend fun albumTracks(albumId: String): List<MusicTrack> {
+                lastAlbum = albumId
+                return listOf(MusicTrack("t", "T", "x", "A", albumId, 1, null, "u"))
+            }
+            override suspend fun search(query: String) = MusicSearchResult()
+            override suspend fun reportPlayed(trackId: String) = Unit
+        }
+        val first = Fake("one")
+        val second = object : MusicSource by Fake("two") {
+            override suspend fun albums(shelf: AlbumShelf, size: Int): List<MusicAlbum> = error("offline")
+        }
+        val third = Fake("three")
+        val composite = CompositeMusicSource(listOf(first, second, third))
+        val albums = composite.albums(AlbumShelf.ALPHABETICAL, 10)
+        assertEquals(listOf("0~a", "2~a"), albums.map { it.id })
+        assertEquals("2~ar", albums[1].artistId)
+        val tracks = composite.albumTracks("2~a")
+        assertEquals("a", third.lastAlbum)
+        assertNull(first.lastAlbum)
+        assertEquals("2~t", tracks[0].id)
+        assertEquals("2~a", tracks[0].albumId)
+    }
+}
