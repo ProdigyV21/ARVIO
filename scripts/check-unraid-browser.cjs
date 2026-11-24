@@ -55,11 +55,12 @@ async function exerciseContext(browser, baseUrl, scenario, evidenceDir) {
         /(?:^|\.)(?:trakt\.tv|simkl\.com|supabase\.co|google-analytics\.com|googletagmanager\.com)$/.test(url.hostname);
       const forbiddenPath = /^\/api\/(?:cloud-auth|premium|membership|entitlement|analytics|trakt|simkl|mdblist)(?:\/|$)/.test(url.pathname) ||
         url.pathname.startsWith('/.netlify/functions/');
-      // On load the app asks its own server whether a Simkl session cookie or MDBList OAuth setup
+      // On load the app asks its own server whether a Simkl or WeTrakr session cookie or MDBList OAuth setup
       // exists. Both answer from local state ("no session", "not configured") and never contact
       // the tracker, so they are not tracker traffic; they run against the real container.
       const localStateProbe = route.request().method() === 'GET' && url.origin === baseUrl &&
-        (url.pathname === '/api/simkl/session' || /^\/api\/mdblist\/oauth\/status\/?$/.test(url.pathname));
+        (url.pathname === '/api/simkl/session' || url.pathname === '/api/wetrakr/session' ||
+          /^\/api\/mdblist\/oauth\/status\/?$/.test(url.pathname));
       if (localStateProbe) {
         await route.continue();
         return;
