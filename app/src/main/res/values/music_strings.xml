@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="nav_music">Music</string>
+    <string name="navigation_show_music">Show Music</string>
+    <string name="music_connect_title">Your own music in ARVIO</string>
+    <string name="music_connect_body">Stream the music collection from your own server. ARVIO works with Navidrome and other Subsonic servers, and with Jellyfin.</string>
+    <string name="music_server_subsonic">Navidrome / Subsonic</string>
+    <string name="music_server_jellyfin">Jellyfin</string>
+    <string name="music_server_url">Server address</string>
+    <string name="music_server_url_hint">e.g. 192.168.1.10:4533</string>
+    <string name="music_username">Username</string>
+    <string name="music_password">Password</string>
+    <string name="music_connect">Connect</string>
+    <string name="music_connecting">Connecting…</string>
+    <string name="music_connect_failed">Could not connect: %1$s</string>
+    <string name="music_disconnect">Disconnect server</string>
+    <string name="music_connected_as">Connected to %1$s as %2$s</string>
+    <string name="music_search_hint">Search artists, albums, songs</string>
+    <string name="music_tab_home">For you</string>
+    <string name="music_tab_albums">Albums</string>
+    <string name="music_tab_artists">Artists</string>
+    <string name="music_shelf_newest">Recently added</string>
+    <string name="music_shelf_recent">Recently played</string>
+    <string name="music_shelf_frequent">Most played</string>
+    <string name="music_shelf_random">Discover</string>
+    <string name="music_songs">Songs</string>
+    <string name="music_play">Play</string>
+    <string name="music_shuffle">Shuffle</string>
+    <string name="music_empty_library">No music found on this server yet.</string>
+    <string name="music_no_results">Nothing found for \"%1$s\"</string>
+    <string name="music_load_failed">Could not load your music.</string>
+    <string name="music_retry">Try again</string>
+    <string name="music_up_next">Up next</string>
+    <string name="music_back">Back</string>
+    <string name="music_more">More</string>
+    <string name="music_close_player">Close player</string>
+    <string name="music_next">Next</string>
+    <string name="music_previous">Previous</string>
+    <string name="music_pause">Pause</string>
+    <string name="music_repeat">Repeat</string>
+    <plurals name="music_track_count">
+        <item quantity="one">%d song</item>
+        <item quantity="other">%d songs</item>
+    </plurals>
+</resources>

@@ -6,10 +6,10 @@ import androidx.datastore.preferences.core.MutablePreferences
 import com.google.gson.Gson
 import com.google.gson.JsonParser
 
-val OPTIONAL_NAVIGATION_SECTIONS = listOf("search", "watchlist", "tv", "news")
+val OPTIONAL_NAVIGATION_SECTIONS = listOf("search", "watchlist", "tv", "news", "music")
 
-/** Unrated content (live channels, news) that a kids profile never gets a tab for. */
-val KIDS_HIDDEN_NAVIGATION_SECTIONS = setOf("tv", "news")
+/** Unrated content (live channels, news, music) that a kids profile never gets a tab for. */
+val KIDS_HIDDEN_NAVIGATION_SECTIONS = setOf("tv", "news", "music")
 
 fun hiddenNavigationSectionsKey(profileId: String) =
     stringPreferencesKey("profile_${profileId}_hidden_navigation_sections")
