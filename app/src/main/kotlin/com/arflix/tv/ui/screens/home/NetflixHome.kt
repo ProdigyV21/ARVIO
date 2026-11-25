@@ -959,6 +959,7 @@ private fun NetflixContentRow(
         }
     }
     val latestOnItemClick by rememberUpdatedState(onItemClick)
+    prefetchNetflixBackdrops(items, focusedItemIndex, isCurrentRow, isContinueWatching, bigCardWidth, bigCardHeight)
 
     val bottomPadding = animateDpAsState(if (expanded) 20.dp else 10.dp,
         if (collapseOffScreen) snap<Dp>() else tween<Dp>(NETFLIX_RAIL_MORPH_MS, easing = NetflixMotionEasing), label = "netflixRowSpacing")
@@ -1221,8 +1222,10 @@ private class NetflixArtworkBlendPainter(
 
     override fun DrawScope.onDraw() {
         val fraction = progress.value
+        val posterBox = Size(minOf(size.width, size.height * (2f / 3f)), size.height)
         if (poster == null || backdrop == null) {
-            (poster ?: backdrop)?.let { drawCropped(it, 1f, size) }
+            // A poster alone keeps its portrait crop; it is not stretched over an opening card.
+            poster?.let { drawCropped(it, 1f, posterBox) } ?: backdrop?.let { drawCropped(it, 1f, size) }
             return
         }
         // The backdrop lies underneath and the poster dissolves on top of it. The poster keeps
@@ -1230,7 +1233,6 @@ private class NetflixArtworkBlendPainter(
         // is never zoomed into: the widening card reveals the backdrop around it.
         if (fraction > 0f) drawCropped(backdrop, 1f, size)
         if (fraction < 1f) {
-            val posterBox = Size(minOf(size.width, size.height * (2f / 3f)), size.height)
             drawCropped(poster, 1f - fraction, posterBox)
         }
     }
@@ -1312,6 +1314,51 @@ internal fun Modifier.netflixRowRenderCache(enabled: Boolean, ready: State<Boole
 internal fun netflixWideBox(width: Dp, height: Dp): Pair<Dp, Dp> =
     maxOf(width, height * (16f / 9f)) to maxOf(height, width * (9f / 16f))
 
+/**
+ * The request a card makes for its artwork. A wide picture is decoded for the 16:9 box covering
+ * the card, the size it has once the card expands, so a portrait card and its expanded self share
+ * one decoded image. [prefetchNetflixBackdrops] builds the same request, so its result is the
+ * memory-cache entry the card reads.
+ */
+internal fun netflixArtworkRequest(
+    context: android.content.Context, density: androidx.compose.ui.unit.Density, item: MediaItem,
+    raw: String, landscape: Boolean, width: Dp, height: Dp
+): ImageRequest {
+    val (slotWidth, slotHeight) = if (landscape) netflixWideBox(width, height) else width to height
+    val widthPx = with(density) { slotWidth.roundToPx() }.coerceAtLeast(1)
+    val heightPx = with(density) { slotHeight.roundToPx() }.coerceAtLeast(1)
+    val url = TmdbImageSizing.forSlot(raw, widthPx, heightPx,
+        TmdbImageSizing.cardArtworkKind(raw, item.backdrop, landscape))
+    val cacheKey = "$url|${widthPx}x$heightPx"
+    return ImageRequest.Builder(context).data(url.takeIf(String::isNotBlank))
+        .size(widthPx, heightPx).precision(Precision.INEXACT)
+        .memoryCacheKey(cacheKey).placeholderMemoryCacheKey(cacheKey).crossfade(false).build()
+}
+
+/**
+ * Loads the wide pictures of the cards next to the focused one in the focused row, so a card
+ * that opens already has its backdrop and dissolves from poster to backdrop instead of showing
+ * a stretched poster while the backdrop loads.
+ */
+@Composable
+private fun prefetchNetflixBackdrops(
+    items: List<MediaItem>, focusedIndex: Int, active: Boolean, watching: Boolean, width: Dp, height: Dp
+) {
+    val context = LocalContext.current
+    val density = LocalDensity.current
+    LaunchedEffect(focusedIndex, active, items) {
+        if (!active || focusedIndex < 0) return@LaunchedEffect
+        // Let the focused card's own requests go first.
+        delay(NETFLIX_RAIL_MORPH_MS.toLong())
+        val loader = context.imageLoader
+        listOf(focusedIndex + 1, focusedIndex + 2, focusedIndex - 1, focusedIndex + 3).forEach { index ->
+            val item = items.getOrNull(index)?.takeUnless { it.isPlaceholder } ?: return@forEach
+            val raw = netflixWideArt(item, watching) ?: return@forEach
+            loader.enqueue(netflixArtworkRequest(context, density, item, raw, true, width, height))
+        }
+    }
+}
+
 /** Keep the current image while loading, then blend the ready poster/backdrop without a blank frame. */
 @Composable
 internal fun rememberNetflixArtwork(
@@ -1327,17 +1374,7 @@ internal fun rememberNetflixArtwork(
         return poster ?: backdrop ?: remember { androidx.compose.ui.graphics.painter.ColorPainter(Color.Transparent) }
     }
     val request = remember(raw, width, height, density, context, landscape) {
-        // A wide picture is decoded for the 16:9 box covering the card, the size it has once
-        // the card expands, so a portrait card and its expanded self share one decoded image.
-        val (slotWidth, slotHeight) = if (landscape) netflixWideBox(width, height) else width to height
-        val widthPx = with(density) { slotWidth.roundToPx() }.coerceAtLeast(1)
-        val heightPx = with(density) { slotHeight.roundToPx() }.coerceAtLeast(1)
-        val url = TmdbImageSizing.forSlot(raw, widthPx, heightPx,
-            TmdbImageSizing.cardArtworkKind(raw, item.backdrop, landscape))
-        val cacheKey = "$url|${widthPx}x$heightPx"
-        ImageRequest.Builder(context).data(url.takeIf(String::isNotBlank))
-            .size(widthPx, heightPx).precision(Precision.INEXACT)
-            .memoryCacheKey(cacheKey).placeholderMemoryCacheKey(cacheKey).crossfade(false).build()
+        netflixArtworkRequest(context, density, item, raw, landscape, width, height)
     }
     val painter = rememberAsyncImagePainter(request, imageLoader = imageLoader, onState = { state ->
         if (state is AsyncImagePainter.State.Success && state.result.request.memoryCacheKey == request.memoryCacheKey) {
