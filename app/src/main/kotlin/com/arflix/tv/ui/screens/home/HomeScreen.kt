@@ -268,6 +268,8 @@ internal class HomeFocusState(
     var currentRowIndex by mutableIntStateOf(initialRowIndex)
     var currentItemIndex by mutableIntStateOf(initialItemIndex)
     var lastNavEventTime by mutableLongStateOf(0L)
+    // Left or Right is held down (key repeat): the Netflix rail glides without opening cards.
+    var horizontalHold by mutableStateOf(false)
     var userHasNavigated by mutableStateOf(false)
     var scrollResetRequest by mutableIntStateOf(0)
     var preferredCategoryId: String? = null
@@ -2867,7 +2869,8 @@ internal fun HomeInputLayer(
     }
     val focusRecoveryDelayMs = 180L
     val dpadRepeatGate = rememberArvioDpadRepeatGate(
-        horizontalMinRepeatIntervalMs = 80L,
+        // The Netflix rail glides one card per held step; a faster repeat would outrun the glide.
+        horizontalMinRepeatIntervalMs = if (netflix != null) NETFLIX_HOLD_STEP_MS else 80L,
         verticalMinRepeatIntervalMs = 112L
     )
     // Profile avatar is always shown when a profile exists (clickable, opens
@@ -2951,6 +2954,7 @@ internal fun HomeInputLayer(
             }
             if (event.type == KeyEventType.KeyUp && isArvioDpadNavigationKey(event.key)) {
                 dpadRepeatGate.reset()
+                focusState.horizontalHold = false
             }
             if (
                 event.type == KeyEventType.KeyDown &&
@@ -2962,6 +2966,10 @@ internal fun HomeInputLayer(
                 )
             ) {
                 return@onPreviewKeyEvent true
+            }
+            if (event.type == KeyEventType.KeyDown && isArvioDpadNavigationKey(event.key)) {
+                val horizontal = event.key == Key.DirectionLeft || event.key == Key.DirectionRight
+                focusState.horizontalHold = netflix != null && horizontal && event.nativeKeyEvent.repeatCount > 0
             }
 
             // The trailing "View all" card is a virtual slot one past the row's last title.
