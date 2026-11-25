@@ -59,6 +59,15 @@ internal object IptvCloudFields {
         prefs[baselineKey] = baseline.toString()
     }
 
+    /** The synced fields whose value differs between two readings, with their new values, ready for [stamp]. */
+    fun changed(before: Map<String, Any>, after: Map<String, Any>): JSONObject {
+        val out = JSONObject()
+        for ((field, value) in after) {
+            if (field in fields && before[field]?.toString() != value.toString()) out.put(field, value)
+        }
+        return out
+    }
+
     fun hasNewerLocalChange(prefs: MutablePreferences, profileId: String, incoming: JSONObject): Boolean {
         val local = parse(prefs[timestampKey])
         return fields.any { field ->

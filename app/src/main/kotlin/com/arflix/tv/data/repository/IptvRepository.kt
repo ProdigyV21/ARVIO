@@ -4,6 +4,7 @@ import android.content.Context
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.Base64
+import androidx.datastore.preferences.core.MutablePreferences
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import com.arflix.tv.data.model.IptvChannel
@@ -1758,7 +1759,7 @@ class IptvRepository @Inject constructor(
         val nextConfig = previousConfig.copy(stalkerPortals = nextPortals)
         val previousSourceKey = epgIndexKey(profileId, previousConfig)
         val sourceChanged = buildSourceSignature(previousConfig) != buildSourceSignature(nextConfig)
-        context.settingsDataStore.edit { prefs ->
+        editLocalIptvSettings { prefs ->
             prefs[stalkerPortalsKey()] = gson.toJson(nextPortals)
             // Clear legacy single-portal keys so the list store becomes the source of truth.
             prefs.remove(stalkerPortalUrlKey())
@@ -1778,7 +1779,7 @@ class IptvRepository @Inject constructor(
         val previousConfig = observeConfig().first()
         val previousSourceKey = epgIndexKey(profileId, previousConfig)
         val sourceChanged = previousConfig.stalkerPortals.isNotEmpty()
-        context.settingsDataStore.edit { prefs ->
+        editLocalIptvSettings { prefs ->
             prefs.remove(stalkerPortalsKey())
             prefs.remove(stalkerPortalUrlKey())
             prefs.remove(stalkerMacAddressKey())
@@ -1823,7 +1824,7 @@ class IptvRepository @Inject constructor(
             .map { it.id }
             .filterNot { id -> normalized.any { it.id == id } }
 
-        context.settingsDataStore.edit { prefs ->
+        editLocalIptvSettings { prefs ->
             prefs[stalkerPortalsKey()] = gson.toJson(normalized)
             // Clear legacy single-portal keys so the list store stays authoritative.
             prefs.remove(stalkerPortalUrlKey())
@@ -1856,7 +1857,7 @@ class IptvRepository @Inject constructor(
 
     suspend fun saveSortOrder(sortOrder: String) {
         val normalizedSortOrder = normalizeIptvSortOrder(sortOrder)
-        context.settingsDataStore.edit { prefs ->
+        editLocalIptvSettings { prefs ->
             prefs[sortOrderKey()] = normalizedSortOrder
         }
         invalidationBus.markDirty(CloudSyncScope.IPTV, profileManager.getProfileIdSync(), "save iptv sort order")
@@ -2715,7 +2716,7 @@ class IptvRepository @Inject constructor(
     suspend fun toggleFavoriteGroup(groupName: String) {
         val trimmed = groupName.trim()
         if (trimmed.isEmpty()) return
-        context.settingsDataStore.edit { prefs ->
+        editLocalIptvSettings { prefs ->
             val existing = decodeFavoriteGroups(prefs).toMutableList()
             if (existing.contains(trimmed)) {
                 existing.remove(trimmed)
@@ -2731,7 +2732,7 @@ class IptvRepository @Inject constructor(
     suspend fun toggleHiddenGroup(playlistId: String, groupName: String) {
         val trimmed = PlaylistGroupKey.build(playlistId, groupName.trim())
         if (groupName.trim().isEmpty()) return
-        context.settingsDataStore.edit { prefs ->
+        editLocalIptvSettings { prefs ->
             val existing = decodeHiddenGroups(prefs).toMutableList()
             if (existing.contains(trimmed)) {
                 existing.remove(trimmed)
@@ -2811,7 +2812,7 @@ class IptvRepository @Inject constructor(
         val trimmedPlaylist = playlistId.trim()
         if (trimmedPlaylist.isEmpty() || trimmedGroup.isEmpty()) return
         val key = PlaylistGroupKey.build(trimmedPlaylist, trimmedGroup)
-        context.settingsDataStore.edit { prefs ->
+        editLocalIptvSettings { prefs ->
             val existing = decodeLockedGroups(prefs).toMutableList()
             if (!existing.remove(key)) existing.add(key)
             if (existing.isEmpty()) prefs.remove(lockedGroupsKey())
@@ -2835,7 +2836,7 @@ class IptvRepository @Inject constructor(
             .map { PlaylistGroupKey.build(trimmedId, it) }
             .toHashSet()
         if (targetKeys.isEmpty()) return
-        context.settingsDataStore.edit { prefs ->
+        editLocalIptvSettings { prefs ->
             val existing = decodeHiddenGroups(prefs).toMutableList()
             if (hidden) {
                 existing.addAll(targetKeys)
@@ -2855,7 +2856,7 @@ class IptvRepository @Inject constructor(
     suspend fun clearGroupPreferences(playlistId: String) {
         val trimmedId = playlistId.trim()
         if (trimmedId.isEmpty()) return
-        context.settingsDataStore.edit { prefs ->
+        editLocalIptvSettings { prefs ->
             val retainedHidden = decodeHiddenGroups(prefs)
                 .filterNot { PlaylistGroupKey(it).playlistId == trimmedId }
             if (retainedHidden.isEmpty()) prefs.remove(hiddenGroupsKey())
@@ -2890,9 +2891,9 @@ class IptvRepository @Inject constructor(
         val target = PlaylistGroupKey.build(playlistId, groupName.trim())
         if (groupName.trim().isEmpty()) return
         val currentKeys = currentGroups.map { PlaylistGroupKey.build(playlistId, it.trim()) }
-        context.settingsDataStore.edit { prefs ->
+        editLocalIptvSettings { prefs ->
             val order = mergedGroupOrder(decodeGroupOrder(prefs), currentKeys)
-            if (order.isEmpty()) return@edit
+            if (order.isEmpty()) return@editLocalIptvSettings
             val idx = order.indexOf(target)
             if (idx > 0) { order.removeAt(idx); order.add(idx - 1, target) }
             prefs[groupOrderKey()] = gson.toJson(replacePlaylistGroupOrder(decodeGroupOrder(prefs), order, playlistId))
@@ -2906,9 +2907,9 @@ class IptvRepository @Inject constructor(
         val target = PlaylistGroupKey.build(playlistId, groupName.trim())
         if (groupName.trim().isEmpty()) return
         val currentKeys = currentGroups.map { PlaylistGroupKey.build(playlistId, it.trim()) }
-        context.settingsDataStore.edit { prefs ->
+        editLocalIptvSettings { prefs ->
             val order = mergedGroupOrder(decodeGroupOrder(prefs), currentKeys)
-            if (order.isEmpty()) return@edit
+            if (order.isEmpty()) return@editLocalIptvSettings
             if (target !in order && currentKeys.contains(target)) order.add(target)
             order.remove(target)
             order.add(0, target)
@@ -2923,9 +2924,9 @@ class IptvRepository @Inject constructor(
         val target = PlaylistGroupKey.build(playlistId, groupName.trim())
         if (groupName.trim().isEmpty()) return
         val currentKeys = currentGroups.map { PlaylistGroupKey.build(playlistId, it.trim()) }
-        context.settingsDataStore.edit { prefs ->
+        editLocalIptvSettings { prefs ->
             val order = mergedGroupOrder(decodeGroupOrder(prefs), currentKeys)
-            if (order.isEmpty()) return@edit
+            if (order.isEmpty()) return@editLocalIptvSettings
             val idx = order.indexOf(target)
             if (idx >= 0 && idx < order.size - 1) { order.removeAt(idx); order.add(idx + 1, target) }
             prefs[groupOrderKey()] = gson.toJson(replacePlaylistGroupOrder(decodeGroupOrder(prefs), order, playlistId))
@@ -2936,7 +2937,7 @@ class IptvRepository @Inject constructor(
     }
 
     suspend fun resetGroupOrder(playlistId: String) {
-        context.settingsDataStore.edit { prefs ->
+        editLocalIptvSettings { prefs ->
             val existing = decodeGroupOrder(prefs).toMutableList()
             existing.removeAll { PlaylistGroupKey(it).playlistId == playlistId }
             prefs[groupOrderKey()] = gson.toJson(existing)
@@ -2949,7 +2950,7 @@ class IptvRepository @Inject constructor(
     suspend fun toggleFavoriteChannel(channelId: String) {
         val trimmed = channelId.trim()
         if (trimmed.isEmpty()) return
-        context.settingsDataStore.edit { prefs ->
+        editLocalIptvSettings { prefs ->
             val existing = decodeFavoriteChannels(prefs).toMutableList()
             if (existing.contains(trimmed)) {
                 existing.remove(trimmed)
@@ -2966,7 +2967,7 @@ class IptvRepository @Inject constructor(
         val trimmed = channelId.trim()
         if (trimmed.isEmpty()) return
         var changed = false
-        context.settingsDataStore.edit { prefs ->
+        editLocalIptvSettings { prefs ->
             val existing = decodeFavoriteChannels(prefs)
             val updated = favoriteChannelsWithMembership(existing, trimmed, favorite)
             if (updated != existing) {
@@ -2991,12 +2992,12 @@ class IptvRepository @Inject constructor(
         val trimmed = channelId.trim()
         if (trimmed.isEmpty() || delta == 0) return
         var changed = false
-        context.settingsDataStore.edit { prefs ->
+        editLocalIptvSettings { prefs ->
             val existing = decodeFavoriteChannels(prefs).toMutableList()
             val from = existing.indexOf(trimmed)
-            if (from < 0) return@edit
+            if (from < 0) return@editLocalIptvSettings
             val to = (from + delta).coerceIn(0, existing.lastIndex)
-            if (to == from) return@edit
+            if (to == from) return@editLocalIptvSettings
             existing.removeAt(from)
             existing.add(to, trimmed)
             prefs[favoriteChannelsKey()] = gson.toJson(existing)
@@ -4781,6 +4782,42 @@ class IptvRepository @Inject constructor(
         cacheOwnerProfileId = profileId
         cacheOwnerConfigSig = sig
         currentEpgIndexKey = epgIndexKey(profileId, config)
+    }
+
+    /**
+     * A local edit of the current profile's IPTV settings. Every synced field the edit changes gets
+     * a fresh cloud timestamp, so the next sync keeps it instead of an older copy from another
+     * device; without one, a portal added on one device was replaced by the other device's list.
+     * Cloud imports write directly: an applied cloud value is not a new local change.
+     */
+    private suspend fun editLocalIptvSettings(transform: suspend (MutablePreferences) -> Unit) {
+        val profileId = profileManager.getProfileIdSync()
+        context.settingsDataStore.edit { prefs ->
+            val before = syncedIptvFieldValues(prefs, profileId)
+            transform(prefs)
+            val changed = IptvCloudFields.changed(before, syncedIptvFieldValues(prefs, profileId))
+            if (changed.length() > 0) IptvCloudFields.stamp(prefs, profileId, changed)
+        }
+    }
+
+    private fun syncedIptvFieldValues(prefs: Preferences, profileId: String): Map<String, Any> {
+        fun json(key: Preferences.Key<String>, empty: () -> Any): Any {
+            val raw = prefs[key]?.takeIf { it.isNotBlank() } ?: return empty()
+            return runCatching<Any> {
+                if (raw.trimStart().startsWith("{")) org.json.JSONObject(raw) else org.json.JSONArray(raw)
+            }.getOrDefault(raw)
+        }
+        return mapOf(
+            "stalkerPortals" to org.json.JSONArray(gson.toJson(readStalkerPortalsFor(prefs, profileId))),
+            "favoriteGroups" to json(favoriteGroupsKeyFor(profileId)) { org.json.JSONArray() },
+            "favoriteChannels" to json(favoriteChannelsKeyFor(profileId)) { org.json.JSONArray() },
+            "hiddenGroups" to json(hiddenGroupsKeyFor(profileId)) { org.json.JSONArray() },
+            "lockedGroups" to json(lockedGroupsKeyFor(profileId)) { org.json.JSONArray() },
+            "groupOrder" to json(groupOrderKeyFor(profileId)) { org.json.JSONArray() },
+            "channelOrder" to json(channelOrderKeyFor(profileId)) { org.json.JSONObject() },
+            "groupNames" to json(groupNamesKeyFor(profileId)) { org.json.JSONObject() },
+            "sortOrder" to normalizeIptvSortOrder(prefs[sortOrderKeyFor(profileId)]),
+        )
     }
 
     private fun m3uUrlKey(): Preferences.Key<String> = profileManager.profileStringKey("iptv_m3u_url")
