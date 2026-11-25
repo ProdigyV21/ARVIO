@@ -95,7 +95,12 @@ data class CollectionSourceConfig(
     val mdblistSlug: String? = null,
     val discoverParams: Map<String, String>? = null,
     val tmdbListId: Int? = null,
-    val traktListId: String? = null
+    val traktListId: String? = null,
+    /**
+     * The catalog's own name inside an imported folder ("Latest Telugu Movies"). A folder
+     * with several named catalogs shows one row per catalog instead of one merged grid.
+     */
+    val title: String? = null
 ) : Serializable
 
 data class CatalogConfig(

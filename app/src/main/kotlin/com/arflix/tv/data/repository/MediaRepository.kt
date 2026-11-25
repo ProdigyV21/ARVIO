@@ -1527,6 +1527,26 @@ class MediaRepository @Inject constructor(
      * Add-on catalog sources of [catalog] whose add-on is not installed or is disabled. Those
      * sources silently load nothing, so the UI can name them instead of showing an empty page.
      */
+    /**
+     * The name an installed add-on gives a collection's catalog source, for folders imported
+     * before catalog names were kept. Null for other sources or when no add-on lists it.
+     */
+    suspend fun collectionSourceName(source: CollectionSourceConfig): String? {
+        if (source.kind != CollectionSourceKind.ADDON_CATALOG) return null
+        val type = source.addonCatalogType?.trim().orEmpty()
+        val id = source.addonCatalogId?.trim().orEmpty()
+        if (type.isBlank() || id.isBlank()) return null
+        val addonId = streamRepository.findInstalledAddonIdForCatalog(type, id, source.addonId) ?: return null
+        val name = streamRepository.installedAddons.first()
+            .firstOrNull { it.id == addonId }
+            ?.manifest?.catalogs.orEmpty()
+            .firstOrNull { it.id.equals(id, ignoreCase = true) && it.type.equals(type, ignoreCase = true) }
+            ?.name?.trim()?.takeIf { it.isNotEmpty() }
+            ?: return null
+        val genre = source.addonGenre?.trim()?.takeIf { it.isNotEmpty() && !it.equals("All", ignoreCase = true) }
+        return if (genre != null) "$name · $genre" else name
+    }
+
     suspend fun missingCollectionAddons(catalog: CatalogConfig): List<String> {
         return catalog.collectionSources
             .filter { it.kind == CollectionSourceKind.ADDON_CATALOG }
