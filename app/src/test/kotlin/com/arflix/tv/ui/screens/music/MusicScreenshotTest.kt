@@ -28,6 +28,7 @@ import okhttp3.Request
 import org.robolectric.Shadows.shadowOf
 import com.arflix.tv.music.MusicAddon
 import com.arflix.tv.music.MusicAlbum
+import com.arflix.tv.music.MusicSearchResult
 import com.arflix.tv.music.MusicArtist
 import com.arflix.tv.music.MusicCollections
 import com.arflix.tv.music.MusicLibrary
@@ -251,6 +252,30 @@ class MusicScreenshotTest {
         sample.home.copy(collections = collectionsOf(sample), pages = listOf(MusicPage.Playlist("p1"))),
         playingOf(sample),
     )
+
+    /** With ARVIO_SCREENSHOTS_CHARTS set to an app language (de-DE), the live charts home and a playlist search. */
+    private val chartsLanguage: String? = System.getenv("ARVIO_SCREENSHOTS_CHARTS")?.takeIf { it.isNotBlank() }
+
+    private fun withLocalCovers(http: OkHttpClient, albums: List<MusicAlbum>) = albums.take(8).map { it.copy(coverUrl = download(http, it.coverUrl)) }
+
+    @Test fun chartsHome() {
+        val language = chartsLanguage
+        org.junit.Assume.assumeTrue(language != null)
+        val http = OkHttpClient()
+        val shelves = runBlocking { com.arflix.tv.music.ChartsSource(http, language!!).shelves() }
+            .take(6).map { it.copy(key = "1/" + it.key, albums = withLocalCovers(http, it.albums)) }
+        render("music-9-charts-home", sample.home.copy(shelves = shelves), playingOf(sample))
+    }
+
+    @Test fun playlistSearch() {
+        val language = chartsLanguage
+        org.junit.Assume.assumeTrue(language != null)
+        val http = OkHttpClient()
+        val query = "top gym hits"
+        val found = runBlocking { com.arflix.tv.music.ChartsSource(http, language!!).search(query) }
+        val results = MusicSearchResult(playlists = withLocalCovers(http, found.playlists), tracks = sample.tracks.take(6))
+        render("music-10-search-playlists", sample.home.copy(query = query, results = results), playingOf(sample))
+    }
 
     @Test fun addToPlaylist() = render(
         "music-8-add-to-playlist",

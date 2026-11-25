@@ -9,6 +9,7 @@ import androidx.datastore.preferences.preferencesDataStore
 import com.arflix.tv.data.repository.CloudSyncInvalidationBus
 import com.arflix.tv.data.repository.CloudSyncScope
 import com.arflix.tv.data.repository.ProfileManager
+import com.arflix.tv.util.resolveAppLanguage
 import com.arflix.tv.util.settingsDataStore
 import com.google.gson.Gson
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -39,6 +40,8 @@ object MusicCloudKeys {
 data class MusicLibrary(
     val server: MusicServerConfig? = null,
     val addons: List<MusicAddon> = emptyList(),
+    /** The app language, which picks the country charts on the Music home. */
+    val language: String = "en-US",
 ) {
     val isEmpty: Boolean get() = server == null && addons.isEmpty()
 }
@@ -72,6 +75,10 @@ class MusicRepository @Inject constructor(
         .map { prefs -> prefs[configKey]?.let { runCatching { gson.fromJson(it, MusicServerConfig::class.java) }.getOrNull() } }
         .distinctUntilChanged()
 
+    private val language: Flow<String> = combine(profileManager.currentProfileId, context.settingsDataStore.data) { profileId, settings ->
+        resolveAppLanguage(settings, profileId)
+    }.distinctUntilChanged()
+
     // Before music synced, addons and collections lived on the device only; a profile without its
     // own synced copy yet still sees those until its first change saves one.
     val addons: Flow<List<MusicAddon>> = combine(
@@ -80,7 +87,7 @@ class MusicRepository @Inject constructor(
         .distinctUntilChanged()
 
     /** Everything the Music tab plays from: the user's server and their music addons. */
-    val library: Flow<MusicLibrary> = combine(config, addons) { server, addons -> MusicLibrary(server, addons) }
+    val library: Flow<MusicLibrary> = combine(config, addons, language) { server, addons, language -> MusicLibrary(server, addons, language) }
         .distinctUntilChanged()
 
     private fun decodeAddons(json: String?): List<MusicAddon> = runCatching {
@@ -94,7 +101,7 @@ class MusicRepository @Inject constructor(
         if (library.isEmpty) return null
         cached?.let { (saved, source) -> if (saved == library) return source }
         val keys = mutableListOf<String>()
-        val sources = buildList<MusicSource> {
+        val sources = mutableListOf<MusicSource>().apply {
             library.server?.let { server ->
                 keys += SERVER_KEY
                 add(
@@ -112,6 +119,9 @@ class MusicRepository @Inject constructor(
                 )
             }
         }
+        // The charts come last, so the user's own sources keep their place in ids and search.
+        keys += ChartsSource.KEY
+        sources += ChartsSource(http, library.language, context.cacheDir)
         val source = CompositeMusicSource(sources, keys)
         cached = library to source
         return source
