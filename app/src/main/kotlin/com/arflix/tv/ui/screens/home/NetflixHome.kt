@@ -1221,19 +1221,31 @@ private class NetflixArtworkBlendPainter(
 
     override fun DrawScope.onDraw() {
         val fraction = progress.value
-        if (backdrop == null || (poster != null && fraction < 1f)) poster?.let { drawCropped(it, 1f) }
-        backdrop?.let { drawCropped(it, if (poster == null) 1f else fraction) }
+        if (poster == null || backdrop == null) {
+            (poster ?: backdrop)?.let { drawCropped(it, 1f, size) }
+            return
+        }
+        // The backdrop lies underneath and the poster dissolves on top of it. The poster keeps
+        // its own portrait crop at the card's height while the card widens or narrows, so it
+        // is never zoomed into: the widening card reveals the backdrop around it.
+        if (fraction > 0f) drawCropped(backdrop, 1f, size)
+        if (fraction < 1f) {
+            val posterBox = Size(minOf(size.width, size.height * (2f / 3f)), size.height)
+            drawCropped(poster, 1f - fraction, posterBox)
+        }
     }
 
-    private fun DrawScope.drawCropped(painter: Painter, alpha: Float) {
+    private fun DrawScope.drawCropped(painter: Painter, alpha: Float, box: Size) {
         if (alpha <= 0f || size.width <= 0f || size.height <= 0f) return
         val source = painter.intrinsicSize.let {
-            if (it.width.isFinite() && it.height.isFinite() && it.width > 0f && it.height > 0f) it else size
+            if (it.width.isFinite() && it.height.isFinite() && it.width > 0f && it.height > 0f) it else box
         }
-        val scale = ContentScale.Crop.computeScaleFactor(source, size)
+        val scale = ContentScale.Crop.computeScaleFactor(source, box)
         val drawn = Size(source.width * scale.scaleX, source.height * scale.scaleY)
-        clipRect {
-            translate((size.width - drawn.width) / 2f, (size.height - drawn.height) / 2f) {
+        // Anchored to the card's left edge, where the card stays put while it opens to the right.
+        val left = 0f
+        clipRect(left = left, top = 0f, right = left + box.width, bottom = size.height) {
+            translate(left + (box.width - drawn.width) / 2f, (size.height - drawn.height) / 2f) {
                 with(painter) { draw(drawn, alpha) }
             }
         }
