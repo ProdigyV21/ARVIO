@@ -1570,5 +1570,6 @@
   "Filter categories": "వర్గాలను ఫిల్టర్ చేయండి",
   "Clear filter": "ఫిల్టర్‌ను క్లియర్ చేయండి",
   "No categories match \"{value0}\".": "\"{value0}\"కి సరిపోలే వర్గాలు లేవు.",
-  "Chromecast": "Chromecast"
+  "Chromecast": "Chromecast",
+  "This browser can't play some sources, so ARVIO tries the next one.": "ఈ బ్రౌజర్ కొన్ని సోర్సులను ప్లే చేయలేదు, అందుకే ARVIO తదుపరిదాన్ని ప్రయత్నిస్తోంది."
 }

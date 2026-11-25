@@ -1465,5 +1465,6 @@
   "Filter categories": "Filtrer les catégories",
   "Clear filter": "Effacer le filtre",
   "No categories match \"{value0}\".": "Aucune catégorie ne correspond à « {value0} ».",
-  "Chromecast": "Chromecast"
+  "Chromecast": "Chromecast",
+  "This browser can't play some sources, so ARVIO tries the next one.": "Ce navigateur ne peut pas lire certaines sources, ARVIO essaie donc la suivante."
 }

@@ -312,3 +312,13 @@ test('successful season sync precedes local updates, which do not repeat remote 
   await action(1, true);
   assert.deepEqual(order, ['remote', 1, 2, 'Season 1 marked as watched.']);
 });
+
+test('a SIMKL delta of null (nothing changed) keeps the library available', async () => {
+  const { client, state, expire } = libraryFixture();
+  assert.equal((await client.watchlist()).length, 4);
+  state.activities = { all: '2026-09-08T11:00:00Z' };
+  state.delta = null;
+  expire();
+  const rows = await client.watchlist(['plantowatch'], { throwOnError: true });
+  assert.equal(rows.length, 4);
+});

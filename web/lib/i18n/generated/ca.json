@@ -1574,5 +1574,6 @@
   "Filter categories": "Filtra les categories",
   "Clear filter": "Esborra el filtre",
   "No categories match \"{value0}\".": "Cap categoria coincideix amb \"{value0}\".",
-  "Chromecast": "Chromecast"
+  "Chromecast": "Chromecast",
+  "This browser can't play some sources, so ARVIO tries the next one.": "Aquest navegador no pot reproduir algunes fonts, així que ARVIO prova la següent."
 }

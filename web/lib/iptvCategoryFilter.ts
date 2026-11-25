@@ -19,6 +19,19 @@ export function sharedCategoryPrefix(labels: string[]): string {
   return named.every((prefix) => prefix === named[0]) ? named[0] : "";
 }
 
+/**
+ * The provider tag most channel names start with ("Strong8K · NPO 1",
+ * "UK | BBC One"): shown once in the provider picker, it is noise on every row.
+ */
+export function sharedChannelPrefix(names: string[]): string {
+  const sample = names.slice(0, 400);
+  const prefixes = sample.map((name) => name.match(/^[^·|:]{1,30}?\s*[·|:]\s+(?=\S)/)?.[0] ?? null);
+  const counts = new Map<string, number>();
+  for (const prefix of prefixes) if (prefix) counts.set(prefix, (counts.get(prefix) ?? 0) + 1);
+  const [best, count] = [...counts.entries()].sort((a, b) => b[1] - a[1])[0] ?? ["", 0];
+  return count >= 3 && count >= sample.length * 0.8 ? best : "";
+}
+
 /** The label without the shared prefix, when it carries it. */
 export function withoutCategoryPrefix(label: string, prefix: string): string {
   return prefix && label.startsWith(prefix) ? label.slice(prefix.length) : label;

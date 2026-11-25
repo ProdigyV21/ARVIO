@@ -1574,5 +1574,6 @@
   "Filter categories": "Iragazi kategoriak",
   "Clear filter": "Garbitu iragazkia",
   "No categories match \"{value0}\".": "Ez dago \"{value0}\"-rekin bat datorren kategoriarik.",
-  "Chromecast": "Chromecast"
+  "Chromecast": "Chromecast",
+  "This browser can't play some sources, so ARVIO tries the next one.": "Nabigatzaile honek ezin ditu iturri batzuk erreproduzitu; beraz, ARVIOk hurrengoa probatzen du."
 }

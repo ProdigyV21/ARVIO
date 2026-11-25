@@ -2,7 +2,7 @@
 import { useTranslation } from "@/lib/i18n";
 import "./details.css";
 
-import { ArrowLeft, BadgeCheck, Bookmark, CalendarDays, Check, ChevronDown, Clapperboard, EyeOff, Folder, Loader2, MapPin, MoreHorizontal, Play, RotateCcw, Star, Trash2, UserCircle, X } from "lucide-react";
+import { ArrowLeft, BadgeCheck, Bookmark, CalendarDays, Check, ChevronDown, Clapperboard, EyeOff, Folder, Loader2, MapPin, MoreHorizontal, Play, RotateCcw, Smartphone, Star, Trash2, UserCircle, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { MediaCard } from "@/components/media/MediaCard";
@@ -478,7 +478,6 @@ function DetailsView({ item }: { item: MediaItem }) {
                 <b>{detailImdbRating}</b>
               </span>
             ) : null}
-            {detailWatched && <span className="detail-watched-chip"><BadgeCheck size={13} /> {translateUi(" Watched")}</span>}
             {displayItem.genres?.slice(0, 3).map((genre) => <span key={genre}>{genre}</span>)}
           </div>
           {externalRatings.length ? (
@@ -511,6 +510,10 @@ function DetailsView({ item }: { item: MediaItem }) {
                 <RotateCcw size={18} /> {translateUi(plan.startOverLabel)}
               </button>
             ) : null}
+            {/* Android: the app plays what this browser cannot (MKV, DTS, HDR), so it sits next to Play. */}
+            {appLink ? (
+              <a href={appLink} className="secondary text-button detail-app-button"><Smartphone size={18} /> {translateUi("Open in {value0}", { value0: "ARVIO" })}</a>
+            ) : null}
             <button type="button" className="secondary text-button" onClick={openSources}><Folder size={18} /> {translateUi("Sources")}</button>
             {inWatchlist ? (
               <button type="button" className="secondary text-button" onClick={() => void toggleWatchlist(displayItem)}><Trash2 size={18} /> {translateUi(" Remove")}</button>
@@ -526,7 +529,6 @@ function DetailsView({ item }: { item: MediaItem }) {
           <div className="detail-links">
             <a href={simklUrl} target="_blank" rel="noopener noreferrer" className="detail-link">{translateUi("View on Simkl")}</a>
             <a href={traktPage ?? traktLinkUrl(displayItem, relayTraktLink)} target="_blank" rel="noopener noreferrer" className="detail-link">{translateUi("View on Trakt")}</a>
-            {appLink ? <a href={appLink} className="detail-link">{translateUi("Open in {value0}", { value0: "ARVIO" })}</a> : null}
           </div>
           {!streams.length && !isTv && busy !== "Finding sources" && (
             <p className="detail-action-hint">{translateUi("Sources will appear here when an installed addon returns results.")}</p>

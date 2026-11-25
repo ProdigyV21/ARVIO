@@ -168,6 +168,7 @@ export function firstUnwatchedEpisode(
  * - Series with an in-progress episode: "Resume S2 E3" (+ "Start over").
  * - Series with an "Up next" entry or a chosen episode: "Play S2 E4".
  * - Series with nothing started: the first unwatched aired episode ("Play S1 E1").
+ * - Watched movie or finished series: "Watch again" (the series from S1 E1).
  */
 export function planPrimaryAction(input: {
   item: Pick<MediaItem, "mediaType" | "isWatched">;
@@ -185,7 +186,8 @@ export function planPrimaryAction(input: {
       const at = resumeSecondsOf(point);
       if (at > 0) return { kind: "resume", label: "Resume {value0}", labelValues: { value0: formatClock(at) }, season: null, episode: null, resumeSeconds: at, startOverLabel: "Start over" };
     }
-    return { kind: "play", label: "Play", season: null, episode: null, resumeSeconds: 0 };
+    const seen = Boolean(input.item.isWatched) || watched(null, null);
+    return { kind: "play", label: seen ? "Watch again" : "Play", season: null, episode: null, resumeSeconds: 0 };
   }
   const chosen = input.selectedEpisode ?? null;
   const progressFor = (season: number, episode: number) => input.points.find((point) => point.season === season && point.episode === episode && isResumable(point));
@@ -203,6 +205,10 @@ export function planPrimaryAction(input: {
       return { kind: "resume", label: "Resume S{value0} E{value1}", labelValues: { value0: latest.season, value1: latest.episode }, season: latest.season, episode: latest.episode, resumeSeconds: resumeSecondsOf(latest), startOverLabel: "Start over" };
     }
     return { kind: "episode", label: "Play S{value0} E{value1}", labelValues: { value0: latest.season, value1: latest.episode }, season: latest.season, episode: latest.episode, resumeSeconds: 0 };
+  }
+  // A finished series offers a rewatch from the start, not "Play S1 E1" as if new.
+  if (input.item.isWatched || watched(null, null)) {
+    return { kind: "episode", label: "Watch again", season: 1, episode: 1, resumeSeconds: 0 };
   }
   if (input.firstUnwatched) {
     return { kind: "episode", label: "Play S{value0} E{value1}", labelValues: { value0: input.firstUnwatched.season, value1: input.firstUnwatched.episode }, season: input.firstUnwatched.season, episode: input.firstUnwatched.episode, resumeSeconds: 0 };

@@ -2,13 +2,14 @@
 import { useTranslation } from "@/lib/i18n";
 
 import { RotateCw } from "lucide-react";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { homeFetchPriority } from "@/lib/fetchPriority";
 import { loadStored, saveStored } from "@/lib/storage";
 import { useAppPick } from "@/lib/store";
+import { homeItemKey, trimRepeatedTitles } from "@/lib/homeRows";
 import { HOME_ROW_LIMIT, loadCatalog } from "@/lib/tmdb";
 import type { CatalogConfig, Category, MediaItem } from "@/lib/types";
-import { MediaRail } from "./MediaRail";
+import { isRankedRow, MediaRail } from "./MediaRail";
 
 // v3: v2 entries were poisoned by collection rails colliding on a cache key
 // that omitted collectionSources (all service rows shared one entry).
@@ -21,7 +22,7 @@ type CatalogRowCache = Record<string, { at: number; category: Category }>;
 
 export type LazyRailOutcome = "loading" | "ready" | "empty" | "error";
 
-export function LazyRail({ catalog, eager = false, posterMode, onOpen, onFocus, onLoaded, onSettled, emptyContent, onViewAll, limit = HOME_ROW_LIMIT }: {
+export function LazyRail({ catalog, eager = false, posterMode, onOpen, onFocus, onLoaded, onSettled, emptyContent, onViewAll, limit = HOME_ROW_LIMIT, hideKeys, onShown }: {
   catalog: CatalogConfig;
   eager?: boolean;
   posterMode?: boolean;
@@ -33,6 +34,10 @@ export function LazyRail({ catalog, eager = false, posterMode, onOpen, onFocus, 
   /** Opens the full row; rows show `limit` titles and end with a "View all" tile. */
   onViewAll?: (catalog: CatalogConfig, category: Category) => void;
   limit?: number;
+  /** Titles rows above already show; this row leaves them out (ranked rows stay whole). */
+  hideKeys?: ReadonlySet<string>;
+  /** Reports the titles this row shows, so rows below can skip them. */
+  onShown?: (catalogId: string, keys: string[]) => void;
 }) {
   const { addons, settings } = useAppPick("addons", "settings");
   const translateUi = useTranslation();
@@ -121,9 +126,20 @@ export function LazyRail({ catalog, eager = false, posterMode, onOpen, onFocus, 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cacheKey, catalog.id, eager, attempt]);
 
+  const shown = useMemo(() => {
+    if (!category || !hideKeys || isRankedRow(category.title)) return category;
+    const items = trimRepeatedTitles(category.items, hideKeys);
+    return items === category.items ? category : { ...category, items };
+  }, [category, hideKeys]);
+  const shownRef = useRef(onShown);
+  shownRef.current = onShown;
+  useEffect(() => {
+    if (shown) shownRef.current?.(catalog.id, shown.items.map(homeItemKey));
+  }, [shown, catalog.id]);
+
   const title = catalog.isPreinstalled ? translateUi(catalog.name) : catalog.name;
-  if (category) {
-    return <MediaRail category={category} onOpen={onOpen} onFocus={onFocus} posterMode={effectivePosterMode}
+  if (category && shown) {
+    return <MediaRail category={shown} onOpen={onOpen} onFocus={onFocus} posterMode={effectivePosterMode}
       onViewAll={onViewAll && category.hasMore ? () => onViewAll(catalog, category) : undefined} />;
   }
   if (status === "error") {

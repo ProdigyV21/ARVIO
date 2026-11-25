@@ -1584,5 +1584,6 @@
   "Filter categories": "I-filter ang mga kategorya",
   "Clear filter": "I-clear ang filter",
   "No categories match \"{value0}\".": "Walang kategoryang tumutugma sa \"{value0}\".",
-  "Chromecast": "Chromecast"
+  "Chromecast": "Chromecast",
+  "This browser can't play some sources, so ARVIO tries the next one.": "Hindi ma-play ng browser na ito ang ilang source, kaya sinusubukan ng ARVIO ang susunod."
 }

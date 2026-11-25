@@ -1575,5 +1575,6 @@
   "Filter categories": "Filtrēt kategorijas",
   "Clear filter": "Notīrīt filtru",
   "No categories match \"{value0}\".": "Neviena kategorija neatbilst “{value0}”.",
-  "Chromecast": "Chromecast"
+  "Chromecast": "Chromecast",
+  "This browser can't play some sources, so ARVIO tries the next one.": "Šī pārlūkprogramma nevar atskaņot dažus avotus, tāpēc ARVIO mēģina nākamo."
 }

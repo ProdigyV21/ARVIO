@@ -1418,5 +1418,6 @@
   "Filter categories": "Kategorien filtern",
   "Clear filter": "Filter löschen",
   "No categories match \"{value0}\".": "Keine Kategorien passen zu „{value0}“.",
-  "Chromecast": "Chromecast"
+  "Chromecast": "Chromecast",
+  "This browser can't play some sources, so ARVIO tries the next one.": "Dieser Browser kann manche Quellen nicht abspielen, daher probiert ARVIO die nächste."
 }

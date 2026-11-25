@@ -1572,5 +1572,6 @@
   "Filter categories": "வகைகளை வடிகட்டு",
   "Clear filter": "வடிகட்டியை அழி",
   "No categories match \"{value0}\".": "\"{value0}\" உடன் பொருந்தும் வகைகள் இல்லை.",
-  "Chromecast": "Chromecast"
+  "Chromecast": "Chromecast",
+  "This browser can't play some sources, so ARVIO tries the next one.": "இந்த உலாவியால் சில மூலங்களை இயக்க முடியாது, எனவே ARVIO அடுத்ததை முயல்கிறது."
 }

@@ -469,8 +469,11 @@ export class SimklClient implements SyncClient {
         // Continuous sync delta (Phase 2): single request for all types modified since watermark
         try {
           const deltaQuery = `?date_from=${encodeURIComponent(cached.activity)}&extended=full_anime_seasons&episode_watched_at=yes&include_all_episodes=yes&next_watch_info=yes`;
-          const deltaRes = await this.simkl<unknown>(`/sync/all-items${deltaQuery}`, {}, accessToken);
-          if (!deltaRes || typeof deltaRes !== "object" || Array.isArray(deltaRes)) {
+          // SIMKL answers `null` (or an empty list) when nothing changed since the watermark:
+          // that is an empty delta, not a failure (it used to mark SIMKL unavailable).
+          const rawDelta = await this.simkl<unknown>(`/sync/all-items${deltaQuery}`, {}, accessToken);
+          const deltaRes = rawDelta == null || (Array.isArray(rawDelta) && rawDelta.length === 0) ? {} : rawDelta;
+          if (typeof deltaRes !== "object" || Array.isArray(deltaRes)) {
             throw new Error("Unexpected Simkl delta response");
           }
           const moviesDelta = extractItems<SimklMovieRow>(deltaRes, "movies");

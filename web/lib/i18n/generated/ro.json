@@ -1577,5 +1577,6 @@
   "Filter categories": "Filtrează categoriile",
   "Clear filter": "Șterge filtrul",
   "No categories match \"{value0}\".": "Nicio categorie nu corespunde cu „{value0}”.",
-  "Chromecast": "Chromecast"
+  "Chromecast": "Chromecast",
+  "This browser can't play some sources, so ARVIO tries the next one.": "Acest browser nu poate reda unele surse, așa că ARVIO o încearcă pe următoarea."
 }

@@ -1573,5 +1573,6 @@
   "Filter categories": "Filtreeri kategooriaid",
   "Clear filter": "Tühjenda filter",
   "No categories match \"{value0}\".": "Ükski kategooria ei vasta päringule \"{value0}\".",
-  "Chromecast": "Chromecast"
+  "Chromecast": "Chromecast",
+  "This browser can't play some sources, so ARVIO tries the next one.": "See brauser ei saa mõnda allikat esitada, seega proovib ARVIO järgmist."
 }

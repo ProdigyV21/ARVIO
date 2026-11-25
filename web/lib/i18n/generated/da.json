@@ -1577,5 +1577,6 @@
   "Filter categories": "Filtrér kategorier",
   "Clear filter": "Ryd filter",
   "No categories match \"{value0}\".": "Ingen kategorier matcher \"{value0}\".",
-  "Chromecast": "Chromecast"
+  "Chromecast": "Chromecast",
+  "This browser can't play some sources, so ARVIO tries the next one.": "Denne browser kan ikke afspille nogle kilder, så ARVIO prøver den næste."
 }

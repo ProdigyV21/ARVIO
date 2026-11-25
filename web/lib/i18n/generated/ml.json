@@ -1612,5 +1612,6 @@
   "Filter categories": "വിഭാഗങ്ങൾ ഫിൽട്ടർ ചെയ്യുക",
   "Clear filter": "ഫിൽട്ടർ മായ്ക്കുക",
   "No categories match \"{value0}\".": "\"{value0}\" എന്നതുമായി പൊരുത്തപ്പെടുന്ന വിഭാഗങ്ങളൊന്നുമില്ല.",
-  "Chromecast": "Chromecast"
+  "Chromecast": "Chromecast",
+  "This browser can't play some sources, so ARVIO tries the next one.": "ഈ ബ്രൗസറിന് ചില സോഴ്സുകൾ പ്ലേ ചെയ്യാനാകില്ല, അതിനാൽ ARVIO അടുത്തത് പരീക്ഷിക്കുന്നു."
 }

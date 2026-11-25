@@ -1576,5 +1576,6 @@
   "Filter categories": "Filtrera kategorier",
   "Clear filter": "Rensa filter",
   "No categories match \"{value0}\".": "Inga kategorier matchar ”{value0}”.",
-  "Chromecast": "Chromecast"
+  "Chromecast": "Chromecast",
+  "This browser can't play some sources, so ARVIO tries the next one.": "Den här webbläsaren kan inte spela upp vissa källor, så ARVIO provar nästa."
 }

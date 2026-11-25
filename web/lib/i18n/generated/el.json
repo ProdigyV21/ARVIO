@@ -1572,5 +1572,6 @@
   "Filter categories": "Φιλτράρισμα κατηγοριών",
   "Clear filter": "Απαλοιφή φίλτρου",
   "No categories match \"{value0}\".": "Καμία κατηγορία δεν ταιριάζει με «{value0}».",
-  "Chromecast": "Chromecast"
+  "Chromecast": "Chromecast",
+  "This browser can't play some sources, so ARVIO tries the next one.": "Αυτό το πρόγραμμα περιήγησης δεν μπορεί να αναπαράγει ορισμένες πηγές, οπότε το ARVIO δοκιμάζει την επόμενη."
 }

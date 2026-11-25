@@ -1573,5 +1573,6 @@
   "Filter categories": "กรองหมวดหมู่",
   "Clear filter": "ล้างตัวกรอง",
   "No categories match \"{value0}\".": "ไม่มีหมวดหมู่ที่ตรงกับ \"{value0}\"",
-  "Chromecast": "Chromecast"
+  "Chromecast": "Chromecast",
+  "This browser can't play some sources, so ARVIO tries the next one.": "เบราว์เซอร์นี้เล่นบางแหล่งไม่ได้ ARVIO จึงลองแหล่งถัดไป"
 }

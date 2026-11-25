@@ -86,3 +86,18 @@ export function withHomeWatchlistRow(categories: Category[], watchlist: MediaIte
   next.splice(Math.max(0, insertion), 0, { id: HOME_WATCHLIST_ROW_ID, title: "Watchlist", items });
   return next;
 }
+
+export function homeItemKey(item: Pick<MediaItem, "mediaType" | "id">) {
+  return `${item.mediaType}-${item.id}`;
+}
+
+/**
+ * Drops titles that a row higher up already shows (two anime rows both opening
+ * with the same series), unless that would leave this row thin.
+ */
+export function trimRepeatedTitles<T extends Pick<MediaItem, "mediaType" | "id">>(items: T[], seen: ReadonlySet<string>, keepAtLeast = 8): T[] {
+  if (!seen.size) return items;
+  const kept = items.filter((item) => !seen.has(homeItemKey(item)));
+  if (kept.length === items.length) return items;
+  return kept.length >= Math.min(keepAtLeast, items.length) ? kept : items;
+}

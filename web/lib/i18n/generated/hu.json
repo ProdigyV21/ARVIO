@@ -1573,5 +1573,6 @@
   "Filter categories": "Kategóriák szűrése",
   "Clear filter": "Szűrő törlése",
   "No categories match \"{value0}\".": "Nincs a(z) „{value0}” keresésnek megfelelő kategória.",
-  "Chromecast": "Chromecast"
+  "Chromecast": "Chromecast",
+  "This browser can't play some sources, so ARVIO tries the next one.": "Ez a böngésző néhány forrást nem tud lejátszani, ezért az ARVIO a következőt próbálja."
 }

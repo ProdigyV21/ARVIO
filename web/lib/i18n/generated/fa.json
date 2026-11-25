@@ -1571,5 +1571,6 @@
   "Filter categories": "فیلتر دسته‌ها",
   "Clear filter": "پاک کردن فیلتر",
   "No categories match \"{value0}\".": "هیچ دسته‌ای با «{value0}» مطابقت ندارد.",
-  "Chromecast": "Chromecast"
+  "Chromecast": "Chromecast",
+  "This browser can't play some sources, so ARVIO tries the next one.": "این مرورگر نمی‌تواند برخی منابع را پخش کند، بنابراین ARVIO منبع بعدی را امتحان می‌کند."
 }
