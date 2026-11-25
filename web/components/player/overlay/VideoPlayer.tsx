@@ -1,4 +1,5 @@
 // Part of the player overlay (see components/player/PlayerOverlay.tsx).
+import { recordSourceOutcome } from "@/lib/sourceReliability";
 import type { MediaItem, StreamSource, AppSettings, InstalledAddon } from "@/lib/types";
 import { useTranslation } from "@/lib/i18n";
 import { useRef, useMemo, useCallback, useState, useEffect } from "react";
@@ -399,6 +400,7 @@ export function VideoPlayer({
       if (!liveTv) {
         // Autoplay waits briefly for this addon next time (see autoplaySelection).
         rememberSuccessfulSource(currentStreamRef.current);
+        recordSourceOutcome(currentStreamRef.current, true);
         markHomeScreenTipEligible();
       }
     };
@@ -586,6 +588,7 @@ export function VideoPlayer({
     const addonKey = current.addonId || current.addonName || "";
     if (addonKey) failedAddonStrikesRef.current.set(addonKey, (failedAddonStrikesRef.current.get(addonKey) ?? 0) + 1);
     recordBrowserPlaybackFailure(current, "This source failed during browser playback", true);
+    recordSourceOutcome(current, false);
     const pick = (skipStruckAddons: boolean) => browserAutoplayCandidates(sourceListRef.current, failedSourceUrlsRef.current).find((candidate) => {
       if (!candidate.url || failedSourceUrlsRef.current.has(candidate.url)) return false;
       // Uncached debrid torrents would stall on a server-side download.

@@ -1,6 +1,7 @@
 import { cachedDebridDirectUrl, parseDebridStream } from "./debrid";
 import { browserPlaysDolbyAudio, canTryRemux, playbackPlan, streamTransport } from "./streamCompatibility";
 import { cachedVerdict, verifyStream } from "./streamVerify";
+import { recordSourceOutcome } from "./sourceReliability";
 import type { StreamSource } from "./types";
 
 type ProbeGlobals = { VideoDecoder?: unknown; AudioDecoder?: unknown };
@@ -41,6 +42,45 @@ export function needsAudioConversion(stream: StreamSource): boolean {
 }
 
 /** Probing is only meaningful where the browser exposes WebCodecs decoders. */
+/**
+ * The URL a reachability check may read, for candidates the decoder probe
+ * skips (remux and unprobeable direct files). Same safety rules as
+ * probeUrlFor: never an unresolved debrid link, never custom headers.
+ */
+export function reachabilityUrlFor(stream: StreamSource): string | null {
+  if (!stream.url || stream.homeServer || stream.transcoded) return null;
+  if (stream.behaviorHints?.proxyHeaders?.request && Object.keys(stream.behaviorHints.proxyHeaders.request).length) return null;
+  if (streamTransport(stream) !== "file") return null;
+  if (parseDebridStream(stream.originalUrl ?? stream.url)) return cachedDebridDirectUrl(stream.originalUrl ?? stream.url);
+  return /^https?:\/\//i.test(stream.url) ? stream.url : null;
+}
+
+// Relays answer a dead usenet/file link by redirecting to a short clip
+// ("download_failed.mp4") that would play as if it were the film.
+const DEAD_TARGET = /download[_-]?failed|\/(?:error|failed|unavailable|expired)\.(?:mp4|mkv|webm)(?:$|\?)/i;
+const MIN_FILE_BYTES = 10 * 1024 * 1024;
+
+/**
+ * One byte of the file: false when the link is dead (error status, a
+ * "download failed" redirect, a tiny placeholder) or, for sources the browser
+ * must repackage, when the browser may not read it at all (CORS); otherwise
+ * null (reachable, or unknown). Never true: reaching a file says nothing about
+ * its codecs.
+ */
+export async function checkReachable(stream: StreamSource, url: string, signal: AbortSignal, fetcher: typeof fetch = fetch): Promise<false | null> {
+  try {
+    const response = await fetcher(url, { headers: { Range: "bytes=0-0" }, signal, credentials: "omit", redirect: "follow" });
+    void response.body?.cancel().catch(() => undefined);
+    const total = Number(response.headers.get("content-range")?.match(/\/(\d+)\s*$/)?.[1] ?? NaN);
+    if (response.status >= 400 || DEAD_TARGET.test(response.url || "") || (Number.isFinite(total) && total < MIN_FILE_BYTES)) return false;
+    return null;
+  } catch (error) {
+    if (signal.aborted) return null;
+    // <video> plays a direct file without CORS; repackaging has to read it.
+    return playbackPlan(stream).method === "remux" ? false : null;
+  }
+}
+
 export function canProbeDecoders(scope: ProbeGlobals = globalThis as ProbeGlobals) {
   return typeof scope.VideoDecoder === "function" && typeof scope.AudioDecoder === "function";
 }
@@ -77,14 +117,24 @@ export async function verifyAutoplayCandidates(
     verdicts.set(stream, verdict);
     onVerdict?.(stream, verdict);
   };
-  if (!canProbeDecoders()) {
-    for (const stream of candidates) report(stream, null);
-    return verdicts;
-  }
   const probes: Promise<void>[] = [];
+  const decoders = canProbeDecoders();
   for (const stream of candidates) {
-    const url = probeUrlFor(stream);
-    if (!url) { report(stream, null); continue; }
+    const url = decoders ? probeUrlFor(stream) : null;
+    if (!url) {
+      // No decoder probe: at least make sure the link is alive, so a dead one
+      // is skipped here instead of costing a 3-6 s hop in the player.
+      const reachable = reachabilityUrlFor(stream);
+      if (!reachable) { report(stream, null); continue; }
+      probes.push(checkReachable(stream, reachable, signal)
+        .then((verdict) => {
+          if (signal.aborted) return;
+          if (verdict === false) recordSourceOutcome(stream, false);
+          report(stream, verdict);
+        })
+        .catch(() => { if (!signal.aborted) report(stream, null); }));
+      continue;
+    }
     const known = cachedVerdict(url);
     if (known) { report(stream, rankingVerdict(known)); continue; }
     probes.push(verifyStream(url, undefined, signal)
