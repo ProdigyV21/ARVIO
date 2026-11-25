@@ -992,7 +992,12 @@ fun HomeScreen(
         }
         if (candidates.isEmpty()) return@LaunchedEffect
         val restored = billboardItem ?: billboardKey?.let { key -> candidates.firstOrNull { homeRowItemKey(it) == key } }
-        val selected = stableNetflixBillboard(restored, candidates) { it.random() }
+        // A new visit shows a title from the top of the day that recent visits did not show.
+        val selected = stableNetflixBillboard(restored, candidates) { list ->
+            chooseNetflixBillboard(list, NetflixBillboardHistory.read(context, currentProfile?.id)).also {
+                NetflixBillboardHistory.record(context, currentProfile?.id, homeRowItemKey(it))
+            }
+        }
         billboardItem = selected
         billboardKey = selected?.let(::homeRowItemKey)
     }
