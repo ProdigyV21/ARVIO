@@ -114,6 +114,39 @@ class IptvCloudFieldsTest {
         assertEquals(400, JSONObject(prefs[stringPreferencesKey("cloud_sync_field_ts")]!!).getInt("i:p1:groupNames"))
     }
 
+    @Test fun onlyTheFieldsAnEditChangedAreReportedForStamping() {
+        val before = mapOf<String, Any>("stalkerPortals" to JSONArray(), "sortOrder" to "provider",
+            "favoriteGroups" to JSONArray().put("News"))
+        val after = mapOf<String, Any>("stalkerPortals" to JSONArray().put(JSONObject().put("id", "stalker1")),
+            "sortOrder" to "provider", "favoriteGroups" to JSONArray().put("News"))
+        val changed = IptvCloudFields.changed(before, after)
+        assertEquals(setOf("stalkerPortals"), changed.keys().asSequence().toSet())
+        assertEquals(0, IptvCloudFields.changed(after, after).length())
+    }
+
+    @Test fun aStampedPortalAdditionSurvivesAnotherDevicesStaleEmptyList() {
+        // The other device pushed its snapshot before it had the new portal.
+        val stale = portals(emptyList(), 0)
+        // This device added the portal; the local edit stamps the field.
+        val prefs = mutablePreferencesOf()
+        val added = JSONArray().put(JSONObject().put("id", "stalker1"))
+        IptvCloudFields.stamp(prefs, "p1", JSONObject().put("stalkerPortals", added), 500)
+        val stamp = JSONObject(prefs[stringPreferencesKey("cloud_sync_field_ts")]!!).getLong("i:p1:stalkerPortals")
+        val local = portals(listOf("stalker1"), stamp)
+        // Pull (base = cloud, other = local) and push (base = local, other = cloud) both keep it.
+        val pulled = JSONObject(stale.toString())
+        assertEquals(setOf("i:p1:stalkerPortals"), IptvCloudFields.merge(pulled, local))
+        assertEquals(1, (IptvCloudFields.value(pulled, "i:p1:stalkerPortals") as JSONArray).length())
+        val pushed = JSONObject(local.toString())
+        assertTrue(IptvCloudFields.merge(pushed, stale).isEmpty())
+        assertEquals(1, (IptvCloudFields.value(pushed, "i:p1:stalkerPortals") as JSONArray).length())
+    }
+
+    private fun portals(ids: List<String>, time: Long) = JSONObject()
+        .put("iptvByProfile", JSONObject().put("p1", JSONObject()
+            .put("stalkerPortals", JSONArray(ids.map { JSONObject().put("id", it) }))))
+        .put("fieldUpdatedAt", JSONObject().put("i:p1:stalkerPortals", time))
+
     private fun payload(ids: List<String>, time: Long) = JSONObject()
         .put("iptvByProfile", JSONObject().put("p1", JSONObject().put("playlists", JSONArray(ids))))
         .put("fieldUpdatedAt", JSONObject().put("i:p1:playlists", time))
