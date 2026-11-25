@@ -1931,6 +1931,10 @@
     <string name="settings_value_indigo">אינדיגו</string>
     <string name="settings_value_violet">סגול</string>
     <string name="settings_value_cyan">ציאן</string>
+    <string name="settings_value_coral">אלמוג</string>
+    <string name="settings_value_amber">ענבר</string>
+    <string name="settings_value_teal">טורקיז</string>
+    <string name="settings_value_pink">ורוד</string>
     <string name="settings_value_normal">רגיל</string>
     <string name="settings_value_bold">מודגש</string>
     <string name="settings_value_background">רקע</string>
