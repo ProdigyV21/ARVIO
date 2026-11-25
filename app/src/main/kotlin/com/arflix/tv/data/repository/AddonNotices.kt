@@ -74,3 +74,19 @@ internal fun addonNoticeRow(index: Int, notice: AddonNotice): StreamSource = Str
 
 internal fun isAddonNoticeRow(stream: StreamSource): Boolean =
     stream.url?.startsWith(ADDON_NOTICE_ROW_URL) == true
+
+/**
+ * Set when any addon in one source search timed out or errored. An empty result from such a
+ * search means "we could not find out", not "there is nothing", so it must not be cached as final.
+ */
+internal class AddonSearchHealth : AbstractCoroutineContextElement(Key) {
+    companion object Key : CoroutineContext.Key<AddonSearchHealth>
+
+    @Volatile
+    var failed: Boolean = false
+        private set
+
+    fun markFailed() {
+        failed = true
+    }
+}
