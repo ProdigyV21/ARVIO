@@ -303,7 +303,7 @@ fun AppBottomBar(
         // Floating, rounded bar over a soft fade, so artwork stays visible beside it.
         Column(
             modifier = modifier.fillMaxWidth()
-                .background(Brush.verticalGradient(0f to Color.Transparent, 1f to Color.Black.copy(alpha = 0.75f)))
+                .background(Brush.verticalGradient(0f to Color.Transparent, 0.45f to Color.Black.copy(alpha = 0.7f), 1f to Color.Black.copy(alpha = 0.92f)))
                 .navigationBarsPadding()
                 .padding(start = 12.dp, end = 12.dp, top = 6.dp, bottom = 8.dp)
         ) {
@@ -311,7 +311,7 @@ fun AppBottomBar(
                 modifier = Modifier.fillMaxWidth().height(barHeight)
                     .shadow(16.dp, FloatingBarShape, clip = false)
                     .clip(FloatingBarShape)
-                    .background(Color(0xFF17171A).copy(alpha = 0.94f))
+                    .background(Color(0xFF17171A).copy(alpha = 0.98f))
                     .border(1.dp, Color.White.copy(alpha = 0.08f), FloatingBarShape)
                     .padding(horizontal = 6.dp),
                 horizontalArrangement = Arrangement.SpaceEvenly,

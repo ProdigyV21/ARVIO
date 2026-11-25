@@ -132,6 +132,7 @@ private fun MobileAccountSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
         containerColor = Color(0xFF141416),
+        scrimColor = Color.Black.copy(alpha = 0.6f),
         contentColor = Color.White,
         shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
     ) {

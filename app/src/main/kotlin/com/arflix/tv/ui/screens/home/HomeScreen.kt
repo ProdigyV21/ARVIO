@@ -3486,7 +3486,7 @@ private fun HomeRowsLayer(
     }
 }
 
-private val MobileRankInsetDp = 34.dp
+private val MobileRankInsetDp = 40.dp
 
 /** Outlined rank numeral for phone Top 10 rows; the card that follows overlaps its right edge. */
 @Composable
@@ -3642,10 +3642,9 @@ private fun MobileHomeRowsLayer(
                         color = Color.White,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f, fill = false)
+                        modifier = Modifier.weight(1f)
                     )
                     if (showViewAll) {
-                        Spacer(modifier = Modifier.weight(1f))
                         Row(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(50))
@@ -3826,9 +3825,10 @@ private fun MobileHomeRowsLayer(
                     else (mobileListState.firstVisibleItemScrollOffset / statusScrimScrollDistance).coerceIn(0f, 1f)
                 alpha = 0.35f + progress * 0.65f
             }
-            .background(Brush.verticalGradient(0f to Color.Black.copy(alpha = 0.65f),
-                0.75f to Color.Black.copy(alpha = 0.55f), 1f to Color.Transparent))
-            .statusBarsPadding().height(12.dp))
+            // Rows scroll under the status bar; a near-solid band keeps the clock readable.
+            .background(Brush.verticalGradient(0f to Color.Black.copy(alpha = 0.92f),
+                0.7f to Color.Black.copy(alpha = 0.85f), 1f to Color.Transparent))
+            .statusBarsPadding().height(16.dp))
     }
 }
 

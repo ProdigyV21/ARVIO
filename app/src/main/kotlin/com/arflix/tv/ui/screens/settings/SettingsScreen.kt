@@ -131,6 +131,7 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Speaker
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Extension
+import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.Tune
 import com.arflix.tv.data.model.StreamIntegrationType
 import com.arflix.tv.data.model.StreamSearchMode
@@ -5126,7 +5127,7 @@ private fun MobileSettingsMainPage(
                     if (!uiState.isKidsProfile) add("News" to Icons.Default.Newspaper)
                     add("Addons" to Icons.Default.Extension)
                     if (BuildConfig.FEATURE_PLUGINS_ENABLED) {
-                        add("Plugins & Extensions" to Icons.Default.Extension)
+                        add("Plugins & Extensions" to Icons.Default.Apps)
                     }
                     add("Catalogs" to Icons.Default.Widgets)
                     add("TV" to Icons.Default.LiveTv)
