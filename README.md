@@ -58,16 +58,18 @@ For GitHub updates through Obtainium, add `https://github.com/ProdigyV21/ARVIO` 
 
 ## Features
 
-- **A home screen you can make your own.** Choose the expanded-card TV home or the classic layout, arrange catalogs and collections, show your watchlist beneath Continue Watching, and enable optional trailer previews.
-- **Collections and discovery.** Browse built-in collections or import your own. Collection pages include artwork, title previews, descriptions and ratings where available. Add compatible TMDB pages, Trakt, SIMKL and MDBList lists, or add-on catalogs.
+- **A home screen you can make your own.** Choose the expanded-card TV home or the classic layout, arrange catalogs and collections, show your watchlist beneath Continue Watching, and enable optional trailer previews. The TV home shows real posters in every row, a clear focus ring, rows that scroll endlessly and a billboard that rotates through today's top titles.
+- **Your colours.** Pick an accent colour for the whole app, now including Coral, Amber, Teal, Cyan and Pink. Your choice syncs between the Android app and the web app.
+- **Collections and discovery.** Browse built-in collections or import your own. Collection pages include artwork, title previews, descriptions and ratings where available. Add compatible TMDB pages, Trakt, SIMKL and MDBList lists, or add-on catalogs. Each catalog in an imported collection folder gets its own row on Home.
 - **Your library and release Calendar.** Keep watchlists, personal lists and home-server libraries together. See upcoming movies and episodes from supported lists and shows you are watching, with local-time schedules where an air time is known.
 - **Plex, Emby and Jellyfin.** Connect your own servers or libraries shared with you, browse their contents and use available server media as playback sources.
+- **Music.** A Music tab on Android for your own music. Connect Navidrome or another Subsonic server, Jellyfin, or compatible music add-ons (including the Eclipse add-on format). Browse daily charts and playlists for your app language, search songs, albums and artists, like songs, save favourite albums and build your own playlists. Bring your Spotify playlists and liked songs over from a Spotify data export file. Music keeps playing in the background, with lock-screen and Bluetooth controls, and your music sources, likes and playlists sync per profile with ARVIO Cloud.
 - **Live TV and catch-up.** Connect supported M3U, Xtream Codes or Stalker sources. Browse categories, favorites, recently watched channels and the programme guide, with a mini-player and fullscreen playback. Guide coverage, catch-up and seeking depend on your provider.
 - **Sports inside Live TV.** Browse live and upcoming events, then choose a matched channel or compatible sports add-on source. Use IPTV, sports add-ons, or both. Coverage and artwork depend on the schedules and sources available to your setup.
 - **Add-ons, debrid and Telegram.** Browse and install compatible community add-ons, configure supported debrid sources, or search video files in your connected Telegram channels and groups. These services need their own configuration and access.
 - **Trakt and SIMKL tracking.** Connect accounts per profile for supported watchlists, history, scrobbling and Continue Watching/next episodes. SIMKL uses AUTH V2 for new connections; custom-list availability depends on your SIMKL account's capabilities.
 - **Playback and subtitles.** Media3 playback on Android, episode-aware controls, source selection, audio/subtitle tracks, automatic frame-rate matching on supported hardware, subtitle language preferences and optional AI subtitle tools.
-- **Profiles and optional cloud sync.** Separate viewing state, avatars and PINs, plus age-filtered kids profiles on Android. ARVIO Cloud can sync supported settings, catalogs, playlists and watch state across your devices.
+- **Profiles and optional cloud sync.** Separate viewing state, avatars and PINs, plus age-filtered kids profiles on Android. ARVIO Cloud can sync supported settings, catalogs, playlists, music and watch state across your devices.
 
 Browser playback depends on the source, CORS, codecs and browser. It is not a guarantee that every source playable on Android will play in a browser. See the [browser playback guide](https://arvio.tv/browser-playback-guide/).
 
@@ -77,6 +79,7 @@ Browser playback depends on the source, CORS, codecs and browser. It is not a gu
 2. **Connect your sources in Settings.** Add your home server, a compatible add-on, your live TV playlist or Telegram account. Browsing a catalog alone does not create a playable source.
 3. **Connect your trackers.** Add Trakt or SIMKL for viewing progress and supported lists; connect MDBList if you use its lists.
 4. **Make Home yours.** Choose your layout, organize catalogs and import collections. Open a title and select an available source to watch.
+5. **Add your music (optional).** Open the Music tab and connect your music server or a music add-on. Import a Spotify export file to bring your playlists along.
 
 [All setup guides](https://arvio.tv/guides/) &middot; [Plex / Emby / Jellyfin](https://arvio.tv/plex-emby-jellyfin/) &middot; [Ask the community](https://discord.gg/UavuEYMfQ4)
 
