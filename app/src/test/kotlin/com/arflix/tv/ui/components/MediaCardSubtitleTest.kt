@@ -33,4 +33,9 @@ class MediaCardSubtitleTest {
         val bidi = Bidi(mediaCardSubtitle("Movie", "13 Nov 2026"), Bidi.DIRECTION_DEFAULT_LEFT_TO_RIGHT)
         assertEquals(true, bidi.isLeftToRight)
     }
+
+    @Test fun `phones show only the date while tv keeps the type`() {
+        assertEquals("16 Dec 2026", mobileAwareCardSubtitle(true, "Movie", "16 Dec 2026"))
+        assertEquals("Movie · 16 Dec 2026", mobileAwareCardSubtitle(false, "Movie", "16 Dec 2026").replace("\u200E", ""))
+    }
 }
