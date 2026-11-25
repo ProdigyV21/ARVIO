@@ -33,6 +33,18 @@ function formatEpisodeLine(item: MediaItem): string {
   return title ? `${code} · ${title}` : code;
 }
 
+// Some Continue Watching sources name the item "Show: Episode". The episode
+// line below already names the episode, so the title keeps only the show.
+function showTitle(item: MediaItem): string {
+  const episode = item.episodeTitle?.trim();
+  if (!episode || item.mediaType !== "tv") return item.title;
+  for (const separator of [": ", " - ", " \u2013 ", " \u00b7 "]) {
+    const suffix = `${separator}${episode}`;
+    if (item.title.length > suffix.length && item.title.endsWith(suffix)) return item.title.slice(0, -suffix.length);
+  }
+  return item.title;
+}
+
 function MediaCardBase({ item, onOpen, onFocus, posterMode, rank, hideService }: {
   item: MediaItem;
   onOpen: (item: MediaItem) => void;
@@ -260,7 +272,7 @@ function MediaCardBase({ item, onOpen, onFocus, posterMode, rank, hideService }:
           </span>
         )}
       </div>
-      <strong title={release ? item.title : undefined}>{release?.title ?? item.title}</strong>
+      <strong title={release ? item.title : undefined}>{release?.title ?? (episodeLine ? showTitle(item) : item.title)}</strong>
       {episodeLine ? (
         <div className="card-episode-line">
           {isUpNext && <span className="card-upnext">{translateUi("Up next")}</span>}

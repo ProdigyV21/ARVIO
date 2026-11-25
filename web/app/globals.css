@@ -3478,3 +3478,14 @@ html:has(.st-shell), body:has(.st-shell), .app-shell:has(.st-shell), .content:ha
 [dir="rtl"] .lucide-panel-left {
   scale: -1 1;
 }
+
+/* The nav stays fully transparent (owner preference). Its labels and icons
+   carry their own shadow so they stay readable over light artwork. */
+.sidebar .nav-item,
+.sidebar .profile-name-text {
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.55), 0 0 14px rgba(0, 0, 0, 0.45);
+}
+.sidebar .nav-item svg,
+.sidebar .settings-gear svg {
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.6));
+}

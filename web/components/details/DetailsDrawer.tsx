@@ -352,6 +352,19 @@ function DetailsView({ item }: { item: MediaItem }) {
     setAutoplayRequest({ resumeSeconds: resume });
   };
 
+  // A series has no sources until an episode is chosen: open the list on the
+  // episode Play would start (resume or next), instead of an empty list.
+  const openSources = () => {
+    if (isTv && !selectedEpisode) {
+      if (plan.season == null || plan.episode == null) {
+        episodesRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+        return;
+      }
+      void loadEpisodeStreams(displayItem, plan.season, plan.episode);
+    }
+    setSourcePickerVisible(true);
+  };
+
   const playPrimary = (fromStart = false) => {
     if (autoplayRequest || starting) return;
     const resumeSeconds = fromStart ? 0 : plan.resumeSeconds;
@@ -498,7 +511,7 @@ function DetailsView({ item }: { item: MediaItem }) {
                 <RotateCcw size={18} /> {translateUi(plan.startOverLabel)}
               </button>
             ) : null}
-            <button type="button" className="secondary text-button" onClick={() => setSourcePickerVisible(true)}><Folder size={18} /> {translateUi("Sources")}</button>
+            <button type="button" className="secondary text-button" onClick={openSources}><Folder size={18} /> {translateUi("Sources")}</button>
             {inWatchlist ? (
               <button type="button" className="secondary text-button" onClick={() => void toggleWatchlist(displayItem)}><Trash2 size={18} /> {translateUi(" Remove")}</button>
             ) : (

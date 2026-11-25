@@ -110,7 +110,15 @@ export function SourcePickerModal({
   // macOS is excluded — VLC self-registers vlc:// there, so no installer is
   // needed (and the .bat wouldn't run on a Mac anyway).
   const [vlcReady, setVlcReady] = useState<boolean>(() => vlcProtocolReady());
-  const showVlcSetup = (isWindows() || isLinux()) && !vlcReady;
+  // Dismissed once = gone in this browser; it is still offered in Settings.
+  const [vlcHintHidden, setVlcHintHidden] = useState<boolean>(() => {
+    try { return localStorage.getItem("arvio.web.vlcHintHidden") === "1"; } catch { return false; }
+  });
+  const hideVlcHint = () => {
+    setVlcHintHidden(true);
+    try { localStorage.setItem("arvio.web.vlcHintHidden", "1"); } catch { /* storage blocked */ }
+  };
+  const showVlcSetup = (isWindows() || isLinux()) && !vlcReady && !vlcHintHidden;
   const enableVlcProtocol = () => {
     // Download the tiny installer script for the platform, then remember the user set it up
     if (isLinux()) {
@@ -389,7 +397,7 @@ export function SourcePickerModal({
       <div className="source-panel src-panel" ref={(node) => { panelRef.current = node; }}>
         <header className="source-panel-head">
           <div>
-            <p className="eyebrow">{translateUi("sources")}</p>
+            <p className="eyebrow">{translateUi("Sources")}</p>
             <h2>{title}</h2>
             <span>
               {translateUi("{value0} sources · {value1} play in this browser", { value0: streams.length, value1: counts.here })}
@@ -401,7 +409,10 @@ export function SourcePickerModal({
         {showVlcSetup && (
           <div className="vlc-setup-hint">
             <span>{translateUi("Windows/desktop: enable one-click \"Open in VLC\" (no more .m3u download).")}</span>
-            <button type="button" onClick={enableVlcProtocol}>{translateUi("Set up VLC integration")}</button>
+            <span className="vlc-setup-actions">
+              <button type="button" className="vlc-setup-dismiss" onClick={hideVlcHint}>{translateUi("Dismiss")}</button>
+              <button type="button" onClick={enableVlcProtocol}>{translateUi("Set up VLC integration")}</button>
+            </span>
           </div>
         )}
 

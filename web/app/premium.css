@@ -107,7 +107,13 @@
   font-size: 13px;
   cursor: pointer;
 }
-[dir="rtl"] .vlc-setup-hint button {
+.vlc-setup-actions { display: inline-flex; gap: 8px; align-items: center; }
+.vlc-setup-hint .vlc-setup-dismiss {
+  background: transparent;
+  color: rgba(255, 255, 255, 0.72);
+  font-weight: 600;
+}
+[dir="rtl"] .vlc-setup-hint button:not(.vlc-setup-dismiss) {
   background-image: linear-gradient(270deg, #00d588, #09b3f0);
 }
 @media (hover: hover) and (pointer: fine) {
