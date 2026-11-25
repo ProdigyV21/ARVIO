@@ -171,6 +171,7 @@ test('no candidate: waits while searching, stops when the search ends or is abor
 
 test('pre-play probes only read direct-play files and never resolve debrid links', async () => {
   const verifyCalls = [];
+  const reachabilityCalls = [];
   const verifier = load('lib/autoplayVerify.ts', {
     './debrid': {
       parseDebridStream: (url) => (String(url).includes('/torbox/') ? { provider: 'torbox' } : null),
@@ -184,7 +185,11 @@ test('pre-play probes only read direct-play files and never resolve debrid links
       verifyStream: async (url) => { verifyCalls.push(url); return url.includes('bad') ? { playable: false } : url.includes('good') ? { playable: true } : null; },
       cachedVerdict: () => undefined
     }
-  }, { VideoDecoder: function () {}, AudioDecoder: function () {} });
+  }, { VideoDecoder: function () {}, AudioDecoder: function () {}, fetch: async (url) => {
+    // Remux candidates get a one-byte reachability check instead of a decoder probe.
+    reachabilityCalls.push(url);
+    return { url, status: 206, headers: { get: () => 'bytes 0-0/4000000000' }, body: { cancel: async () => {} } };
+  } });
   assert.equal(verifier.probeUrlFor({ url: 'https://h.example/good.mp4' }), 'https://h.example/good.mp4');
   assert.equal(verifier.probeUrlFor({ url: 'https://h.example/movie.mkv' }), null, 'remux candidates probe themselves');
   assert.equal(verifier.probeUrlFor({ url: 'https://h.example/live.m3u8' }), null);
@@ -198,8 +203,9 @@ test('pre-play probes only read direct-play files and never resolve debrid links
   const reported = [];
   const verdicts = await verifier.verifyAutoplayCandidates([good, bad, remux], 500, new AbortController().signal, (stream, verdict) => reported.push([stream.url, verdict]));
   assert.deepEqual(plain(verifyCalls), [good.url, bad.url]);
-  // Unprobeable candidates are reported at once; probed ones as they finish.
-  assert.deepEqual(plain(reported[0]), [remux.url, null]);
+  assert.deepEqual(plain(reachabilityCalls), [remux.url]);
+  // Each candidate is reported as soon as its own check finishes.
+  assert.ok(reported.some(([url, verdict]) => url === remux.url && verdict === null));
   assert.equal(reported.length, 3);
   assert.equal(verdicts.get(good), true);
   assert.equal(verdicts.get(bad), false);
