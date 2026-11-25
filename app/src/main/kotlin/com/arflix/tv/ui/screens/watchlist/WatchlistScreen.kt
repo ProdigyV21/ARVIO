@@ -305,8 +305,15 @@ fun WatchlistScreen(
             .then(if (compact && search) Modifier.imePadding() else Modifier)
             .padding(top = if (touch) 0.dp else LibraryTabsTopInset)
             .padding(horizontal = if (compact) 16.dp else 26.dp)) {
-            if (touch) Text(stringResource(R.string.nav_library), color = Color.White, fontSize = 24.sp,
-                fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(vertical = 12.dp))
+            if (touch) Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(stringResource(R.string.nav_library), color = Color.White, fontSize = 28.sp,
+                    fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                com.arflix.tv.ui.components.MobileAccountButton(
+                    profile = currentProfile,
+                    onSwitchProfile = onSwitchProfile,
+                    onOpenSettings = { onNavigateToSettings(null) },
+                )
+            }
             Row(Modifier.fillMaxWidth().testTag("library-section-tabs").then(if (compact) Modifier.horizontalScroll(rememberScrollState()) else Modifier)
                 .heightIn(min = 48.dp)
                 .padding(bottom = if(compact) 10.dp else 6.dp), verticalAlignment = Alignment.CenterVertically,

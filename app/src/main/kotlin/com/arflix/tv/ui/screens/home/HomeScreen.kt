@@ -2550,25 +2550,27 @@ private fun MobileHeroOverlay(
 private fun MobileHomeHeader(
     currentProfile: com.arflix.tv.data.model.Profile?,
     onSwitchProfile: () -> Unit,
-    onNavigateToSearch: () -> Unit,
+    onNavigateToSettings: () -> Unit,
 ) {
+    // Wordmark left, profile avatar right (Switch profile, News, Settings), like the web app.
+    // Search has its own tab, so the header no longer repeats it.
     Row(
         Modifier.fillMaxWidth().statusBarsPadding()
-            .padding(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 8.dp),
+            .padding(start = 20.dp, end = 12.dp, top = 6.dp, bottom = 6.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(Modifier.size(48.dp).clip(CircleShape).clickable(onClick = onSwitchProfile)
-            .padding(5.dp).clip(CircleShape)) {
-            if (currentProfile != null) ProfileAvatarVisual(
-                profile = currentProfile, letterFontSize = 15.sp, iconPadding = 5.dp)
-        }
-        Box(Modifier.size(48.dp).clip(CircleShape).clickable(onClick = onNavigateToSearch)
-            .padding(5.dp).background(Color.Black.copy(alpha = 0.32f), CircleShape),
-            contentAlignment = Alignment.Center) {
-            Icon(Icons.Filled.Search, stringResource(R.string.search), tint = Color.White,
-                modifier = Modifier.size(26.dp))
-        }
+        Icon(
+            painter = painterResource(R.drawable.ic_arvio_wordmark),
+            contentDescription = "ARVIO",
+            tint = Color.White,
+            modifier = Modifier.height(16.dp).testTag("mobile_home_wordmark"),
+        )
+        com.arflix.tv.ui.components.MobileAccountButton(
+            profile = currentProfile,
+            onSwitchProfile = onSwitchProfile,
+            onOpenSettings = onNavigateToSettings,
+        )
     }
 }
 
@@ -2584,6 +2586,8 @@ internal fun MobileHeroCarousel(
     currentProfile: com.arflix.tv.data.model.Profile? = null,
     onNavigateToSearch: () -> Unit = {},
     onSwitchProfile: () -> Unit = {},
+    onNavigateToSettings: () -> Unit = {},
+    onHeroOpen: (item: MediaItem, play: Boolean) -> Unit = { _, _ -> },
     onNavigateToDetails: (MediaType, Int, Int?, Int?) -> Unit,
     onPreloadHeroImdbRatings: (List<MediaItem>) -> Unit = {},
 ) {
@@ -2600,7 +2604,7 @@ internal fun MobileHeroCarousel(
     if (heroItems.isEmpty()) {
         LaunchedEffect(incomingItems) { heroItems = incomingItems }
         Column(modifier = Modifier.fillMaxWidth()) {
-            if (posterStyle) MobileHomeHeader(currentProfile, onSwitchProfile, onNavigateToSearch)
+            if (posterStyle) MobileHomeHeader(currentProfile, onSwitchProfile, onNavigateToSettings)
 
             Box(
                 modifier = Modifier
@@ -2616,7 +2620,7 @@ internal fun MobileHeroCarousel(
                     ),
                 )
                 if (!posterStyle) Box(Modifier.align(Alignment.TopCenter)) {
-                    MobileHomeHeader(currentProfile, onSwitchProfile, onNavigateToSearch)
+                    MobileHomeHeader(currentProfile, onSwitchProfile, onNavigateToSettings)
                 }
             }
         }
@@ -2658,7 +2662,7 @@ internal fun MobileHeroCarousel(
     }
 
     Column(modifier = Modifier.fillMaxWidth()) {
-        if (posterStyle) MobileHomeHeader(currentProfile, onSwitchProfile, onNavigateToSearch)
+        if (posterStyle) MobileHomeHeader(currentProfile, onSwitchProfile, onNavigateToSettings)
 
         // Banner card pager — circular, peeks at adjacent cards on both sides
         Box(Modifier.fillMaxWidth().height(heroLayout.cardHeightDp.dp).testTag("mobile_hero_pager")) {
@@ -2720,6 +2724,8 @@ internal fun MobileHeroCarousel(
                     rating = rating,
                     logoUrl = logoUrl,
                     onClick = { onNavigateToDetails(item.mediaType, item.id, null, null) },
+                    onPlay = { onHeroOpen(item, true) },
+                    onMoreInfo = { onHeroOpen(item, false) },
                     compactContent = heroLayout.compactContent,
                     immersive = !posterStyle,
                     showPageIndicators = heroItems.size > 1,
@@ -2732,7 +2738,7 @@ internal fun MobileHeroCarousel(
                 )
             }
         }
-        if (!posterStyle) MobileHomeHeader(currentProfile, onSwitchProfile, onNavigateToSearch)
+        if (!posterStyle) MobileHomeHeader(currentProfile, onSwitchProfile, onNavigateToSettings)
 
         // Keep pagination on the artwork, without adding a separate strip below the hero.
         if (heroItems.size > 1) {
@@ -3291,6 +3297,8 @@ internal fun HomeInputLayer(
             currentProfile = currentProfile,
             onNavigateToSearch = onNavigateToSearch,
             onSwitchProfile = onSwitchProfile,
+            onNavigateToSettings = onNavigateToSettings,
+            onHeroOpen = onBillboardOpen,
             onNavigateToDetails = onNavigateToDetails,
             onMobileCategoryVisiblePosition = onMobileCategoryVisiblePosition,
             onViewAllCategory = onNavigateToCategory,
@@ -3363,6 +3371,8 @@ private fun HomeRowsLayer(
     currentProfile: com.arflix.tv.data.model.Profile? = null,
     onNavigateToSearch: () -> Unit = {},
     onSwitchProfile: () -> Unit = {},
+    onNavigateToSettings: () -> Unit = {},
+    onHeroOpen: (item: MediaItem, play: Boolean) -> Unit = { _, _ -> },
     onNavigateToDetails: (MediaType, Int, Int?, Int?) -> Unit = { _, _, _, _ -> },
     onMobileCategoryVisiblePosition: (String, Int) -> Unit = { _, _ -> },
     onViewAllCategory: (String) -> Unit = {},
@@ -3427,6 +3437,8 @@ private fun HomeRowsLayer(
                     currentProfile = currentProfile,
                     onNavigateToSearch = onNavigateToSearch,
                     onSwitchProfile = onSwitchProfile,
+                    onNavigateToSettings = onNavigateToSettings,
+                    onHeroOpen = onHeroOpen,
                     usePosterCards = usePosterCards,
                     categoryHasMoreMap = categoryHasMoreMap,
                     isSlowLoading = isSlowLoading,
@@ -3483,6 +3495,8 @@ private fun MobileHomeRowsLayer(
     currentProfile: com.arflix.tv.data.model.Profile? = null,
     onNavigateToSearch: () -> Unit = {},
     onSwitchProfile: () -> Unit = {},
+    onNavigateToSettings: () -> Unit = {},
+    onHeroOpen: (item: MediaItem, play: Boolean) -> Unit = { _, _ -> },
     categoryHasMoreMap: Map<String, Boolean> = emptyMap(),
     isSlowLoading: Boolean = false,
     onRetry: () -> Unit = {},
@@ -3525,6 +3539,8 @@ private fun MobileHomeRowsLayer(
                 currentProfile = currentProfile,
                 onNavigateToSearch = onNavigateToSearch,
                 onSwitchProfile = onSwitchProfile,
+                onNavigateToSettings = onNavigateToSettings,
+                onHeroOpen = onHeroOpen,
                 onNavigateToDetails = onNavigateToDetails,
                 onPreloadHeroImdbRatings = onPreloadHeroImdbRatings
             )
