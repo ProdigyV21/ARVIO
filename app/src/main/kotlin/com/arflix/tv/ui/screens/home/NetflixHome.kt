@@ -4,6 +4,7 @@ import android.os.SystemClock
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.AnimationSpec
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.snap
@@ -142,6 +143,8 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.LayoutCoordinates
 
 private const val NETFLIX_RAIL_MORPH_MS = 220
+/** One step of a held Left/Right: the key repeat and the rail glide share this pace. */
+internal const val NETFLIX_HOLD_STEP_MS = 150L
 /** Margin past the vertical scroll before a row that left through the top collapses. */
 private const val NETFLIX_COLLAPSE_SETTLE_MS = 80
 /** Resting row titles draw at 17sp of the focused row's 20sp. */
@@ -505,6 +508,7 @@ internal fun NetflixTvHomeRowsLayer(
                                 rowIndex < focusState.currentRowIndex,
                             focusedItemIndex = focusedItemIndex,
                             restingItemIndex = focusState.rowItemIndicesByCategoryId[category.id] ?: 0,
+                            holdingHorizontal = rowIsFocused && focusState.horizontalHold,
                             usePosterCards = true,
                             bigCardHeight = bigCardHeight,
                             startPadding = contentStartPadding,
@@ -834,6 +838,7 @@ private fun NetflixContentRow(
     collapsesOffScreen: Boolean,
     focusedItemIndex: Int,
     restingItemIndex: Int,
+    holdingHorizontal: Boolean = false,
     usePosterCards: Boolean = true,
     bigCardHeight: Dp,
     startPadding: Dp,
@@ -919,6 +924,7 @@ private fun NetflixContentRow(
     // The focused title always sits in the first slot; a resting row keeps its position.
     val anchorIndex = (if (isCurrentRow) focusedItemIndex else restingItemIndex)
         .coerceIn(0, (items.size - 1 + if (hasViewAllCard) 1 else 0).coerceAtLeast(0))
+    val latestHolding by rememberUpdatedState(holdingHorizontal)
     var lastAnchor by remember { mutableIntStateOf(-1) }
     var appliedScrollReset by rememberSaveable { mutableIntStateOf(0) }
     val railOffset = remember { Animatable(0f) }
@@ -935,7 +941,11 @@ private fun NetflixContentRow(
             // scroll animation chases a moving destination while the old card shrinks.
             railOffset.snapTo(visibleAnchor.offset.toFloat())
             rowState.requestScrollToItem(anchorIndex, -railOffset.value.roundToInt())
-            railOffset.animateTo(0f, tween(NETFLIX_RAIL_MORPH_MS, easing = FastOutSlowInEasing)) {
+            // A held key moves the rail at a constant speed so successive steps join into
+            // one glide; a single press eases in and out with the card's morph.
+            val glide = if (latestHolding) tween<Float>(NETFLIX_HOLD_STEP_MS.toInt(), easing = LinearEasing)
+                else tween(NETFLIX_RAIL_MORPH_MS, easing = FastOutSlowInEasing)
+            railOffset.animateTo(0f, glide) {
                 rowState.requestScrollToItem(anchorIndex, -value.roundToInt())
             }
         } else {
@@ -987,18 +997,27 @@ private fun NetflixContentRow(
                     LaunchedEffect(items.size) { onLoadMore() }
                 }
                 val onClick = remember(item) { { latestOnItemClick(item) } }
-                val featured = expanded && index == expandedIndex && !item.isPlaceholder
+                // While Left/Right is held the row glides at one card width per step; the
+                // focused card opens once the key is released.
+                val featured = expanded && !holdingHorizontal && index == expandedIndex && !item.isPlaceholder
                 val landscape = featured || (!expanded && !restingPoster)
                 val cardWidth = if (featured) bigCardWidth else if (expanded) focusedPosterWidth else restingWidth
                 val cardHeight = if (expanded) bigCardHeight else cardWidth / (if (landscape) (16f / 9f) else (2f / 3f))
                 val animatedWidth = animateDpAsState(cardWidth, sizeSpec, label = "netflixCardWidth")
                 val animatedHeight = animateDpAsState(cardHeight, sizeSpec, label = "netflixCardHeight")
-                // One picture per title, as Netflix does: a portrait card shows the middle of
-                // the wide artwork that it reveals in full when it expands, never a separate poster.
-                val sharedArt = !item.isPlaceholder && sharesWideArt(category, item, isContinueWatching)
-                // Decode once for the target geometry, never once per animation frame.
+                // A portrait card shows the title's poster. Continue Watching keeps the middle of
+                // its episode still, and a title without a poster falls back to its wide artwork.
+                val usePoster = !landscape && !isContinueWatching && item.image.isNotBlank()
+                val sharedArt = !item.isPlaceholder && !usePoster && sharesWideArt(category, item, isContinueWatching)
+                val artLandscape = landscape || sharedArt
+                // Decode once for the largest size the card takes, never once per animation frame:
+                // a poster is decoded for the focused row's poster size, so moving between rows
+                // reuses the same image.
                 val artwork = if (item.isPlaceholder) null else rememberNetflixArtwork(
-                    item, landscape || sharedArt, cardWidth, cardHeight, isContinueWatching)
+                    item, artLandscape,
+                    if (artLandscape) cardWidth else focusedPosterWidth,
+                    if (artLandscape) cardHeight else bigCardHeight,
+                    isContinueWatching)
                 Box(Modifier.testTag("netflix_morph_${item.mediaType}_${item.id}")) {
                     // The morph size is applied at layout time: the cards get their target
                     // size and are only re-measured each frame, not recomposed.
