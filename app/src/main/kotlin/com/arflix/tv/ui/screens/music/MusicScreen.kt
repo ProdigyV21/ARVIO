@@ -111,6 +111,9 @@ import coil.compose.AsyncImage
 import com.arflix.tv.R
 import com.arflix.tv.music.AlbumShelf
 import com.arflix.tv.music.MusicAlbum
+import com.arflix.tv.music.MusicSearchRanking
+import com.arflix.tv.music.ChartsSource
+import com.arflix.tv.music.SearchSection
 import com.arflix.tv.music.MusicArtist
 import com.arflix.tv.music.MusicCollections
 import com.arflix.tv.music.MusicPlaylist
@@ -594,6 +597,13 @@ private fun HomeShelves(state: MusicUiState, accent: Color, bottomPadding: Dp, v
                     }
                 }
             }
+            if (shelves.any { ChartsSource.isChartShelf(it.key) }) item(key = "charts-credit") {
+                Text(
+                    stringResource(R.string.music_charts_credit),
+                    color = Color.White.copy(alpha = 0.45f), fontSize = 12.sp,
+                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 20.dp),
+                )
+            }
         }
     }
 }
@@ -624,37 +634,54 @@ private fun SearchResultsView(
     when {
         results == null -> LoadingBox()
         results.isEmpty && !state.searching -> MessageBox(stringResource(R.string.music_no_results, state.query.trim()))
-        else -> LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = bottomPadding)) {
-            if (results.artists.isNotEmpty()) {
-                item { SectionTitle(stringResource(R.string.music_tab_artists)) }
-                items(results.artists, key = { "artist-" + it.id }) { artist ->
-                    ArtistRow(artist) { viewModel.openArtist(artist) }
-                }
-            }
-            if (results.albums.isNotEmpty()) {
-                item { SectionTitle(stringResource(R.string.music_tab_albums)) }
-                item {
-                    LazyRow(
-                        contentPadding = PaddingValues(horizontal = 16.dp),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    ) {
-                        items(results.albums, key = { it.id }) { album ->
-                            AlbumCard(album, Modifier.width(144.dp)) { viewModel.openAlbum(album) }
+        else -> {
+            val order = remember(results, state.query) { MusicSearchRanking.order(state.query, results) }
+            LazyColumn(Modifier.fillMaxSize().testTag("music-search-results"), contentPadding = PaddingValues(bottom = bottomPadding)) {
+                order.forEachIndexed { position, section ->
+                    when (section) {
+                        // Artists that only come after songs are a short list, so songs stay near the top.
+                        SearchSection.ARTISTS -> if (results.artists.isNotEmpty()) {
+                            val artists = if (position == 0) results.artists else results.artists.take(5)
+                            item(key = "artists-title") { SectionTitle(stringResource(R.string.music_tab_artists)) }
+                            items(artists, key = { "artist-" + it.id }) { artist ->
+                                ArtistRow(artist) { viewModel.openArtist(artist) }
+                            }
+                        }
+                        SearchSection.ALBUMS -> if (results.albums.isNotEmpty()) {
+                            item(key = "albums") { SearchAlbumRow(stringResource(R.string.music_tab_albums), results.albums, viewModel) }
+                        }
+                        SearchSection.PLAYLISTS -> if (results.playlists.isNotEmpty()) {
+                            item(key = "playlists") { SearchAlbumRow(stringResource(R.string.music_playlists), results.playlists, viewModel) }
+                        }
+                        SearchSection.TRACKS -> if (results.tracks.isNotEmpty()) {
+                            item(key = "tracks-title") { SectionTitle(stringResource(R.string.music_songs)) }
+                            itemsIndexed(results.tracks, key = { _, track -> "track-" + track.id }) { index, track ->
+                                TrackRow(
+                                    track = track,
+                                    playing = playback.current?.id == track.id,
+                                    accent = accent,
+                                    showCover = true,
+                                    actions = trackActions(track, state.collections, viewModel),
+                                ) { viewModel.play(results.tracks, index) }
+                            }
                         }
                     }
                 }
             }
-            if (results.tracks.isNotEmpty()) {
-                item { SectionTitle(stringResource(R.string.music_songs)) }
-                itemsIndexed(results.tracks, key = { _, track -> "track-" + track.id }) { index, track ->
-                    TrackRow(
-                        track = track,
-                        playing = playback.current?.id == track.id,
-                        accent = accent,
-                        showCover = true,
-                        actions = trackActions(track, state.collections, viewModel),
-                    ) { viewModel.play(results.tracks, index) }
-                }
+        }
+    }
+}
+
+@Composable
+private fun SearchAlbumRow(title: String, albums: List<MusicAlbum>, viewModel: MusicActions) {
+    Column {
+        SectionTitle(title)
+        LazyRow(
+            contentPadding = PaddingValues(horizontal = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            items(albums, key = { it.id }) { album ->
+                AlbumCard(album, Modifier.width(144.dp)) { viewModel.openAlbum(album) }
             }
         }
     }

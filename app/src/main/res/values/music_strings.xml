@@ -24,6 +24,8 @@
     <string name="music_shelf_frequent">Most played</string>
     <string name="music_shelf_random">Discover</string>
     <string name="music_songs">Songs</string>
+    <string name="music_playlists">Playlists</string>
+    <string name="music_charts_credit">Charts and playlists: Deezer. Songs play from your own sources.</string>
     <string name="music_play">Play</string>
     <string name="music_shuffle">Shuffle</string>
     <string name="music_empty_library">No music found on this server yet.</string>

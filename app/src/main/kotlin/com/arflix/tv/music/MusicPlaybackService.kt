@@ -7,6 +7,8 @@ import androidx.annotation.OptIn
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
+import androidx.media3.common.PlaybackException
+import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.datasource.DefaultDataSource
@@ -17,9 +19,21 @@ import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
+import dagger.hilt.EntryPoint
+import dagger.hilt.InstallIn
+import dagger.hilt.android.EntryPointAccessors
+import dagger.hilt.components.SingletonComponent
+import kotlinx.coroutines.runBlocking
 import okhttp3.OkHttpClient
 import java.io.IOException
 import java.util.concurrent.TimeUnit
+
+/** The service is started by media3, not by Hilt, so it fetches the repository itself. */
+@EntryPoint
+@InstallIn(SingletonComponent::class)
+interface MusicServiceEntryPoint {
+    fun musicRepository(): MusicRepository
+}
 
 /**
  * Plays the Music tab's queue in the background, with the system media notification and
@@ -41,16 +55,29 @@ class MusicPlaybackService : MediaSessionService() {
             .connectTimeout(15, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS)
             .build()
+        val repository = EntryPointAccessors.fromApplication(applicationContext, MusicServiceEntryPoint::class.java).musicRepository()
+        fun addonStream(uri: Uri): Uri {
+            val base = uri.getQueryParameter("base") ?: throw IOException("Missing addon")
+            val id = uri.getQueryParameter("id") ?: throw IOException("Missing track")
+            val stream = runCatching { MusicAddonSource.resolveStream(http, base, id, uri.getQueryParameter("p")) }
+                .getOrElse { throw IOException(it.message, it) }
+            return Uri.parse(stream)
+        }
         val dataSources = ResolvingDataSource.Factory(DefaultDataSource.Factory(this)) { spec ->
             val uri = spec.uri
-            if (uri.scheme != MusicAddonSource.STREAM_SCHEME) {
-                spec
-            } else {
-                val base = uri.getQueryParameter("base") ?: throw IOException("Missing addon")
-                val id = uri.getQueryParameter("id") ?: throw IOException("Missing track")
-                val stream = runCatching { MusicAddonSource.resolveStream(http, base, id, uri.getQueryParameter("p")) }
-                    .getOrElse { throw IOException(it.message, it) }
-                spec.withUri(Uri.parse(stream))
+            when (uri.scheme) {
+                MusicAddonSource.STREAM_SCHEME -> spec.withUri(addonStream(uri))
+                // A chart song: found in the user's own sources only now that it starts.
+                MusicMatch.SCHEME -> {
+                    val title = uri.getQueryParameter("t").orEmpty()
+                    val track = runBlocking {
+                        val source = repository.currentSource() ?: throw MusicMatchMissingException(title)
+                        MusicMatch.find(source, title, uri.getQueryParameter("a").orEmpty(), uri.getQueryParameter("d")?.toIntOrNull() ?: 0)
+                    }
+                    val stream = Uri.parse(track.streamUrl)
+                    spec.withUri(if (stream.scheme == MusicAddonSource.STREAM_SCHEME) addonStream(stream) else stream)
+                }
+                else -> spec
             }
         }
         val player = ExoPlayer.Builder(this, renderers)
@@ -65,6 +92,16 @@ class MusicPlaybackService : MediaSessionService() {
             .setHandleAudioBecomingNoisy(true)
             .setWakeMode(C.WAKE_MODE_NETWORK)
             .build()
+        // A chart song none of the user's sources has is skipped instead of stopping the queue.
+        player.addListener(object : Player.Listener {
+            override fun onPlayerError(error: PlaybackException) {
+                if (generateSequence<Throwable>(error) { it.cause }.none { it is MusicMatchMissingException }) return
+                if (!player.hasNextMediaItem()) return
+                player.seekToNextMediaItem()
+                player.prepare()
+                player.play()
+            }
+        })
 
         val builder = MediaSession.Builder(this, player)
             .setId("arvio_music")

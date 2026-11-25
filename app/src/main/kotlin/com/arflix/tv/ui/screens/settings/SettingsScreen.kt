@@ -5870,7 +5870,7 @@ private fun MobileSettingsSubPage(
                     MobileSettingsRow(
                         icon = Icons.Default.Palette,
                         title = stringResource(R.string.accent_color),
-                        value = uiState.accentColor,
+                        value = localizeSettingValue(uiState.accentColor),
                         isFocused = false,
                         showDivider = true,
                         onClick = { viewModel.cycleAccentColor() }
@@ -6852,7 +6852,7 @@ private fun tvSettingsPanelFacts(
         )
         "appearance" -> listOf(
             stringResource(R.string.settings_fact_oled) to if (uiState.oledBlackBackground) stringResource(R.string.on) else stringResource(R.string.off),
-            stringResource(R.string.settings_fact_accent_color) to uiState.accentColor
+            stringResource(R.string.settings_fact_accent_color) to localizeSettingValue(uiState.accentColor)
         )
         "profiles" -> listOf(
             stringResource(R.string.settings_fact_startup) to if (uiState.skipProfileSelection) stringResource(R.string.settings_skip_picker) else stringResource(R.string.settings_show_picker)

@@ -269,3 +269,8 @@
 # sherpa-onnx (audio subtitle sync speech recognition): JNI reads config fields by name.
 -keep class com.k2fsa.sherpa.onnx.** { *; }
 -keep interface com.k2fsa.sherpa.onnx.** { *; }
+
+# ComposeAccessibilityGate reads these Compose internals by name (guarded; a rename only disables it).
+-keepnames class androidx.compose.ui.platform.AndroidComposeView
+-keepclassmembernames class androidx.compose.ui.platform.AndroidComposeView { *** composeAccessibilityDelegate; }
+-keepclassmembernames class androidx.compose.ui.platform.AndroidComposeViewAccessibilityDelegateCompat { *** _enabledServices; }

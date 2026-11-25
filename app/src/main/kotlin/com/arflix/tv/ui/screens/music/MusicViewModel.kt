@@ -11,6 +11,7 @@ import com.arflix.tv.music.MusicLibrary
 import com.arflix.tv.music.MusicPlaybackState
 import com.arflix.tv.music.MusicPlayer
 import com.arflix.tv.music.MusicRepository
+import com.arflix.tv.music.MusicSearchRanking
 import com.arflix.tv.music.MusicSearchResult
 import com.arflix.tv.music.MusicServerConfig
 import com.arflix.tv.music.MusicServerType
@@ -279,7 +280,7 @@ class MusicViewModel @Inject constructor(
         _state.update { it.copy(loading = true, error = null) }
         viewModelScope.launch {
             runCatching { source.shelves() }
-                .onSuccess { shelves -> _state.update { it.copy(loading = false, shelves = shelves) } }
+                .onSuccess { shelves -> _state.update { it.copy(loading = false, shelves = MusicSearchRanking.arrangeHome(shelves)) } }
                 .onFailure { error -> _state.update { it.copy(loading = false, error = error.message) } }
         }
     }
@@ -314,6 +315,7 @@ class MusicViewModel @Inject constructor(
             delay(300)
             _state.update { it.copy(searching = true) }
             val result = runCatching { source.search(query.trim()) }.getOrDefault(MusicSearchResult())
+                .let { it.copy(tracks = MusicSearchRanking.rankTracks(query, it.tracks)) }
             _state.update { it.copy(searching = false, results = result) }
         }
     }

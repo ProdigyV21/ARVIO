@@ -1477,6 +1477,10 @@
     <string name="settings_value_indigo">Índigo</string>
     <string name="settings_value_violet">Violeta</string>
     <string name="settings_value_cyan">Ciano</string>
+    <string name="settings_value_coral">Coral</string>
+    <string name="settings_value_amber">Âmbar</string>
+    <string name="settings_value_teal">Verde-azulado</string>
+    <string name="settings_value_pink">Rosa</string>
     <string name="settings_value_normal">Normal</string>
     <string name="settings_value_bold">Negrito</string>
     <string name="settings_value_background">Com fundo</string>
