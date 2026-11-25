@@ -6,6 +6,10 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.arflix.tv.data.repository.CloudSyncInvalidationBus
+import com.arflix.tv.data.repository.CloudSyncScope
+import com.arflix.tv.data.repository.ProfileManager
+import com.arflix.tv.util.settingsDataStore
 import com.google.gson.Gson
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
@@ -22,6 +26,15 @@ import javax.inject.Singleton
 /** Kept apart from the synced settings: the server login belongs to this device only. */
 private val Context.musicDataStore: DataStore<Preferences> by preferencesDataStore(name = "music_server")
 
+/**
+ * The music the user keeps per profile, in the synced settings so the cloud sync carries it to
+ * their other devices: music addons, liked songs, favourite albums and playlists.
+ */
+object MusicCloudKeys {
+    fun addons(profileId: String) = stringPreferencesKey("profile_${profileId}_music_addons_v1")
+    fun collections(profileId: String) = stringPreferencesKey("profile_${profileId}_music_collections_v1")
+}
+
 /** The sources the Music tab plays from. */
 data class MusicLibrary(
     val server: MusicServerConfig? = null,
@@ -37,6 +50,8 @@ data class MusicLibrary(
 @Singleton
 class MusicRepository @Inject constructor(
     @ApplicationContext private val context: Context,
+    private val profileManager: ProfileManager,
+    private val invalidationBus: CloudSyncInvalidationBus,
 ) {
     private val configKey = stringPreferencesKey("server_v1")
     private val deviceIdKey = stringPreferencesKey("device_id")
@@ -57,8 +72,11 @@ class MusicRepository @Inject constructor(
         .map { prefs -> prefs[configKey]?.let { runCatching { gson.fromJson(it, MusicServerConfig::class.java) }.getOrNull() } }
         .distinctUntilChanged()
 
-    val addons: Flow<List<MusicAddon>> = context.musicDataStore.data
-        .map { prefs -> decodeAddons(prefs[addonsKey]) }
+    // Before music synced, addons and collections lived on the device only; a profile without its
+    // own synced copy yet still sees those until its first change saves one.
+    val addons: Flow<List<MusicAddon>> = combine(
+        profileManager.currentProfileId, context.settingsDataStore.data, context.musicDataStore.data,
+    ) { profileId, settings, device -> decodeAddons(settings[MusicCloudKeys.addons(profileId)] ?: device[addonsKey]) }
         .distinctUntilChanged()
 
     /** Everything the Music tab plays from: the user's server and their music addons. */
@@ -103,9 +121,10 @@ class MusicRepository @Inject constructor(
 
     private val collectionsKey = stringPreferencesKey("collections_v1")
 
-    /** Liked songs, favourite albums and the user's playlists, kept on this device. */
-    val collections: Flow<MusicCollections> = context.musicDataStore.data
-        .map { prefs -> decodeCollections(prefs[collectionsKey]) }
+    /** Liked songs, favourite albums and the user's playlists, per profile and synced. */
+    val collections: Flow<MusicCollections> = combine(
+        profileManager.currentProfileId, context.settingsDataStore.data, context.musicDataStore.data,
+    ) { profileId, settings, device -> decodeCollections(settings[MusicCloudKeys.collections(profileId)] ?: device[collectionsKey]) }
         .distinctUntilChanged()
 
     private fun decodeCollections(json: String?): MusicCollections = json?.let {
@@ -123,25 +142,34 @@ class MusicRepository @Inject constructor(
     }
 
     suspend fun updateCollections(transform: (MusicCollections) -> MusicCollections) {
-        context.musicDataStore.edit { prefs ->
-            prefs[collectionsKey] = gson.toJson(transform(decodeCollections(prefs[collectionsKey])))
+        val profileId = profileManager.getProfileIdSync()
+        val device = context.musicDataStore.data.first()[collectionsKey]
+        context.settingsDataStore.edit { prefs ->
+            val key = MusicCloudKeys.collections(profileId)
+            prefs[key] = gson.toJson(transform(decodeCollections(prefs[key] ?: device)))
         }
+        invalidationBus.markUserDirty(CloudSyncScope.PROFILE_SETTINGS, profileId, "music collections")
     }
 
     /** Reads the addon's manifest and adds it; adding the same addon again refreshes it. */
     suspend fun addAddon(url: String): MusicAddon {
         val addon = MusicAddonSource.install(http, url)
-        context.musicDataStore.edit { prefs ->
-            val current = decodeAddons(prefs[addonsKey]).filter { it.baseUrl != addon.baseUrl && it.id != addon.id }
-            prefs[addonsKey] = gson.toJson(current + addon)
-        }
+        editAddons { current -> current.filter { it.baseUrl != addon.baseUrl && it.id != addon.id } + addon }
         return addon
     }
 
     suspend fun removeAddon(baseUrl: String) {
-        context.musicDataStore.edit { prefs ->
-            prefs[addonsKey] = gson.toJson(decodeAddons(prefs[addonsKey]).filter { it.baseUrl != baseUrl })
+        editAddons { current -> current.filter { it.baseUrl != baseUrl } }
+    }
+
+    private suspend fun editAddons(transform: (List<MusicAddon>) -> List<MusicAddon>) {
+        val profileId = profileManager.getProfileIdSync()
+        val device = context.musicDataStore.data.first()[addonsKey]
+        context.settingsDataStore.edit { prefs ->
+            val key = MusicCloudKeys.addons(profileId)
+            prefs[key] = gson.toJson(transform(decodeAddons(prefs[key] ?: device)))
         }
+        invalidationBus.markUserDirty(CloudSyncScope.PROFILE_SETTINGS, profileId, "music addons")
     }
 
     /** Checks the login against the server and saves it only when it works. */

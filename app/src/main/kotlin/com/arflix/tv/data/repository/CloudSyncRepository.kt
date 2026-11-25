@@ -390,7 +390,10 @@ class CloudSyncRepository @Inject constructor(
          * approvals sync; each device records the titles they list as its catalogs load. Null
          * from older clients, which must not clear approvals.
          */
-        val kidsCatalogApprovals: List<String>? = null
+        val kidsCatalogApprovals: List<String>? = null,
+        /** The Music tab's addons and the user's liked songs, favourites and playlists (JSON). Null keeps local. */
+        val musicAddonsJson: String? = null,
+        val musicCollectionsJson: String? = null,
     )
 
     // ── DataStore key helpers ──
@@ -811,7 +814,9 @@ class CloudSyncRepository @Inject constructor(
                         streamIntegrationsMacroOrder = streamCloudState.macroCategoryOrder,
                         streamMacroEnabledMap = streamCloudState.macroEnabledMap,
                         streamProviderEnabledMap = streamCloudState.providerEnabledMap,
-                        kidsCatalogApprovals = prefs[KidsTrustedCatalogs.approvalsKey(profile.id)]?.sorted()
+                        kidsCatalogApprovals = prefs[KidsTrustedCatalogs.approvalsKey(profile.id)]?.sorted(),
+                        musicAddonsJson = prefs[com.arflix.tv.music.MusicCloudKeys.addons(profile.id)],
+                        musicCollectionsJson = prefs[com.arflix.tv.music.MusicCloudKeys.collections(profile.id)],
                     )
                 )
             }
@@ -1822,6 +1827,8 @@ class CloudSyncRepository @Inject constructor(
                                 providerEnabledMap = state.streamProviderEnabledMap
                             )
                         )
+                        state.musicAddonsJson?.let { prefs[com.arflix.tv.music.MusicCloudKeys.addons(profileId)] = it }
+                        state.musicCollectionsJson?.let { prefs[com.arflix.tv.music.MusicCloudKeys.collections(profileId)] = it }
                         state.kidsCatalogApprovals?.let { approvals ->
                             val approved = approvals.toSet()
                             val members = KidsTrustedCatalogs.membersKey(profileId)
