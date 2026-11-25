@@ -212,7 +212,13 @@ class CollectionDetailsViewModel @Inject constructor(
      * [serviceHome] lets a streaming service open as its Home-like page; the grid otherwise.
      * [serviceRowId] opens the full query for one row rather than the whole service.
      */
-    fun load(catalogId: String, serviceHome: Boolean = false, serviceRowId: String? = null, serviceFilter: String? = null) {
+    fun load(
+        catalogId: String,
+        serviceHome: Boolean = false,
+        serviceRowId: String? = null,
+        serviceFilter: String? = null,
+        touch: Boolean = false
+    ) {
         val normalizedCatalogId = normalizeCatalogId(catalogId)
         // Preserve partial and paginated data when composition is recreated during a load.
         if (loadedCatalogId == normalizedCatalogId &&
@@ -244,7 +250,8 @@ class CollectionDetailsViewModel @Inject constructor(
                 )
                 return@launch
             }
-            if (serviceHome && ServiceHome.supports(catalog)) {
+            // Touch devices keep a service's grid, but a folder of catalogs shows its rows everywhere.
+            if (serviceHome && ServiceHome.supports(catalog) && (!touch || ServiceHome.isCatalogFolder(catalog))) {
                 // ServiceHomeViewModel loads the page's rows; the grid's tabs are never needed.
                 _uiState.value = CollectionDetailsUiState(
                     catalog = catalog,
@@ -782,14 +789,24 @@ fun CollectionDetailsScreen(
     LaunchedEffect(catalogId) {
         viewModel.load(
             catalogId,
-            serviceHome = serviceRowId == null && serviceFilter == null && !isTouchDevice,
+            serviceHome = serviceRowId == null && serviceFilter == null,
             serviceRowId = serviceRowId,
-            serviceFilter = serviceFilter
+            serviceFilter = serviceFilter,
+            touch = isTouchDevice
         )
     }
     BackHandler(onBack = onBack)
 
     val serviceCatalog = uiState.catalog?.takeIf { uiState.serviceHome }
+    if (serviceCatalog != null && isTouchDevice) {
+        CollectionFolderRowsMobile(
+            folder = serviceCatalog,
+            onOpen = { item -> onNavigateToDetails(item.mediaType, item.id) },
+            onViewAll = { viewAll -> onOpenServiceGrid(serviceCatalog.id, viewAll.rowId, viewAll.filter.name) },
+            onBack = onBack
+        )
+        return
+    }
     if (serviceCatalog != null) {
         ServiceHomeScreen(
             service = serviceCatalog,

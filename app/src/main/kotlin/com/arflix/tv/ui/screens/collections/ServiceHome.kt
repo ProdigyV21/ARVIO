@@ -6,6 +6,7 @@ import com.arflix.tv.data.model.CatalogSourceType
 import com.arflix.tv.data.model.CollectionGroupKind
 import com.arflix.tv.data.model.CollectionSourceConfig
 import com.arflix.tv.data.model.CollectionSourceKind
+import com.arflix.tv.data.repository.CustomCollections
 import com.arflix.tv.data.repository.WatchProviderSort
 import com.arflix.tv.ui.screens.home.RANKED_ROW_ID_PREFIX
 import java.time.LocalDate
@@ -29,6 +30,8 @@ internal object ServiceHome {
     const val TOP_RATED_SERIES_ROW_ID = "service_top_rated_series"
     const val TOP_RATED_MOVIES_ROW_ID = "service_top_rated_movies"
     const val GENRE_ROW_PREFIX = "service_genre_"
+    /** One row per catalog of an imported folder (see [isCatalogFolder]); the source's index follows. */
+    const val CATALOG_ROW_PREFIX = "folder_catalog_"
 
     const val TOP10_SIZE = 10
     const val ROW_SIZE = 20
@@ -58,7 +61,7 @@ internal object ServiceHome {
         283 to "1112"        // Crunchyroll
     )
 
-    enum class RowKind { TOP10_SERIES, TOP10_MOVIES, NEW, ORIGINALS, TOP_RATED_SERIES, TOP_RATED_MOVIES, GENRE }
+    enum class RowKind { TOP10_SERIES, TOP10_MOVIES, NEW, ORIGINALS, TOP_RATED_SERIES, TOP_RATED_MOVIES, GENRE, CATALOG }
 
     /** One genre row: the TMDB genre for movies and for series (either may be absent). */
     data class Genre(val key: String, val movieGenreId: Int?, val seriesGenreId: Int?) {
@@ -91,11 +94,29 @@ internal object ServiceHome {
         val limit: Int,
         val genre: Genre? = null,
         /** Null when the row has no "View all" (the Top 10 rows end at ten). */
-        val viewAll: ViewAll?
+        val viewAll: ViewAll?,
+        /** The row's own name, for a folder's catalog rows; service rows are named by their id. */
+        val title: String? = null
     )
 
-    /** True when every source is a watch-provider query, the same pages the genre filter serves. */
-    fun supports(catalog: CatalogConfig): Boolean = ServiceGenreFilter.supports(catalog)
+    /**
+     * True for a streaming service (every source a watch-provider query, the same pages the
+     * genre filter serves) and for an imported folder that holds several catalogs.
+     */
+    fun supports(catalog: CatalogConfig): Boolean =
+        ServiceGenreFilter.supports(catalog) || isCatalogFolder(catalog)
+
+    /**
+     * A folder from an imported collection with several catalogs in it ("Telugu" holding
+     * "Latest Telugu Movies", "Latest Telugu Series", ...). Each catalog is its own row, the way
+     * the collection was built, instead of every catalog's titles merged into one grid.
+     * Built-in collections that pair a movie and a series source keep their grid.
+     */
+    fun isCatalogFolder(catalog: CatalogConfig): Boolean =
+        catalog.kind == CatalogKind.COLLECTION &&
+            catalog.collectionSources.size >= 2 &&
+            !ServiceGenreFilter.supports(catalog) &&
+            (CustomCollections.isCustom(catalog) || catalog.collectionSources.any { !it.title.isNullOrBlank() })
 
     /** What the page lists: both kinds of title, or only series or only movies. */
     enum class Filter { ALL, SERIES, MOVIES }
@@ -112,12 +133,12 @@ internal object ServiceHome {
      * (a genre row keeps its series or its movie query) and drops rows left with none.
      */
     fun rows(service: CatalogConfig, today: LocalDate, filter: Filter = Filter.ALL): List<Row> {
-        val all = allRows(service, today)
+        val all = if (isCatalogFolder(service)) folderRows(service) else allRows(service, today)
         if (filter == Filter.ALL) return all
         val type = if (filter == Filter.SERIES) "series" else "movie"
         val tab = if (filter == Filter.SERIES) CollectionTab.SERIES else CollectionTab.MOVIES
         return all.mapNotNull { row ->
-            val sources = row.catalog.collectionSources.filter { it.mediaType == type }
+            val sources = row.catalog.collectionSources.filter { sourceMatches(it.mediaType, filter) }
             if (sources.isEmpty()) return@mapNotNull null
             row.copy(
                 catalog = row.catalog.copy(
@@ -130,6 +151,41 @@ internal object ServiceHome {
             )
         }
     }
+
+    /**
+     * Whether a source of [mediaType] belongs on [filter]'s page. TMDB sources say "tv" where
+     * add-ons say "series"; add-on types that are neither ("Live Docs") may hold both.
+     */
+    private fun sourceMatches(mediaType: String?, filter: Filter): Boolean {
+        val type = mediaType?.trim()?.lowercase() ?: return true
+        val series = type == "series" || type == "tv" || type == "show" || type == "anime"
+        val movie = type == "movie" || type == "film"
+        return when (filter) {
+            Filter.ALL -> true
+            Filter.SERIES -> series || !movie
+            Filter.MOVIES -> movie || !series
+        }
+    }
+
+    /** A folder's catalogs, one row each, in the folder's order, each opening its own grid. */
+    private fun folderRows(folder: CatalogConfig): List<Row> =
+        folder.collectionSources.mapIndexed { index, source ->
+            val id = CATALOG_ROW_PREFIX + index
+            val title = source.title?.takeIf { it.isNotBlank() }
+            Row(
+                id = id,
+                kind = RowKind.CATALOG,
+                catalog = folder.copy(
+                    id = "${folder.id}#$id",
+                    title = title ?: folder.title,
+                    collectionRailKey = "${folder.collectionRailKey ?: folder.id}#$id",
+                    collectionSources = listOf(source)
+                ),
+                limit = ROW_SIZE,
+                viewAll = ViewAll(id, if (sourceMatches(source.mediaType, Filter.MOVIES)) CollectionTab.MOVIES else CollectionTab.SERIES),
+                title = title
+            )
+        }
 
     private fun allRows(service: CatalogConfig, today: LocalDate): List<Row> {
         val providerSources = service.collectionSources.filter { it.kind == CollectionSourceKind.TMDB_WATCH_PROVIDER }

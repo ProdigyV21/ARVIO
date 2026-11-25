@@ -143,7 +143,7 @@ internal fun ServiceHomeContent(
             sidebarFocusIndex = 0
         }
     }
-    val titles = visibleRows.associate { it.row.id to serviceRowTitle(it.row.id, service.title) }
+    val titles = visibleRows.associate { it.row.id to serviceHomeRowTitle(it, service.title) }
     val incomingRails = remember(visibleRows, titles) {
         ServiceHomeRails(
             categories = visibleRows.map { Category(id = it.row.id, title = titles.getValue(it.row.id), items = it.items) },
@@ -307,6 +307,19 @@ private fun serviceHomeKey(event: KeyEvent): ServiceHomeKey? = when (event.key) 
     Key.Enter, Key.DirectionCenter, Key.NumPadEnter -> ServiceHomeKey.SELECT
     Key.Back, Key.Escape -> ServiceHomeKey.BACK
     else -> null
+}
+
+/**
+ * A loaded row's heading. A folder's catalog without a name of its own is told apart by its
+ * kind of title ("Telugu · Movies").
+ */
+@Composable
+internal fun serviceHomeRowTitle(row: ServiceHomeRowState, service: String): String {
+    row.title?.let { return it }
+    if (row.row.kind != ServiceHome.RowKind.CATALOG) return serviceRowTitle(row.row.id, service)
+    val movies = row.items.count { it.mediaType == com.arflix.tv.data.model.MediaType.MOVIE }
+    val kind = stringResource(if (movies * 2 >= row.items.size) R.string.movies else R.string.series)
+    return "$service · $kind"
 }
 
 @Composable

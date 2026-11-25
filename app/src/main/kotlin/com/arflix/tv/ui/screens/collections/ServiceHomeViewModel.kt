@@ -36,7 +36,9 @@ import kotlinx.coroutines.sync.withPermit
 internal data class ServiceHomeRowState(
     val row: ServiceHome.Row,
     val items: List<MediaItem>,
-    val sourceLoadFailed: Boolean = false
+    val sourceLoadFailed: Boolean = false,
+    /** A folder catalog's name: the collection's own, else the name its add-on gives it. */
+    val title: String? = row.title
 )
 
 /** One filter's page: its rows and the title its big card shows. */
@@ -152,7 +154,14 @@ internal class ServiceHomeViewModel @Inject constructor(
             .filter { it.id > 0 }
             .distinctBy { it.mediaType to it.id }
             .take(row.limit)
-        ServiceHomeRowState(row, items, page.sourceLoadFailed)
+        val title = row.title ?: if (row.kind == ServiceHome.RowKind.CATALOG) {
+            row.catalog.collectionSources.singleOrNull()?.let { source ->
+                runCatching { mediaRepository.collectionSourceName(source) }
+                    .onFailure { if (it is CancellationException) throw it }
+                    .getOrNull()
+            }
+        } else null
+        ServiceHomeRowState(row, items, page.sourceLoadFailed, title)
     } catch (e: CancellationException) {
         throw e
     } catch (_: Exception) {
@@ -163,7 +172,7 @@ internal class ServiceHomeViewModel @Inject constructor(
     private fun publish(filter: ServiceHome.Filter, loaded: Array<ServiceHomeRowState?>, done: Boolean) {
         val rows = loaded.filterNotNull().filter { it.items.isNotEmpty() }
         val previous = pages[filter]
-        val billboard = previous?.billboard ?: pickBillboard(rows, done)
+        val billboard = previous?.billboard ?: pickBillboard(rows, done, loaded.firstOrNull()?.row?.id)
         val page = ServiceHomePage(
             rows = rows, billboard = billboard, isLoading = !done,
             sourceLoadFailed = loaded.any { it?.sourceLoadFailed == true }
@@ -177,11 +186,18 @@ internal class ServiceHomeViewModel @Inject constructor(
      * The first Top 10 title with artwork; it then stays put while rows arrive. Without a
      * Top 10 title, any row's first title with artwork once the page has loaded.
      */
-    private fun pickBillboard(rows: List<ServiceHomeRowState>, done: Boolean): MediaItem? {
+    private fun pickBillboard(rows: List<ServiceHomeRowState>, done: Boolean, firstRowId: String?): MediaItem? {
         val top10 = rows.filter {
             it.row.kind == ServiceHome.RowKind.TOP10_SERIES || it.row.kind == ServiceHome.RowKind.TOP10_MOVIES
         }
-        val candidates = if (top10.isNotEmpty()) top10 else if (done) rows else return null
+        // A folder's rows are its catalogs, in order: its first catalog leads once it is in.
+        val folderLead = rows.firstOrNull()?.takeIf { it.row.kind == ServiceHome.RowKind.CATALOG && it.row.id == firstRowId }
+        val candidates = when {
+            top10.isNotEmpty() -> top10
+            done -> rows
+            folderLead != null -> listOf(folderLead)
+            else -> return null
+        }
         return candidates.flatMap { it.items }.firstOrNull { !it.backdrop.isNullOrBlank() }
     }
 

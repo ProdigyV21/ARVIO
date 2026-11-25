@@ -141,7 +141,12 @@ internal object CustomCollections {
         val sourcesJson = folder.arr("sources")?.takeIf { it.size() > 0 }
             ?: folder.arr("catalogSources")
             ?: JsonArray()
-        val sources = sourcesJson.flatMap { el -> (el as? JsonObject)?.let(::parseSource).orEmpty() }
+        val sources = sourcesJson.flatMap { el ->
+            val source = el as? JsonObject ?: return@flatMap emptyList()
+            // Each catalog keeps its own name, so the folder can show it as its own row.
+            val catalogTitle = source.str("title") ?: source.str("name") ?: source.str("catalogName")
+            parseSource(source).map { it.copy(title = catalogTitle) }
+        }
         if (sources.isEmpty()) return null
         val folderId = folder.str("id") ?: "f$index"
         val cover = folder.str("coverImageUrl")

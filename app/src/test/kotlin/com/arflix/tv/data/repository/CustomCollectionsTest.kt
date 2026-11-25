@@ -151,4 +151,22 @@ class CustomCollectionsTest {
     private fun tileConfig(id: String) = CatalogConfig(
         id = id, title = "t", sourceType = CatalogSourceType.PREINSTALLED, kind = CatalogKind.COLLECTION
     )
+
+    @Test
+    fun `keeps each catalog's name inside a folder`() {
+        val json = """
+            [{ "id": "lang", "title": "Languages", "folders": [
+              { "id": "te", "title": "Telugu", "sources": [
+                { "provider": "addon", "addonId": "aio", "type": "movie", "catalogId": "te.movies", "title": "Latest Telugu Movies" },
+                { "provider": "addon", "addonId": "aio", "type": "series", "catalogId": "te.series", "name": "Latest Telugu Series" },
+                { "provider": "tmdb", "tmdbSourceType": "DISCOVER", "mediaType": "MOVIE", "filters": { "withOriginalLanguage": "te" } }
+              ] }
+            ] }]
+        """.trimIndent()
+        val sources = CustomCollections.parse(json, url = null).getOrThrow().single().entries.single().sources
+        assertEquals(listOf("Latest Telugu Movies", "Latest Telugu Series", null), sources.map { it.title })
+        val folder = CustomCollections.catalogs(CustomCollections.parse(json, url = null).getOrThrow())
+            .single { it.kind == CatalogKind.COLLECTION }
+        assertEquals(sources, folder.collectionSources)
+    }
 }
