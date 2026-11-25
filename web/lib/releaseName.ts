@@ -45,11 +45,12 @@ export function releaseKey(raw: string, mediaType: string) {
 /** Drops repeat releases of the same title from an addon file library; other items pass through. */
 export function dedupeReleases<T extends { title: string; mediaType: string; addonNativeId?: unknown }>(items: T[]): T[] {
   const seen = new Set<string>();
-  return items.filter((item) => {
+  const kept = items.filter((item) => {
     if (!item.addonNativeId) return true;
     const key = releaseKey(item.title, item.mediaType);
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
   });
+  return kept.length === items.length ? items : kept;
 }
