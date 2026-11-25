@@ -25,12 +25,16 @@ internal fun MobileConnectionForm(title: String, supportingText: String?, fields
     toggles: List<ToggleField>, onConfirm: () -> Unit, onDismiss: () -> Unit) {
     val clipboard = LocalClipboardManager.current
     var help by remember { mutableStateOf(false) }
+    // Read here, in the app's own window: some phones report no system bar insets to the dialog's
+    // window, which left Cancel/Confirm under the Back/Home buttons. The dialog takes whichever is larger.
+    val hostBars = WindowInsets.systemBars.union(WindowInsets.displayCutout)
     MaterialTheme(colorScheme = darkColorScheme(primary = Color.White, onPrimary = Color.Black,
         surface = Color.Black, onSurface = Color.White, onSurfaceVariant = Color.LightGray,
         outline = Color.White.copy(alpha = 0.4f))) {
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false,
         decorFitsSystemWindows = false)) {
-        Column(Modifier.fillMaxSize().background(Color.Black).systemBarsPadding().imePadding()
+        Column(Modifier.fillMaxSize().background(Color.Black)
+            .windowInsetsPadding(WindowInsets.safeDrawing.union(hostBars))
             .padding(16.dp).testTag("mobile-connection-form")) {
             Text(title, style = MaterialTheme.typography.headlineSmall, color = Color.White,
                 modifier = Modifier.padding(vertical = 12.dp))
