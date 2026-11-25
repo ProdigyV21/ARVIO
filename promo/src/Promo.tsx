@@ -9,12 +9,12 @@ import {
   BigScreen,
   Details,
   Everywhere,
-  Hook,
   Intro,
   Library,
   Music,
   Outro,
   Sources,
+  Subtitles,
   Touch,
 } from "./scenes";
 import { loadBrandFonts } from "./theme";
@@ -22,20 +22,20 @@ import { easeInOut } from "./primitives";
 
 loadBrandFonts();
 
-export const T = 16;
+export const T = 12;
 const timing = linearTiming({ durationInFrames: T, easing: easeInOut });
 
 export const SCENES = [
-  { id: "Intro", C: Intro, d: 105 },
-  { id: "Hook", C: Hook, d: 135 },
-  { id: "BigScreen", C: BigScreen, d: 150 },
-  { id: "Details", C: Details, d: 130 },
-  { id: "Touch", C: Touch, d: 150 },
-  { id: "Music", C: Music, d: 185 },
-  { id: "Library", C: Library, d: 150 },
-  { id: "Sources", C: Sources, d: 135 },
-  { id: "Everywhere", C: Everywhere, d: 165 },
-  { id: "Outro", C: Outro, d: 189 },
+  { id: "Intro", C: Intro, d: 48 },
+  { id: "BigScreen", C: BigScreen, d: 120 },
+  { id: "Details", C: Details, d: 100 },
+  { id: "Touch", C: Touch, d: 105 },
+  { id: "Music", C: Music, d: 125 },
+  { id: "Subtitles", C: Subtitles, d: 140 },
+  { id: "Library", C: Library, d: 105 },
+  { id: "Sources", C: Sources, d: 100 },
+  { id: "Everywhere", C: Everywhere, d: 120 },
+  { id: "Outro", C: Outro, d: 150 },
 ] as const;
 
 export const PROMO_DURATION =
@@ -58,6 +58,7 @@ export const Promo: React.FC = () => (
   <AbsoluteFill>
     <Audio
       src={staticFile("audio/soundtrack.mp3")}
+      trimBefore={Math.round(45 * 30 - PROMO_DURATION)}
       volume={(f) =>
         interpolate(
           f,

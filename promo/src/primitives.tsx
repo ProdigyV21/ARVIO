@@ -115,7 +115,7 @@ export const Kicker: React.FC<{
   delay?: number;
   style?: React.CSSProperties;
 }> = ({ children, delay = 0, style }) => {
-  const p = useProgress(delay, 18);
+  const p = useProgress(delay, 12);
   return (
     <div
       style={{
@@ -157,7 +157,7 @@ export const Headline: React.FC<{
   stagger?: number;
   align?: "left" | "center";
   style?: React.CSSProperties;
-}> = ({ text, delay = 0, size = 96, stagger = 3, align = "left", style }) => {
+}> = ({ text, delay = 0, size = 96, stagger = 2, align = "left", style }) => {
   const frame = useCurrentFrame();
   const lines = text.split("\n");
   let i = 0;
@@ -188,7 +188,7 @@ export const Headline: React.FC<{
             const idx = i++;
             const p = interpolate(
               frame,
-              [delay + idx * stagger, delay + idx * stagger + 22],
+              [delay + idx * stagger, delay + idx * stagger + 16],
               [0, 1],
               { ...clamp, easing: ease },
             );
@@ -227,7 +227,7 @@ export const Body: React.FC<{
   delay?: number;
   style?: React.CSSProperties;
 }> = ({ children, delay = 0, style }) => {
-  const p = useProgress(delay, 22);
+  const p = useProgress(delay, 14);
   return (
     <div
       style={{
@@ -250,7 +250,7 @@ export const Pill: React.FC<{
   delay?: number;
   strong?: boolean;
 }> = ({ children, delay = 0, strong }) => {
-  const p = useProgress(delay, 16);
+  const p = useProgress(delay, 11);
   return (
     <div
       style={{

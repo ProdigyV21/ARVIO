@@ -51,6 +51,7 @@ export const SCREENS = {
   phoneDetails: "screens/phone/06-details-movie.webp",
   tabletClip: "screens/tablet/clip-home.mp4",
   phoneClip: "screens/phone/clip-home.mp4",
+  subtitlesPlayer: "screens/subtitles-player.webp",
   musicCharts: "screens/phone/music-charts.webp",
   musicAlbum: "screens/phone/music-album.webp",
   musicPlayer: "screens/phone/music-player.webp",

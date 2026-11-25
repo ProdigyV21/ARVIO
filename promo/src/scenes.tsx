@@ -30,13 +30,13 @@ export const Intro: React.FC = () => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const pop = spring({
-    frame: frame - 6,
+    frame,
     fps,
-    config: { damping: 14, stiffness: 120 },
+    config: { damping: 13, stiffness: 180 },
   });
-  const ring = interpolate(frame, [6, 60], [0, 1], { ...clamp, easing: ease });
-  const word = useProgress(26, 30);
-  const tag = useProgress(50, 24);
+  const ring = interpolate(frame, [0, 34], [0, 1], { ...clamp, easing: ease });
+  const word = useProgress(5, 14);
+  const tag = useProgress(12, 12);
   return (
     <AbsoluteFill>
       <Backdrop intensity={0.7 + ring * 0.6} />
@@ -116,67 +116,17 @@ export const Intro: React.FC = () => {
   );
 };
 
-/* 2 ─ Full-bleed home with headline */
-export const Hook: React.FC = () => {
-  const frame = useCurrentFrame();
-  const { durationInFrames } = useVideoConfig();
-  const reveal = interpolate(frame, [0, 26], [1.18, 1], {
-    ...clamp,
-    easing: ease,
-  });
-  const pan = interpolate(frame, [0, durationInFrames], [0, -40], clamp);
-  return (
-    <AbsoluteFill style={{ background: C.bg }}>
-      <AbsoluteFill
-        style={{
-          scale: String(reveal),
-          translate: `${pan}px 0`,
-          maskImage:
-            "linear-gradient(90deg, transparent 0%, transparent 30%, black 68%)",
-        }}
-      >
-        <Screen
-          src={SCREENS.tvDetails}
-          zoom={[1.32, 1.42]}
-          position="center top"
-          style={{ transformOrigin: "100% 48%" }}
-        />
-      </AbsoluteFill>
-      <AbsoluteFill
-        style={{
-          background:
-            "linear-gradient(90deg, rgba(5,7,7,0.98) 0%, rgba(5,7,7,0.92) 38%, rgba(5,7,7,0.3) 62%, rgba(5,7,7,0) 100%), linear-gradient(0deg, rgba(5,7,7,1) 0%, rgba(5,7,7,0.85) 22%, transparent 48%)",
-        }}
-      />
-      <AbsoluteFill
-        style={{ padding: "0 140px", justifyContent: "center", gap: 34 }}
-      >
-        <Kicker delay={6}>One app for all of it</Kicker>
-        <Headline
-          text={"Everything you watch.\nOne *home.*"}
-          delay={10}
-          size={112}
-        />
-        <Body delay={30} style={{ maxWidth: 720 }}>
-          Your servers, live TV, add-ons and watchlists, together in one
-          beautiful app.
-        </Body>
-      </AbsoluteFill>
-    </AbsoluteFill>
-  );
-};
-
 /* 3 ─ TV */
 export const BigScreen: React.FC = () => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const rise = spring({
-    frame: frame - 8,
+    frame,
     fps,
     config: { damping: 200 },
-    durationInFrames: 40,
+    durationInFrames: 22,
   });
-  const tilt = interpolate(frame, [0, 180], [10, 0], {
+  const tilt = interpolate(frame, [0, 120], [8, 0], {
     ...clamp,
     easing: easeInOut,
   });
@@ -187,10 +137,10 @@ export const BigScreen: React.FC = () => {
         <Kicker delay={0}>Android TV · Google TV · Fire TV</Kicker>
         <div style={{ height: 26 }} />
         <Headline
-          text="Made for the *big screen.*"
+          text="Everything you watch. *One home.*"
           align="center"
           size={92}
-          delay={4}
+          delay={2}
         />
       </AbsoluteFill>
       <AbsoluteFill
@@ -202,7 +152,7 @@ export const BigScreen: React.FC = () => {
       >
         <div
           style={{
-            translate: `0 ${(1 - rise) * 500 + 70}px`,
+            translate: `0 ${(1 - rise) * 260 + 70}px`,
             rotate: `x ${tilt}deg`,
           }}
         >
@@ -390,6 +340,277 @@ export const Touch: React.FC = () => {
         <Phone width={270}>
           <Screen src={SCREENS.phoneClip} />
         </Phone>
+      </div>
+    </AbsoluteFill>
+  );
+};
+
+/* 5c ─ AI subtitles */
+const LANGS = [
+  { name: "English", line: "I've been waiting for this moment." },
+  { name: "Nederlands", line: "Ik heb op dit moment gewacht." },
+  { name: "Español", line: "He esperado este momento." },
+  { name: "Deutsch", line: "Ich habe auf diesen Moment gewartet." },
+  { name: "Français", line: "J'attendais ce moment." },
+];
+
+export const Subtitles: React.FC = () => {
+  const frame = useCurrentFrame();
+  const { fps, durationInFrames } = useVideoConfig();
+  const enter = spring({
+    frame,
+    fps,
+    config: { damping: 200 },
+    durationInFrames: 22,
+  });
+  const step = Math.floor((durationInFrames - 20) / LANGS.length);
+  const idx = Math.min(
+    LANGS.length - 1,
+    Math.max(0, Math.floor((frame - 14) / step)),
+  );
+  const local = frame - 14 - idx * step;
+  const lineIn = interpolate(local, [0, 6], [0, 1], clamp);
+  const progress = interpolate(
+    frame,
+    [0, durationInFrames],
+    [0.34, 0.42],
+    clamp,
+  );
+  const bars = [0.5, 0.9, 0.6, 1, 0.7, 0.4, 0.85, 0.55];
+  return (
+    <AbsoluteFill>
+      <Backdrop />
+      <AbsoluteFill style={{ alignItems: "center", paddingTop: 70 }}>
+        <Kicker delay={0}>AI subtitles</Kicker>
+        <div style={{ height: 22 }} />
+        <Headline
+          text="Every word. *Any language.*"
+          align="center"
+          size={92}
+          delay={2}
+        />
+      </AbsoluteFill>
+      <div
+        style={{
+          position: "absolute",
+          left: 130,
+          top: 360,
+          width: 1220,
+          borderRadius: 26,
+          overflow: "hidden",
+          background: "#0b0f0e",
+          boxShadow:
+            "0 60px 140px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.08)",
+          translate: `0 ${(1 - enter) * 120}px`,
+          opacity: enter,
+        }}
+      >
+        <div style={{ position: "relative", height: 1220 * (304 / 826) }}>
+          <Screen
+            src={SCREENS.subtitlesPlayer}
+            zoom={[1.2, 1.25]}
+            position="center"
+            style={{ transformOrigin: "100% 100%" }}
+          />
+          <div
+            style={{
+              position: "absolute",
+              left: 24,
+              top: 22,
+              display: "flex",
+              alignItems: "center",
+              gap: 12,
+              padding: "10px 18px 10px 12px",
+              borderRadius: 99,
+              background: "rgba(10,14,13,0.92)",
+              color: C.ink,
+              fontFamily: TEXT,
+              fontSize: 24,
+              fontWeight: 600,
+            }}
+          >
+            <span
+              style={{
+                background: C.mint,
+                color: "#04150f",
+                borderRadius: 7,
+                padding: "2px 8px",
+                fontSize: 20,
+                fontWeight: 800,
+              }}
+            >
+              AI
+            </span>
+            Subtitles · {LANGS[idx].name}
+          </div>
+          <div
+            style={{
+              position: "absolute",
+              left: 0,
+              right: 0,
+              bottom: 34,
+              textAlign: "center",
+              fontFamily: TEXT,
+              fontWeight: 600,
+              fontSize: 46,
+              color: "#fff",
+              textShadow: "0 2px 12px rgba(0,0,0,0.85)",
+              opacity: lineIn,
+              translate: `0 ${(1 - lineIn) * 10}px`,
+            }}
+          >
+            {LANGS[idx].line}
+          </div>
+        </div>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 26,
+            padding: "22px 30px",
+          }}
+        >
+          <div
+            style={{
+              width: 0,
+              height: 0,
+              borderLeft: "22px solid #fff",
+              borderTop: "13px solid transparent",
+              borderBottom: "13px solid transparent",
+            }}
+          />
+          <div
+            style={{
+              flex: 1,
+              height: 6,
+              borderRadius: 9,
+              background: "rgba(255,255,255,0.14)",
+              position: "relative",
+            }}
+          >
+            <div
+              style={{
+                width: `${progress * 100}%`,
+                height: "100%",
+                borderRadius: 9,
+                background: `linear-gradient(90deg, ${C.mintDeep}, ${C.mint})`,
+              }}
+            />
+          </div>
+          <div style={{ fontFamily: TEXT, fontSize: 24, color: C.soft }}>
+            0:38:14 / 1:49:04
+          </div>
+          <div
+            style={{
+              fontFamily: TEXT,
+              fontSize: 20,
+              fontWeight: 700,
+              color: C.mint,
+              border: `2px solid ${C.mint}`,
+              borderRadius: 6,
+              padding: "1px 8px",
+            }}
+          >
+            CC
+          </div>
+        </div>
+      </div>
+      <div
+        style={{
+          position: "absolute",
+          left: 1400,
+          top: 360,
+          width: 400,
+          padding: 26,
+          borderRadius: 26,
+          background: "rgba(13,19,18,0.92)",
+          border: "1px solid rgba(255,255,255,0.08)",
+          translate: `${(1 - enter) * 200}px 0`,
+          opacity: enter,
+          fontFamily: TEXT,
+        }}
+      >
+        <div
+          style={{
+            fontSize: 20,
+            letterSpacing: "0.24em",
+            color: C.muted,
+            fontWeight: 600,
+            marginBottom: 16,
+          }}
+        >
+          TRANSLATE TO
+        </div>
+        {LANGS.map((l, i) => (
+          <div
+            key={l.name}
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              padding: "14px 18px",
+              marginBottom: 8,
+              borderRadius: 12,
+              fontSize: 30,
+              color: i === idx ? C.ink : C.muted,
+              background: i === idx ? "rgba(158,251,213,0.10)" : "transparent",
+              border: `1px solid ${i === idx ? "rgba(158,251,213,0.45)" : "transparent"}`,
+            }}
+          >
+            {l.name}
+            {i === idx && (
+              <span
+                style={{
+                  width: 10,
+                  height: 10,
+                  borderRadius: 99,
+                  background: C.mint,
+                }}
+              />
+            )}
+          </div>
+        ))}
+        <div
+          style={{
+            borderTop: "1px solid rgba(255,255,255,0.08)",
+            marginTop: 14,
+            paddingTop: 18,
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+          }}
+        >
+          <div>
+            <div style={{ fontSize: 24, color: C.ink, fontWeight: 600 }}>
+              Sync by hearing
+            </div>
+            <div style={{ fontSize: 18, color: C.muted, marginTop: 4 }}>
+              Times every line to the audio
+            </div>
+          </div>
+          <div
+            style={{
+              display: "flex",
+              gap: 4,
+              alignItems: "center",
+              height: 40,
+            }}
+          >
+            {bars.map((b, i) => (
+              <span
+                key={i}
+                style={{
+                  width: 5,
+                  borderRadius: 9,
+                  background: C.mint,
+                  height:
+                    8 +
+                    30 * b * (0.55 + 0.45 * Math.abs(Math.sin(frame / 4 + i))),
+                }}
+              />
+            ))}
+          </div>
+        </div>
       </div>
     </AbsoluteFill>
   );
