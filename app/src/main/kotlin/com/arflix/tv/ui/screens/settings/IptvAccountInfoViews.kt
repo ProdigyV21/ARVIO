@@ -53,9 +53,11 @@ internal fun IptvAccountSubtitle(
     /** Phone layout: remaining time on the first line, streams and EPG on a second. */
     stacked: Boolean = false,
 ) {
+    android.os.Trace.beginSection("UI:IptvAccountSubtitle")
     val style = ArflixTypography.caption.copy(fontSize = 13.sp)
     if (info == null || info.sourceFingerprint != fingerprint) {
         Text(fallback + suffix, style = style, color = textColor, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = modifier)
+        android.os.Trace.endSection()
         return
     }
     val now = remember(info) { System.currentTimeMillis() }
@@ -150,6 +152,7 @@ internal fun IptvAccountSubtitle(
             Detail(listOfNotNull(dateDetail).joinToString() + suffix)
         }
     }
+    android.os.Trace.endSection()
 }
 
 /** The colour of the "concurrent streams" heads, as in the approved mock-up. */

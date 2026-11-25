@@ -71,9 +71,12 @@ object IptvAccountInfoParser {
      * stored map carries no portal address, MAC or password.
      */
     fun fingerprint(vararg parts: String): String {
+        android.os.Trace.beginSection("IPTV:fingerprint")
+        try {
         val raw = parts.joinToString("\u0000") { it.trim().lowercase(Locale.ROOT) }
         val digest = MessageDigest.getInstance("SHA-256").digest(raw.toByteArray(Charsets.UTF_8))
         return digest.take(12).joinToString("") { "%02x".format(it) }
+        } finally { android.os.Trace.endSection() }
     }
 
     fun fingerprint(playlist: IptvPlaylistEntry): String =

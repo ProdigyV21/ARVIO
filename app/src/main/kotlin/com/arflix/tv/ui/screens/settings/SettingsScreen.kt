@@ -8776,6 +8776,7 @@ internal fun IptvSettings(
         Column {
             SettingsRow(icon = Icons.Default.LiveTv, title = stringResource(R.string.add_playlist), subtitle = if (playlists.isEmpty()) stringResource(R.string.settings_add_iptv_lists_hint) else stringResource(R.string.settings_create_another_iptv), value = if (playlists.size >= MAX_IPTV_PLAYLISTS) stringResource(R.string.settings_badge_full) else stringResource(R.string.settings_badge_add), isFocused = focusedIndex == 0, onClick = onConfigure, modifier = Modifier.settingsFocusSlot(0))
             Spacer(modifier = Modifier.height(6.dp))
+            android.os.Trace.beginSection("IPTV:playlists")
             playlists.forEachIndexed { index, playlist ->
                 val rowIndex = index + 1
                 val epgSourceCount = playlist.settingsEpgInput().lineSequence().count { it.isNotBlank() }
@@ -8827,8 +8828,10 @@ internal fun IptvSettings(
                 }
                 Spacer(modifier = Modifier.height(10.dp))
             }
+            android.os.Trace.endSection()
             Spacer(modifier = Modifier.height(6.dp))
             // ── Stalker portals section ──
+            android.os.Trace.beginSection("IPTV:portals")
             if (stalkerPortals.isNotEmpty()) {
                 Spacer(modifier = Modifier.height(6.dp))
                 stalkerPortals.forEachIndexed { index, portal ->
@@ -8882,6 +8885,7 @@ internal fun IptvSettings(
                     Spacer(modifier = Modifier.height(10.dp))
                 }
             }
+            android.os.Trace.endSection()
             Spacer(modifier = Modifier.height(6.dp))
             val trailingBase = playlists.size + stalkerPortals.size + 1
             SettingsRow(
