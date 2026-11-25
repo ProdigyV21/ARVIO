@@ -148,6 +148,8 @@ private const val NETFLIX_RAIL_MORPH_MS = 280
 private val NetflixMotionEasing = androidx.compose.animation.core.CubicBezierEasing(0.2f, 0f, 0f, 1f)
 /** One step of a held Left/Right: the key repeat and the rail glide share this pace. */
 internal const val NETFLIX_HOLD_STEP_MS = 150L
+/** A rail asks for its next page this many cards before its end. */
+private const val HOME_ROW_LOAD_AHEAD_ITEMS = 12
 /** Margin past the vertical scroll before a row that left through the top collapses. */
 private const val NETFLIX_COLLAPSE_SETTLE_MS = 80
 /** Resting row titles draw at 17sp of the focused row's 20sp. */
@@ -341,7 +343,7 @@ internal fun NetflixTvHomeRowsLayer(
         val billboardHeight = (maxHeight - topInset - 70.dp).coerceAtLeast(200.dp)
         // Focused-row card height: room for the row title above, the description
         // below and a peek of the next row.
-        val bigCardHeight = (maxHeight * 0.42f).coerceIn(170.dp, 330.dp)
+        val bigCardHeight = (maxHeight * 0.36f).coerceIn(150.dp, 290.dp)
         @OptIn(ExperimentalFoundationApi::class)
         val listState = rememberLazyListState(prefetchStrategy = remember { NetflixNextRowPrefetchStrategy() })
         val targetIndex = if (focusState.isHeroFocused) 0 else focusState.currentRowIndex + 1
@@ -876,7 +878,8 @@ private fun NetflixContentRow(
     val bigCardWidth = bigCardHeight * (16f / 9f)
     val focusedPosterWidth = bigCardHeight * (2f / 3f)
     val restingPoster = category.isPortrait(usePosterCards)
-    val restingWidth = if (restingPoster) HOME_TV_POSTER_CARD_WIDTH_DP.dp else HOME_TV_LANDSCAPE_CARD_WIDTH_DP.dp
+    // Posters keep one size in every row, focused or not; only the opened card changes shape.
+    val restingWidth = if (restingPoster) focusedPosterWidth else HOME_TV_LANDSCAPE_CARD_WIDTH_DP.dp
 
     // A row left by moving down keeps its expanded layout while the vertical scroll
     // carries it out the top, then collapses in one frame once it is off screen.
@@ -996,7 +999,7 @@ private fun NetflixContentRow(
                     if (item.isPlaceholder) "placeholder_card" else "netflix_media_card"
                 }
             ) { index, item ->
-                if (!item.isPlaceholder && categoryHasMore && index >= items.size - 5) {
+                if (!item.isPlaceholder && categoryHasMore && index >= items.size - HOME_ROW_LOAD_AHEAD_ITEMS) {
                     LaunchedEffect(items.size) { onLoadMore() }
                 }
                 val onClick = remember(item) { { latestOnItemClick(item) } }
@@ -1340,7 +1343,8 @@ internal fun rememberNetflixArtwork(
     }
     // Keep the loaded source until the requested one is ready. Rapid reversals retarget
     // the same animation from its current value rather than flashing either endpoint.
-    LaunchedEffect(target) { fade.animateTo(target, tween(140)) }
+    // The picture changes over the same time and curve as the card's shape.
+    LaunchedEffect(target) { fade.animateTo(target, tween(NETFLIX_RAIL_MORPH_MS, easing = NetflixMotionEasing)) }
     if (poster == null && backdrop == null) return painter
     return remember(poster, backdrop, fade) { NetflixArtworkBlendPainter(poster, backdrop, fade.asState()) }
 }
@@ -1676,8 +1680,8 @@ private class NetflixNextRowPrefetchStrategy : LazyListPrefetchStrategy {
  */
 private fun Modifier.netflixFocusRing(): Modifier = drawWithContent {
     drawContent()
-    val gap = 3.dp.toPx()
-    val stroke = 2.5.dp.toPx()
+    val gap = 2.5.dp.toPx()
+    val stroke = 1.75.dp.toPx()
     val inset = gap + stroke / 2f
     val radius = androidx.compose.ui.geometry.CornerRadius(10.dp.toPx() + inset)
     val topLeft = androidx.compose.ui.geometry.Offset(-inset, -inset)

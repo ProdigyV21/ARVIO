@@ -1763,10 +1763,8 @@ class HomeViewModel @Inject constructor(
     private val initialCategoryItemCap = if (isLowRamDevice) 8 else 10
     private val categoryPageSize = if (isLowRamDevice) 8 else 10
     private val initialMdblistCatalogCount = 1
-    private val nearEndThreshold = 4
-    // Home rails stop auto-paging here so their trailing "View all" card stays reachable
-    // with the D-pad; the rest of the catalog pages in the "View all" grid.
-    private val homeRowAutoPageLimit = 60
+    // About one page ahead, so a held D-pad never reaches the end before the next page arrives.
+    private val nearEndThreshold = 12
 
     // Track current focus for ahead-of-focus preloading
     private var currentRowIndex = 0
@@ -4192,12 +4190,8 @@ class HomeViewModel @Inject constructor(
         loadNextHomeRowPage(categoryId)
     }
 
-    /** Next page for a home rail, capped at [homeRowAutoPageLimit] for rows that end in "View all". */
+    /** Next page for a home rail: rails page endlessly while the catalog has more. */
     fun loadNextHomeRowPage(categoryId: String) {
-        val category = _uiState.value.categories.firstOrNull { it.id == categoryId } ?: return
-        val realCount = category.items.count { !it.isPlaceholder }
-        val hasMore = _uiState.value.categoryHasMoreMap[categoryId] == true
-        if (realCount >= homeRowAutoPageLimit && homeRowSupportsViewAll(category, hasMore)) return
         loadNextPageForCategory(categoryId)
     }
 
