@@ -268,6 +268,13 @@ class ArflixApplication : Application(), Configuration.Provider, ImageLoaderFact
             // on the home hero. Error = transparent so failed loads are invisible
             // (the card surface background is the fallback visual).
             .error(android.R.color.transparent)
+            .eventListener(object : coil.EventListener {
+                override fun decodeStart(request: coil.request.ImageRequest, decoder: coil.decode.Decoder, options: coil.request.Options) {
+                    val key = request.memoryCacheKey?.key ?: request.data.toString()
+                    android.os.Trace.beginSection(("IMG:" + key.takeLast(80) + " sz=" + options.size.width + "x" + options.size.height).take(120))
+                    android.os.Trace.endSection()
+                }
+            })
             .components {
                 add(SvgDecoder.Factory())
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {

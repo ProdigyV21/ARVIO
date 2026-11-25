@@ -924,8 +924,13 @@ private fun NetflixContentRow(
     }
     val expandedIndex = if (isCurrentRow) focusedItemIndex else restingItemIndex
     val focusedItem = items.getOrNull(expandedIndex)?.takeIf { expanded && !it.isPlaceholder }
-    val sizeSpec: AnimationSpec<Dp> =
+    val sizeSpec: AnimationSpec<Dp> = remember(collapseOffScreen) {
         if (collapseOffScreen) snap() else tween(NETFLIX_RAIL_MORPH_MS, easing = FastOutSlowInEasing)
+    }
+    // Cards read the focused position through these states, so a D-pad step recomposes
+    // only the card that gains focus and the one that loses it, not every card in the row.
+    val expandedIndexState = rememberUpdatedState(expandedIndex)
+    val focusedIndexState = rememberUpdatedState(focusedItemIndex)
 
     // The focused title always sits in the first slot; a resting row keeps its position.
     val anchorIndex = (if (isCurrentRow) focusedItemIndex else restingItemIndex)
@@ -998,7 +1003,8 @@ private fun NetflixContentRow(
                     LaunchedEffect(items.size) { onLoadMore() }
                 }
                 val onClick = remember(item) { { latestOnItemClick(item) } }
-                val featured = expanded && index == expandedIndex && !item.isPlaceholder
+                val isExpandedIndex by remember(index) { derivedStateOf { expandedIndexState.value == index } }
+                val featured = expanded && isExpandedIndex && !item.isPlaceholder
                 val landscape = featured || (!expanded && !restingPoster)
                 val cardWidth = if (featured) bigCardWidth else if (expanded) focusedPosterWidth else restingWidth
                 val cardHeight = if (expanded) bigCardHeight else cardWidth / (if (landscape) (16f / 9f) else (2f / 3f))
@@ -1080,10 +1086,13 @@ private fun NetflixContentRow(
             }
             if (hasViewAllCard) {
                 item(key = "${category.id}_view_all", contentType = "view_all_card") {
+                    val viewAllFocused by remember(items.size) {
+                        derivedStateOf { focusedIndexState.value == items.size }
+                    }
                     HomeViewAllCard(
                         width = if (expanded) focusedPosterWidth else restingWidth,
                         isLandscape = !expanded && !restingPoster,
-                        isFocused = isCurrentRow && focusedItemIndex == items.size,
+                        isFocused = isCurrentRow && viewAllFocused,
                         enableSystemFocus = false,
                         onClick = onViewAll
                     )
