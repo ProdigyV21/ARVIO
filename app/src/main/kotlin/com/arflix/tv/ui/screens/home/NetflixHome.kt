@@ -187,8 +187,10 @@ private val NETFLIX_BILLBOARD_KIDS_IDS = setOf(
 )
 
 /**
- * Billboard candidates: today's Top 10 movies and series. When those rows are hidden,
- * any other Top 10 row, then the trending rows, then the kids starter rows. Those exist
+ * Billboard candidates: today's Top 10 and the trending movies and series together, ranked
+ * by position across the rows (each row's #1, then each row's #2, ...), so the pool is the
+ * most popular titles of the day and is large enough to vary between visits. When those
+ * rows are hidden, any other Top 10 row, then the kids starter rows. Those exist
  * on a kids profile, where the age filter can empty every Top 10 and trending row and an
  * empty candidate list left a black billboard. Last, any other row except Continue
  * Watching, for profiles whose Home has none of those rows (only collections and addon
@@ -198,26 +200,64 @@ internal fun netflixBillboardCandidates(
     categories: List<Category>,
     isSpecialItem: (MediaItem) -> Boolean
 ): List<MediaItem> {
-    fun itemsOf(rows: List<Category>) = rows.asSequence()
-        .flatMap { it.items.asSequence() }
-        .filter { isActionableHomeItem(it) && !isSpecialItem(it) && !it.backdrop.isNullOrBlank() }
-        .distinctBy { homeRowItemKey(it) }
-        .toList()
+    // Round-robin over the rows by rank, so the best of every row comes first.
+    fun itemsOf(rows: List<Category>): List<MediaItem> {
+        val longest = rows.maxOfOrNull { it.items.size } ?: 0
+        return (0 until longest).asSequence()
+            .flatMap { rank -> rows.asSequence().mapNotNull { it.items.getOrNull(rank) } }
+            .filter { isActionableHomeItem(it) && !isSpecialItem(it) && !it.backdrop.isNullOrBlank() }
+            .distinctBy { homeRowItemKey(it) }
+            .toList()
+    }
 
     val isOtherTop10 = { category: Category ->
         category.id.contains("top10", ignoreCase = true) ||
             category.title.contains("Top 10", ignoreCase = true)
     }
     return sequenceOf<(Category) -> Boolean>(
-        { it.id in NETFLIX_BILLBOARD_TOP10_IDS },
+        { it.id in NETFLIX_BILLBOARD_TOP10_IDS || it.id in NETFLIX_BILLBOARD_TRENDING_IDS },
         isOtherTop10,
-        { it.id in NETFLIX_BILLBOARD_TRENDING_IDS },
         { it.id in NETFLIX_BILLBOARD_KIDS_IDS },
         { it.id != "continue_watching" }
     )
         .map { matches -> itemsOf(categories.filter(matches)) }
         .firstOrNull { it.isNotEmpty() }
         .orEmpty()
+}
+
+/** How many of the top-ranked candidates a visit picks from. */
+private const val NETFLIX_BILLBOARD_POOL = 16
+/** Titles shown on recent visits that are skipped while others are available. */
+internal const val NETFLIX_BILLBOARD_HISTORY = 24
+
+/**
+ * Picks the billboard title for a visit: a random one of the [NETFLIX_BILLBOARD_POOL]
+ * best-ranked candidates that were not shown in the [recent] visits. Only when every
+ * candidate was shown recently does a recent one come back.
+ */
+internal fun chooseNetflixBillboard(
+    candidates: List<MediaItem>, recent: List<String>, random: kotlin.random.Random = kotlin.random.Random
+): MediaItem {
+    val recentKeys = recent.toHashSet()
+    val fresh = candidates.filterNot { homeRowItemKey(it) in recentKeys }
+    return fresh.ifEmpty { candidates }.take(NETFLIX_BILLBOARD_POOL).random(random)
+}
+
+/** The billboard titles of recent visits, newest last, per profile. */
+internal object NetflixBillboardHistory {
+    private const val PREFS = "netflix_billboard_history"
+
+    fun read(context: android.content.Context, profileId: String?): List<String> =
+        context.getSharedPreferences(PREFS, android.content.Context.MODE_PRIVATE)
+            .getString(profileId ?: "default", null)
+            ?.split('\n')?.filter { it.isNotBlank() }
+            .orEmpty()
+
+    fun record(context: android.content.Context, profileId: String?, key: String) {
+        val history = (read(context, profileId).filterNot { it == key } + key).takeLast(NETFLIX_BILLBOARD_HISTORY)
+        context.getSharedPreferences(PREFS, android.content.Context.MODE_PRIVATE).edit()
+            .putString(profileId ?: "default", history.joinToString("\n")).apply()
+    }
 }
 
 internal fun stableNetflixBillboard(previous: MediaItem?, candidates: List<MediaItem>, pick: (List<MediaItem>) -> MediaItem): MediaItem? =
@@ -1723,23 +1763,20 @@ private class NetflixNextRowPrefetchStrategy : LazyListPrefetchStrategy {
 }
 
 /**
- * The focused card's frame: a white ring a few dp outside the card with a dark gap between,
- * so the ring never sits on the artwork, and a soft glow around it. Drawn outside the
- * card's bounds, so it costs no layout and the morph keeps the card's own size.
+ * The focused card's frame: a thin white ring hugging the card's edge, concentric with its
+ * rounded corners. It overlaps the artwork by half a pixel, so no dark seam shows between the
+ * ring and the picture. Drawn outside the card's layout, so the morph keeps the card's size.
  */
 private fun Modifier.netflixFocusRing(): Modifier = drawWithContent {
     drawContent()
-    val gap = 2.5.dp.toPx()
-    val stroke = 1.75.dp.toPx()
-    val inset = gap + stroke / 2f
+    val stroke = 2.dp.toPx()
+    val inset = stroke / 2f - 0.5f
     val radius = androidx.compose.ui.geometry.CornerRadius(10.dp.toPx() + inset)
-    val topLeft = androidx.compose.ui.geometry.Offset(-inset, -inset)
-    val ringSize = androidx.compose.ui.geometry.Size(size.width + inset * 2, size.height + inset * 2)
-    // Glow: two wide, faint strokes under the ring.
-    drawRoundRect(Color.White.copy(alpha = 0.10f), topLeft, ringSize, radius,
-        style = androidx.compose.ui.graphics.drawscope.Stroke(stroke * 4f))
-    drawRoundRect(Color.White.copy(alpha = 0.16f), topLeft, ringSize, radius,
-        style = androidx.compose.ui.graphics.drawscope.Stroke(stroke * 2.2f))
-    drawRoundRect(Color.White, topLeft, ringSize, radius,
-        style = androidx.compose.ui.graphics.drawscope.Stroke(stroke))
+    drawRoundRect(
+        Color.White,
+        androidx.compose.ui.geometry.Offset(-inset, -inset),
+        androidx.compose.ui.geometry.Size(size.width + inset * 2, size.height + inset * 2),
+        radius,
+        style = androidx.compose.ui.graphics.drawscope.Stroke(stroke)
+    )
 }
