@@ -307,9 +307,10 @@ export function webAiModel(value: unknown): AppSettings["aiSubtitleModel"] {
   return String(value ?? "").toLowerCase().includes("gemini") ? "gemini" : "groq";
 }
 
-// Accent colours: the web ids map onto Android's eight named colours.
+// Accent colours: the web ids map onto Android's thirteen named colours.
 const ACCENT_TO_ANDROID: Record<string, string> = {
-  arctic: "White", red: "Red", orange: "Orange", gold: "Yellow", green: "Green", blue: "Blue", indigo: "Indigo", purple: "Violet"
+  arctic: "White", red: "Red", coral: "Coral", orange: "Orange", amber: "Amber", gold: "Yellow", green: "Green",
+  teal: "Teal", cyan: "Cyan", blue: "Blue", indigo: "Indigo", purple: "Violet", pink: "Pink"
 };
 
 export function androidAccent(value: string) {

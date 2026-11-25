@@ -49,7 +49,7 @@ fun accentColorFromName(name: String): Color = when (name) {
     // Extra TV-friendly hues: saturated enough to read at 10 feet on a dark
     // background, none so bright that a 2dp focus ring glares on an OLED panel.
     "Coral" -> Color(0xFFFF6F61)
-    "Gold" -> Color(0xFFE8B84A)
+    "Amber" -> Color(0xFFE8B84A)
     "Teal" -> Color(0xFF14B8A6)
     "Cyan" -> Color(0xFF22D3EE)
     "Pink" -> Color(0xFFFF4FA3)

@@ -1948,6 +1948,10 @@
     <string name="settings_value_indigo">Añil</string>
     <string name="settings_value_violet">Violeta</string>
     <string name="settings_value_cyan">Cian</string>
+    <string name="settings_value_coral">Coral</string>
+    <string name="settings_value_amber">Ámbar</string>
+    <string name="settings_value_teal">Verde azulado</string>
+    <string name="settings_value_pink">Rosa</string>
     <string name="settings_value_normal">Normal</string>
     <string name="settings_value_bold">Negrita</string>
     <string name="settings_value_background">Fondo</string>

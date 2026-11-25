@@ -82,7 +82,7 @@ class BottomBarAppearanceDeviceTest {
                 compose.onNodeWithContentDescription(compose.activity.getString(it.labelRes)).fetchSemanticsNode().boundsInRoot
             })
         }
-        for (name in listOf("White", "Red", "Orange", "Yellow", "Green", "Blue", "Indigo", "Violet")) {
+        for (name in listOf("White", "Red", "Coral", "Orange", "Amber", "Yellow", "Green", "Teal", "Cyan", "Blue", "Indigo", "Violet", "Pink")) {
             val expected = accentColorFromName(name)
             compose.runOnIdle { accent.value = expected }
             // PixelCopy can see the previous frame while the icon colour/ripple finishes drawing.

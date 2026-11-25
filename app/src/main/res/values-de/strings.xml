@@ -829,6 +829,10 @@
     <string name="settings_value_indigo">Indigo</string>
     <string name="settings_value_violet">Violett</string>
     <string name="settings_value_cyan">Cyan</string>
+    <string name="settings_value_coral">Koralle</string>
+    <string name="settings_value_amber">Bernstein</string>
+    <string name="settings_value_teal">Petrol</string>
+    <string name="settings_value_pink">Pink</string>
     <string name="settings_value_normal">Normal</string>
     <string name="settings_value_bold">Fett</string>
     <string name="settings_value_background">Hintergrund</string>
