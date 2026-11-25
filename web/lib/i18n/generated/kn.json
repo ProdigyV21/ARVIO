@@ -1613,5 +1613,6 @@
   "Filter categories": "ವರ್ಗಗಳನ್ನು ಫಿಲ್ಟರ್ ಮಾಡಿ",
   "Clear filter": "ಫಿಲ್ಟರ್ ತೆರವುಗೊಳಿಸಿ",
   "No categories match \"{value0}\".": "\"{value0}\" ಗೆ ಹೊಂದುವ ವರ್ಗಗಳಿಲ್ಲ.",
-  "Chromecast": "Chromecast"
+  "Chromecast": "Chromecast",
+  "This browser can't play some sources, so ARVIO tries the next one.": "ಈ ಬ್ರೌಸರ್ ಕೆಲವು ಮೂಲಗಳನ್ನು ಪ್ಲೇ ಮಾಡಲು ಸಾಧ್ಯವಿಲ್ಲ, ಆದ್ದರಿಂದ ARVIO ಮುಂದಿನದನ್ನು ಪ್ರಯತ್ನಿಸುತ್ತದೆ."
 }

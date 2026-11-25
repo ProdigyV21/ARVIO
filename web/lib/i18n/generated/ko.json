@@ -1573,5 +1573,6 @@
   "Filter categories": "카테고리 필터",
   "Clear filter": "필터 지우기",
   "No categories match \"{value0}\".": "\"{value0}\"과(와) 일치하는 카테고리가 없습니다.",
-  "Chromecast": "Chromecast"
+  "Chromecast": "Chromecast",
+  "This browser can't play some sources, so ARVIO tries the next one.": "이 브라우저에서 재생할 수 없는 소스가 있어 ARVIO가 다음 소스를 시도합니다."
 }

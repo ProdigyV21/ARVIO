@@ -95,17 +95,25 @@ function MediaCardBase({ item, onOpen, onFocus, posterMode, rank, hideService }:
   const imgFailed = Boolean(artwork && failedArtwork === artwork);
   // Addon file libraries (debrid) name items after the release file.
   const release = item.addonNativeId ? readableReleaseName(item.title) : null;
-  const year = item.releaseDate?.slice(0, 4) || item.year || release?.year || (item.mediaType === "tv" ? "Series" : "Movie");
+  const releaseEpisode = release?.season == null ? ""
+    : release.episode == null ? `S${release.season}` : `S${release.season} · E${release.episode}`;
+  const year = item.releaseDate?.slice(0, 4) || item.year || release?.year || releaseEpisode || (item.mediaType === "tv" ? "Series" : "Movie");
 
   useEffect(() => {
     let active = true;
     setMetadataId(directMetadataId);
-    if (directMetadataId || !item.isHomeServer) return () => { active = false; };
-    void resolveTmdbId(item).then((id) => {
+    // Home-server items, and debrid-library files without a poster, borrow the
+    // matching TMDB title's artwork (the card still opens the file itself).
+    const lookup = item.isHomeServer ? item
+      : release && missingArtwork ? { mediaType: item.mediaType, title: release.title, year: release.year }
+        : null;
+    if (directMetadataId || !lookup) return () => { active = false; };
+    void resolveTmdbId(lookup).then((id) => {
       if (active) setMetadataId(id);
     });
     return () => { active = false; };
-  }, [directMetadataId, item.homeServerId, item.homeServerItemId, item.imdbId, item.isHomeServer, item.mediaType]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [directMetadataId, item.homeServerId, item.homeServerItemId, item.imdbId, item.isHomeServer, item.mediaType, release?.title, release?.year, missingArtwork]);
 
   useEffect(() => () => {
     if (longPressTimer.current) clearTimeout(longPressTimer.current);

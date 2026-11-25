@@ -45,6 +45,19 @@ export function PlayerStatusLayers({ booted, bootLogo, bootStatus, bufferAheadSe
               <Loader2 size={16} aria-hidden="true" /> {translateUi(bootStatus.label, bootStatus.values)}
             </p>
             {subtitleLabel ? <p className="player-boot-sub">{subtitleLabel}{item?.episodeTitle ? ` · ${item.episodeTitle}` : ""}</p> : null}
+            {/* After a few automatic hops, say why and offer a way out instead of a counter alone. */}
+            {!liveTv && Number(bootStatus.values?.value0 ?? 0) >= 3 && bootStatus.label.startsWith("Trying next source") ? (
+              <div className="player-boot-help">
+                <p>{translateUi("This browser can't play some sources, so ARVIO tries the next one.")}</p>
+                <div className="player-error-actions">
+                  <button type="button" className="player-error-external" onClick={() => openPanel("sources")}>
+                    <Folder size={15} /> {translateUi("Choose source")}</button>
+                  {externalButtons}
+                  {appLink && <a className="player-error-external" href={appLink}>
+                    <ExternalLink size={15} /> {translateUi("Open in {value0}", { value0: "ARVIO" })}</a>}
+                </div>
+              </div>
+            ) : null}
           </div>
         </div>
       )}

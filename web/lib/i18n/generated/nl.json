@@ -1529,5 +1529,6 @@
   "Filter categories": "Categorieën filteren",
   "Clear filter": "Filter wissen",
   "No categories match \"{value0}\".": "Geen categorieën gevonden voor \"{value0}\".",
-  "Chromecast": "Chromecast"
+  "Chromecast": "Chromecast",
+  "This browser can't play some sources, so ARVIO tries the next one.": "Deze browser kan sommige bronnen niet afspelen, dus ARVIO probeert de volgende."
 }

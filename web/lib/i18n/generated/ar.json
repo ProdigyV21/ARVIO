@@ -1571,5 +1571,6 @@
   "Filter categories": "تصفية الفئات",
   "Clear filter": "مسح عامل التصفية",
   "No categories match \"{value0}\".": "لا توجد فئات تطابق \"{value0}\".",
-  "Chromecast": "Chromecast"
+  "Chromecast": "Chromecast",
+  "This browser can't play some sources, so ARVIO tries the next one.": "لا يمكن لهذا المتصفح تشغيل بعض المصادر، لذا يجرّب ARVIO المصدر التالي."
 }

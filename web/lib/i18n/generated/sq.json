@@ -1576,5 +1576,6 @@
   "Filter categories": "Filtro kategoritë",
   "Clear filter": "Pastro filtrin",
   "No categories match \"{value0}\".": "Asnjë kategori nuk përputhet me \"{value0}\".",
-  "Chromecast": "Chromecast"
+  "Chromecast": "Chromecast",
+  "This browser can't play some sources, so ARVIO tries the next one.": "Ky shfletues nuk mund të luajë disa burime, ndaj ARVIO provon tjetrin."
 }

@@ -1575,5 +1575,6 @@
   "Filter categories": "Filter kategori",
   "Clear filter": "Hapus filter",
   "No categories match \"{value0}\".": "Tidak ada kategori yang cocok dengan \"{value0}\".",
-  "Chromecast": "Chromecast"
+  "Chromecast": "Chromecast",
+  "This browser can't play some sources, so ARVIO tries the next one.": "Browser ini tidak dapat memutar beberapa sumber, jadi ARVIO mencoba sumber berikutnya."
 }

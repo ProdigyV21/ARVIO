@@ -1573,5 +1573,6 @@
   "Filter categories": "Фільтр категорій",
   "Clear filter": "Очистити фільтр",
   "No categories match \"{value0}\".": "Немає категорій, що відповідають «{value0}».",
-  "Chromecast": "Chromecast"
+  "Chromecast": "Chromecast",
+  "This browser can't play some sources, so ARVIO tries the next one.": "Цей браузер не може відтворити деякі джерела, тому ARVIO пробує наступне."
 }

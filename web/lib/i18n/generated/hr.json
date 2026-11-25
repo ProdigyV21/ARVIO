@@ -1576,5 +1576,6 @@
   "Filter categories": "Filtriraj kategorije",
   "Clear filter": "Očisti filtar",
   "No categories match \"{value0}\".": "Nijedna kategorija ne odgovara \"{value0}\".",
-  "Chromecast": "Chromecast"
+  "Chromecast": "Chromecast",
+  "This browser can't play some sources, so ARVIO tries the next one.": "Ovaj preglednik ne može reproducirati neke izvore, pa ARVIO pokušava sljedeći."
 }

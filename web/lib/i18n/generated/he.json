@@ -1537,5 +1537,6 @@
   "Filter categories": "סינון קטגוריות",
   "Clear filter": "ניקוי המסנן",
   "No categories match \"{value0}\".": "אין קטגוריות שתואמות ל-\"{value0}\".",
-  "Chromecast": "Chromecast"
+  "Chromecast": "Chromecast",
+  "This browser can't play some sources, so ARVIO tries the next one.": "הדפדפן הזה לא יכול להפעיל חלק מהמקורות, ולכן ARVIO מנסה את הבא."
 }

@@ -1572,5 +1572,6 @@
   "Filter categories": "زمرے فلٹر کریں",
   "Clear filter": "فلٹر صاف کریں",
   "No categories match \"{value0}\".": "\"{value0}\" سے کوئی زمرہ میل نہیں کھاتا۔",
-  "Chromecast": "Chromecast"
+  "Chromecast": "Chromecast",
+  "This browser can't play some sources, so ARVIO tries the next one.": "یہ براؤزر کچھ ذرائع نہیں چلا سکتا، اس لیے ARVIO اگلا آزما رہا ہے۔"
 }

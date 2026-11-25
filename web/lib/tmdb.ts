@@ -1,3 +1,4 @@
+import { dedupeReleases } from "./releaseName";
 import { addonServesOwnMeta, findAddonServingOwnMeta, getNativeDetails, getNativeSeasonEpisodes, isAddonNative, registerNativeItem } from "./addonNative";
 import { isYouTubeItem, youTubeCatalogItems, youTubeDetails } from "./youtubeCollection";
 import { config } from "./config";
@@ -813,7 +814,8 @@ async function loadAddonCatalog(
   const rawMetas = payload.metas ?? [];
   const metas = effectiveFilter ? rawMetas : rawMetas.slice(0, limit ?? Infinity);
   const hydrated = await Promise.all(metas.map((meta) => hydrateAddonMeta(meta, catalog.mediaType, language, addon, addons, catalogType).catch(() => null)));
-  const items = hydrated.filter((item): item is MediaItem => Boolean(item));
+  // Debrid libraries hold the same film several times (one per encode); show it once.
+  const items = dedupeReleases(hydrated.filter((item): item is MediaItem => Boolean(item)));
   if (effectiveFilter) {
     const { filterClientCatalogItems } = await import('./clientCatalogLoader');
     return filterClientCatalogItems(items, effectiveFilter, homeServers, limit);

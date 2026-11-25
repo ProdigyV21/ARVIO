@@ -1573,5 +1573,6 @@
   "Filter categories": "Kategorileri filtrele",
   "Clear filter": "Filtreyi temizle",
   "No categories match \"{value0}\".": "\"{value0}\" ile eşleşen kategori yok.",
-  "Chromecast": "Chromecast"
+  "Chromecast": "Chromecast",
+  "This browser can't play some sources, so ARVIO tries the next one.": "Bu tarayıcı bazı kaynakları oynatamıyor, bu yüzden ARVIO bir sonrakini deniyor."
 }

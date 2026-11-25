@@ -1571,5 +1571,6 @@
   "Filter categories": "篩選分類",
   "Clear filter": "清除篩選",
   "No categories match \"{value0}\".": "沒有符合「{value0}」的分類。",
-  "Chromecast": "Chromecast"
+  "Chromecast": "Chromecast",
+  "This browser can't play some sources, so ARVIO tries the next one.": "此瀏覽器無法播放部分片源，因此 ARVIO 正在嘗試下一個。"
 }

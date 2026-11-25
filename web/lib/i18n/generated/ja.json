@@ -1573,5 +1573,6 @@
   "Filter categories": "カテゴリを絞り込む",
   "Clear filter": "フィルターをクリア",
   "No categories match \"{value0}\".": "「{value0}」に一致するカテゴリはありません。",
-  "Chromecast": "Chromecast"
+  "Chromecast": "Chromecast",
+  "This browser can't play some sources, so ARVIO tries the next one.": "このブラウザでは再生できないソースがあるため、ARVIO は次のソースを試しています。"
 }

@@ -1574,5 +1574,6 @@
   "Filter categories": "Lọc danh mục",
   "Clear filter": "Xóa bộ lọc",
   "No categories match \"{value0}\".": "Không có danh mục nào khớp với \"{value0}\".",
-  "Chromecast": "Chromecast"
+  "Chromecast": "Chromecast",
+  "This browser can't play some sources, so ARVIO tries the next one.": "Trình duyệt này không phát được một số nguồn, nên ARVIO đang thử nguồn tiếp theo."
 }

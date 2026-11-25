@@ -1573,5 +1573,6 @@
   "Filter categories": "Филтрирај категорије",
   "Clear filter": "Обриши филтер",
   "No categories match \"{value0}\".": "Ниједна категорија не одговара „{value0}“.",
-  "Chromecast": "Chromecast"
+  "Chromecast": "Chromecast",
+  "This browser can't play some sources, so ARVIO tries the next one.": "Овај прегледач не може да репродукује неке изворе, па ARVIO покушава следећи."
 }

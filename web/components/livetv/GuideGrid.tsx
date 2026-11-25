@@ -1,4 +1,5 @@
 "use client";
+import { withoutCategoryPrefix } from "@/lib/iptvCategoryFilter";
 import { useDirection, useTranslation } from "@/lib/i18n";
 import { ChevronLeft, ChevronRight, Play, Star } from "lucide-react";
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
@@ -82,7 +83,7 @@ function useVisibility(ref: React.RefObject<HTMLElement | null>, id: string, onV
 
 // Timeline guide: channels down, time across (window of four hours), programme
 // blocks positioned by their real start/end times. EPG loads lazily per row.
-export function GuideGrid({ channels, favorites, nowNext, settled, selectedId, playingId, clockFormat, resetKey, callbacks }: {
+export function GuideGrid({ channels, favorites, nowNext, settled, selectedId, playingId, clockFormat, resetKey, namePrefix = "", callbacks }: {
   channels: IptvChannel[];
   favorites: Set<string>;
   nowNext: IptvSnapshot["nowNext"];
@@ -93,6 +94,8 @@ export function GuideGrid({ channels, favorites, nowNext, settled, selectedId, p
   clockFormat?: ClockFormat;
   /** Changes when the list is filtered: scroll back to the top, keep the time window. */
   resetKey: string;
+  /** Provider tag shared by the channel names, left off each row. */
+  namePrefix?: string;
   callbacks: GuideCallbacks;
 }) {
   const translateUi = useTranslation();
@@ -206,9 +209,10 @@ export function GuideGrid({ channels, favorites, nowNext, settled, selectedId, p
       totalWidth={totalWidth}
       nowOffset={nowOffset}
       clockFormat={clockFormat}
+      namePrefix={namePrefix}
       callbacks={callbacks}
     />
-  ), [favorites, nowNext, settled, selectedId, playingId, windowStart, windowEnd, totalWidth, nowOffset, clockFormat, callbacks]);
+  ), [favorites, nowNext, settled, selectedId, playingId, windowStart, windowEnd, totalWidth, nowOffset, clockFormat, namePrefix, callbacks]);
 
   if (!clock) return <div className="livetv-guide" aria-busy="true" aria-label={translateUi("Programme guide")} />;
   const showNow = nowOffset >= 0 && nowOffset <= totalWidth;
@@ -236,7 +240,7 @@ export function GuideGrid({ channels, favorites, nowNext, settled, selectedId, p
   );
 }
 
-const GuideRow = memo(function GuideRow({ channel, favorite, guide, settled, selected, playing, windowStart, windowEnd, totalWidth, nowOffset, clockFormat, callbacks }: {
+const GuideRow = memo(function GuideRow({ channel, favorite, guide, settled, selected, playing, windowStart, windowEnd, totalWidth, nowOffset, clockFormat, namePrefix = "", callbacks }: {
   channel: IptvChannel;
   favorite: boolean;
   guide?: IptvNowNext;
@@ -248,6 +252,7 @@ const GuideRow = memo(function GuideRow({ channel, favorite, guide, settled, sel
   totalWidth: number;
   nowOffset: number;
   clockFormat?: ClockFormat;
+  namePrefix?: string;
   callbacks: GuideCallbacks;
 }) {
   const translateUi = useTranslation();
@@ -268,7 +273,7 @@ const GuideRow = memo(function GuideRow({ channel, favorite, guide, settled, sel
         <button type="button" className="livetv-guide-channel" title={channel.name} aria-label={[channel.number, channel.name, favorite ? translateUi("Favorite") : "", playing ? translateUi("Playing") : ""].filter(Boolean).join(", ")} {...press}>
           <small className="tv-guide-channel-number">{channel.number}</small>
           <span className="livetv-row-logo"><ChannelLogo channel={channel} size={16} /></span>
-          <strong>{channel.name}</strong>
+          <strong>{withoutCategoryPrefix(channel.name, namePrefix)}</strong>
           {playing && <Play size={13} fill="currentColor" className="livetv-guide-playing" aria-hidden="true" />}
         </button>
         {/* Pointer shortcut; remote users use the long-press menu, so it is not a focus stop. */}
@@ -311,13 +316,14 @@ const GuideRow = memo(function GuideRow({ channel, favorite, guide, settled, sel
   );
 });
 
-export const ChannelRow = memo(function ChannelRow({ channel, guide, favorite, selected, playing, clockFormat, callbacks }: {
+export const ChannelRow = memo(function ChannelRow({ channel, guide, favorite, selected, playing, clockFormat, namePrefix = "", callbacks }: {
   channel: IptvChannel;
   guide?: IptvNowNext;
   favorite: boolean;
   selected: boolean;
   playing: boolean;
   clockFormat?: ClockFormat;
+  namePrefix?: string;
   callbacks: GuideCallbacks;
 }) {
   const translateUi = useTranslation();
@@ -335,7 +341,7 @@ export const ChannelRow = memo(function ChannelRow({ channel, guide, favorite, s
         <span className="livetv-row-copy">
           <span className="livetv-row-title">
             {channel.number && <small className="tv-guide-channel-number">{channel.number}</small>}
-            <strong>{channel.name}</strong>
+            <strong>{withoutCategoryPrefix(channel.name, namePrefix)}</strong>
             {channel.qualityLabel && <i className="livetv-quality">{channel.qualityLabel}</i>}
           </span>
           {now?.title ? (

@@ -1575,5 +1575,6 @@
   "Filter categories": "Filtrovať kategórie",
   "Clear filter": "Vymazať filter",
   "No categories match \"{value0}\".": "Žiadne kategórie nezodpovedajú „{value0}“.",
-  "Chromecast": "Chromecast"
+  "Chromecast": "Chromecast",
+  "This browser can't play some sources, so ARVIO tries the next one.": "Tento prehliadač nedokáže prehrať niektoré zdroje, preto ARVIO skúša ďalší."
 }

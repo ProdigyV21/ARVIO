@@ -1571,5 +1571,6 @@
   "Filter categories": "বিভাগ ফিল্টার করুন",
   "Clear filter": "ফিল্টার মুছুন",
   "No categories match \"{value0}\".": "\"{value0}\"-এর সাথে কোনো বিভাগ মেলেনি।",
-  "Chromecast": "Chromecast"
+  "Chromecast": "Chromecast",
+  "This browser can't play some sources, so ARVIO tries the next one.": "এই ব্রাউজার কিছু সোর্স চালাতে পারে না, তাই ARVIO পরেরটি চেষ্টা করছে।"
 }

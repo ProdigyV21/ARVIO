@@ -367,3 +367,14 @@ test('the lock screen skips by the on-screen interval; fullscreen locks landscap
   assert.deepEqual(locks, ['landscape']);
   assert.equal(platform.lockLandscape({ screen: {} }), false, 'iOS Safari has no orientation lock');
 });
+
+test('a watched movie or finished series offers "Watch again" instead of a fresh start', () => {
+  const resume = load('lib/playerResume.ts');
+  const movie = resume.planPrimaryAction({ item: { mediaType: 'movie' }, points: [], isWatched: () => true });
+  assert.equal(movie.label, 'Watch again');
+  const series = resume.planPrimaryAction({ item: { mediaType: 'tv' }, points: [], firstUnwatched: { season: 1, episode: 1 }, isWatched: (season) => season == null });
+  assert.equal(series.label, 'Watch again');
+  assert.equal(series.season, 1);
+  const fresh = resume.planPrimaryAction({ item: { mediaType: 'tv' }, points: [], firstUnwatched: { season: 1, episode: 1 } });
+  assert.equal(fresh.label, 'Play S{value0} E{value1}');
+});

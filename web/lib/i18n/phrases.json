@@ -1330,6 +1330,7 @@
   "This addon is run by a third party and can see what you watch. Only install addons you trust.",
   "This address can't be opened from a web browser (it may be a local or private address). Use the provider's public address, or the Android app.",
   "This browser",
+  "This browser can't play some sources, so ARVIO tries the next one.",
   "This browser cannot decode the selected video track.",
   "This browser could not decode video frames from the selected source.",
   "This category has no channels yet.",

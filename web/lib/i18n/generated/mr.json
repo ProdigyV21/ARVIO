@@ -1609,5 +1609,6 @@
   "Filter categories": "श्रेणी फिल्टर करा",
   "Clear filter": "फिल्टर साफ करा",
   "No categories match \"{value0}\".": "\"{value0}\" शी जुळणारी कोणतीही श्रेणी नाही.",
-  "Chromecast": "Chromecast"
+  "Chromecast": "Chromecast",
+  "This browser can't play some sources, so ARVIO tries the next one.": "हा ब्राउझर काही स्रोत चालवू शकत नाही, म्हणून ARVIO पुढचा वापरून पाहत आहे."
 }

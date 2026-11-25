@@ -30,7 +30,7 @@ import { authClient, useAppPick } from "@/lib/store";
 import { trackPremiumEvent } from "@/lib/premiumAnalytics";
 import type { IptvChannel } from "@/lib/types";
 import { uiLocales } from "@/lib/uiLocale";
-import { matchesCategoryQuery, sharedCategoryPrefix, withoutCategoryPrefix } from "@/lib/iptvCategoryFilter";
+import { matchesCategoryQuery, sharedCategoryPrefix, sharedChannelPrefix, withoutCategoryPrefix } from "@/lib/iptvCategoryFilter";
 
 const LAST_CHANNEL_KEY = "arvio.web.livetv.lastChannel";
 const GUIDE_BATCH_DELAY_MS = 500;
@@ -232,6 +232,7 @@ export function LiveTvScreen() {
     if (!categories.some((category) => category.id === activeCategory)) setActiveCategory("all");
   }, [categories, activeCategory]);
   const renderedChannels = visibleChannels;
+  const channelNamePrefix = useMemo(() => sharedChannelPrefix(renderedChannels.slice(0, 400).map((channel) => channel.name)), [renderedChannels]);
   const selectedChannel = channelById.get(selectedChannelId ?? "") ?? renderedChannels[0] ?? null;
   // While a channel plays in the docked mini-player the hero describes what is
   // playing; the focused row is a secondary "Selected" line.
@@ -636,6 +637,7 @@ export function LiveTvScreen() {
                     selected={selectedChannel?.id === channel.id}
                     playing={activeChannel?.id === channel.id}
                     clockFormat={settings.clockFormat}
+                    namePrefix={channelNamePrefix}
                     callbacks={guideCallbacks}
                   />
                 )} />
@@ -651,6 +653,7 @@ export function LiveTvScreen() {
                 selectedId={selectedChannel?.id ?? null}
                 playingId={activeChannel?.id ?? null}
                 clockFormat={settings.clockFormat}
+                namePrefix={channelNamePrefix}
                 callbacks={guideCallbacks}
               />
             )}
