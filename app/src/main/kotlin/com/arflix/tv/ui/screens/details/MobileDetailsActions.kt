@@ -24,6 +24,10 @@ import androidx.compose.material.icons.outlined.Layers
 import androidx.compose.material.icons.outlined.Movie
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material3.Icon
+import androidx.compose.material3.ripple
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.runtime.remember
+import com.arflix.tv.ui.components.mobilePressScale
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -119,12 +123,13 @@ private fun PrimaryDetailsAction(
     modifier: Modifier,
 ) {
     val foreground = if (primary) Color(0xFF111214) else Color.White
+    val source = remember { MutableInteractionSource() }
     Row(
         // Pill shape, matching the Home hero buttons.
-        modifier.clip(CircleShape)
+        modifier.mobilePressScale(source).clip(CircleShape)
             .background(if (primary) Color(0xFFF5F5F7) else Color(0xFF1D1E21))
             .then(if (primary) Modifier else Modifier.border(1.dp, Color.White.copy(alpha = 0.10f), CircleShape))
-            .clickable(role = Role.Button, onClick = onClick)
+            .clickable(interactionSource = source, indication = ripple(), role = Role.Button, onClick = onClick)
             .padding(horizontal = 12.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
         verticalAlignment = Alignment.CenterVertically,

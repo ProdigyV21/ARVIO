@@ -23,6 +23,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material3.Icon
+import androidx.compose.material3.ripple
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -318,9 +320,11 @@ private fun BannerActions(compact: Boolean, onPlay: () -> Unit, onMoreInfo: (() 
             .testTag("mobile_hero_actions"),
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
+        val playSource = remember { MutableInteractionSource() }
         Row(
-            Modifier.weight(1f).height(height).clip(CircleShape).background(Color.White)
-                .clickable(role = Role.Button, onClick = onPlay).testTag("mobile_hero_play"),
+            Modifier.weight(1f).mobilePressScale(playSource).height(height).clip(CircleShape).background(Color.White)
+                .clickable(interactionSource = playSource, indication = ripple(), role = Role.Button, onClick = onPlay)
+                .testTag("mobile_hero_play"),
             horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -329,11 +333,13 @@ private fun BannerActions(compact: Boolean, onPlay: () -> Unit, onMoreInfo: (() 
             Text(stringResource(R.string.play), color = Color.Black, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
         }
         if (onMoreInfo != null) {
+            val infoSource = remember { MutableInteractionSource() }
             Row(
-                Modifier.weight(1f).height(height).clip(CircleShape)
+                Modifier.weight(1f).mobilePressScale(infoSource).height(height).clip(CircleShape)
                     .background(Color.White.copy(alpha = 0.16f))
                     .border(1.dp, Color.White.copy(alpha = 0.18f), CircleShape)
-                    .clickable(role = Role.Button, onClick = onMoreInfo).testTag("mobile_hero_info"),
+                    .clickable(interactionSource = infoSource, indication = ripple(), role = Role.Button, onClick = onMoreInfo)
+                    .testTag("mobile_hero_info"),
                 horizontalArrangement = Arrangement.Center,
                 verticalAlignment = Alignment.CenterVertically,
             ) {

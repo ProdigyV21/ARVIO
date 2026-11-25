@@ -9,4 +9,5 @@
     <string name="mobile_connection_help">Ayuda de conexión</string>
     <string name="mobile_expand_preview">Ampliar vista previa</string>
     <string name="mobile_collapse_preview">Contraer vista previa</string>
+    <string name="search_top_results">Mejores resultados</string>
 </resources>

@@ -4888,7 +4888,7 @@ private fun MobileSettingsLayout(
             ) {
                 Text(
                     text = stringResource(R.string.settings),
-                    style = ArflixTypography.heroTitle.copy(fontSize = 24.sp),
+                    style = ArflixTypography.heroTitle.copy(fontSize = 28.sp, fontWeight = FontWeight.Bold),
                     color = TextPrimary,
                     modifier = Modifier.weight(1f)
                 )

@@ -50,6 +50,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -344,6 +345,15 @@ private fun BottomBarItemButton(
         animationSpec = tween(180),
         label = "navigation_icon_color"
     )
+    // The selected icon springs up a touch, so a tab change is felt as well as seen.
+    val iconScale by androidx.compose.animation.core.animateFloatAsState(
+        targetValue = if (isSelected) 1f else 0.92f,
+        animationSpec = androidx.compose.animation.core.spring(
+            dampingRatio = androidx.compose.animation.core.Spring.DampingRatioMediumBouncy,
+            stiffness = androidx.compose.animation.core.Spring.StiffnessMediumLow,
+        ),
+        label = "navigation_icon_scale"
+    )
     val indicatorColor by animateColorAsState(
         targetValue = if (isSelected) accent.copy(alpha = 0.16f) else Color.Transparent,
         animationSpec = tween(200),
@@ -382,7 +392,7 @@ private fun BottomBarItemButton(
                     imageVector = item.icon,
                     contentDescription = null,
                     tint = iconColor,
-                    modifier = Modifier.size(if (isSelected) 24.dp else 23.dp)
+                    modifier = Modifier.size(24.dp).graphicsLayer { scaleX = iconScale; scaleY = iconScale }
                 )
             }
             androidx.compose.material3.Text(label, color = iconColor, fontSize = spec.labelFontSizeSp.sp,
