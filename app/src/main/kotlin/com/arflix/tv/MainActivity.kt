@@ -536,6 +536,8 @@ class MainActivity : ComponentActivity() {
         // Before super.onResume(): screens observe ON_RESUME and must already see the
         // post-idle sync as running, or they would rebuild from stale state first.
         idleReturnCoordinator.onAppForeground()
+        // Compose may have rebuilt its view; keep it from tracking semantics for services that cannot read them.
+        window.decorView.post { com.arflix.tv.ui.ComposeAccessibilityGate.install(window.decorView) }
         super.onResume()
         // Signalled from here, not from a screen: the app can return to the
         // foreground on any destination — a TV woken in the morning resumes onto
