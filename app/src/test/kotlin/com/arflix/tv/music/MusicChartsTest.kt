@@ -23,7 +23,7 @@ class MusicChartsTest {
         val rows = ChartCatalog.rows("de-DE", day)
         assertEquals("Top Germany", rows[0].query)
         assertEquals("Top Deutschland", rows[0].title)
-        assertEquals(null, rows[1].query)
+        assertEquals("Top 50 Germany", rows[1].query)
         assertEquals("Deutsche Hits", rows[2].title)
         assertTrue(rows.size >= 40)
         assertTrue(rows.any { it.key == "christmas" })
@@ -48,7 +48,7 @@ class MusicChartsTest {
                 calls++
                 val url = request.requestUrl!!
                 val body = when {
-                    url.encodedPath == "/chart/0/playlists" -> """{"data":${playlists("9", 5)}}"""
+                    url.encodedPath == "/search/playlist" && url.queryParameter("q") == "Top 50 Germany" -> """{"data":${playlists("9", 5)}}"""
                     url.encodedPath == "/search/playlist" && url.queryParameter("q") == "Top Germany" ->
                         """{"data":${playlists("1", 4)}}"""
                     url.encodedPath == "/search/playlist" && url.queryParameter("q") == "top gym hits" ->

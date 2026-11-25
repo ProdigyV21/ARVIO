@@ -150,7 +150,8 @@ object ChartCatalog {
         val year = date.year
         val pinned = listOf(
             Row("country", COUNTRY_TITLES[tag] ?: COUNTRY_TITLES[language] ?: local.countryChart, local.countryChart),
-            Row("charts", local.chartsTitle, null),
+            // Deezer's own chart list follows the caller's location, so the language's country is searched instead.
+            Row("charts", local.chartsTitle, "Top 50 " + local.countryChart.removePrefix("Top ")),
         ) + local.local.mapIndexed { i, (title, query) -> Row("local$i", title, query) } +
             general.take(PINNED_GENERAL) +
             Row("year", "Hits $year", "Hits $year")
