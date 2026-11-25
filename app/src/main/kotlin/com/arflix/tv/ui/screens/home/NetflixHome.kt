@@ -851,10 +851,13 @@ private fun NetflixContentRow(
 ) {
     val isContinueWatching = category.id == "continue_watching"
     val isRanked = isRankedHomeRow(category)
-    // Prefetching this row from the vertical list also builds its first cards.
+    // Prefetching this row from the vertical list also builds its cards, so that work happens
+    // between key presses instead of in the frame the row scrolls in. A 1080p row shows up to
+    // eight cards; with only three prefetched, the rest were composed and measured in that one
+    // frame (100-200 ms on a 4-core TV).
     @OptIn(ExperimentalFoundationApi::class)
     val rowState = rememberLazyListState(
-        prefetchStrategy = remember { LazyListPrefetchStrategy(nestedPrefetchItemCount = 3) }
+        prefetchStrategy = remember { LazyListPrefetchStrategy(nestedPrefetchItemCount = HOME_ROW_PREFETCH_CARDS) }
     )
     val items = remember(category.items) {
         if (category.items.isEmpty()) {
@@ -1646,3 +1649,6 @@ private class NetflixNextRowPrefetchStrategy : LazyListPrefetchStrategy {
 
     override fun NestedPrefetchScope.onNestedPrefetch(firstVisibleItemIndex: Int) = Unit
 }
+
+/** Cards of a Home row composed ahead when the row is prefetched: one 1080p screen's worth. */
+internal const val HOME_ROW_PREFETCH_CARDS = 8

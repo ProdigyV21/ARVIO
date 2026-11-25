@@ -4188,7 +4188,11 @@ internal fun ContentRow(
 ) {
     val isCollectionRow = category.id.startsWith("collection_row_")
     val effectiveCategoryHasMore = !isCollectionRow && categoryHasMore
-    val rowState = rememberLazyListState()
+    // Build a whole screen of this row's cards when the vertical list prefetches it (default: 2).
+    @OptIn(ExperimentalFoundationApi::class)
+    val rowState = rememberLazyListState(
+        prefetchStrategy = remember { androidx.compose.foundation.lazy.LazyListPrefetchStrategy(nestedPrefetchItemCount = HOME_ROW_PREFETCH_CARDS) }
+    )
     val density = LocalDensity.current
     val isContinueWatching = category.id == "continue_watching"
     // Poster rows felt too tight vertically when focused. Instead of adding more

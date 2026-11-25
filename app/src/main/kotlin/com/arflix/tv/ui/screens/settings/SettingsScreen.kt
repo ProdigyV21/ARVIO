@@ -322,6 +322,9 @@ val LocalSettingsFocusTracker = compositionLocalOf<SettingsFocusTracker?> { null
 private const val ACCOUNT_DELETION_URL = "https://auth.arvio.tv/delete"
 private const val PRIVACY_POLICY_URL = "https://arvio.tv/privacy"
 
+/** How long the sidebar focus must rest before the Settings content switches to its section. */
+private const val SETTINGS_SECTION_SETTLE_MS = 110L
+
 private fun isRepeatedSettingsSelect(event: androidx.compose.ui.input.key.KeyEvent): Boolean =
     event.type == KeyEventType.KeyDown &&
         (event.key == Key.Enter || event.key == Key.DirectionCenter || event.key == Key.NumPadEnter) &&
@@ -822,9 +825,21 @@ fun SettingsScreen(
     }
 
     val focusRequester = remember { FocusRequester() }
-    val scrollState = key(sectionIndex, showIptvCategoriesSettings) { rememberScrollState() }
+    // The content panel follows the sidebar, but on TV it waits until the sidebar focus rests.
+    // Every Up/Down in the sidebar used to compose and measure a whole section (60-130 ms on a
+    // 4-core TV), even for sections the user only passed through. Entering the content, touch
+    // input, and a settled sidebar all show the selected section straight away.
+    var contentSectionIndex by remember { mutableIntStateOf(sectionIndex) }
+    LaunchedEffect(sectionIndex, activeZone) {
+        if (!isTouchDevice && activeZone == Zone.SECTION && contentSectionIndex != sectionIndex) {
+            kotlinx.coroutines.delay(SETTINGS_SECTION_SETTLE_MS)
+        }
+        contentSectionIndex = sectionIndex
+    }
+    val contentSection = sections.getOrElse(contentSectionIndex) { sections[sectionIndex] }
+    val scrollState = key(contentSectionIndex, showIptvCategoriesSettings) { rememberScrollState() }
     val sectionScrollState = rememberScrollState()
-    val focusTracker = remember(sectionIndex, showIptvCategoriesSettings) { SettingsFocusTracker() }
+    val focusTracker = remember(contentSectionIndex, showIptvCategoriesSettings) { SettingsFocusTracker() }
     val sectionFocusTracker = remember { SettingsFocusTracker() }
     val openSubtitlePicker = {
         viewModel.refreshSubtitleOptions()
@@ -2123,22 +2138,22 @@ fun SettingsScreen(
                         .fillMaxSize()
                         .testTag("settings-content")
                         .onGloballyPositioned { focusTracker.viewport = it }
-                        .then(if (sections[sectionIndex] == "catalogs") Modifier else Modifier.verticalScroll(scrollState))
+                        .then(if (contentSection == "catalogs") Modifier else Modifier.verticalScroll(scrollState))
                         .padding(start = 28.dp)
                 ) {
-                  if (sections[sectionIndex] != "catalogs") {
+                  if (contentSection != "catalogs") {
                     TvSettingsSectionHeader(
-                        section = sections[sectionIndex],
+                        section = contentSection,
                         uiState = uiState,
                         addonCount = stremioAddons.size
                     )
                     Spacer(modifier = Modifier.height(12.dp))
                   }
                   CompositionLocalProvider(LocalSettingsFocusTracker provides focusTracker) {
-                    when (sections[sectionIndex]) {
+                    when (contentSection) {
                         in tvGeneralSectionIds -> {
                         TvGeneralSettingsRows(
-                            section = sections[sectionIndex],
+                            section = contentSection,
                             defaultSubtitle = uiState.defaultSubtitle,
                             secondarySubtitle = uiState.secondarySubtitle,
                             defaultAudioLanguage = uiState.defaultAudioLanguage,
