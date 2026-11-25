@@ -2046,6 +2046,8 @@ internal fun DetailsContent(
         // Layer 1: Strong left gradient for hero text area (Netflix-style)
         // Uses colorStops with percentages to work on any resolution.
         // It darkens the start edge, where the hero text is: the right one in right-to-left languages.
+        // The overview runs to about 70% of the width (up to 820dp, 66% of the screen, plus the
+        // start padding), so the scrim stays dark well past it and only clears after ~80%.
         val isRtlScrim = androidx.compose.ui.platform.LocalLayoutDirection.current ==
             androidx.compose.ui.unit.LayoutDirection.Rtl
         Box(
@@ -2054,12 +2056,12 @@ internal fun DetailsContent(
                 .background(
                     brush = Brush.horizontalGradient(
                         colorStops = arrayOf(
-                            0.0f to Color.Black.copy(alpha = 0.85f),
-                            0.15f to Color.Black.copy(alpha = 0.75f),
-                            0.25f to Color.Black.copy(alpha = 0.55f),
-                            0.35f to Color.Black.copy(alpha = 0.35f),
-                            0.45f to Color.Black.copy(alpha = 0.15f),
-                            0.55f to Color.Transparent,
+                            0.0f to Color.Black.copy(alpha = 0.88f),
+                            0.20f to Color.Black.copy(alpha = 0.80f),
+                            0.40f to Color.Black.copy(alpha = 0.66f),
+                            0.55f to Color.Black.copy(alpha = 0.50f),
+                            0.68f to Color.Black.copy(alpha = 0.30f),
+                            0.80f to Color.Transparent,
                             1.0f to Color.Transparent
                         ),
                         startX = if (isRtlScrim) Float.POSITIVE_INFINITY else 0f,
