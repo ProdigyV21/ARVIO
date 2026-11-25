@@ -7,6 +7,7 @@ import { homeFetchPriority } from "@/lib/fetchPriority";
 import { loadStored, saveStored } from "@/lib/storage";
 import { useAppPick } from "@/lib/store";
 import { homeItemKey, trimRepeatedTitles } from "@/lib/homeRows";
+import { dedupeReleases } from "@/lib/releaseName";
 import { HOME_ROW_LIMIT, loadCatalog } from "@/lib/tmdb";
 import type { CatalogConfig, Category, MediaItem } from "@/lib/types";
 import { isRankedRow, MediaRail } from "./MediaRail";
@@ -127,8 +128,10 @@ export function LazyRail({ catalog, eager = false, posterMode, onOpen, onFocus, 
   }, [cacheKey, catalog.id, eager, attempt]);
 
   const shown = useMemo(() => {
-    if (!category || !hideKeys || isRankedRow(category.title)) return category;
-    const items = trimRepeatedTitles(category.items, hideKeys);
+    if (!category) return category;
+    // Rows cached before release de-duplication still list each encode once.
+    const unique = dedupeReleases(category.items);
+    const items = !hideKeys || isRankedRow(category.title) ? unique : trimRepeatedTitles(unique, hideKeys);
     return items === category.items ? category : { ...category, items };
   }, [category, hideKeys]);
   const shownRef = useRef(onShown);

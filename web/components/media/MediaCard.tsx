@@ -95,6 +95,11 @@ function MediaCardBase({ item, onOpen, onFocus, posterMode, rank, hideService }:
   const imgFailed = Boolean(artwork && failedArtwork === artwork);
   // Addon file libraries (debrid) name items after the release file.
   const release = item.addonNativeId ? readableReleaseName(item.title) : null;
+  // Library files are often typed by the addon, not by what they are: a release
+  // with an episode marker is a series, one with only a year is a film.
+  const metadataType: MediaItem["mediaType"] = release && !item.isHomeServer
+    ? (release.season != null ? "tv" : release.year ? "movie" : item.mediaType)
+    : item.mediaType;
   const releaseEpisode = release?.season == null ? ""
     : release.episode == null ? `S${release.season}` : `S${release.season} · E${release.episode}`;
   const year = item.releaseDate?.slice(0, 4) || item.year || release?.year || releaseEpisode || (item.mediaType === "tv" ? "Series" : "Movie");
@@ -105,7 +110,7 @@ function MediaCardBase({ item, onOpen, onFocus, posterMode, rank, hideService }:
     // Home-server items, and debrid-library files without a poster, borrow the
     // matching TMDB title's artwork (the card still opens the file itself).
     const lookup = item.isHomeServer ? item
-      : release && missingArtwork ? { mediaType: item.mediaType, title: release.title, year: release.year }
+      : release && missingArtwork ? { mediaType: metadataType, title: release.title, year: release.year }
         : null;
     if (directMetadataId || !lookup) return () => { active = false; };
     void resolveTmdbId(lookup).then((id) => {
@@ -113,7 +118,7 @@ function MediaCardBase({ item, onOpen, onFocus, posterMode, rank, hideService }:
     });
     return () => { active = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [directMetadataId, item.homeServerId, item.homeServerItemId, item.imdbId, item.isHomeServer, item.mediaType, release?.title, release?.year, missingArtwork]);
+  }, [directMetadataId, item.homeServerId, item.homeServerItemId, item.imdbId, item.isHomeServer, item.mediaType, metadataType, release?.title, release?.year, missingArtwork]);
 
   useEffect(() => () => {
     if (longPressTimer.current) clearTimeout(longPressTimer.current);
@@ -178,17 +183,17 @@ function MediaCardBase({ item, onOpen, onFocus, posterMode, rank, hideService }:
 
   useEffect(() => {
     if (!metadataId) { setExtras(null); return undefined; }
-    const cached = peekCardExtras({ mediaType: item.mediaType, id: metadataId });
+    const cached = peekCardExtras({ mediaType: metadataType, id: metadataId });
     if (cached) { setExtras(cached); return undefined; }
     setExtras(null);
     if (!near && !interacted) return undefined;
     // Row hydration goes first; decoration waits for a slot (lib/fetchPriority).
     const controller = new AbortController();
-    void homeFetchPriority.run(() => getCardExtras({ mediaType: item.mediaType, id: metadataId }), controller.signal, interacted)
+    void homeFetchPriority.run(() => getCardExtras({ mediaType: metadataType, id: metadataId }), controller.signal, interacted)
       .then((value) => { if (!controller.signal.aborted && value) setExtras(value); })
       .catch(() => undefined);
     return () => controller.abort();
-  }, [item.mediaType, metadataId, near, interacted]);
+  }, [metadataType, metadataId, near, interacted]);
 
   // Streaming-service clearlogos, shown top-left inside the artwork.
   const hidden = hideService ? canonicalServiceName(hideService) : "";
@@ -210,11 +215,11 @@ function MediaCardBase({ item, onOpen, onFocus, posterMode, rank, hideService }:
     setImdbRating(null);
     if (!imdbId || (!near && !interacted)) return undefined;
     const controller = new AbortController();
-    void homeFetchPriority.run(() => getImdbRating(item.mediaType, imdbId), controller.signal, interacted)
+    void homeFetchPriority.run(() => getImdbRating(metadataType, imdbId), controller.signal, interacted)
       .then((rating) => { if (!controller.signal.aborted) setImdbRating(rating); })
       .catch(() => undefined);
     return () => controller.abort();
-  }, [imdbId, item.mediaType, near, interacted]);
+  }, [imdbId, metadataType, near, interacted]);
 
   const dateLabel = formatReleaseDate(item.releaseDate, language) || item.subtitle || year;
   const runtimeLabel = formatRuntime(item.duration || runtime);
