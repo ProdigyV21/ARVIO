@@ -103,6 +103,7 @@ fun SettingsRow(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    android.os.Trace.beginSection("UI:SettingsRow")
     val interactionSource = remember { MutableInteractionSource() }
     val foreground = TextPrimary
     val secondary = if (isFocused) Color.White.copy(alpha = 0.8f) else TextSecondary
@@ -171,6 +172,7 @@ fun SettingsRow(
             }
         }
     }
+    android.os.Trace.endSection()
 }
 
 @OptIn(ExperimentalTvMaterial3Api::class)
@@ -183,6 +185,7 @@ fun SettingsToggleRow(
     onToggle: (Boolean) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    android.os.Trace.beginSection("UI:SettingsToggleRow")
     val interactionSource = remember { MutableInteractionSource() }
     val foreground = TextPrimary
     val secondary = if (isFocused) Color.White.copy(alpha = 0.8f) else TextSecondary
@@ -249,6 +252,7 @@ fun SettingsToggleRow(
             )
         }
     }
+    android.os.Trace.endSection()
 }
 
 @Composable
@@ -256,6 +260,7 @@ fun MobileSettingsCategory(
     title: String,
     content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit
 ) {
+    android.os.Trace.beginSection("UI:MobileSettingsCategory")
     Column(
         modifier = Modifier.fillMaxWidth()
     ) {
@@ -272,6 +277,7 @@ fun MobileSettingsCategory(
             content()
         }
     }
+    android.os.Trace.endSection()
 }
 
 @Composable
@@ -291,6 +297,7 @@ fun MobileSettingsRow(
     toggleChecked: Boolean? = null,
     onClick: () -> Unit
 ) {
+    android.os.Trace.beginSection("UI:MobileSettingsRow")
     // Older callers still use English display tokens; localized toggles pass their Boolean state.
     val checked = toggleChecked ?: if (isToggle) {
         when (value) {
@@ -419,4 +426,5 @@ fun MobileSettingsRow(
             Box(modifier = Modifier.fillMaxWidth().height(1.dp).padding(horizontal = 16.dp).background(Color.White.copy(alpha = 0.05f)))
         }
     }
+    android.os.Trace.endSection()
 }

@@ -121,6 +121,7 @@ fun MediaCard(
         )
         return
     }
+    android.os.Trace.beginSection("UI:MediaCard")
 
     var isFocused by remember { mutableStateOf(false) }
     val visualFocused = isFocusedOverride || isFocused
@@ -573,6 +574,7 @@ fun MediaCard(
             }
         }
     }
+    android.os.Trace.endSection()
 }
 
 /**
@@ -693,6 +695,7 @@ fun PosterCard(
         )
         return
     }
+    android.os.Trace.beginSection("UI:PosterCard")
 
     var isFocused by remember { mutableStateOf(false) }
     val visualFocused = isFocusedOverride || isFocused
@@ -798,6 +801,7 @@ fun PosterCard(
             }
         }
     }
+    android.os.Trace.endSection()
 }
 
 /**
@@ -821,6 +825,7 @@ fun FeaturedMediaCard(
     artworkWidth: Dp = width,
     autoplayNotBeforeMs: Long? = null,
 ) {
+    android.os.Trace.beginSection("UI:FeaturedMediaCard")
     val density = LocalDensity.current
     val imageUrl = remember(item.backdrop, item.image, artworkWidth, density) {
         (item.backdrop ?: item.image).takeIf { it.isNotBlank() }?.let { url ->
@@ -902,11 +907,13 @@ fun FeaturedMediaCard(
             )
         }
     }
+    android.os.Trace.endSection()
 }
 
 /** The green tick on a watched title. Every card that shows a title draws this one. */
 @Composable
 fun WatchedBadge(modifier: Modifier = Modifier, size: Dp = 14.dp) {
+    android.os.Trace.beginSection("UI:WatchedBadge")
     Box(
         modifier = modifier
             .size(size)
@@ -921,4 +928,5 @@ fun WatchedBadge(modifier: Modifier = Modifier, size: Dp = 14.dp) {
             modifier = Modifier.size(size * (8f / 14f))
         )
     }
+    android.os.Trace.endSection()
 }

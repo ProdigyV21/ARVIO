@@ -327,6 +327,7 @@ internal fun NetflixTvHomeRowsLayer(
     isSpecialItem: (MediaItem) -> Boolean,
     onItemClick: (MediaItem) -> Unit
 ) {
+    android.os.Trace.beginSection("UI:NetflixTvHomeRowsLayer")
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val screenHeight = maxHeight
         val topInset = AppTopBarHeight + 6.dp
@@ -542,6 +543,7 @@ internal fun NetflixTvHomeRowsLayer(
             }
         }
     }
+    android.os.Trace.endSection()
 }
 
 /** Id prefix of rows drawn with rank ribbons whatever their (translated) title says. */
@@ -570,6 +572,7 @@ private fun NetflixBillboard(
     horizontalPadding: Dp,
     modifier: Modifier = Modifier
 ) {
+    android.os.Trace.beginSection("UI:NetflixBillboard")
     val context = LocalContext.current
     val density = LocalDensity.current
     val shape = RoundedCornerShape(16.dp)
@@ -662,6 +665,7 @@ private fun NetflixBillboard(
             }
         }
     }
+    android.os.Trace.endSection()
 }
 
 private val NetflixTextShadow = Shadow(
@@ -678,6 +682,7 @@ private fun NetflixBillboardInfo(
     focusedButton: Int,
     modifier: Modifier = Modifier
 ) {
+    android.os.Trace.beginSection("UI:NetflixBillboardInfo")
     val context = LocalContext.current
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(10.dp)) {
         if (!logoUrl.isNullOrBlank()) {
@@ -738,6 +743,7 @@ private fun NetflixBillboardInfo(
             )
         }
     }
+    android.os.Trace.endSection()
 }
 
 @Composable
@@ -768,6 +774,7 @@ private fun NetflixBillboardButton(
 /** "Series • Drama • 2026 • 16+": the Netflix metadata line. */
 @Composable
 private fun NetflixMetaLine(item: MediaItem, fontSize: Int, upcomingDate: String? = null) {
+    android.os.Trace.beginSection("UI:NetflixMetaLine")
     val context = LocalContext.current
     val parts = remember(item.id, item.mediaType, item.genreIds, item.year, item.duration, item.contentRating, context, upcomingDate) {
         buildList {
@@ -814,6 +821,7 @@ private fun NetflixMetaLine(item: MediaItem, fontSize: Int, upcomingDate: String
             )
         }
     }
+    android.os.Trace.endSection()
 }
 
 /**
@@ -849,6 +857,7 @@ private fun NetflixContentRow(
     onViewAll: () -> Unit,
     onItemClick: (MediaItem) -> Unit
 ) {
+    android.os.Trace.beginSection("UI:NetflixContentRow")
     val isContinueWatching = category.id == "continue_watching"
     val isRanked = isRankedHomeRow(category)
     // Prefetching this row from the vertical list also builds its first cards.
@@ -1103,6 +1112,7 @@ private fun NetflixContentRow(
             )
         }
     }
+    android.os.Trace.endSection()
 }
 
 /** The wide picture a title's expanded card shows: the episode still when continuing, else the backdrop. */
@@ -1124,6 +1134,7 @@ internal fun NetflixSliceTitle(
     modifier: Modifier = Modifier,
     imageLoader: coil.ImageLoader = LocalContext.current.imageLoader
 ) {
+    android.os.Trace.beginSection("UI:NetflixSliceTitle")
     var logoLoaded by remember(logoUrl, imageLoader) { mutableStateOf(false) }
     Box(
         modifier
@@ -1158,6 +1169,7 @@ internal fun NetflixSliceTitle(
             )
         }
     }
+    android.os.Trace.endSection()
 }
 
 @Composable
@@ -1167,6 +1179,7 @@ private fun NetflixCardDescription(
     upcomingDate: String?,
     modifier: Modifier = Modifier
 ) {
+    android.os.Trace.beginSection("UI:NetflixCardDescription")
     val context = LocalContext.current
     val overview = remember(overviewOverride, item.overview, context) {
         val text = context.cleanOverviewText(overviewOverride ?: item.overview)
@@ -1186,6 +1199,7 @@ private fun NetflixCardDescription(
             overflow = TextOverflow.Ellipsis
         )
     }
+    android.os.Trace.endSection()
 }
 
 /** Keeps each source's crop independent while blending; a portrait must not suddenly use the backdrop's crop. */
@@ -1522,6 +1536,7 @@ private fun NetflixChannelCard(
     height: Dp,
     onMediaPlaced: (LayoutCoordinates) -> Unit
 ) {
+    android.os.Trace.beginSection("UI:NetflixChannelCard")
     Box(
         modifier = Modifier
             .width(width)
@@ -1534,6 +1549,7 @@ private fun NetflixChannelCard(
     ) {
         NetflixChannelLogo(item)
     }
+    android.os.Trace.endSection()
 }
 
 @Composable

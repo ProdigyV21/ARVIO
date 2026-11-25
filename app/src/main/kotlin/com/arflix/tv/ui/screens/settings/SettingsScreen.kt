@@ -3864,6 +3864,7 @@ private fun SettingsChip(
     isFocused: Boolean = false,
     modifier: Modifier = Modifier
 ) {
+    android.os.Trace.beginSection("UI:SettingsChip")
     Box(
         modifier = modifier
             .clip(RoundedCornerShape(12.dp))
@@ -3887,6 +3888,7 @@ private fun SettingsChip(
             }
         )
     }
+    android.os.Trace.endSection()
 }
 
 @Composable
@@ -6461,6 +6463,7 @@ private fun tvSettingsSidebarGroup(section: String): String {
 
 @Composable
 private fun SettingsSectionGroupLabel(label: String) {
+    android.os.Trace.beginSection("UI:SettingsSectionGroupLabel")
     Text(
         text = label.uppercase(),
         style = ArflixTypography.caption.copy(fontSize = 10.sp),
@@ -6469,6 +6472,7 @@ private fun SettingsSectionGroupLabel(label: String) {
         overflow = TextOverflow.Ellipsis,
         modifier = Modifier.padding(start = 9.dp, top = 8.dp)
     )
+    android.os.Trace.endSection()
 }
 
 @OptIn(ExperimentalTvMaterial3Api::class)
@@ -6481,6 +6485,7 @@ private fun SettingsSectionItem(
     onClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
+    android.os.Trace.beginSection("UI:SettingsSectionItem")
     val bgColor = when {
         isFocused -> Color.White.copy(alpha = 0.12f)
         isSelected -> Color.White.copy(alpha = 0.07f)
@@ -6537,6 +6542,7 @@ private fun SettingsSectionItem(
             )
         }
     }
+    android.os.Trace.endSection()
 }
 
 @Composable
@@ -6545,6 +6551,7 @@ private fun TvSettingsSectionHeader(
     uiState: SettingsUiState,
     addonCount: Int
 ) {
+    android.os.Trace.beginSection("UI:TvSettingsSectionHeader")
     Column(modifier = Modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier
@@ -6585,6 +6592,7 @@ private fun TvSettingsSectionHeader(
             }
         }
     }
+    android.os.Trace.endSection()
 }
 
 @Composable
@@ -6621,6 +6629,7 @@ private fun TvSettingsInsightPanel(
     addonCount: Int,
     modifier: Modifier = Modifier
 ) {
+    android.os.Trace.beginSection("UI:TvSettingsInsightPanel")
     val help = tvSettingsFocusedHelp(section, focusedIndex)
     Column(
         modifier = modifier
@@ -6692,6 +6701,7 @@ private fun TvSettingsInsightPanel(
             Spacer(modifier = Modifier.height(10.dp))
         }
     }
+    android.os.Trace.endSection()
 }
 
 @Composable
@@ -7127,6 +7137,7 @@ private fun TvGeneralSettingsRows(
     onNewsTopicsClick: () -> Unit = {},
     onNewsSourcesClick: () -> Unit = {}
 ) {
+    android.os.Trace.beginSection("UI:TvGeneralSettingsRows")
     Column {
         tvGeneralRowsForSection(section).forEachIndexed { localIndex, rowId ->
             if (localIndex > 0) Spacer(modifier = Modifier.height(10.dp))
@@ -7314,6 +7325,7 @@ private fun TvGeneralSettingsRows(
             }
         }
     }
+    android.os.Trace.endSection()
 }
 
 private fun formatPlaybackCacheBytes(bytes: Long): String = when {
@@ -10029,6 +10041,7 @@ private fun TvCatalogSettingsRow(
     onUnpackCatalog: (CatalogConfig) -> Unit,
     onDeleteCatalog: (CatalogConfig) -> Unit
 ) {
+    android.os.Trace.beginSection("UI:TvCatalogSettingsRow")
 
                 if (showPackHeader) {
                     Spacer(modifier = Modifier.height(8.dp))
@@ -10109,6 +10122,7 @@ private fun TvCatalogSettingsRow(
                     CatalogActionChip(icon = Icons.Default.Delete, isFocused = isRowFocused && focusedActionIndex == 5, isDestructive = true, enabled = true, onClick = { onDeleteCatalog(catalog) })
                 }
                 Spacer(modifier = Modifier.height(10.dp))
+    android.os.Trace.endSection()
 }
 
 
@@ -11019,6 +11033,7 @@ private fun SettingsActionRow(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    android.os.Trace.beginSection("UI:SettingsActionRow")
     SettingsRow(
         title = title,
         subtitle = description,
@@ -11027,6 +11042,7 @@ private fun SettingsActionRow(
         onClick = onClick,
         modifier = modifier
     )
+    android.os.Trace.endSection()
 }
 
 @OptIn(ExperimentalTvMaterial3Api::class)
