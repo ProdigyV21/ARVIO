@@ -72,6 +72,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
@@ -142,7 +143,9 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.LayoutCoordinates
 
-private const val NETFLIX_RAIL_MORPH_MS = 220
+private const val NETFLIX_RAIL_MORPH_MS = 280
+/** One curve for every part of a row move (scroll, card size, spacing, description), so they land together. */
+private val NetflixMotionEasing = androidx.compose.animation.core.CubicBezierEasing(0.2f, 0f, 0f, 1f)
 /** One step of a held Left/Right: the key repeat and the rail glide share this pace. */
 internal const val NETFLIX_HOLD_STEP_MS = 150L
 /** Margin past the vertical scroll before a row that left through the top collapses. */
@@ -367,7 +370,7 @@ internal fun NetflixTvHomeRowsLayer(
                 try {
                     verticalOffset.snapTo(target.offset.toFloat())
                     listState.requestScrollToItem(targetIndex, -verticalOffset.value.roundToInt())
-                    verticalOffset.animateTo(0f, tween(NETFLIX_RAIL_MORPH_MS, easing = FastOutSlowInEasing)) {
+                    verticalOffset.animateTo(0f, tween(NETFLIX_RAIL_MORPH_MS, easing = NetflixMotionEasing)) {
                         listState.requestScrollToItem(targetIndex, -value.roundToInt())
                     }
                 } finally {
@@ -919,7 +922,7 @@ private fun NetflixContentRow(
     val expandedIndex = if (isCurrentRow) focusedItemIndex else restingItemIndex
     val focusedItem = items.getOrNull(expandedIndex)?.takeIf { expanded && !it.isPlaceholder }
     val sizeSpec: AnimationSpec<Dp> =
-        if (collapseOffScreen) snap() else tween(NETFLIX_RAIL_MORPH_MS, easing = FastOutSlowInEasing)
+        if (collapseOffScreen) snap() else tween(NETFLIX_RAIL_MORPH_MS, easing = NetflixMotionEasing)
 
     // The focused title always sits in the first slot; a resting row keeps its position.
     val anchorIndex = (if (isCurrentRow) focusedItemIndex else restingItemIndex)
@@ -944,7 +947,7 @@ private fun NetflixContentRow(
             // A held key moves the rail at a constant speed so successive steps join into
             // one glide; a single press eases in and out with the card's morph.
             val glide = if (latestHolding) tween<Float>(NETFLIX_HOLD_STEP_MS.toInt(), easing = LinearEasing)
-                else tween(NETFLIX_RAIL_MORPH_MS, easing = FastOutSlowInEasing)
+                else tween(NETFLIX_RAIL_MORPH_MS, easing = NetflixMotionEasing)
             railOffset.animateTo(0f, glide) {
                 rowState.requestScrollToItem(anchorIndex, -value.roundToInt())
             }
@@ -955,10 +958,10 @@ private fun NetflixContentRow(
     val latestOnItemClick by rememberUpdatedState(onItemClick)
 
     val bottomPadding = animateDpAsState(if (expanded) 20.dp else 10.dp,
-        if (collapseOffScreen) snap<Dp>() else tween<Dp>(NETFLIX_RAIL_MORPH_MS), label = "netflixRowSpacing")
+        if (collapseOffScreen) snap<Dp>() else tween<Dp>(NETFLIX_RAIL_MORPH_MS, easing = NetflixMotionEasing), label = "netflixRowSpacing")
     // Scaled at draw time: animating the font size re-measures the text on every frame.
     val headingScale = animateFloatAsState(if (expanded) 1f else NETFLIX_RESTING_HEADING_SCALE,
-        if (collapseOffScreen) snap<Float>() else tween<Float>(NETFLIX_RAIL_MORPH_MS), label = "netflixRowHeading")
+        if (collapseOffScreen) snap<Float>() else tween<Float>(NETFLIX_RAIL_MORPH_MS, easing = NetflixMotionEasing), label = "netflixRowHeading")
     Column(modifier = Modifier.netflixRowSpacing(bottomPadding)
         .netflixRowRenderCache(cacheInactiveRow && cacheSettled, renderCacheReady)
         .testTag("netflix_row_${category.id}")) {
@@ -1101,9 +1104,9 @@ private fun NetflixContentRow(
         val descriptionItem = focusedItem ?: items.getOrNull(restingItemIndex)?.takeUnless { it.isPlaceholder }
         AnimatedVisibility(
             visible = focusedItem != null,
-            enter = expandVertically(tween(NETFLIX_RAIL_MORPH_MS)) + fadeIn(tween(140)),
+            enter = expandVertically(tween(NETFLIX_RAIL_MORPH_MS, easing = NetflixMotionEasing)) + fadeIn(tween(140)),
             exit = if (collapseOffScreen) ExitTransition.None
-            else shrinkVertically(tween(NETFLIX_RAIL_MORPH_MS)) + fadeOut(tween(140))
+            else shrinkVertically(tween(NETFLIX_RAIL_MORPH_MS, easing = NetflixMotionEasing)) + fadeOut(tween(140))
         ) {
             if (descriptionItem == null) return@AnimatedVisibility
             // The ViewModel hero carries the loaded details once it is this title.
@@ -1378,7 +1381,7 @@ private fun NetflixFeaturedCard(
         modifier = Modifier
             .width(width)
             .height(height)
-            .border(2.5.dp, Color.White, RoundedCornerShape(10.dp))
+            .netflixFocusRing()
             .clip(RoundedCornerShape(10.dp))
             .background(Color.Black)
             .testTag("netflix_card_${item.mediaType}_${item.id}")
@@ -1545,7 +1548,7 @@ private fun NetflixChannelCard(
         modifier = Modifier
             .width(width)
             .height(height)
-            .border(2.5.dp, Color.White, RoundedCornerShape(10.dp))
+            .netflixFocusRing()
             .padding(4.dp)
             .onGloballyPositioned(onMediaPlaced)
             .clip(RoundedCornerShape(7.dp))
@@ -1664,4 +1667,26 @@ private class NetflixNextRowPrefetchStrategy : LazyListPrefetchStrategy {
     }
 
     override fun NestedPrefetchScope.onNestedPrefetch(firstVisibleItemIndex: Int) = Unit
+}
+
+/**
+ * The focused card's frame: a white ring a few dp outside the card with a dark gap between,
+ * so the ring never sits on the artwork, and a soft glow around it. Drawn outside the
+ * card's bounds, so it costs no layout and the morph keeps the card's own size.
+ */
+private fun Modifier.netflixFocusRing(): Modifier = drawWithContent {
+    drawContent()
+    val gap = 3.dp.toPx()
+    val stroke = 2.5.dp.toPx()
+    val inset = gap + stroke / 2f
+    val radius = androidx.compose.ui.geometry.CornerRadius(10.dp.toPx() + inset)
+    val topLeft = androidx.compose.ui.geometry.Offset(-inset, -inset)
+    val ringSize = androidx.compose.ui.geometry.Size(size.width + inset * 2, size.height + inset * 2)
+    // Glow: two wide, faint strokes under the ring.
+    drawRoundRect(Color.White.copy(alpha = 0.10f), topLeft, ringSize, radius,
+        style = androidx.compose.ui.graphics.drawscope.Stroke(stroke * 4f))
+    drawRoundRect(Color.White.copy(alpha = 0.16f), topLeft, ringSize, radius,
+        style = androidx.compose.ui.graphics.drawscope.Stroke(stroke * 2.2f))
+    drawRoundRect(Color.White, topLeft, ringSize, radius,
+        style = androidx.compose.ui.graphics.drawscope.Stroke(stroke))
 }
