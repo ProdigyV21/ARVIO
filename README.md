@@ -12,13 +12,13 @@
 
 <div align="center">
 
-[![Watch ARVIO: a looping preview of the home screen, collections, live TV and connected sources.](netlify-arvio-tv-site/assets/promo/arvio-tour-preview.gif)](https://arvio.tv/#demo)
+[![Watch ARVIO: a looping preview of the TV home, phone and tablet apps, the new Music tab, AI subtitles and ARVIO on every screen.](netlify-arvio-tv-site/assets/promo/arvio-tour-preview.gif)](https://arvio.tv/#demo)
 
 </div>
 
 <p align="center">
-  <a href="https://arvio.tv/#demo"><strong>Watch the full 85-second tour</strong></a>
-  &middot; <a href="https://arvio.tv/assets/promo/arvio-tour-720p.mp4">Download video</a>
+  <a href="https://arvio.tv/#demo"><strong>Watch the 34-second film</strong></a>
+  &middot; <a href="https://arvio.tv/assets/promo/arvio-promo-1080p.mp4">Download in 1080p</a> (<a href="https://arvio.tv/assets/promo/arvio-tour-720p.mp4">720p</a>)
 </p>
 
 <p align="center">
