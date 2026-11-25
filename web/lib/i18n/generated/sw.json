@@ -1563,5 +1563,16 @@
   "Maximum of 10 IPTV playlists reached": "Umefikia kikomo cha orodha 10 za IPTV",
   "Regional price · save {value0} vs. 12 monthly payments": "Bei ya kikanda · okoa {value0} ikilinganishwa na malipo 12 ya kila mwezi",
   "One payment, no automatic renewal. About {value0} a month.": "Malipo mara moja, bila kusasishwa kiotomatiki. Takriban {value0} kwa mwezi.",
-  "12-month pass · {value0}": "Pasi ya miezi 12 · {value0}"
+  "12-month pass · {value0}": "Pasi ya miezi 12 · {value0}",
+  "Look around for free. Premium is needed to play.": "Tazama bila malipo. Premium inahitajika ili kucheza.",
+  "Watch {title} with ARVIO Premium": "Tazama {title} ukiwa na ARVIO Premium",
+  "Watch this with ARVIO Premium": "Tazama hii ukiwa na ARVIO Premium",
+  "Watch Live TV with ARVIO Premium": "Tazama TV mubashara ukiwa na ARVIO Premium",
+  "Download with ARVIO Premium": "Pakua ukiwa na ARVIO Premium",
+  "Open streams with ARVIO Premium": "Fungua mitiririko ukiwa na ARVIO Premium",
+  "Filter categories": "Chuja kategoria",
+  "Clear filter": "Futa kichujio",
+  "No categories match \"{value0}\".": "Hakuna kategoria inayolingana na \"{value0}\".",
+  "Chromecast": "Chromecast",
+  "This browser can't play some sources, so ARVIO tries the next one.": "Kivinjari hiki hakiwezi kucheza baadhi ya vyanzo, kwa hiyo ARVIO inajaribu kinachofuata."
 }

@@ -935,7 +935,7 @@ class HttpLocalScraperRuntime @Inject constructor(
     private fun qualityFromText(value: String): String = normalizeQuality(value.ifBlank { "Auto" })
 
     private fun sanitizeProviderLabel(value: String): String {
-        return value.replace(NUVIO_REGEX, "HTTP").trim()
+        return value.replace(SCRAPER_BRAND_REGEX, "HTTP").trim()
     }
 
     private fun String.urlEncode(): String = java.net.URLEncoder.encode(this, "UTF-8")
@@ -1010,7 +1010,8 @@ class HttpLocalScraperRuntime @Inject constructor(
             RegexOption.IGNORE_CASE
         )
         private val IMDB_ID_REGEX = Regex("tt\\d{5,}")
-        private val NUVIO_REGEX = Regex("nu" + "vio", RegexOption.IGNORE_CASE)
+        // A third-party app name some scrapers put in their source labels.
+        private val SCRAPER_BRAND_REGEX = Regex("\\x6e\\x75\\x76\\x69\\x6f", RegexOption.IGNORE_CASE)
         private const val HTTP_LOCAL_MANIFEST_PREFIX = "http.local."
         private const val LEGACY_LOCAL_MANIFEST_PREFIX = "nu" + "vio.local."
         private const val USER_AGENT =

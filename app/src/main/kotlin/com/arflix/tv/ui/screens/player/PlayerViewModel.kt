@@ -509,10 +509,17 @@ class PlayerViewModel @Inject constructor(
     // Per-file state: cleared on every new media/stream so it can't leak across sources.
     private val untranslatableSourceKeys = mutableSetOf<String>()
 
+    /** User-configured translation endpoints (Settings → Audio & Subtitles → Translation service). */
+    @Volatile private var customAiStore: com.arflix.tv.ui.screens.player.subtitles.ai.CustomAiConfigStore? = null
+    private val customAiProvider: () -> com.arflix.tv.ui.screens.player.subtitles.ai.CustomAiConfig? = {
+        customAiStore?.current
+    }
+
     /** Shared with [translationManager]; also used directly for AI subtitle line-matching. */
     private val translationService = SubtitleTranslationService(
         apiKeyProvider = { aiApiKey },
-        modelProvider = { aiModel }
+        modelProvider = { aiModel },
+        customConfigProvider = customAiProvider,
     )
 
     val translationManager: SubtitleTranslationManager = SubtitleTranslationManager(
@@ -546,7 +553,9 @@ class PlayerViewModel @Inject constructor(
                 val msg = when {
                     errorMessage == "API key missing" -> PlayerMessage.Res(R.string.player_ai_no_key)
                     errorMessage == "RATE_LIMITED"    -> PlayerMessage.Res(R.string.player_ai_rate_limited)
-                    errorMessage?.startsWith("HTTP 401") == true -> PlayerMessage.Res(R.string.player_ai_invalid_key)
+                    errorMessage?.startsWith("HTTP 401") == true ||
+                        (errorMessage == "HTTP 403" && customAiProvider()?.isActive == true) ->
+                        PlayerMessage.Res(R.string.player_ai_invalid_key)
                     else -> PlayerMessage.Res(
                         R.string.player_ai_translation_error,
                         listOf(errorMessage.orEmpty())
@@ -931,6 +940,9 @@ class PlayerViewModel @Inject constructor(
             setTargetSubtitleLang(normalizeLanguage(preferredSub))
 
             // Load AI subtitle settings
+            customAiStore = withContext(Dispatchers.IO) {
+                com.arflix.tv.ui.screens.player.subtitles.ai.CustomAiConfigStore.from(context)
+            }
             aiSubtitleEnabled = prefs[aiEnabledKey] ?: false
             aiSubtitleAutoSelect = prefs[aiAutoSelectKey] ?: false
             aiFindBestMatchFirst = prefs[aiFindBestMatchKey] ?: false
@@ -941,7 +953,11 @@ class PlayerViewModel @Inject constructor(
                 SubtitleAiModel.valueOf(prefs[aiModelKey] ?: SubtitleAiModel.GROQ_LLAMA_70B.name)
             }.getOrDefault(SubtitleAiModel.GROQ_LLAMA_70B)
             aiRemoveHearingImpaired = prefs[aiRemoveHearingImpairedKey] ?: true
-            translationManager.updateService(apiKey = aiApiKey, model = aiModel)
+            translationManager.updateService(
+                apiKey = aiApiKey,
+                model = aiModel,
+                customConfigProvider = customAiProvider,
+            )
             translationManager.removeHearingImpaired = aiRemoveHearingImpaired
             translationManager.isEnabled = false
             untranslatableSourceKeys.clear()
@@ -4032,13 +4048,13 @@ class PlayerViewModel @Inject constructor(
 
     /**
      * Scan-failure fallback: activate AI translation when the feature can run (master toggle on,
-     * key present, source available). Deliberately NOT gated on auto-select — that setting only
+     * translation service configured, source available). Deliberately NOT gated on auto-select — that setting only
      * governs unprompted activation at playback start; a failed scan explicitly asked for the
      * best available subtitle, and AI timing (from the built-in track) beats an unverified addon
      * pick. Returns true when AI took over.
      */
     private fun tryAiFallbackAfterScan(): Boolean {
-        if (userLockedSubtitleKey != null || !aiSubtitleEnabled || aiApiKey.isBlank()) return false
+        if (userLockedSubtitleKey != null || !aiSubtitleEnabled || !translationService.isConfigured()) return false
         if (findAiSourceSubtitle(_uiState.value.subtitles) == null) return false
         activateAiTranslation(isUserAction = false)
         showMatchToast(PlayerMessage.Res(R.string.player_match_none_using_ai))
@@ -4329,7 +4345,7 @@ class PlayerViewModel @Inject constructor(
                 // mean a long blank screen, so wait a short bounded time only: long enough for
                 // tracks to appear on a normal start, short enough that a source without an
                 // embedded English track falls back to the optimistic pick quickly.
-                val aiPossible = aiSubtitleEnabled && aiApiKey.isNotBlank()
+                val aiPossible = aiSubtitleEnabled && translationService.isConfigured()
                 val aiInterimSource = if (!aiPossible) null else {
                     // The scan begins BEFORE the player has opened the file — preload mode gates
                     // prepare on the addon-subtitle fetch, and that same fetch triggers the scan.
@@ -5488,7 +5504,7 @@ class PlayerViewModel @Inject constructor(
              */
             val aiVerdicts = HashMap<String, AiVerdict>()
             while (aiChecks < MATCH_AI_MAX_VERIFICATIONS && referenceCues.isNotEmpty() &&
-                aiSubtitleEnabled && aiApiKey.isNotBlank()
+                aiSubtitleEnabled && translationService.canMatchSubtitleLines()
             ) {
                 aiChecks++
                 val aiTarget = results?.let { list ->
@@ -5773,7 +5789,7 @@ class PlayerViewModel @Inject constructor(
             // not be accepted just because the loop ran out of budget. Timing alone put three
             // rejected subtitles at 0.81-0.82 in one scan, so "highest remaining score" is not a
             // safe default — silence from the verifier means unverified, not approved.
-            val aiIsArbiter = referenceCues.isNotEmpty() && aiSubtitleEnabled && aiApiKey.isNotBlank()
+            val aiIsArbiter = referenceCues.isNotEmpty() && aiSubtitleEnabled && translationService.canMatchSubtitleLines()
             // "Cleared" = the model looked at it and did not reject it. That is enough to SELECT it:
             // a failed or inconclusive check leaves a timing-only fallback, which is fine. Whether it
             // counts as VERIFIED, and may be remembered, is a separate question — see the cache write.
@@ -6032,7 +6048,7 @@ class PlayerViewModel @Inject constructor(
         candidateCues: List<SubtitleSyncMatcher.TimedCue>,
         label: String
     ): AiLineSync? {
-        if (!aiSubtitleEnabled || aiApiKey.isBlank()) return null
+        if (!aiSubtitleEnabled || !translationService.canMatchSubtitleLines()) return null
         // Dialogue only: music/SFX cues ("♪", "[DOOR SLAMS]") are SDH-only and have no counterpart
         // in a translated file, so they can only produce false pairs.
         val refs = referenceCues
@@ -6446,7 +6462,8 @@ class PlayerViewModel @Inject constructor(
         // only replace it once the model's own measurement confirms the audio's timing. Without
         // that measurement there is nothing to confirm it against: AI stays, and the audio does
         // not run at all.
-        val aiPossible = aiSubtitleEnabled && aiApiKey.isNotBlank() && findAiSourceSubtitle(_uiState.value.subtitles) != null
+        val aiPossible = aiSubtitleEnabled && translationService.isConfigured() &&
+            findAiSourceSubtitle(_uiState.value.subtitles) != null
         if (aiPossible && anchor == null) {
             Log.i("SubMatch", "audio sync: skipped — AI translation can run and the model measured nothing to check the audio against")
             return false
@@ -6473,7 +6490,10 @@ class PlayerViewModel @Inject constructor(
             if (generation != audioSyncGeneration || !hearingAvailable || userPickedSubtitle) return@launch
             audioSyncTarget = original
             audioSyncRaw = raw
-            val aiCanTakeOver = { aiSubtitleEnabled && aiApiKey.isNotBlank() && findAiSourceSubtitle(_uiState.value.subtitles) != null }
+            val aiCanTakeOver = {
+                aiSubtitleEnabled && translationService.isConfigured() &&
+                    findAiSourceSubtitle(_uiState.value.subtitles) != null
+            }
             // Where AI can run it holds the screen while the audio works (its timing comes from the
             // built-in track, so it is right from the first line), and the subtitle replaces it
             // only once the audio has confirmed its timing. Otherwise the subtitle is shown now and
@@ -7484,10 +7504,10 @@ class PlayerViewModel @Inject constructor(
     private fun localizeSubtitle(sub: Subtitle, raw: String): Subtitle {
         return runCatching {
             val dir = java.io.File(context.cacheDir, "matched_subs").apply { mkdirs() }
-            // Keep the directory bounded; files are ~100KB and keyed stably per subtitle.
+            // Keep the directory bounded; files are ~100KB and keyed by subtitle and by its text.
             dir.listFiles()?.sortedBy { it.lastModified() }?.dropLast(39)?.forEach { it.delete() }
             val ext = if (raw.trimStart().startsWith("WEBVTT")) "vtt" else "srt"
-            val file = java.io.File(dir, "${"${sub.provider}|${sub.id}".hashCode().toUInt()}.$ext")
+            val file = java.io.File(dir, localSubtitleFileName(sub.provider, sub.id, raw, ext))
             file.writeText(raw)
             sub.copy(url = file.toURI().toString())
         }.getOrDefault(sub)

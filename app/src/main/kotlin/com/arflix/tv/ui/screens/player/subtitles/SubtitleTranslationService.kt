@@ -1,6 +1,9 @@
 package com.arflix.tv.ui.screens.player.subtitles
 
 import android.util.Log
+import com.arflix.tv.ui.screens.player.subtitles.ai.CustomAiConfig
+import com.arflix.tv.ui.screens.player.subtitles.ai.CustomAiWire
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
@@ -49,7 +52,7 @@ private const val GROQ_REASONING_FORMAT = "hidden"
 // gemini-2.5-flash was retired by Google (HTTP 404 "no longer available", July 2026).
 // gemini-3.5-flash-lite: ~2x throughput (350 vs 165 tok/s) and ~3.5x cheaper than 3.5-flash,
 // positioned by Google for high-volume translation. Same v1beta API + thinkingLevel field.
-private const val GEMINI_MODEL_ID = "gemini-3.5-flash-lite"
+internal const val GEMINI_MODEL_ID = "gemini-3.5-flash-lite"
 private const val GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models/$GEMINI_MODEL_ID:generateContent"
 
 // Transient-failure retry (server overload / flaky network). 503/500/502 and IOExceptions are
@@ -116,8 +119,17 @@ internal fun repairTruncatedArray(text: String): JSONArray? {
 
 class SubtitleTranslationService(
     private val apiKeyProvider: () -> String,
-    private val modelProvider: () -> SubtitleAiModel = { SubtitleAiModel.GROQ_LLAMA_70B }
+    private val modelProvider: () -> SubtitleAiModel = { SubtitleAiModel.GROQ_LLAMA_70B },
+    /** Active custom endpoint, when the user configured one. Replaces the built-in models. */
+    private val customConfigProvider: () -> CustomAiConfig? = { null },
 ) {
+
+    private fun activeCustom(): CustomAiConfig? = customConfigProvider()?.takeIf { it.isActive }
+
+    /** True when either a custom endpoint or a built-in key can translate. */
+    fun isConfigured(): Boolean = activeCustom() != null || apiKeyProvider().isNotBlank()
+
+    fun canMatchSubtitleLines(): Boolean = apiKeyProvider().isNotBlank()
 
     private val client = OkHttpClient.Builder()
         .connectTimeout(10, TimeUnit.SECONDS)
@@ -334,16 +346,21 @@ class SubtitleTranslationService(
         depth: Int
     ): TranslationResult {
         if (lines.isEmpty()) return TranslationResult(lines, true)
+        val custom = activeCustom()
         val apiKey = apiKeyProvider()
-        if (apiKey.isBlank()) {
+        if (custom == null && apiKey.isBlank()) {
             Log.e(TAG, "API key is blank — translation skipped")
             return TranslationResult(lines, false, "API key missing")
         }
 
-        val result = when (modelProvider()) {
-            SubtitleAiModel.GROQ_LLAMA_70B -> translateGroq(lines, targetLanguage, apiKey)
-            SubtitleAiModel.GEMINI_FLASH_25 -> translateGemini(lines, targetLanguage, apiKey)
-            SubtitleAiModel.CLAUDE_HAIKU -> translateClaude(lines, targetLanguage, apiKey)
+        val result = if (custom != null) {
+            translateCustom(custom, lines, targetLanguage)
+        } else {
+            when (modelProvider()) {
+                SubtitleAiModel.GROQ_LLAMA_70B -> translateGroq(lines, targetLanguage, apiKey)
+                SubtitleAiModel.GEMINI_FLASH_25 -> translateGemini(lines, targetLanguage, apiKey)
+                SubtitleAiModel.CLAUDE_HAIKU -> translateClaude(lines, targetLanguage, apiKey)
+            }
         }
 
         // A content-policy block poisons the whole window because of (usually) one line.
@@ -365,6 +382,77 @@ class SubtitleTranslationService(
             return TranslationResult(left.lines + right.lines, true, untranslated = untranslated)
         }
         return result
+    }
+
+    /** One-line smoke test used by the settings editor's "Test connection" button. */
+    suspend fun testCustom(
+        config: CustomAiConfig,
+        targetLanguage: String,
+    ): TranslationResult = translateCustom(config, listOf("Winter is coming."), targetLanguage, retryParse = false)
+
+    private val customClient by lazy {
+        client.newBuilder()
+            .connectTimeout(15, TimeUnit.SECONDS)
+            .readTimeout(90, TimeUnit.SECONDS)
+            .build()
+    }
+
+    /**
+     * One round trip to the user's own endpoint (OpenAI-compatible chat/responses or Anthropic
+     * Messages). Returns the same [TranslationResult] shape as the built-in providers, so the
+     * bisect/repair logic above keeps working unchanged. A server that rejects the "thinking off"
+     * switch gets one retry without it — some providers answer HTTP 400 to unknown fields.
+     */
+    private suspend fun translateCustom(
+        config: CustomAiConfig,
+        lines: List<String>,
+        targetLanguage: String,
+        retryParse: Boolean = true,
+        withThinkingControl: Boolean = true,
+    ): TranslationResult = withContext(Dispatchers.IO) {
+        try {
+            val newlineMarker = "⏎"
+            val system = buildSystemPrompt(targetLanguage, newlineMarker)
+            val user = "Translate to $targetLanguage:\n${encodeIndexed(lines, newlineMarker)}"
+            val body = CustomAiWire.buildBody(config, system, user, jsonMode = false, withThinkingControl).toString()
+            val request = Request.Builder()
+                .url(config.endpointUrl())
+                .post(body.toRequestBody("application/json".toMediaType()))
+                .apply {
+                    CustomAiWire.headers(config).forEach { (key, value) -> addHeader(key, value) }
+                }
+                .build()
+            val (code, text) = customClient.newCall(request).execute().use { response ->
+                response.code to response.body?.string().orEmpty()
+            }
+            if (code !in 200..299) {
+                if (code == 400 && withThinkingControl && config.disableThinking &&
+                    CustomAiWire.thinkingOff(config).isNotEmpty()
+                ) {
+                    val fallbackBody = CustomAiWire.buildBody(config, system, user, jsonMode = false, withThinkingControl = false)
+                    if (fallbackBody.toString() != body) {
+                        return@withContext translateCustom(config, lines, targetLanguage, retryParse, withThinkingControl = false)
+                    }
+                }
+                val error = if (code == 429) "RATE_LIMITED" else "HTTP $code"
+                return@withContext TranslationResult(lines, false, error)
+            }
+            CustomAiWire.incompleteReason(config.protocol, text)?.let { reason ->
+                return@withContext TranslationResult(lines, false, reason)
+            }
+            val raw = CustomAiWire.extractText(config.protocol, text)
+                ?: return@withContext TranslationResult(lines, false, "Empty reply")
+            val parsed = parseTranslationResult(lines, targetLanguage, raw, newlineMarker)
+            if (parsed.success || !retryParse) parsed
+            else translateCustom(config, lines, targetLanguage, retryParse = false, withThinkingControl)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: IllegalArgumentException) {
+            TranslationResult(lines, false, "Invalid custom API URL, headers or request settings")
+        } catch (e: Exception) {
+            Log.w(TAG, "Custom subtitle request failed (${e.javaClass.simpleName})")
+            TranslationResult(lines, false, "Custom subtitle request failed")
+        }
     }
 
     private suspend fun translateGroq(lines: List<String>, targetLanguage: String, apiKey: String): TranslationResult {

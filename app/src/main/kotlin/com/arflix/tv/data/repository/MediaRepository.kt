@@ -1672,7 +1672,7 @@ class MediaRepository @Inject constructor(
             else -> false
         }
         val params = source.discoverParams.orEmpty()
-        // Nuvio stores one date sort for both media types; TMDB names them differently.
+        // Collection files store one date sort for both media types; TMDB names them differently.
         val sortBy = (source.sortBy ?: "popularity.desc").let { sort ->
             when {
                 isTv && sort.startsWith("primary_release_date") -> sort.replace("primary_release_date", "first_air_date")

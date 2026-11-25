@@ -11,8 +11,10 @@ import { loadHomeServerRows } from "../homeserver";
 import { loadPlaylists } from "../iptv";
 import { migrateLegacyIptvKeys } from "../stalkerPortals";
 import { loadStored, saveStored } from "../storage";
+import { setRankingRuntime } from "../connectionBudget";
 import type { TraktDeviceCode } from "../trakt";
 import type { TraktActivitySnapshot } from "../traktActivity";
+import type { AccountRevisionSnapshot } from "../accountChange";
 import { mdblistClient, type MdbListDeviceCode } from "../mdblist";
 import { simklClient, type SimklPinCode } from "../simkl";
 import { loadTrackingPreferences, type TrackingPreferences } from "../sync";
@@ -50,8 +52,13 @@ export function useStoreCore(initialView?: AppView) {
   const refreshKeyRef = useRef<string | null>(null);
   const refreshGenerationRef = useRef(0);
   const traktActivityRef = useRef<TraktActivitySnapshot>(null);
+  const accountRevisionRef = useRef<AccountRevisionSnapshot>(null);
   const [watchedKeys, setWatchedKeys] = useState<Set<string>>(() => new Set());
   const [selected, setSelected] = useState<MediaItem | null>(null);
+  // Source ranking compares each file's bitrate with what this connection carries (connectionBudget).
+  useEffect(() => {
+    setRankingRuntime(selected?.durationSeconds ? selected.durationSeconds / 60 : selected?.duration, selected?.mediaType);
+  }, [selected?.duration, selected?.durationSeconds, selected?.mediaType]);
   const [streams, setStreams] = useState<StreamSource[]>([]);
   const streamsRef = useRef(streams);
   streamsRef.current = streams;
@@ -244,7 +251,24 @@ export function useStoreCore(initialView?: AppView) {
     };
     return () => { mdblistClient.onTokenRefreshed = undefined; };
   }, []);
-  return { managed, personalSettings, personalSettingsRef, personalAddons, personalAddonsRef, section, setSection, initialProfileId, initialCw, initialWatchlist, categories, setCategories, catalogConfigs, setCatalogConfigs, homeServerRows, setHomeServerRows, continueWatching, setContinueWatching, watchlist, setWatchlist, watchlistMutationRef, cwSourceRef, refreshKeyRef, refreshGenerationRef, traktActivityRef, watchedKeys, setWatchedKeys, selected, setSelected, streams, setStreams, streamsRef, selectedEpisode, setSelectedEpisode, activeStream, setActiveStream, activeChannel, setActiveChannel, playingRef, addons, setAddons, addonsReady, setAddonsReady, iptvSnapshot, setIptvSnapshot, query, setQuery, results, setResults, searchState, setSearchState, settingsSyncState, setSettingsSyncState, settings, setSettings, auth, setAuth, traktConnected, setTraktConnected, mdblistConnected, setMdblistConnected, simklConnected, setSimklConnected, deviceCode, setDeviceCode, simklDeviceCode, setSimklDeviceCode, mdblistDeviceCode, setMdblistDeviceCode, busy, setBusy, busyRef, toast, setToast, cloudProfilesHydrated, setCloudProfilesHydrated, refreshInFlightRef, lastRefreshStartedRef, previousSectionRef, iptvGuideInFlightRef, lastSyncedSettingsRef, sourceGeneration, playbackGeneration, playbackPreparation, ownedPlayback, stopOwnedPlayback, guideRetryAfter, profiles, setProfiles, activeProfileId, setActiveProfileId, activeProfileIdRef, trackingPreferences, setTrackingPreferences, avatarImages, setAvatarImagesState, setAvatarImages, manageMode, setManageMode, view, setView, activeProfile, activeProfileRef, addonsRef, settingsRef, deviceCodeRef, simklDeviceCodeRef, mdblistDeviceCodeRef };
+
+  useEffect(() => {
+    // Trakt refresh tokens are single use: once this browser rotates the pair, every other
+    // device still holds a dead refresh token until the new one reaches the cloud.
+    traktClient.onTokenRefreshed = async (profileId, token) => {
+      if (activeProfileIdRef.current !== profileId || traktClient.token !== token) return;
+      await saveCloudTrackingSelection(authClient, profileId, {
+        provider: "TRAKT",
+        traktToken: token,
+        simklToken: simklClient.token,
+        mdbListApiKey: mdblistClient.key,
+        trackingPreferences: loadTrackingPreferences(profileId),
+        changedDomains: ["trakt"]
+      });
+    };
+    return () => { traktClient.onTokenRefreshed = undefined; };
+  }, []);
+  return { managed, personalSettings, personalSettingsRef, personalAddons, personalAddonsRef, section, setSection, initialProfileId, initialCw, initialWatchlist, categories, setCategories, catalogConfigs, setCatalogConfigs, homeServerRows, setHomeServerRows, continueWatching, setContinueWatching, watchlist, setWatchlist, watchlistMutationRef, cwSourceRef, refreshKeyRef, refreshGenerationRef, traktActivityRef, accountRevisionRef, watchedKeys, setWatchedKeys, selected, setSelected, streams, setStreams, streamsRef, selectedEpisode, setSelectedEpisode, activeStream, setActiveStream, activeChannel, setActiveChannel, playingRef, addons, setAddons, addonsReady, setAddonsReady, iptvSnapshot, setIptvSnapshot, query, setQuery, results, setResults, searchState, setSearchState, settingsSyncState, setSettingsSyncState, settings, setSettings, auth, setAuth, traktConnected, setTraktConnected, mdblistConnected, setMdblistConnected, simklConnected, setSimklConnected, deviceCode, setDeviceCode, simklDeviceCode, setSimklDeviceCode, mdblistDeviceCode, setMdblistDeviceCode, busy, setBusy, busyRef, toast, setToast, cloudProfilesHydrated, setCloudProfilesHydrated, refreshInFlightRef, lastRefreshStartedRef, previousSectionRef, iptvGuideInFlightRef, lastSyncedSettingsRef, sourceGeneration, playbackGeneration, playbackPreparation, ownedPlayback, stopOwnedPlayback, guideRetryAfter, profiles, setProfiles, activeProfileId, setActiveProfileId, activeProfileIdRef, trackingPreferences, setTrackingPreferences, avatarImages, setAvatarImagesState, setAvatarImages, manageMode, setManageMode, view, setView, activeProfile, activeProfileRef, addonsRef, settingsRef, deviceCodeRef, simklDeviceCodeRef, mdblistDeviceCodeRef };
 }
 
 export type StoreCore = ReturnType<typeof useStoreCore>;

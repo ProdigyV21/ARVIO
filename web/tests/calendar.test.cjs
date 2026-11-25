@@ -57,14 +57,14 @@ test('calendar metadata uses a separate half-hour cache while ordinary details r
   const context = { params: Promise.resolve({ path: ['tv', '2', 'season', '1'] }) };
   const response = await route.GET(new Request('https://web.example/api/tmdb/tv/2/season/1?arvio_calendar=1&language=en'), context);
   assert.equal(calls[0].init.next.revalidate, 1800);
-  assert.equal(calls[0].url.searchParams.get('cv'), 'calendar-3');
+  assert.equal(calls[0].url.searchParams.get('cv'), 'calendar-4');
   assert.equal(calls[0].url.searchParams.has('arvio_calendar'), false);
   assert.equal(calls[0].url.searchParams.get('language'), 'en');
   assert.match(response.headers.get('netlify-cdn-cache-control'), /max-age=1800/);
   assert.doesNotMatch(response.headers.get('cache-control'), /stale-while-revalidate/);
   const ordinary = await route.GET(new Request('https://web.example/api/tmdb/tv/2/season/1?language=en'), context);
   assert.equal(calls[1].init.next.revalidate, 86400);
-  assert.equal(calls[1].url.searchParams.get('cv'), '2');
+  assert.equal(calls[1].url.searchParams.get('cv'), '3');
   assert.match(ordinary.headers.get('cache-control'), /s-maxage=21600/);
 });
 

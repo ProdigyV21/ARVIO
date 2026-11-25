@@ -756,7 +756,7 @@ fun EpgGrid(
                         .arvioDpadFocusGroup(enableFocusRestorer = false)
                 ) {
                     if (channels.isEmpty()) {
-                        item(key = "guide_empty_state") {
+                        item(key = "guide_empty_state", contentType = "EpgGrid.guide_empty_state") {
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()

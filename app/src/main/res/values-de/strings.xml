@@ -890,7 +890,7 @@
     <string name="settings_builtin_collections_title">Eingebaute Sammlungen</string>
     <string name="settings_builtin_collections_desc">Die eingebauten ARVIO-Leisten für Dienste, Genres und Filmreihen anzeigen. Ausschalten, um nur eigene importierte Sammlungen zu nutzen</string>
     <string name="settings_collections_installed">Installierte Sammlungen: %1$s (%2$d Leisten)</string>
-    <string name="catalog_collections_invalid">Das ist keine gültige Sammlungsdatei (erwartet wird ein Nuvio-Sammlungsexport als JSON)</string>
+    <string name="catalog_collections_invalid">Das ist keine gültige Sammlungsdatei (erwartet wird ein Sammlungsexport als JSON)</string>
     <string name="catalog_tmdb_title">TMDB-Katalog</string>
     <string name="catalog_url_tmdb_hint">Nutze die URL einer TMDB-Liste, -Sammlung, -Firma, eines Senders, einer Person, eines Schlagworts oder einer Genre-Seite</string>
     <string name="catalog_url_simkl_hint">Nutze die URL einer eigenen SIMKL-Liste, z. B. simkl.com/5/list/14462.</string>

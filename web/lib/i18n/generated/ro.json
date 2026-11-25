@@ -1567,5 +1567,16 @@
   "Maximum of 10 IPTV playlists reached": "S-a atins limita de 10 liste IPTV",
   "Regional price · save {value0} vs. 12 monthly payments": "Preț regional · economisiți {value0} față de 12 plăți lunare",
   "One payment, no automatic renewal. About {value0} a month.": "O singură plată, fără reînnoire automată. Aproximativ {value0} pe lună.",
-  "12-month pass · {value0}": "Acces pe 12 luni · {value0}"
+  "12-month pass · {value0}": "Acces pe 12 luni · {value0}",
+  "Look around for free. Premium is needed to play.": "Explorează gratuit. Pentru redare ai nevoie de Premium.",
+  "Watch {title} with ARVIO Premium": "Urmărește {title} cu ARVIO Premium",
+  "Watch this with ARVIO Premium": "Urmărește asta cu ARVIO Premium",
+  "Watch Live TV with ARVIO Premium": "Urmărește TV în direct cu ARVIO Premium",
+  "Download with ARVIO Premium": "Descarcă cu ARVIO Premium",
+  "Open streams with ARVIO Premium": "Deschide fluxuri cu ARVIO Premium",
+  "Filter categories": "Filtrează categoriile",
+  "Clear filter": "Șterge filtrul",
+  "No categories match \"{value0}\".": "Nicio categorie nu corespunde cu „{value0}”.",
+  "Chromecast": "Chromecast",
+  "This browser can't play some sources, so ARVIO tries the next one.": "Acest browser nu poate reda unele surse, așa că ARVIO o încearcă pe următoarea."
 }

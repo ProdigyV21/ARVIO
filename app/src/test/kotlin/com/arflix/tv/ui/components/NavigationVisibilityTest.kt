@@ -3,6 +3,7 @@ package com.arflix.tv.ui.components
 import android.app.Application
 import androidx.datastore.preferences.core.mutablePreferencesOf
 import com.arflix.tv.data.repository.CloudSyncRepository.CloudProfileSettings
+import com.arflix.tv.ui.screens.settings.navigationSectionForRow
 import com.arflix.tv.ui.screens.settings.tvGeneralRowsForSection
 import com.arflix.tv.util.*
 import com.google.gson.Gson
@@ -27,12 +28,12 @@ class NavigationVisibilityTest {
         assertEquals(SidebarItem.entries, visibleNavigationItems())
         for (json in listOf(null, "broken", "{}", "null", "42")) assertTrue(readHiddenNavigationSections(json).isEmpty())
         assertEquals(setOf("search", "tv"), readHiddenNavigationSections("""["tv","home",null,42,"search","settings","tv"]"""))
-        NavigationVisibility.hiddenSections = setOf("home", "settings", "search", "watchlist", "tv")
+        NavigationVisibility.hiddenSections = setOf("home", "settings", "search", "watchlist", "tv", "news")
         assertEquals(listOf(SidebarItem.HOME, SidebarItem.SETTINGS), visibleNavigationItems())
     }
 
     @Test fun everyVisibilityCombinationHasAContiguousFocusMapAndReachableSettings() {
-        for (mask in 0..7) for (kids in listOf(false, true)) for (hasProfile in listOf(false, true)) {
+        for (mask in 0 until (1 shl OPTIONAL_NAVIGATION_SECTIONS.size)) for (kids in listOf(false, true)) for (hasProfile in listOf(false, true)) {
             NavigationVisibility.hiddenSections = OPTIONAL_NAVIGATION_SECTIONS.filterIndexed { index, _ -> mask and (1 shl index) != 0 }.toSet()
             KidsNavigation.hideLiveTv = kids
             val visible = visibleNavigationItems()
@@ -49,7 +50,9 @@ class NavigationVisibilityTest {
         KidsNavigation.hideLiveTv = true
         assertFalse(visibleNavigationItems().contains(SidebarItem.TV))
         assertTrue(visibleNavigationItems().contains(SidebarItem.SEARCH))
+        assertFalse(visibleNavigationItems().contains(SidebarItem.NEWS))
         assertFalse(tvGeneralRowsForSection("appearance").contains(58))
+        assertTrue(tvGeneralRowsForSection("news").isEmpty())
     }
 
     @Test fun changingVisibilityKeepsFocusOnTheSameItemInsteadOfTheOldPosition() {
@@ -64,8 +67,12 @@ class NavigationVisibilityTest {
 
     @Test fun appearanceRowsHaveUniqueIdsWithoutChangingExistingSettingsSlots() {
         val appearance = tvGeneralRowsForSection("appearance")
-        assertEquals(listOf(56, 57, 58), appearance.takeLast(3))
-        val all = listOf("language", "subtitles", "ai_subtitles", "playback", "appearance", "profiles", "network")
+        // Row 59 was appended after the existing appearance slots.
+        assertEquals(listOf(56, 57, 58, 59), appearance.takeLast(4))
+        // The News switch opens its own section, followed by the topics and sources pickers.
+        assertEquals(listOf(61, 62, 63), tvGeneralRowsForSection("news"))
+        assertEquals(listOf("search", "watchlist", "tv", "news"), listOf(56, 57, 58, 61).map(::navigationSectionForRow))
+        val all = listOf("language", "subtitles", "ai_subtitles", "playback", "appearance", "news", "profiles", "network")
             .flatMap(::tvGeneralRowsForSection)
         assertEquals(all.size, all.distinct().size)
     }

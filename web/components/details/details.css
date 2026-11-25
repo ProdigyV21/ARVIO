@@ -2236,3 +2236,12 @@ html.kbd-nav .details-drawer .cast-card:focus strong { color: #fff; }
   .details-drawer .cast-card:focus-visible img,
   .details-drawer .cast-card:focus-visible > svg { transform: none; }
 }
+/* Android "Open in ARVIO": a link that looks and sits like the other actions. */
+.detail-actions a.detail-app-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: #fff;
+  text-decoration: none;
+}

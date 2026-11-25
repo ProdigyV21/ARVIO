@@ -16,6 +16,7 @@ import { getCardExtras, peekCardExtras, prefetchDetails, resolveTmdbId } from "@
 import type { CardExtras } from "@/lib/cardExtras";
 import type { MediaItem } from "@/lib/types";
 import { ImdbLogo, RankRibbon, useNearViewport } from "./CardBits";
+import { readableReleaseName } from "@/lib/releaseName";
 
 // Rendered card widths (CSS px) per layout, for the browser to pick a TMDB
 // rendition from the srcset: ~2.4 cards across on phones, ~293px on a laptop.
@@ -30,6 +31,18 @@ function formatEpisodeLine(item: MediaItem): string {
   const code = `S${item.seasonNumber} · E${item.episodeNumber}`;
   const title = item.episodeTitle?.trim();
   return title ? `${code} · ${title}` : code;
+}
+
+// Some Continue Watching sources name the item "Show: Episode". The episode
+// line below already names the episode, so the title keeps only the show.
+function showTitle(item: MediaItem): string {
+  const episode = item.episodeTitle?.trim();
+  if (!episode || item.mediaType !== "tv") return item.title;
+  for (const separator of [": ", " - ", " \u2013 ", " \u00b7 "]) {
+    const suffix = `${separator}${episode}`;
+    if (item.title.length > suffix.length && item.title.endsWith(suffix)) return item.title.slice(0, -suffix.length);
+  }
+  return item.title;
 }
 
 function MediaCardBase({ item, onOpen, onFocus, posterMode, rank, hideService }: {
@@ -80,17 +93,32 @@ function MediaCardBase({ item, onOpen, onFocus, posterMode, rank, hideService }:
   const artwork = effectivePosterMode ? (image || backdrop) : (episodeArtwork || backdrop || image);
   const imgLoaded = Boolean(artwork && loadedArtwork === artwork);
   const imgFailed = Boolean(artwork && failedArtwork === artwork);
-  const year = item.releaseDate?.slice(0, 4) || item.year || (item.mediaType === "tv" ? "Series" : "Movie");
+  // Addon file libraries (debrid) name items after the release file.
+  const release = item.addonNativeId ? readableReleaseName(item.title) : null;
+  // Library files are often typed by the addon, not by what they are: a release
+  // with an episode marker is a series, one with only a year is a film.
+  const metadataType: MediaItem["mediaType"] = release && !item.isHomeServer
+    ? (release.season != null ? "tv" : release.year ? "movie" : item.mediaType)
+    : item.mediaType;
+  const releaseEpisode = release?.season == null ? ""
+    : release.episode == null ? `S${release.season}` : `S${release.season} · E${release.episode}`;
+  const year = item.releaseDate?.slice(0, 4) || item.year || release?.year || releaseEpisode || (item.mediaType === "tv" ? "Series" : "Movie");
 
   useEffect(() => {
     let active = true;
     setMetadataId(directMetadataId);
-    if (directMetadataId || !item.isHomeServer) return () => { active = false; };
-    void resolveTmdbId(item).then((id) => {
+    // Home-server items, and debrid-library files without a poster, borrow the
+    // matching TMDB title's artwork (the card still opens the file itself).
+    const lookup = item.isHomeServer ? item
+      : release && missingArtwork ? { mediaType: metadataType, title: release.title, year: release.year }
+        : null;
+    if (directMetadataId || !lookup) return () => { active = false; };
+    void resolveTmdbId(lookup).then((id) => {
       if (active) setMetadataId(id);
     });
     return () => { active = false; };
-  }, [directMetadataId, item.homeServerId, item.homeServerItemId, item.imdbId, item.isHomeServer, item.mediaType]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [directMetadataId, item.homeServerId, item.homeServerItemId, item.imdbId, item.isHomeServer, item.mediaType, metadataType, release?.title, release?.year, missingArtwork]);
 
   useEffect(() => () => {
     if (longPressTimer.current) clearTimeout(longPressTimer.current);
@@ -155,17 +183,17 @@ function MediaCardBase({ item, onOpen, onFocus, posterMode, rank, hideService }:
 
   useEffect(() => {
     if (!metadataId) { setExtras(null); return undefined; }
-    const cached = peekCardExtras({ mediaType: item.mediaType, id: metadataId });
+    const cached = peekCardExtras({ mediaType: metadataType, id: metadataId });
     if (cached) { setExtras(cached); return undefined; }
     setExtras(null);
     if (!near && !interacted) return undefined;
     // Row hydration goes first; decoration waits for a slot (lib/fetchPriority).
     const controller = new AbortController();
-    void homeFetchPriority.run(() => getCardExtras({ mediaType: item.mediaType, id: metadataId }), controller.signal, interacted)
+    void homeFetchPriority.run(() => getCardExtras({ mediaType: metadataType, id: metadataId }), controller.signal, interacted)
       .then((value) => { if (!controller.signal.aborted && value) setExtras(value); })
       .catch(() => undefined);
     return () => controller.abort();
-  }, [item.mediaType, metadataId, near, interacted]);
+  }, [metadataType, metadataId, near, interacted]);
 
   // Streaming-service clearlogos, shown top-left inside the artwork.
   const hidden = hideService ? canonicalServiceName(hideService) : "";
@@ -187,11 +215,11 @@ function MediaCardBase({ item, onOpen, onFocus, posterMode, rank, hideService }:
     setImdbRating(null);
     if (!imdbId || (!near && !interacted)) return undefined;
     const controller = new AbortController();
-    void homeFetchPriority.run(() => getImdbRating(item.mediaType, imdbId), controller.signal, interacted)
+    void homeFetchPriority.run(() => getImdbRating(metadataType, imdbId), controller.signal, interacted)
       .then((rating) => { if (!controller.signal.aborted) setImdbRating(rating); })
       .catch(() => undefined);
     return () => controller.abort();
-  }, [imdbId, item.mediaType, near, interacted]);
+  }, [imdbId, metadataType, near, interacted]);
 
   const dateLabel = formatReleaseDate(item.releaseDate, language) || item.subtitle || year;
   const runtimeLabel = formatRuntime(item.duration || runtime);
@@ -257,7 +285,7 @@ function MediaCardBase({ item, onOpen, onFocus, posterMode, rank, hideService }:
           </span>
         )}
       </div>
-      <strong>{item.title}</strong>
+      <strong title={release ? item.title : undefined}>{release?.title ?? (episodeLine ? showTitle(item) : item.title)}</strong>
       {episodeLine ? (
         <div className="card-episode-line">
           {isUpNext && <span className="card-upnext">{translateUi("Up next")}</span>}

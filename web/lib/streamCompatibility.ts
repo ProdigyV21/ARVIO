@@ -78,10 +78,22 @@ function videoReason(stream: CompatStream): string | null {
   // Resolution is not a codec. Unknown metadata is checked on selection.
   return null;
 }
+/**
+ * Atmos on a Blu-ray release is TrueHD (streaming services carry it in DD+).
+ * Release names often say only "Atmos 7.1", so without this a 50 GB UHD remux
+ * looked playable, ranked first, and failed only after it had started.
+ */
+function impliedTrueHd(stream: CompatStream) {
+  if (stream.media?.audioCodec) return false;
+  const name = text(stream);
+  return /\batmos\b/.test(name)
+    && /remux|blu-?ray|\bbd(?:rip)?\b|\buhd\b/.test(name)
+    && !/e-?ac-?3|ec-3|\bddp|dd\+|digital plus|web-?(?:dl|rip)|\bdts|\baac\b|\bopus\b/.test(name);
+}
 function audioReason(stream: CompatStream): string | null {
   const caps = getMediaCapabilities();
   const audio = stream.media?.audioCodec?.toLowerCase() || text(stream);
-  if (/true[ -]?hd|\bmlp\b/.test(audio)) return "TrueHD needs a compatible audio track or server conversion";
+  if (/true[ -]?hd|\bmlp\b/.test(audio) || impliedTrueHd(stream)) return "TrueHD needs a compatible audio track or server conversion";
   if (/\bdts|\bdca\b/.test(audio)) return "DTS needs audio conversion";
   if (/e-?ac-?3|ec-3|ddp|dd\+|digital plus/.test(audio)) return caps.eac3 ? null : "Dolby Digital Plus needs audio conversion";
   if (/\bac-?3\b|dd5\.1/.test(audio)) return caps.ac3 ? null : "Dolby Digital needs audio conversion";
@@ -95,7 +107,7 @@ export function canProviderTranscode(stream: CompatStream): boolean {
 }
 export function videoDecodableForDevice(stream: CompatStream) { return !videoReason(stream); }
 export function audioDecodableForDevice(stream: CompatStream) {
-  return !audioReason(stream) || (getMediaCapabilities().mse && !/true[ -]?hd|\bmlp\b/i.test(stream.media?.audioCodec || text(stream)));
+  return !audioReason(stream) || (getMediaCapabilities().mse && !impliedTrueHd(stream) && !/true[ -]?hd|\bmlp\b/i.test(stream.media?.audioCodec || text(stream)));
 }
 export function canDirectPlayMkvStream(stream: CompatStream): boolean {
   if (typeof navigator === "undefined" || /iPhone|iPad|iPod|CriOS|FxiOS/.test(navigator.userAgent)) return false;

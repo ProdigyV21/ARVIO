@@ -1564,5 +1564,16 @@
   "Maximum of 10 IPTV playlists reached": "S'ha arribat al màxim de 10 llistes IPTV",
   "Regional price · save {value0} vs. 12 monthly payments": "Preu regional · estalvieu un {value0} respecte de 12 pagaments mensuals",
   "One payment, no automatic renewal. About {value0} a month.": "Un sol pagament, sense renovació automàtica. Uns {value0} al mes.",
-  "12-month pass · {value0}": "Passi de 12 mesos · {value0}"
+  "12-month pass · {value0}": "Passi de 12 mesos · {value0}",
+  "Look around for free. Premium is needed to play.": "Explora-ho gratis. Per reproduir cal Premium.",
+  "Watch {title} with ARVIO Premium": "Mira {title} amb ARVIO Premium",
+  "Watch this with ARVIO Premium": "Mira-ho amb ARVIO Premium",
+  "Watch Live TV with ARVIO Premium": "Mira la TV en directe amb ARVIO Premium",
+  "Download with ARVIO Premium": "Baixa amb ARVIO Premium",
+  "Open streams with ARVIO Premium": "Obre fluxos amb ARVIO Premium",
+  "Filter categories": "Filtra les categories",
+  "Clear filter": "Esborra el filtre",
+  "No categories match \"{value0}\".": "Cap categoria coincideix amb \"{value0}\".",
+  "Chromecast": "Chromecast",
+  "This browser can't play some sources, so ARVIO tries the next one.": "Aquest navegador no pot reproduir algunes fonts, així que ARVIO prova la següent."
 }

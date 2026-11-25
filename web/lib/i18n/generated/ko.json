@@ -1563,5 +1563,16 @@
   "Maximum of 10 IPTV playlists reached": "IPTV 재생목록은 최대 10개까지 추가할 수 있습니다",
   "Regional price · save {value0} vs. 12 monthly payments": "지역 가격 · 월간 결제 12회 대비 {value0} 절약",
   "One payment, no automatic renewal. About {value0} a month.": "한 번 결제, 자동 갱신 없음. 월 약 {value0}입니다.",
-  "12-month pass · {value0}": "12개월 이용권 · {value0}"
+  "12-month pass · {value0}": "12개월 이용권 · {value0}",
+  "Look around for free. Premium is needed to play.": "무료로 둘러보세요. 재생하려면 Premium이 필요합니다.",
+  "Watch {title} with ARVIO Premium": "ARVIO Premium으로 {title} 시청하기",
+  "Watch this with ARVIO Premium": "ARVIO Premium으로 시청하기",
+  "Watch Live TV with ARVIO Premium": "ARVIO Premium으로 실시간 TV 시청하기",
+  "Download with ARVIO Premium": "ARVIO Premium으로 다운로드하기",
+  "Open streams with ARVIO Premium": "ARVIO Premium으로 스트림 열기",
+  "Filter categories": "카테고리 필터",
+  "Clear filter": "필터 지우기",
+  "No categories match \"{value0}\".": "\"{value0}\"과(와) 일치하는 카테고리가 없습니다.",
+  "Chromecast": "Chromecast",
+  "This browser can't play some sources, so ARVIO tries the next one.": "이 브라우저에서 재생할 수 없는 소스가 있어 ARVIO가 다음 소스를 시도합니다."
 }

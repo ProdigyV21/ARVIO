@@ -113,7 +113,10 @@ export async function auditUnraidDependencies(options) {
       if (unsupportedNativePath.test(file.path)) issues.push({ kind: 'unsupported-native-runtime-path', scope, path: file.path, reason: 'Unused musl alternative is outside the pinned Linux amd64 glibc runtime/source plan' });
       if (file.path.endsWith('/package.json') || file.path === 'package.json') {
         const metadata = JSON.parse(await readFile(file.absolute, 'utf8'));
-        if (manifestForbidden(metadata)) issues.push({ kind: 'excluded-sdk-runtime-declaration', scope, path: file.path, name: metadata.name || null });
+        // distribution-sources/ holds the vendored upstream source kept only for its license's source-distribution
+        // obligation. It is not runtime code (the node_modules check below is the runtime declaration), so a
+        // traced copy of its manifest must not read as a shipped SDK dependency.
+        if (!file.path.startsWith('distribution-sources/') && manifestForbidden(metadata)) issues.push({ kind: 'excluded-sdk-runtime-declaration', scope, path: file.path, name: metadata.name || null });
         if (typeof metadata.name === 'string' && /(?:^|\/)node_modules\//.test(file.path)) {
           const record = { path: file.path, name: metadata.name, version: metadata.version || 'NOASSERTION', declaredLicense: metadata.license || metadata.licenses || 'NOASSERTION' };
           runtimePackages.push(record);

@@ -1563,5 +1563,16 @@
   "Maximum of 10 IPTV playlists reached": "En fazla 10 IPTV oynatma listesi sınırına ulaşıldı",
   "Regional price · save {value0} vs. 12 monthly payments": "Bölgesel fiyat · 12 aylık ödemeye kıyasla {value0} tasarruf",
   "One payment, no automatic renewal. About {value0} a month.": "Tek ödeme, otomatik yenileme yok. Ayda yaklaşık {value0}.",
-  "12-month pass · {value0}": "12 aylık geçiş · {value0}"
+  "12-month pass · {value0}": "12 aylık geçiş · {value0}",
+  "Look around for free. Premium is needed to play.": "Ücretsiz göz atın. Oynatmak için Premium gerekir.",
+  "Watch {title} with ARVIO Premium": "{title} içeriğini ARVIO Premium ile izleyin",
+  "Watch this with ARVIO Premium": "ARVIO Premium ile izleyin",
+  "Watch Live TV with ARVIO Premium": "Canlı TV'yi ARVIO Premium ile izleyin",
+  "Download with ARVIO Premium": "ARVIO Premium ile indirin",
+  "Open streams with ARVIO Premium": "Yayınları ARVIO Premium ile açın",
+  "Filter categories": "Kategorileri filtrele",
+  "Clear filter": "Filtreyi temizle",
+  "No categories match \"{value0}\".": "\"{value0}\" ile eşleşen kategori yok.",
+  "Chromecast": "Chromecast",
+  "This browser can't play some sources, so ARVIO tries the next one.": "Bu tarayıcı bazı kaynakları oynatamıyor, bu yüzden ARVIO bir sonrakini deniyor."
 }

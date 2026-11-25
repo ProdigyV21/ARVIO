@@ -660,7 +660,7 @@ fun VariantPickerOverlay(
                     .heightIn(max = 360.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                itemsIndexed(variants, key = { index, item -> "${item.id}#$index" }) { index, variant ->
+                itemsIndexed(variants, key = { index, item -> "${item.id}#$index" }, contentType = { _, _ -> "LiveTvEnhancements.variants" }) { index, variant ->
                     VariantRow(
                         channel = variant,
                         modifier = if (index == 0) Modifier.focusRequester(firstFocus) else Modifier,

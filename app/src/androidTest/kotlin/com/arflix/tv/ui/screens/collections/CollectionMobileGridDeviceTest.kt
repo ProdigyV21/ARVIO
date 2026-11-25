@@ -11,7 +11,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.unit.dp
-import androidx.tv.foundation.lazy.grid.rememberTvLazyGridState
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import com.arflix.tv.data.model.MediaItem
 import com.arflix.tv.util.DeviceType
 import com.arflix.tv.util.LocalDeviceType
@@ -27,12 +27,12 @@ class CollectionMobileGridDeviceTest {
         val containerWidth = mutableStateOf(360.dp)
         val posters = mutableStateOf(false)
         val selectedTab = mutableStateOf(CollectionTab.MOVIES)
-        var renderedGridState: androidx.tv.foundation.lazy.grid.TvLazyGridState? = null
+        var renderedGridState: LazyGridState? = null
         var opened: MediaItem? = null
         val items = (1..40).map { MediaItem(it, "Title $it") }
         compose.setContent {
             CompositionLocalProvider(LocalDeviceType provides DeviceType.PHONE) {
-                val gridState = rememberTvLazyGridState()
+                val gridState = rememberLazyGridState()
                 renderedGridState = gridState
                 Box(Modifier.width(containerWidth.value).fillMaxSize()) {
                     CollectionItemsGrid(

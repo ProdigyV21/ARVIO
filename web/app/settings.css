@@ -47,15 +47,17 @@
 [dir="rtl"] .toggle-switch span {
   transform: translateX(0);
 }
+/* On is a solid accent track with a dark knob, so on and off differ by more
+   than the knob position (the tinted glass track read as "off" with the
+   default white accent). */
 .toggle-switch.is-on {
-  border-color: color-mix(in srgb, var(--accent, #fff) 54%, transparent);
-  background:
-    linear-gradient(180deg, color-mix(in srgb, var(--accent, #fff) 44%, rgba(255, 255, 255, 0.12)), color-mix(in srgb, var(--accent, #fff) 24%, rgba(0, 0, 0, 0.18))),
-    rgba(255, 255, 255, 0.1);
+  border-color: var(--accent, #ededed);
+  background: var(--accent, #ededed);
 }
 .toggle-switch.is-on span {
   transform: translateX(22px);
-  background: #fff;
+  background: #0b0d0e;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
 }
 [dir="rtl"] .toggle-switch.is-on span {
   transform: translateX(-22px);

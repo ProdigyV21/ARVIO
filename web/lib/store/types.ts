@@ -42,6 +42,8 @@ export interface AppStore {
   selectedEpisode: { season: number; episode: number } | null;
   loadEpisodeStreams: (item: MediaItem, season: number, episode: number) => Promise<StreamSource[]>;
   advanceEpisode: () => Promise<boolean>;
+  /** Starts the next episode's source search ahead of time (while Up next shows). */
+  prefetchNextEpisode: () => Promise<void>;
   activeStream: StreamSource | null;
   activeChannel: IptvChannel | null;
   addons: InstalledAddon[];

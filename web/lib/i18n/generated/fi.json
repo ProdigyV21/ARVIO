@@ -1565,5 +1565,16 @@
   "Maximum of 10 IPTV playlists reached": "Enintään 10 IPTV-soittolistaa saavutettu",
   "Regional price · save {value0} vs. 12 monthly payments": "Alueellinen hinta · säästä {value0} verrattuna 12 kuukausimaksuun",
   "One payment, no automatic renewal. About {value0} a month.": "Kertamaksu, ei automaattista uusimista. Noin {value0} kuukaudessa.",
-  "12-month pass · {value0}": "12 kuukauden passi · {value0}"
+  "12-month pass · {value0}": "12 kuukauden passi · {value0}",
+  "Look around for free. Premium is needed to play.": "Katsele ilmaiseksi. Toistoon tarvitaan Premium.",
+  "Watch {title} with ARVIO Premium": "Katso {title} ARVIO Premiumilla",
+  "Watch this with ARVIO Premium": "Katso tämä ARVIO Premiumilla",
+  "Watch Live TV with ARVIO Premium": "Katso suoraa TV:tä ARVIO Premiumilla",
+  "Download with ARVIO Premium": "Lataa ARVIO Premiumilla",
+  "Open streams with ARVIO Premium": "Avaa striimit ARVIO Premiumilla",
+  "Filter categories": "Suodata luokkia",
+  "Clear filter": "Tyhjennä suodatin",
+  "No categories match \"{value0}\".": "Mikään luokka ei vastaa hakua \"{value0}\".",
+  "Chromecast": "Chromecast",
+  "This browser can't play some sources, so ARVIO tries the next one.": "Tämä selain ei voi toistaa joitakin lähteitä, joten ARVIO kokeilee seuraavaa."
 }

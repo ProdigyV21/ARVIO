@@ -1560,5 +1560,16 @@
   "Maximum of 10 IPTV playlists reached": "గరిష్ఠంగా 10 IPTV ప్లేలిస్ట్‌ల పరిమితిని చేరుకున్నారు",
   "Regional price · save {value0} vs. 12 monthly payments": "ప్రాంతీయ ధర · 12 నెలవారీ చెల్లింపులతో పోలిస్తే {value0} ఆదా",
   "One payment, no automatic renewal. About {value0} a month.": "ఒకేసారి చెల్లింపు, ఆటోమేటిక్ రెన్యూవల్ లేదు. నెలకు సుమారు {value0}.",
-  "12-month pass · {value0}": "12 నెలల పాస్ · {value0}"
+  "12-month pass · {value0}": "12 నెలల పాస్ · {value0}",
+  "Look around for free. Premium is needed to play.": "ఉచితంగా చూడండి. ప్లే చేయడానికి Premium అవసరం.",
+  "Watch {title} with ARVIO Premium": "ARVIO Premium తో {title} చూడండి",
+  "Watch this with ARVIO Premium": "ARVIO Premium తో దీన్ని చూడండి",
+  "Watch Live TV with ARVIO Premium": "ARVIO Premium తో లైవ్ టీవీ చూడండి",
+  "Download with ARVIO Premium": "ARVIO Premium తో డౌన్‌లోడ్ చేయండి",
+  "Open streams with ARVIO Premium": "ARVIO Premium తో స్ట్రీమ్‌లను తెరవండి",
+  "Filter categories": "వర్గాలను ఫిల్టర్ చేయండి",
+  "Clear filter": "ఫిల్టర్‌ను క్లియర్ చేయండి",
+  "No categories match \"{value0}\".": "\"{value0}\"కి సరిపోలే వర్గాలు లేవు.",
+  "Chromecast": "Chromecast",
+  "This browser can't play some sources, so ARVIO tries the next one.": "ఈ బ్రౌజర్ కొన్ని సోర్సులను ప్లే చేయలేదు, అందుకే ARVIO తదుపరిదాన్ని ప్రయత్నిస్తోంది."
 }

@@ -336,7 +336,7 @@ class TraktRepository @Inject constructor(
                 } else {
                     prefs[accessKey] = accessToken
                     token.refreshToken?.let { prefs[refreshKey] = it } ?: prefs.remove(refreshKey)
-                    token.expiresAt?.let { prefs[expiresKey] = it } ?: prefs.remove(expiresKey)
+                    token.expiresAt?.let { prefs[expiresKey] = traktExpirySeconds(it) } ?: prefs.remove(expiresKey)
                 }
                 token.updatedAt?.takeIf { it > 0L }?.let { prefs[updatedAtKey] = it }
             }
@@ -5384,3 +5384,10 @@ private object TraktRepoRegexes {
     val HOURS_REGEX = Regex("""(\d+)\s*h""")
     val MINS_REGEX = Regex("""(\d+)\s*m""")
 }
+
+/**
+ * The cloud copy of a Trakt token carries its expiry in epoch seconds, but the web app used to write
+ * milliseconds. Read as seconds that is year 50000, so a token imported from the web never refreshed
+ * ahead of time.
+ */
+internal fun traktExpirySeconds(raw: Long): Long = if (raw >= 100_000_000_000L) raw / 1000L else raw

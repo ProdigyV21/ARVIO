@@ -50,6 +50,12 @@ const PLAYBACK_METHODS = new Set(["direct", "remux", "hls", "other"]);
 const PLAYBACK_CONTAINERS = new Set(["mp4", "mkv", "ts", "m3u8", "unknown"]);
 const PLAYBACK_HOST_TYPES = new Set(["debrid", "addon_http", "home_server", "iptv", "other"]);
 const PLAYBACK_OUTCOMES = new Set(["retried", "final"]);
+// Startup speed of a successful start, measured in the browser from opening the
+// player to the first frame. Sent only on the existing daily playback_started
+// event, with the browser's own tally of earlier days: no extra requests.
+const PLAYBACK_STARTUP = new Set(["under_2s", "2_5s", "5_10s", "over_10s"]);
+const START_TALLY_FIELDS = ["starts_direct", "starts_remux", "starts_hls", "starts_other", "start_under_2s", "start_2_5s", "start_5_10s", "start_over_10s", "stalls"];
+const MAX_START_TALLY = 500;
 const ATTEMPT_FIELDS = ["platform", "method", "container", "host_type", "failure_kind", "phase", "outcome"];
 // Bounds per account/UTC day: a broken title hopping through dozens of dead
 // links folds into a handful of signatures instead of unbounded growth.
@@ -64,9 +70,9 @@ function premiumFunnelStore(event) {
 function sanitizeMetadata(metadata) {
   if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return {};
   const result = {};
-  const allowed = new Set(["source", "medium", "campaign", "content", "referrer", "page", "landing_page", "playback_type", "entry", "player", "stage", "status", "destination", "duration_days", "tier", "provider", "successful", "billing_key", "failure_kind", "transport", "phase", "flow_version", "platform", "method", "container", "host_type", "outcome", "attempt"]);
+  const allowed = new Set(["source", "medium", "campaign", "content", "referrer", "page", "landing_page", "playback_type", "entry", "player", "stage", "status", "destination", "duration_days", "tier", "provider", "successful", "billing_key", "failure_kind", "transport", "phase", "flow_version", "platform", "method", "container", "host_type", "outcome", "attempt", "startup", ...START_TALLY_FIELDS]);
   const enumerated = { failure_kind: FAILURE_KINDS, transport: TRANSPORTS, phase: PHASES, flow_version: CHECKOUT_FLOW_VERSIONS,
-    platform: PLAYBACK_PLATFORMS, method: PLAYBACK_METHODS, container: PLAYBACK_CONTAINERS, host_type: PLAYBACK_HOST_TYPES, outcome: PLAYBACK_OUTCOMES };
+    platform: PLAYBACK_PLATFORMS, method: PLAYBACK_METHODS, container: PLAYBACK_CONTAINERS, host_type: PLAYBACK_HOST_TYPES, outcome: PLAYBACK_OUTCOMES, startup: PLAYBACK_STARTUP };
   // Attribution (5) + playback diagnostics (12) must fit; unknown keys are
   // skipped before they count.
   for (const [key, value] of Object.entries(metadata).slice(0, 24)) {
@@ -78,6 +84,10 @@ function sanitizeMetadata(metadata) {
     }
     if (enumerated[key] && !enumerated[key].has(value)) continue;
     if (key === "attempt" && value !== true) continue;
+    if (START_TALLY_FIELDS.includes(key)) {
+      if (Number.isInteger(value) && value > 0) result[key] = Math.min(value, MAX_START_TALLY);
+      continue;
+    }
     if (!/^[a-z][a-z0-9_]{0,31}$/i.test(key)) continue;
     if (typeof value === "boolean" || (typeof value === "number" && Number.isFinite(value))) {
       result[key] = value;
@@ -314,7 +324,7 @@ async function premiumFunnelReport(event, days = 30, endDate) {
   // This avoids turning a small period report into thousands of extra reads.
   const accountKeys = new Set(keys.filter(key => key.endsWith("/subscription_started.json")).map(key => key.split("/")[4]));
   for (const { billingKey, accountKey } of verifiedLinks) if (accountKeys.has(billingKey)) accountKeys.add(accountKey);
-  const detailedEvents = new Set(["_journey", "trial_started", "subscription_started", "paid_access_observed", "membership_cta_viewed", "checkout_opened", "checkout_returned", "payment_status_checked", "checkout_recovery_opened", "checkout_recovery_closed", "membership_link_started", "membership_linked", "membership_link_failed", "billing_email_verified", "playback_failed"]);
+  const detailedEvents = new Set(["_journey", "trial_started", "subscription_started", "paid_access_observed", "membership_cta_viewed", "checkout_opened", "checkout_returned", "payment_status_checked", "checkout_recovery_opened", "checkout_recovery_closed", "membership_link_started", "membership_linked", "membership_link_failed", "billing_email_verified", "playback_failed", "playback_started"]);
   const detailKeys = keys.filter(key => {
     const name = key.split("/")[5]?.replace(/\.json$/, "");
     // Extra authenticated source observations are needed only for confirmed
@@ -335,8 +345,39 @@ async function premiumFunnelReport(event, days = 30, endDate) {
   return { ...summary, generatedAt, periodStart: dates[0], periodEnd: dates.at(-1),
     ...summarizeMeasurements(records, journeys, verifiedLinks, { contextRecords, contextJourneys }),
     playbackAttempts: summarizePlaybackAttempts(attemptRecords),
+    playbackStarts: summarizePlaybackStarts(records),
     attributionLookback: { days: 30, contextStart, note: "Earlier retained journeys and authenticated pre-payment source observations can explain payments in this period; they do not increase period visit counts. Unknown or post-payment sources remain unattributed. paymentAttribution includes authenticated fallbacks; legacy journey counts still require a connected anonymous journey." } };
 
+}
+
+function summarizePlaybackStarts(records) {
+  const result = {
+    unit: "successful browser starts",
+    firstStartOfDay: { accountDays: 0, byPlatform: {}, byMethod: {}, byContainer: {}, byHostType: {}, byStartup: {} },
+    earlierDays: { reports: 0, starts: { direct: 0, remux: 0, hls: 0, other: 0 }, startup: { under_2s: 0, "2_5s": 0, "5_10s": 0, over_10s: 0 }, stalls: 0 },
+    note: "firstStartOfDay describes the first successful start of each account/UTC day. earlierDays is the browser's own tally of every start since its previous report, sent with that same daily event (no extra requests), so a device that stops playing never sends its last days. Startup is measured from opening the player to the first frame, including source selection and conversion."
+  };
+  const bump = (bucket, value) => { if (value) bucket[value] = (bucket[value] || 0) + 1; };
+  for (const record of records) {
+    if (record?.eventName !== "playback_started") continue;
+    const meta = record.metadata || {};
+    const first = result.firstStartOfDay;
+    first.accountDays += 1;
+    if (PLAYBACK_PLATFORMS.has(meta.platform)) bump(first.byPlatform, meta.platform);
+    if (PLAYBACK_METHODS.has(meta.method)) bump(first.byMethod, meta.method);
+    if (PLAYBACK_CONTAINERS.has(meta.container)) bump(first.byContainer, meta.container);
+    if (PLAYBACK_HOST_TYPES.has(meta.host_type)) bump(first.byHostType, meta.host_type);
+    if (PLAYBACK_STARTUP.has(meta.startup)) bump(first.byStartup, meta.startup);
+    const tally = START_TALLY_FIELDS.map(field => Math.min(MAX_START_TALLY, Math.max(0, Math.floor(Number(meta[field]) || 0))));
+    if (!tally.some(Boolean)) continue;
+    const earlier = result.earlierDays;
+    earlier.reports += 1;
+    const [direct, remux, hls, other, under2, to5, to10, over10, stalls] = tally;
+    earlier.starts.direct += direct; earlier.starts.remux += remux; earlier.starts.hls += hls; earlier.starts.other += other;
+    earlier.startup.under_2s += under2; earlier.startup["2_5s"] += to5; earlier.startup["5_10s"] += to10; earlier.startup.over_10s += over10;
+    earlier.stalls += stalls;
+  }
+  return result;
 }
 
 function summarizePlaybackAttempts(records) {
@@ -500,5 +541,5 @@ module.exports = {
   recordPremiumEvent,
   premiumFunnelReport,
   cleanupPremiumFunnel,
-  _test: { sanitizeMetadata, dayRange, summarizePremiumKeys, playbackAttempt, mergePlaybackAttempt, summarizePlaybackAttempts }
+  _test: { sanitizeMetadata, dayRange, summarizePremiumKeys, playbackAttempt, mergePlaybackAttempt, summarizePlaybackAttempts, summarizePlaybackStarts }
 };

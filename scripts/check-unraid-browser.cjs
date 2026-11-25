@@ -45,7 +45,7 @@ async function exerciseContext(browser, baseUrl, scenario, evidenceDir) {
   const stats = {
     scenario, bootstrapRequests: 0, delayedBootstrapMs: 0,
     mockedMetadataRequests: 0, blockedExternalRequests: 0,
-    unexpectedApiRequests: 0, forbiddenServiceRequests: 0
+    unexpectedApiRequests: 0, forbiddenServiceRequests: 0, forbiddenUrls: [], unexpectedUrls: []
   };
   const pageErrors = [];
   try {
@@ -55,7 +55,17 @@ async function exerciseContext(browser, baseUrl, scenario, evidenceDir) {
         /(?:^|\.)(?:trakt\.tv|simkl\.com|supabase\.co|google-analytics\.com|googletagmanager\.com)$/.test(url.hostname);
       const forbiddenPath = /^\/api\/(?:cloud-auth|premium|membership|entitlement|analytics|trakt|simkl|mdblist)(?:\/|$)/.test(url.pathname) ||
         url.pathname.startsWith('/.netlify/functions/');
-      if (forbiddenHost || forbiddenPath) stats.forbiddenServiceRequests += 1;
+      // On load the app asks its own server whether a Simkl or WeTrakr session cookie or MDBList OAuth setup
+      // exists. Both answer from local state ("no session", "not configured") and never contact
+      // the tracker, so they are not tracker traffic; they run against the real container.
+      const localStateProbe = route.request().method() === 'GET' && url.origin === baseUrl &&
+        (url.pathname === '/api/simkl/session' || url.pathname === '/api/wetrakr/session' ||
+          /^\/api\/mdblist\/oauth\/status\/?$/.test(url.pathname));
+      if (localStateProbe) {
+        await route.continue();
+        return;
+      }
+      if (forbiddenHost || forbiddenPath) { stats.forbiddenServiceRequests += 1; stats.forbiddenUrls.push(`${route.request().method()} ${url.origin}${url.pathname}`); }
       if (url.origin !== baseUrl) {
         stats.blockedExternalRequests += 1;
         await route.abort('blockedbyclient');
@@ -84,6 +94,7 @@ async function exerciseContext(browser, baseUrl, scenario, evidenceDir) {
       }
       if (url.pathname.startsWith('/api/') || forbiddenPath) {
         stats.unexpectedApiRequests += 1;
+        stats.unexpectedUrls.push(`${route.request().method()} ${url.pathname}`);
         await route.abort('blockedbyclient');
         return;
       }
@@ -113,18 +124,21 @@ async function exerciseContext(browser, baseUrl, scenario, evidenceDir) {
     await profile.click();
     await expect(page.locator('.settings-gear')).toBeVisible();
     await page.locator('.settings-gear').click();
-    await expect(page.getByRole('heading', { name: 'Local Account', exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Local account', exact: true })).toBeVisible();
     await expect(page.getByText('Profiles and settings are saved in this browser. ARVIO Cloud is not connected.', { exact: true }))
       .toBeVisible();
     await assertIndependentUi(page, scenario);
 
     assert.equal(await page.getByRole('button', { name: 'Telegram', exact: true }).count(), 0,
       'Disabled integration must not offer a Telegram account action.');
+    // The settings page is split into sections; the tracker panels live under Connected services.
+    await page.locator('.st-nav-item').filter({ hasText: 'Connected services' }).click();
+    await expect(page.getByRole('heading', { name: 'Connected services', exact: true })).toBeVisible();
+    const providerPanel = (provider) => page.locator('.st-group').filter({
+      has: page.getByRole('heading', { name: provider, exact: true })
+    });
     for (const provider of ['Trakt', 'Simkl']) {
-      const panel = page.locator('.settings-panel-card').filter({
-        has: page.getByRole('heading', { name: provider, exact: true })
-      });
-      const button = panel.getByRole('button', { name: 'Start device link', exact: true });
+      const button = providerPanel(provider).getByRole('button', { name: `Connect ${provider}`, exact: true });
       await expect(button).toBeVisible();
       if (scenario === 'bootstrap-blocked') await expect(button).toBeDisabled();
       else await expect(button).toBeEnabled();
@@ -136,8 +150,8 @@ async function exerciseContext(browser, baseUrl, scenario, evidenceDir) {
     });
     if (scenario === 'bootstrap-blocked') {
       assert.equal(runtimeIds, null, 'Blocked bootstrap does not invent or reuse runtime credentials.');
-      await expect(page.getByText('Trakt client id is missing.', { exact: true })).toBeVisible();
-      await expect(page.getByText('Simkl client configuration is missing.', { exact: true })).toBeVisible();
+      await expect(providerPanel('Trakt').getByText('Missing config', { exact: true })).toBeVisible();
+      await expect(providerPanel('Simkl').getByText('Missing config', { exact: true })).toBeVisible();
     } else {
       assert.deepEqual(runtimeIds, EXPECTED_PUBLIC_IDS, 'UI receives only the expected dummy public tracker IDs.');
       assert.ok(stats.delayedBootstrapMs >= BOOTSTRAP_DELAY_MS - 100, 'Bootstrap was deliberately delayed.');
@@ -153,8 +167,8 @@ async function exerciseContext(browser, baseUrl, scenario, evidenceDir) {
     await expect(page.getByRole('heading', { name: "Who's watching?", exact: true })).toBeVisible();
     await expect(page.locator('.profile-pick').filter({ hasText: profileName })).toBeVisible();
     await assertIndependentUi(page, scenario);
-    assert.equal(stats.forbiddenServiceRequests, 0, `${scenario}: no Cloud, billing, analytics or tracker requests`);
-    assert.equal(stats.unexpectedApiRequests, 0, `${scenario}: no unmocked provider API routes`);
+    assert.equal(stats.forbiddenServiceRequests, 0, `${scenario}: no Cloud, billing, analytics or tracker requests; saw: ${stats.forbiddenUrls.join(", ")}`);
+    assert.equal(stats.unexpectedApiRequests, 0, `${scenario}: no unmocked provider API routes; saw: ${stats.unexpectedUrls.join(", ")}`);
     assert.deepEqual(pageErrors, [], `${scenario}: no unhandled application errors`);
     return stats;
   } finally {

@@ -75,6 +75,21 @@ test('runtime excluded package paths and declarations fail despite harmless UI c
   assert.ok(result.issues.some(issue => issue.kind === 'excluded-sdk-runtime-path'));
   assert.ok(result.issues.some(issue => issue.kind === 'excluded-sdk-runtime-declaration'));
 });
+test('a traced copy of the vendored AES source manifest is not a shipped runtime declaration, but a runtime one still is', async t => {
+  const options = await fixture(t);
+  const vendored = path.join(options.standalone, 'distribution-sources/aes/upstream/packages/aes/package.json');
+  await mkdir(path.dirname(vendored), { recursive: true });
+  await writeFile(vendored, JSON.stringify({ name: '@cryptography/aes', version: '1' }));
+  const vendoredOnly = await auditUnraidDependencies(options);
+  assert.equal(vendoredOnly.issues.some(issue => issue.kind === 'excluded-sdk-runtime-declaration'), false);
+  assert.equal(vendoredOnly.passed, true);
+  const runtime = path.join(options.standalone, 'node_modules/@cryptography/aes/package.json');
+  await mkdir(path.dirname(runtime), { recursive: true });
+  await writeFile(runtime, JSON.stringify({ name: '@cryptography/aes', version: '1' }));
+  const withRuntime = await auditUnraidDependencies(options);
+  assert.equal(withRuntime.passed, false);
+  assert.ok(withRuntime.issues.some(issue => issue.kind === 'excluded-sdk-runtime-declaration' && issue.path.startsWith('node_modules/')));
+});
 test('webpack stats distinguish ignored aliases from included package and external modules', async t => {
   const options = await fixture(t), stats = path.join(path.dirname(options.lock), 'stats.json');
   await writeFile(stats, JSON.stringify({ modules: [{ identifier: 'telegram (ignored)' }, { identifier: '/app/node_modules/@cryptography/aes/dist/es/aes.js' }, { name: 'external commonjs "telegram/sessions"' }] }));

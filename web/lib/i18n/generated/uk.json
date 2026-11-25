@@ -1563,5 +1563,16 @@
   "Maximum of 10 IPTV playlists reached": "Досягнуто максимуму — 10 плейлистів IPTV",
   "Regional price · save {value0} vs. 12 monthly payments": "Регіональна ціна · економія {value0} порівняно з 12 щомісячними платежами",
   "One payment, no automatic renewal. About {value0} a month.": "Один платіж, без автоматичного продовження. Близько {value0} на місяць.",
-  "12-month pass · {value0}": "Пропуск на 12 місяців · {value0}"
+  "12-month pass · {value0}": "Пропуск на 12 місяців · {value0}",
+  "Look around for free. Premium is needed to play.": "Переглядайте безкоштовно. Для відтворення потрібен Premium.",
+  "Watch {title} with ARVIO Premium": "Дивіться {title} з ARVIO Premium",
+  "Watch this with ARVIO Premium": "Дивіться це з ARVIO Premium",
+  "Watch Live TV with ARVIO Premium": "Дивіться пряме ТБ з ARVIO Premium",
+  "Download with ARVIO Premium": "Завантажуйте з ARVIO Premium",
+  "Open streams with ARVIO Premium": "Відкривайте потоки з ARVIO Premium",
+  "Filter categories": "Фільтр категорій",
+  "Clear filter": "Очистити фільтр",
+  "No categories match \"{value0}\".": "Немає категорій, що відповідають «{value0}».",
+  "Chromecast": "Chromecast",
+  "This browser can't play some sources, so ARVIO tries the next one.": "Цей браузер не може відтворити деякі джерела, тому ARVIO пробує наступне."
 }

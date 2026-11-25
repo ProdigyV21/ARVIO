@@ -118,7 +118,22 @@ async function titleReleases(title: CalendarTitle, options: CalendarLoadOptions,
   const scheduleKey = `${options.language}:${options.customApiKey || "default"}:${item.id}`;
   const cachedSchedule = item.mediaType === "tv" && !options.refreshMetadata ? schedules.get(scheduleKey) : undefined;
   const savedSchedule = cachedSchedule && Date.now() - cachedSchedule.at < 30 * 60_000 ? cachedSchedule : undefined;
-  const details = savedSchedule?.details ?? await readMetadata(() => metadata<Details>(`${item.mediaType}/${item.id}`, options, item.mediaType === "movie" ? { append_to_response: "release_dates" } : {}));
+  let details: Details;
+  try {
+    details = savedSchedule?.details ?? await readMetadata(() => metadata<Details>(`${item.mediaType}/${item.id}`, options, item.mediaType === "movie" ? { append_to_response: "release_dates" } : {}));
+  } catch (error) {
+    if ((error as { status?: number }).status !== 404 && (error as Error).message !== "Calendar metadata not found") throw error;
+    // Lists sometimes file a film under series (anime films synced as shows):
+    // TMDB has no series with that id, so read it as the film it is.
+    if (item.mediaType === "tv") {
+      const movie = await readMetadata(() => metadata<Details>(`movie/${item.id}`, options, { append_to_response: "release_dates" })).catch(() => null);
+      if (movie && !movie.adult) {
+        movieCalendarReleases({ ...title, item: { ...item, ...mapTmdbItem(movie, "movie"), traktId: item.traktId } }, movie, options.region).forEach(publish);
+      }
+    }
+    // A title TMDB does not know is not a failed load: Retry cannot fix it.
+    return { failed: false };
+  }
   if (details.adult) return { failed: false };
   const hydrated: CalendarTitle = { ...title, item: { ...item, ...mapTmdbItem(details, item.mediaType), traktId: item.traktId } };
   if (item.mediaType === "movie") { movieCalendarReleases(hydrated, details, options.region).forEach(publish); return { failed: false }; }

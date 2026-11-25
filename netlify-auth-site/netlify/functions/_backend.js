@@ -1449,11 +1449,14 @@ async function handleTmdbProxy(event) {
       statusCode: response.status,
       headers: {
         ...JSON_HEADERS,
-        "cache-control": response.ok ? "public, max-age=3600, stale-while-revalidate=86400" : "no-store",
-        // CRITICAL: Netlify's CDN cache key excludes the query string by default,
-        // so without this every /discover request shares ONE cache entry and all
-        // provider rows show identical content. Vary on the full query.
-        "netlify-vary": "query"
+        // Clients (web data cache, app HTTP cache) key on the full URL, so they
+        // may keep a copy. Netlify's edge must not: it kept serving one cached
+        // body for unrelated queries (an episode object for "The Matrix"
+        // searches) even with Netlify-Vary: query, and its hit rate on this
+        // function was ~4%, so the shared edge copy buys almost nothing.
+        "cache-control": response.ok ? "public, max-age=3600" : "no-store",
+        "netlify-cdn-cache-control": "no-store",
+        "cdn-cache-control": "no-store"
       },
       body: text
     };
@@ -2380,6 +2383,31 @@ async function saveSnapshotToBlobs(event, identity, snapshot, condition) {
   return normalized;
 }
 
+/**
+ * A cheap "did the account document change?" signal for clients that poll. It reads only the
+ * metadata of the stored document (no body), and the etag changes on every write, so two equal
+ * revisions mean nothing was saved in between. Returns null when the account has no document yet.
+ */
+async function loadSnapshotRevision(event, identity) {
+  const stores = snapshotStores(event);
+  const key = snapshotKeys(identity).supabase;
+  let meta;
+  try {
+    meta = await stores.account.getMetadata(key, { consistency: "strong" });
+  } catch (error) {
+    if (String(error?.message || "").includes("uncachedEdgeURL")) {
+      meta = await stores.account.getMetadata(key);
+    } else if (error?.status === 404 || error?.name === "BlobNotFoundError") {
+      return null;
+    } else {
+      throw error;
+    }
+  }
+  if (!meta) return null;
+  const revision = String(meta.etag || meta.metadata?.updatedAt || "").trim();
+  return revision || null;
+}
+
 async function appendSnapshotEvent(event, identity, snapshot) {
   const stores = snapshotStores(event);
   const cursor = Date.now();
@@ -3096,6 +3124,7 @@ module.exports = {
   snapshotKeys,
   loadSnapshotFromBlobs,
   loadSnapshotForUpdate,
+  loadSnapshotRevision,
   saveSnapshotToBlobs,
   appendSnapshotEvent,
   listBlobKeys,

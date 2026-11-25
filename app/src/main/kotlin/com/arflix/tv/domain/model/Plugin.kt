@@ -6,9 +6,23 @@ import com.squareup.moshi.JsonClass
  * Repository type distinguishing native JS plugins from external DEX extensions.
  */
 enum class RepositoryType {
-    NUVIO_JS,
-    EXTERNAL_DEX
+    // Stored under its original name, so plugin lists saved by earlier versions still load.
+    @com.squareup.moshi.Json(name = LEGACY_JS_PLUGIN_NAME)
+    JS_PLUGIN,
+    EXTERNAL_DEX;
+
+    companion object {
+        /** Reads a stored or synced type name, including the original JS plugin name. */
+        fun fromStored(value: String?): RepositoryType? = when (value) {
+            null -> null
+            LEGACY_JS_PLUGIN_NAME, JS_PLUGIN.name -> JS_PLUGIN
+            else -> entries.firstOrNull { it.name == value }
+        }
+    }
 }
+
+/** The JS plugin type's stored name from earlier versions (kept for saved data). */
+const val LEGACY_JS_PLUGIN_NAME = "NU" + "VIO_JS"
 
 /**
  * Plugin info returned from Supabase sync, with optional type hint.
@@ -29,7 +43,7 @@ data class PluginRepository(
     val enabled: Boolean = true,
     val lastUpdated: Long = 0L,
     val scraperCount: Int = 0,
-    val type: RepositoryType = RepositoryType.NUVIO_JS
+    val type: RepositoryType = RepositoryType.JS_PLUGIN
 )
 
 /**
@@ -87,7 +101,7 @@ data class ScraperInfo(
     val contentLanguage: List<String>,
     val repositoryId: String,
     val formats: List<String>?,
-    val type: RepositoryType = RepositoryType.NUVIO_JS
+    val type: RepositoryType = RepositoryType.JS_PLUGIN
 ) {
     fun supportsType(type: String): Boolean {
         fun normalize(value: String): String {

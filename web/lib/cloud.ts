@@ -803,6 +803,16 @@ async function fetchRawPayload(auth: AuthClient): Promise<RawPayload> {
 }
 
 /** Read the full account_sync_state payload object (shared with Android). */
+/**
+ * The revision of the stored account document: it changes whenever any device saves, and reading
+ * it downloads nothing. Null when the account cannot use the backend or the server has no value.
+ */
+export async function pullCloudRevision(auth: AuthClient): Promise<string | null> {
+  if (!auth.session || !canUseBackendSync(auth)) return null;
+  const result = await backendRequest<{ revision?: unknown }>(auth, "account-sync-cursor");
+  return typeof result.revision === "string" && result.revision ? result.revision : null;
+}
+
 export async function pullRawPayload(auth: AuthClient): Promise<RawPayload> {
   if (!auth.session) return {};
   const userId = auth.session.userId;
@@ -1559,6 +1569,22 @@ function normalizeTrackingReadMode(value: unknown, fallback: TrackingReadMode): 
     normalized === "both" || normalized === "wetrakr" || normalized === "mdblist" ? normalized : fallback;
 }
 
+/** The web keeps Trakt expiry in epoch milliseconds; the cloud payload carries epoch seconds. */
+export function cloudTraktExpirySeconds(expiresAt: number): number {
+  return expiresAt >= 1_000_000_000_000 ? Math.floor(expiresAt / 1000) : expiresAt;
+}
+
+/**
+ * Trakt refresh tokens are single use. A token this browser rotated but could not publish yet is
+ * newer than the cloud copy, and replacing it would swap a live refresh token for a spent one.
+ * A later expiry means a later rotation; equal or missing expiry follows the cloud, as before.
+ */
+export function chooseTraktToken(local: TraktToken | null, cloud: TraktToken | null): TraktToken | null {
+  if (!local || !cloud) return cloud;
+  if (local.refresh_token === cloud.refresh_token) return cloud;
+  return local.expires_at > cloud.expires_at ? local : cloud;
+}
+
 function readCloudTraktToken(root: RawPayload, profileId: string): TraktToken | null {
   const tokensByProfile = objectRecord<{
     accessToken?: string;
@@ -1745,13 +1771,15 @@ export async function saveCloudTrackingSelection(
 
     if (writeTraktCredential && selection.traktToken) {
       const token = selection.traktToken;
+      // The cloud copy is shared with Android, which reads the expiry as epoch seconds.
+      const expiresAtSeconds = cloudTraktExpirySeconds(token.expires_at);
       traktTokens[profileId] = {
         accessToken: token.access_token,
         refreshToken: token.refresh_token,
-        expiresAt: token.expires_at,
+        expiresAt: expiresAtSeconds,
         access_token: token.access_token,
         refresh_token: token.refresh_token,
-        expires_at: token.expires_at,
+        expires_at: expiresAtSeconds,
         updatedAt
       };
     } else if (writeTraktCredential) {

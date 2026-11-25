@@ -1567,5 +1567,16 @@
   "Maximum of 10 IPTV playlists reached": "Maksimum på 10 IPTV-playlister er nået",
   "Regional price · save {value0} vs. 12 monthly payments": "Regional pris · spar {value0} sammenlignet med 12 månedlige betalinger",
   "One payment, no automatic renewal. About {value0} a month.": "Én betaling, ingen automatisk fornyelse. Cirka {value0} om måneden.",
-  "12-month pass · {value0}": "12-måneders pas · {value0}"
+  "12-month pass · {value0}": "12-måneders pas · {value0}",
+  "Look around for free. Premium is needed to play.": "Kig dig gratis omkring. Premium kræves for at afspille.",
+  "Watch {title} with ARVIO Premium": "Se {title} med ARVIO Premium",
+  "Watch this with ARVIO Premium": "Se dette med ARVIO Premium",
+  "Watch Live TV with ARVIO Premium": "Se live-tv med ARVIO Premium",
+  "Download with ARVIO Premium": "Download med ARVIO Premium",
+  "Open streams with ARVIO Premium": "Åbn streams med ARVIO Premium",
+  "Filter categories": "Filtrér kategorier",
+  "Clear filter": "Ryd filter",
+  "No categories match \"{value0}\".": "Ingen kategorier matcher \"{value0}\".",
+  "Chromecast": "Chromecast",
+  "This browser can't play some sources, so ARVIO tries the next one.": "Denne browser kan ikke afspille nogle kilder, så ARVIO prøver den næste."
 }

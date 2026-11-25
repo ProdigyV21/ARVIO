@@ -2,7 +2,8 @@
 import { Play, ArrowLeft, X, Loader2, TriangleAlert, RotateCw, Folder, ExternalLink, RotateCcw } from "lucide-react";
 import { canProviderTranscode } from "@/lib/streamCompatibility";
 import { MediaCard } from "@/components/media/MediaCard";
-import type { ExternalPlayerOption } from "@/lib/externalPlayers";
+import { isAndroid, type ExternalPlayerOption } from "@/lib/externalPlayers";
+import { arvioAppLink } from "@/lib/appLink";
 import type { MediaItem, StreamSource } from "@/lib/types";
 import type { LiveFailure } from "@/lib/liveTvPlayback";
 import "./liveFailure.css";
@@ -20,6 +21,10 @@ export function PlayerStatusLayers({ booted, bootLogo, bootStatus, bufferAheadSe
     <button key={option.id} type="button" className="player-error-external" onClick={() => openExternalOption(option, stream)}>
       <ExternalLink size={15} /> {option.id === "chooser" ? translateUi("Open in player") : translateUi("Open in {value0}", { value0: translateUi(option.label) })}</button>
   ));
+  // Android: the ARVIO app plays what this browser cannot (MKV, DTS, HDR).
+  const appLink = !liveTv && item && isAndroid()
+    ? arvioAppLink(item, item.seasonNumber != null && item.episodeNumber != null ? { season: item.seasonNumber, episode: item.episodeNumber } : null)
+    : null;
   return (<>
       {playBlocked && !error && <div className="player-start-prompt">
         <button type="button" className="player-error-external" onClick={togglePlay}>
@@ -40,6 +45,19 @@ export function PlayerStatusLayers({ booted, bootLogo, bootStatus, bufferAheadSe
               <Loader2 size={16} aria-hidden="true" /> {translateUi(bootStatus.label, bootStatus.values)}
             </p>
             {subtitleLabel ? <p className="player-boot-sub">{subtitleLabel}{item?.episodeTitle ? ` · ${item.episodeTitle}` : ""}</p> : null}
+            {/* After a few automatic hops, say why and offer a way out instead of a counter alone. */}
+            {!liveTv && Number(bootStatus.values?.value0 ?? 0) >= 3 && bootStatus.label.startsWith("Trying next source") ? (
+              <div className="player-boot-help">
+                <p>{translateUi("This browser can't play some sources, so ARVIO tries the next one.")}</p>
+                <div className="player-error-actions">
+                  <button type="button" className="player-error-external" onClick={() => openPanel("sources")}>
+                    <Folder size={15} /> {translateUi("Choose source")}</button>
+                  {externalButtons}
+                  {appLink && <a className="player-error-external" href={appLink}>
+                    <ExternalLink size={15} /> {translateUi("Open in {value0}", { value0: "ARVIO" })}</a>}
+                </div>
+              </div>
+            ) : null}
           </div>
         </div>
       )}
@@ -66,6 +84,8 @@ export function PlayerStatusLayers({ booted, bootLogo, bootStatus, bufferAheadSe
               {!liveTv && <button type="button" className="player-error-external" onClick={() => openPanel("sources")}>
                 <Folder size={15} /> {translateUi("Sources")}</button>}
               {!liveTv && externalButtons}
+              {appLink && <a className="player-error-external" href={appLink}>
+                <ExternalLink size={15} /> {translateUi("Open in {value0}", { value0: "ARVIO" })}</a>}
               {!liveTv && !stream.transcoded && canProviderTranscode(stream) && (
                 <button type="button" className="player-error-transcode" onClick={() => onSelectStream(stream, { forceTranscode: true })}>
                   <Play size={15} fill="currentColor" /> {translateUi(" Transcode")}</button>

@@ -45,7 +45,7 @@ private const val MIN_TITLE_SIMILARITY = 0.5
 private const val MAX_ALT_TITLES = 8
 
 /**
- * Executes external DEX extensions by bridging between NuvioTV's TMDB ID-based system
+ * Executes external DEX extensions by bridging between ARVIO's TMDB ID-based system
  * and the extensions' text search-based API.
  *
  * Flow: TMDB ID → title lookup → search() → match → load() → loadLinks() → LocalScraperResult

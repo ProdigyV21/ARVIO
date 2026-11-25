@@ -1574,5 +1574,16 @@
   "Maximum of 10 IPTV playlists reached": "Naabot na ang maximum na 10 IPTV playlist",
   "Regional price · save {value0} vs. 12 monthly payments": "Rehiyonal na presyo · makatipid ng {value0} kumpara sa 12 buwanang bayad",
   "One payment, no automatic renewal. About {value0} a month.": "Isang bayad, walang awtomatikong renewal. Mga {value0} kada buwan.",
-  "12-month pass · {value0}": "12-buwang pass · {value0}"
+  "12-month pass · {value0}": "12-buwang pass · {value0}",
+  "Look around for free. Premium is needed to play.": "Tumingin-tingin nang libre. Kailangan ang Premium para mag-play.",
+  "Watch {title} with ARVIO Premium": "Panoorin ang {title} gamit ang ARVIO Premium",
+  "Watch this with ARVIO Premium": "Panoorin ito gamit ang ARVIO Premium",
+  "Watch Live TV with ARVIO Premium": "Manood ng Live TV gamit ang ARVIO Premium",
+  "Download with ARVIO Premium": "Mag-download gamit ang ARVIO Premium",
+  "Open streams with ARVIO Premium": "Magbukas ng mga stream gamit ang ARVIO Premium",
+  "Filter categories": "I-filter ang mga kategorya",
+  "Clear filter": "I-clear ang filter",
+  "No categories match \"{value0}\".": "Walang kategoryang tumutugma sa \"{value0}\".",
+  "Chromecast": "Chromecast",
+  "This browser can't play some sources, so ARVIO tries the next one.": "Hindi ma-play ng browser na ito ang ilang source, kaya sinusubukan ng ARVIO ang susunod."
 }

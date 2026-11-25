@@ -188,7 +188,7 @@ fun ListPickerMenu(
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                     modifier = Modifier.heightIn(max = 420.dp)
                 ) {
-                    itemsIndexed(choices, key = { _, choice -> choice.list.key }) { index, choice ->
+                    itemsIndexed(choices, key = { _, choice -> choice.list.key }, contentType = { _, _ -> "ListPickerMenu.choices" }) { index, choice ->
                         ListChoiceRow(
                             choice = choice,
                             showProvider = showProvider,

@@ -3,7 +3,7 @@ import "@/app/premium.css";
 import { useRegionalYearly } from "@/lib/regionalPricing";
 
 import { useEffect, useId, useRef, useState } from "react";
-import { BadgeCheck, ExternalLink, Loader2, RefreshCw, X } from "lucide-react";
+import { ExternalLink, Loader2, RefreshCw, X } from "lucide-react";
 import { useTranslation } from "@/lib/i18n";
 import { authClient, useAppPick } from "@/lib/store";
 import { EXIT_REASONS, fetchEntitlement, kofiYearlyUrl, submitExitSurvey, type EntitlementState, type ExitReason } from "@/lib/entitlement";
@@ -22,15 +22,14 @@ export function deviceName(userAgent = typeof navigator === "undefined" ? "" : n
   return "device";
 }
 
-// Literal phrases so the translation tooling can find them.
-function headline(intent: PremiumIntent): string {
-  if (intent === "live") return "Watch Live TV on your {device}";
-  if (intent === "download") return "Download with ARVIO Premium";
-  if (intent === "external" || intent === "copy") return "Open streams with ARVIO Premium";
-  return "Watch this on your {device}";
+// Literal translateUi calls so the translation tooling collects every headline.
+function useHeadline(intent: PremiumIntent, title?: string | null): string {
+  const translateUi = useTranslation();
+  if (intent === "live") return translateUi("Watch Live TV with ARVIO Premium");
+  if (intent === "download") return translateUi("Download with ARVIO Premium");
+  if (intent === "external" || intent === "copy") return translateUi("Open streams with ARVIO Premium");
+  return title ? translateUi("Watch {title} with ARVIO Premium", { title }) : translateUi("Watch this with ARVIO Premium");
 }
-
-const DEVICE_LABELS: Record<string, string> = { TV: "TV", iPhone: "iPhone", iPad: "iPad", Mac: "Mac", phone: "phone", computer: "computer", device: "device" };
 
 const REASON_LABELS: Record<ExitReason, string> = {
   too_expensive: "Too expensive",
@@ -92,17 +91,20 @@ export function PremiumOffer({ intent, state, status, account, onClose, onRetry,
   onEntitled: (next: EntitlementState) => void;
 }) {
   const translateUi = useTranslation();
-  const { auth } = useAppPick("auth");
+  const { auth, selected } = useAppPick("auth", "selected");
   const dialog = useRef<HTMLDialogElement>(null);
   const id = useId();
   useRegionalYearly(); // re-render with the regional link once the country is known
   const yearly = kofiYearlyUrl();
-  const device = deviceName();
   const lapsed = Boolean(state?.everPaid) && !state?.entitled;
   const [tv] = useState(() => isTvClassBrowser());
   const entitled = useRef(onEntitled);
   entitled.current = onEntitled;
   const ready = !(status === "loading" && !state) && status !== "error";
+  // The title they pressed Play on: the offer shows what they are about to watch.
+  const title = intent === "play" ? selected?.title?.trim() || null : null;
+  const artwork = intent === "play" ? selected?.backdrop || selected?.image || null : null;
+  const heading = useHeadline(intent, title);
 
   useEffect(() => {
     const element = dialog.current;
@@ -144,8 +146,8 @@ export function PremiumOffer({ intent, state, status, account, onClose, onRetry,
       <p>{translateUi("Your payment status has not changed. Please retry before subscribing again.")}</p>
       <button type="button" className="paywall-primary" onClick={onRetry}><RefreshCw size={16} /> {translateUi("Check access again")}</button>
     </div> : <>
-      <p className="premium-offer-eyebrow"><BadgeCheck size={15} /> ARVIO PREMIUM</p>
-      <h2 id={`${id}-title`}>{translateUi(headline(intent), { device: translateUi(DEVICE_LABELS[device] ?? "device") })}</h2>
+      {artwork && <div className="premium-offer-artwork" aria-hidden="true"><img src={artwork} alt="" /></div>}
+      <h2 id={`${id}-title`}>{heading}</h2>
       <p className="premium-offer-lead">{lapsed ? translateUi("Welcome back. Everything you set up is still here.") : translateUi("Everything you set up stays. Premium unlocks playback, Live TV and downloads in ARVIO Web on every browser you sign in to.")}</p>
       {tv && <PayOnPhone email={auth?.email} />}
       <PremiumPlans action={(plan) => plan === "yearly"
@@ -156,8 +158,8 @@ export function PremiumOffer({ intent, state, status, account, onClose, onRetry,
             {translateUi("Subscribe monthly")} <ExternalLink size={15} />
           </MembershipCheckout>} />
       <AndroidAppNote />
-      {/* Members who left already know the app: the video is for newcomers. */}
-      {!lapsed && !tv && config.promoVideoUrl && <video className="premium-offer-video" src={config.promoVideoUrl} poster={config.promoPosterUrl || undefined} muted playsInline controls preload="none" />}
+      {/* The tour is for newcomers; members who left, and anyone who just chose a title, skip it. */}
+      {!lapsed && !tv && !artwork && config.promoVideoUrl && <video className="premium-offer-video" src={config.promoVideoUrl} poster={config.promoPosterUrl || undefined} muted playsInline controls preload="none" />}
       <p className="premium-offer-note">{translateUi("The Android and TV app stays free. Membership does not include media or subscriptions to other services.")}</p>
     </>}
   </dialog>;

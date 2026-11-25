@@ -36,7 +36,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
-import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.compose.ui.Alignment
@@ -291,7 +291,7 @@ fun WatchlistScreen(
                             Key.Enter, Key.DirectionCenter, Key.NumPadEnter -> {
                                 when(topBarFocusedItem(topIndex, currentProfile != null)) {
                                     SidebarItem.HOME -> onNavigateToHome(); SidebarItem.SEARCH -> onNavigateToSearch()
-                                    SidebarItem.TV -> onNavigateToTv(); SidebarItem.SETTINGS -> onNavigateToSettings(null)
+                                    SidebarItem.TV -> onNavigateToTv(); SidebarItem.NEWS -> com.arflix.tv.ui.components.NewsNavigation.open(); SidebarItem.SETTINGS -> onNavigateToSettings(null)
                                     SidebarItem.WATCHLIST -> firstTab.requestFocus(); null -> onSwitchProfile()
                                 }; true
                             }
@@ -574,7 +574,7 @@ fun WatchlistScreen(
                             LazyVerticalGrid(GridCells.Fixed(columns), state = grid, modifier = Modifier.fillMaxSize(),
                                 horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(18.dp),
                                 contentPadding = PaddingValues(top = 8.dp, bottom = 16.dp + LocalBottomBarInset.current)) {
-                                items(lists, key = { it.id }) { source ->
+                                items(lists, key = { it.id }, contentType = { "WatchlistScreen.lists" }) { source ->
                                     var cover by remember(source) { mutableStateOf<String?>((source as? WatchlistSourceItem.Catalog)?.config?.collectionCoverImageUrl) }
                                     LaunchedEffect(source) { cover = viewModel.collectionCover(source) }
                                     OledCollection(source, cover, width) { openedList = source.id; viewModel.selectSource(source.id) }
@@ -596,13 +596,13 @@ fun WatchlistScreen(
                             .clipToBounds().testTag("library-grid"),
                         horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(18.dp),
                         contentPadding = PaddingValues(top = 8.dp, bottom = bottomPadding)) {
-                        if (touch && showSpotlight) item("mobile-spotlight", span = { GridItemSpan(maxLineSpan) }) {
+                        if (touch && showSpotlight) item("mobile-spotlight", span = { GridItemSpan(maxLineSpan) }, contentType = "WatchlistScreen.mobile_spotlight") {
                             CollectionSpotlight(previewCatalog, spotlightItem, true, compactSpotlight, {},
                                 providerLogoUrl = activePreview?.providerLogoUrl ?: spotlightItem?.primaryNetworkLogo,
                                 clearLogoUrl = previewItem?.let { logos[watchlistLogoKey(it)] },
                                 horizontalInset = 6.dp, showBackButton = false, topInset = 8.dp)
                         }
-                        itemsIndexed(items, key = { index, item -> watchlistItemKey(item, index) }) { index, item ->
+                        itemsIndexed(items, key = { index, item -> watchlistItemKey(item, index) }, contentType = { _, _ -> "WatchlistScreen.items" }) { index, item ->
                             LaunchedEffect(watchlistLogoKey(item), poster) { if(!poster) viewModel.ensureLogo(item) }
                             Box(Modifier.padding(6.dp).testTag("library-card-frame-$index")) {
                             MediaCard(item, width = width - 12.dp, isLandscape = !poster, logoImageUrl = logos[watchlistLogoKey(item)],
@@ -616,12 +616,12 @@ fun WatchlistScreen(
                                 }) else null)
                             }
                         }
-                        if (if(serverMode) servers.isLoadingMore else state.isLoadingMore) item("loading-more", span = { GridItemSpan(maxLineSpan) }) {
+                        if (if(serverMode) servers.isLoadingMore else state.isLoadingMore) item("loading-more", span = { GridItemSpan(maxLineSpan) }, contentType = "WatchlistScreen.loading_more") {
                             Box(Modifier.fillMaxWidth().padding(12.dp), contentAlignment = Alignment.Center) {
                                 CircularProgressIndicator(Modifier.size(24.dp), color = resolveAccentColor(Color.White))
                             }
                         }
-                        if(error != null) item("retry-page", span = { GridItemSpan(maxLineSpan) }) {
+                        if(error != null) item("retry-page", span = { GridItemSpan(maxLineSpan) }, contentType = "WatchlistScreen.retry_page") {
                             OledControl(tr("Could not update this source. Retry"), onClick = { if(serverMode) viewModel.refreshLibrary() else viewModel.refresh() })
                         }
                     }
@@ -838,10 +838,10 @@ private fun OledSources(
     } else {
         LazyColumn(modifier.testTag("library-sources"), verticalArrangement = Arrangement.spacedBy(4.dp), contentPadding = PaddingValues(bottom = 24.dp)) {
             groups.forEach { (group, entries) ->
-                item("group:$group") { header(group, entries.firstOrNull()) }
-                items(entries, key = { it.id }) { row(it) }
+                item("group:$group", contentType = "WatchlistScreen.group_") { header(group, entries.firstOrNull()) }
+                items(entries, key = { it.id }, contentType = { "WatchlistScreen.entries" }) { row(it) }
             }
-            if (showConnect) item("connect") { connect() }
+            if (showConnect) item("connect", contentType = "WatchlistScreen.connect") { connect() }
         }
     }
 }

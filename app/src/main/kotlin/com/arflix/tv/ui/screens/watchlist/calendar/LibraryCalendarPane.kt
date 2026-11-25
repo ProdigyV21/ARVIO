@@ -28,7 +28,7 @@ import androidx.compose.ui.input.key.*
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalLayoutDirection
-import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
@@ -224,7 +224,7 @@ fun LibraryCalendarPane(
             if (selectedReleases.isNotEmpty()) {
                 LazyRow(Modifier.fillMaxWidth().height(if (compact) 169.dp else 130.dp).testTag("calendar-release-rail"), state = releaseRail,
                     horizontalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(top = 2.dp, bottom = 2.dp)) {
-                    itemsIndexed(selectedReleases, key = { _, item -> item.id }) { index, release ->
+                    itemsIndexed(selectedReleases, key = { _, item -> item.id }, contentType = { _, _ -> "LibraryCalendarPane.selectedReleases" }) { index, release ->
                         CalendarReleaseCard(release, state.timezone, locale, if (compact) 280.dp else (this@BoxWithConstraints.maxWidth / 3.28f),
                             compact, Modifier.then(if (index == 0) Modifier.focusRequester(firstRelease) else Modifier)
                                 .onPreviewKeyEvent { event ->

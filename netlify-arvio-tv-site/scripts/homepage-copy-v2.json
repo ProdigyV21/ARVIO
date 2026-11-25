@@ -43,14 +43,14 @@
     "Tu contenido."
   ],
   [
-    "Free and",
-    "Grátis e de",
-    "Gratis y de"
+    "Beautifully",
+    "Tudo bem",
+    "Todo bien"
   ],
   [
-    "open source.",
-    "código aberto.",
-    "código abierto."
+    "connected.",
+    "conectado.",
+    "conectado."
   ],
   [
     "Your libraries, live TV and discoveries.",
@@ -986,5 +986,44 @@
     "View ARVIO source on GitHub",
     "Ver o código do ARVIO no GitHub",
     "Ver el código de ARVIO en GitHub"
-  ]
+  ],
+  ["Start on the TV.", "Comece na TV.", "Empieza en la TV."],
+  ["Finish on the iPad.", "Termine no iPad.", "Termina en el iPad."],
+  ["Your Jellyfin, Plex and Emby servers, live TV and addons in one app. Profiles, watchlist and progress follow you to every screen.", "Seus servidores Jellyfin, Plex e Emby, TV ao vivo e addons em um só aplicativo. Perfis, lista e progresso acompanham você em todas as telas.", "Tus servidores Jellyfin, Plex y Emby, TV en vivo y addons en una sola app. Perfiles, lista y progreso te siguen a cada pantalla."],
+  ["Free on Android TV, Fire TV and phones", "Grátis na Android TV, Fire TV e celulares", "Gratis en Android TV, Fire TV y móviles"],
+  ["ARVIO Web for iPad, iPhone and laptop:", "ARVIO Web para iPad, iPhone e notebook:", "ARVIO Web para iPad, iPhone y portátil:"],
+  ["Same profiles and watchlist", "Mesmos perfis e lista", "Mismos perfiles y lista"],
+  ["Picks up where you left off", "Continua de onde você parou", "Sigue donde lo dejaste"],
+  ["WORKS WITH THE SERVICES YOU ALREADY USE", "FUNCIONA COM OS SERVIÇOS QUE VOCÊ JÁ USA", "FUNCIONA CON LOS SERVICIOS QUE YA USAS"],
+  ["Your own accounts, libraries and sources. ARVIO includes no media or subscriptions.", "Suas próprias contas, bibliotecas e fontes. O ARVIO não inclui conteúdo nem assinaturas.", "Tus propias cuentas, bibliotecas y fuentes. ARVIO no incluye contenidos ni suscripciones."],
+  ["One ARVIO.", "Um ARVIO.", "Un ARVIO."],
+  ["Every screen you own.", "Em todas as suas telas.", "En todas tus pantallas."],
+  ["The app is free on Android. Add ARVIO Web for the iPad on the couch, the iPhone on the go or the laptop at work.", "O aplicativo é grátis no Android. Adicione o ARVIO Web para o iPad no sofá, o iPhone na rua ou o notebook no trabalho.", "La app es gratis en Android. Añade ARVIO Web para el iPad en el sofá, el iPhone fuera de casa o el portátil en el trabajo."],
+  ["The app.", "O aplicativo.", "La app."],
+  ["Free, forever.", "Grátis, para sempre.", "Gratis, para siempre."],
+  ["Android TV · Google TV · Fire TV · Android phones", "Android TV · Google TV · Fire TV · celulares Android", "Android TV · Google TV · Fire TV · móviles Android"],
+  ["Open source, no ads. Built for the remote, refined for touch.", "Código aberto, sem anúncios. Feito para o controle remoto, refinado para o toque.", "Código abierto, sin anuncios. Hecho para el mando, pulido para el tacto."],
+  ["Home servers, live TV with guide, sports and addons", "Servidores domésticos, TV ao vivo com guia, esportes e addons", "Servidores domésticos, TV en vivo con guía, deportes y addons"],
+  ["Trakt and Simkl sync", "Sincronização com Trakt e Simkl", "Sincronización con Trakt y Simkl"],
+  ["Self-host ARVIO Web for free", "Hospede o ARVIO Web você mesmo, grátis,", "Aloja ARVIO Web tú mismo, gratis,"],
+  ["if you prefer your own server", "se preferir seu próprio servidor", "si prefieres tu propio servidor"],
+  ["Nothing to install.", "Nada para instalar.", "Nada que instalar."],
+  ["iPad · iPhone · Mac · Windows · Linux", "iPad · iPhone · Mac · Windows · Linux", "iPad · iPhone · Mac · Windows · Linux"],
+  ["Already use ARVIO on your TV? Sign in with the same account: your profiles, addons and progress are already there. We host it, so there is no server to run.", "Já usa o ARVIO na TV? Entre com a mesma conta: seus perfis, addons e progresso já estão lá. Nós hospedamos, então não há servidor para manter.", "¿Ya usas ARVIO en tu TV? Inicia sesión con la misma cuenta: tus perfiles, addons y progreso ya están ahí. Nosotros lo alojamos, así que no hay servidor que mantener."],
+  ["Look around for free. Premium is needed to play.", "Explore de graça. O Premium é necessário para reproduzir.", "Explora gratis. Se necesita Premium para reproducir."],
+  ["See everything that’s included", "Veja tudo o que está incluído", "Mira todo lo que incluye"],
+  ["Phone and tablet images use demo libraries and channels. Your membership supports development; the code stays open source.", "As imagens de celular e tablet usam bibliotecas e canais de demonstração. Sua assinatura apoia o desenvolvimento; o código continua aberto.", "Las imágenes de móvil y tableta usan bibliotecas y canales de demostración. Tu membresía apoya el desarrollo; el código sigue siendo abierto."],
+  ["More watching.", "Mais assistindo.", "Más viendo."],
+  ["Ready when", "Pronto quando", "Listo cuando"],
+  ["you are.", "você estiver.", "tú lo estés."],
+  ["Also on your iPad, iPhone or laptop with ARVIO Web ↗", "Também no seu iPad, iPhone ou notebook com o ARVIO Web ↗", "También en tu iPad, iPhone o portátil con ARVIO Web ↗"],
+  ["Does it work on PlayStation 5 or Xbox?", "Funciona no PlayStation 5 ou Xbox?", "¿Funciona en PlayStation 5 o Xbox?"],
+  ["PlayStation 5 has no browser that can run ARVIO Web, so on a PS5 TV use the free ARVIO app on an Android TV, Google TV or Fire TV device instead. On Xbox, open ARVIO Web in Microsoft Edge; it switches to TV mode and works with the controller.", "O PlayStation 5 não tem um navegador capaz de rodar o ARVIO Web; na TV do PS5, use o aplicativo ARVIO gratuito em um dispositivo Android TV, Google TV ou Fire TV. No Xbox, abra o ARVIO Web no Microsoft Edge; ele muda para o modo TV e funciona com o controle.", "PlayStation 5 no tiene un navegador que pueda ejecutar ARVIO Web; en la TV de la PS5 usa la app gratuita de ARVIO en un dispositivo Android TV, Google TV o Fire TV. En Xbox, abre ARVIO Web en Microsoft Edge; cambia al modo TV y funciona con el mando."],
+  ["ARVIO on an Android phone, a TV and an iPad, showing the same series and progress", "ARVIO em um celular Android, uma TV e um iPad, mostrando a mesma série e o mesmo progresso", "ARVIO en un móvil Android, una TV y un iPad, con la misma serie y el mismo progreso"],
+  ["Watch the 85-second tour", "Veja o tour de 85 segundos", "Mira el recorrido de 85 segundos"],
+  ["Paused on the TV", "Pausado na TV", "En pausa en la TV"],
+  ["Resumed on the iPad", "Retomado no iPad", "Retomado en el iPad"],
+  ["Same account, same profiles, same spot. ARVIO Cloud keeps your watchlist and progress in step on every screen.", "Mesma conta, mesmos perfis, mesmo ponto. O ARVIO Cloud mantém sua lista e seu progresso sincronizados em todas as telas.", "La misma cuenta, los mismos perfiles, el mismo punto. ARVIO Cloud mantiene tu lista y tu progreso sincronizados en todas las pantallas."],
+  ["The same series on a TV, an iPad and a phone", "A mesma série na TV, no iPad e no celular", "La misma serie en una TV, un iPad y un móvil"],
+  ["ARVIO on a TV, an iPad and an Android phone, showing the same series and progress", "ARVIO na TV, no iPad e em um celular Android, com a mesma série e o mesmo progresso", "ARVIO en una TV, un iPad y un móvil Android, con la misma serie y el mismo progreso"]
 ]

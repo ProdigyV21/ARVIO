@@ -68,7 +68,7 @@ fun TouchCategoryRail(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
     ) {
-        item(key = "search") {
+        item(key = "search", contentType = "rail-search") {
             Row(
                 modifier = Modifier
                     .height(38.dp)
@@ -91,7 +91,7 @@ fun TouchCategoryRail(
             }
         }
 
-        itemsIndexed(items, key = { _, item -> item.id }) { _, item ->
+        itemsIndexed(items, key = { _, item -> item.id }, contentType = { _, _ -> "rail" }) { _, item ->
             val sectionId = item.playlistSectionId
             val isSectionHeader = sectionId != null
             val isSectionOpen = sectionId != null && sectionId in expandedPlaylistIds

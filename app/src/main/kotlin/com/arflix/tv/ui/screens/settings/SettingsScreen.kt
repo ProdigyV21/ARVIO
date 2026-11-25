@@ -16,6 +16,7 @@ import androidx.activity.compose.PredictiveBackHandler
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.ui.graphics.graphicsLayer
 import kotlin.coroutines.cancellation.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.collectLatest
@@ -106,7 +107,9 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Subtitles
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.filled.VolumeUp
+import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.material.icons.filled.LiveTv
+import androidx.compose.material.icons.filled.Newspaper
 import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.Widgets
@@ -177,6 +180,9 @@ import androidx.compose.runtime.key
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.produceState
+import com.arflix.tv.ui.screens.player.subtitles.ai.CustomAiConfigStore
+import com.arflix.tv.ui.screens.player.subtitles.ai.CustomAiProfiles
 import androidx.compose.runtime.compositionLocalOf
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
@@ -271,6 +277,7 @@ import com.arflix.tv.ui.theme.appBackgroundDark
 import com.arflix.tv.ui.theme.BackgroundElevated
 import com.arflix.tv.ui.theme.ErrorRed
 import com.arflix.tv.ui.theme.contrastingContentColor
+import com.arflix.tv.ui.theme.DangerRed
 import com.arflix.tv.ui.theme.Pink
 import com.arflix.tv.ui.theme.SuccessGreen
 import com.arflix.tv.ui.theme.TextPrimary
@@ -334,9 +341,17 @@ private val tvGeneralSectionIds = setOf(
     "ai_subtitles",
     "playback",
     "appearance",
+    "news",
     "profiles",
     "network"
 )
+
+/** Row id of the News tab switch; 56..58 are the other optional tabs, in OPTIONAL_NAVIGATION_SECTIONS order. */
+internal const val NEWS_TAB_ROW = 61
+
+/** The optional tab a navigation switch row controls. */
+internal fun navigationSectionForRow(rowId: Int): String =
+    if (rowId == NEWS_TAB_ROW) "news" else com.arflix.tv.util.OPTIONAL_NAVIGATION_SECTIONS[rowId - 56]
 
 internal fun tvGeneralRowsForSection(section: String): List<Int> {
     return when (section) {
@@ -349,6 +364,8 @@ internal fun tvGeneralRowsForSection(section: String): List<Int> {
         "playback" -> listOf(10, 11, 12, 43, 44, 55, 13, 14, 34, 37, 16, 15, 40, 27, 53, 54, 60)
         "appearance" -> listOf(17, 49, 50, 18, 20, 21, 24, 23, 22, 41, 46, 36, 47, 56, 57) +
             (if (com.arflix.tv.ui.components.KidsNavigation.hideLiveTv) emptyList() else listOf(58)) + 59
+        // News: the tab switch, then what the tab shows. Kids profiles never get the section.
+        "news" -> if (com.arflix.tv.ui.components.KidsNavigation.hideLiveTv) emptyList() else listOf(NEWS_TAB_ROW, 62, 63)
         "profiles" -> listOf(19)
         "network" -> listOf(25, 26, 35)
         else -> emptyList()
@@ -600,6 +617,7 @@ fun SettingsScreen(
                 add("plugins")
             }
             add("appearance")
+            if (!com.arflix.tv.ui.components.KidsNavigation.hideLiveTv) add("news")
             add("network")
         }
     }
@@ -733,6 +751,10 @@ fun SettingsScreen(
     var showUiModeWarningDialog by remember { mutableStateOf(false) }
     var nextUiMode by remember { mutableStateOf("") }
     var showQualityFiltersModal by remember { mutableStateOf(false) }
+    val newsSettingsViewModel: com.arflix.tv.ui.screens.news.NewsSettingsViewModel = hiltViewModel()
+    val newsSelection by newsSettingsViewModel.selection.collectAsStateWithLifecycle()
+    var newsDialog by remember { mutableStateOf<com.arflix.tv.ui.screens.news.NewsSettingsDialog?>(null) }
+    com.arflix.tv.ui.screens.news.NewsSettingsDialogHost(newsDialog, newsSettingsViewModel) { newsDialog = null }
     var showQualityFilterEditor by remember { mutableStateOf(false) }
     var editingQualityFilterId by remember { mutableStateOf<String?>(null) }
     var qualityFilterDeviceName by remember { mutableStateOf("") }
@@ -1040,6 +1062,7 @@ fun SettingsScreen(
         showContentLanguagePicker ||
         showUiModeWarningDialog ||
         showQualityFiltersModal ||
+        newsDialog != null ||
         showQualityFilterEditor ||
         showCredits || showPlaybackCompatibility ||
         addonConfigureTarget != null ||
@@ -1458,6 +1481,7 @@ fun SettingsScreen(
                                             SidebarItem.HOME -> onNavigateToHome()
                                             SidebarItem.TV -> onNavigateToTv()
                                             SidebarItem.WATCHLIST -> onNavigateToWatchlist()
+                                            SidebarItem.NEWS -> com.arflix.tv.ui.components.NewsNavigation.open()
                                             SidebarItem.SETTINGS -> { /* Already here */ }
                                             null -> Unit
                                         }
@@ -1525,9 +1549,11 @@ fun SettingsScreen(
                                                 54 -> viewModel.clearPlaybackCache()
                                                 60 -> showPlaybackCompatibility = true
                                                 55 -> viewModel.setShowAddonStreamDetails(!uiState.showAddonStreamDetails)
-                                                in 56..58 -> {
-                                                    val section = com.arflix.tv.util.OPTIONAL_NAVIGATION_SECTIONS[
-                                                        tvGeneralRowsForSection(currentSection)[contentFocusIndex] - 56]
+                                                62 -> newsDialog = com.arflix.tv.ui.screens.news.NewsSettingsDialog.TOPICS
+                                                63 -> newsDialog = com.arflix.tv.ui.screens.news.NewsSettingsDialog.SOURCES
+                                                in 56..58, NEWS_TAB_ROW -> {
+                                                    val section = navigationSectionForRow(
+                                                        tvGeneralRowsForSection(currentSection)[contentFocusIndex])
                                                     viewModel.setNavigationSectionVisible(section, section in uiState.hiddenNavigationSections)
                                                 }
                                             }
@@ -2035,6 +2061,7 @@ fun SettingsScreen(
                                     "ai_subtitles" -> Icons.Default.AutoAwesome
                                     "playback" -> Icons.Default.PlayArrow
                                     "appearance" -> Icons.Default.Palette
+                                    "news" -> Icons.Default.Newspaper
                                     "profiles" -> Icons.Default.SwitchAccount
                                     "network" -> Icons.Default.Settings
                                     "stream_integrations" -> Icons.Default.Tune
@@ -2051,6 +2078,7 @@ fun SettingsScreen(
                                     "ai_subtitles" -> stringResource(R.string.ai_subtitles_section)
                                     "playback" -> stringResource(R.string.playback)
                                     "appearance" -> stringResource(R.string.interface_label)
+                                    "news" -> stringResource(R.string.nav_news)
                                     "profiles" -> stringResource(R.string.profiles)
                                     "network" -> stringResource(R.string.network)
                                     "stream_integrations" -> stringResource(R.string.settings_stream_integrations)
@@ -2225,7 +2253,11 @@ fun SettingsScreen(
                             showAddonStreamDetails = uiState.showAddonStreamDetails,
                             onShowAddonStreamDetailsToggle = { viewModel.setShowAddonStreamDetails(it) },
                             hiddenNavigationSections = uiState.hiddenNavigationSections,
-                            onNavigationSectionVisibleChange = viewModel::setNavigationSectionVisible
+                            onNavigationSectionVisibleChange = viewModel::setNavigationSectionVisible,
+                            newsTopicsSummary = com.arflix.tv.ui.screens.news.newsTopicsSummary(newsSelection),
+                            newsSourcesSummary = com.arflix.tv.ui.screens.news.newsSourcesSummary(newsSelection),
+                            onNewsTopicsClick = { newsDialog = com.arflix.tv.ui.screens.news.NewsSettingsDialog.TOPICS },
+                            onNewsSourcesClick = { newsDialog = com.arflix.tv.ui.screens.news.NewsSettingsDialog.SOURCES }
                         )
                         if (showAiModelDialog) {
                             AiModelDialog(
@@ -3750,7 +3782,7 @@ private fun QualityFiltersModal(
                             .fillMaxWidth()
                             .heightIn(max = 460.dp)
                     ) {
-                        itemsIndexed(filters) { index, filter ->
+                        itemsIndexed(filters, contentType = { _, _ -> "SettingsScreen.filters" }) { index, filter ->
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -3832,22 +3864,16 @@ private fun SettingsChip(
     isFocused: Boolean = false,
     modifier: Modifier = Modifier
 ) {
-    val chipFocusColor = resolveAccentColor(fallback = Color.White)
     Box(
         modifier = modifier
             .clip(RoundedCornerShape(12.dp))
             .background(
                 when {
                     !enabled -> Color.White.copy(alpha = 0.06f)
-                    isFocused -> Color.White
                     else -> Color.White.copy(alpha = 0.12f)
                 }
             )
-            .border(
-                width = if (isFocused) 1.dp else 0.dp,
-                color = if (isFocused) chipFocusColor else Color.Transparent,
-                shape = RoundedCornerShape(12.dp)
-            )
+            .settingsFocusOutline(isFocused, cornerRadius = 12.dp)
             .clickable(enabled = enabled) { onClick() }
             .padding(vertical = 12.dp),
         contentAlignment = Alignment.Center
@@ -3857,7 +3883,6 @@ private fun SettingsChip(
             style = ArflixTypography.button,
             color = when {
                 !enabled -> TextSecondary
-                isFocused -> Color.Black
                 else -> TextPrimary
             }
         )
@@ -5012,6 +5037,7 @@ private fun mobileCategoryTitle(page: String): String = when (page) {
     "Playback & Controls" -> stringResource(R.string.settings_cat_playback_controls)
     "Audio & Subtitles" -> stringResource(R.string.settings_cat_audio_subtitles)
     "Appearance" -> stringResource(R.string.interface_label)
+    "News" -> stringResource(R.string.nav_news)
     "Addons" -> stringResource(R.string.addons)
     "Plugins & Extensions" -> stringResource(R.string.settings_cat_plugins_extensions)
     "Catalogs" -> stringResource(R.string.catalogs)
@@ -5052,7 +5078,7 @@ private fun MobileSettingsMainPage(
         ),
         verticalArrangement = Arrangement.spacedBy(20.dp)
     ) {
-        item {
+        item(contentType = "SettingsScreen.item") {
             MobileSettingsCategory(title = stringResource(R.string.settings_section_languages)) {
                 MobileSettingsRow(
                     icon = Icons.Default.Language,
@@ -5090,13 +5116,14 @@ private fun MobileSettingsMainPage(
             }
         }
 
-        item {
+        item(contentType = "SettingsScreen.item2") {
             MobileSettingsCategory(title = stringResource(R.string.settings_section_categories)) {
                 val categories = buildList {
                     add("Stream Integrations" to Icons.Default.Tune)
                     add("Playback & Controls" to Icons.Default.PlayArrow)
                     add("Audio & Subtitles" to Icons.Default.Speaker)
                     add("Appearance" to Icons.Default.Palette)
+                    if (!uiState.isKidsProfile) add("News" to Icons.Default.Newspaper)
                     add("Addons" to Icons.Default.Extension)
                     if (BuildConfig.FEATURE_PLUGINS_ENABLED) {
                         add("Plugins & Extensions" to Icons.Default.Extension)
@@ -5128,7 +5155,7 @@ private fun MobileSettingsMainPage(
             }
         }
 
-        item {
+        item(contentType = "SettingsScreen.item3") {
             MobileSettingsCategory(title = stringResource(R.string.settings_section_user_account)) {
                 MobileSettingsRow(
                     icon = Icons.Default.Person,
@@ -5612,6 +5639,18 @@ private fun MobileSettingsSubPage(
                     )
                 }
                 MobileSettingsCategory(title = stringResource(R.string.ai_subtitles_section)) {
+                    val context = LocalContext.current
+                    val customAiStore by produceState<CustomAiConfigStore?>(null, context) {
+                        value = withContext(Dispatchers.IO) { CustomAiConfigStore.from(context) }
+                    }
+                    val store = customAiStore
+                    val customProfiles = if (store != null) {
+                        val profiles by store.profiles.collectAsState()
+                        profiles
+                    } else {
+                        CustomAiProfiles()
+                    }
+                    val activeCustomService = customProfiles.active.takeIf { it.isActive }
                     MobileSettingsRow(
                         icon = Icons.Default.AutoAwesome,
                         title = stringResource(R.string.ai_subtitle_translation_title),
@@ -5623,8 +5662,11 @@ private fun MobileSettingsSubPage(
                     )
                     MobileSettingsRow(
                         icon = Icons.Default.AutoAwesome,
-                        title = stringResource(R.string.ai_model_title),
-                        subtitle = stringResource(R.string.ai_model_desc),
+                        title = stringResource(
+                            if (activeCustomService == null) R.string.ai_model_title else R.string.custom_ai_builtin_matching
+                        ),
+                        subtitle = if (activeCustomService == null) stringResource(R.string.ai_model_desc)
+                        else stringResource(R.string.custom_ai_using_service, activeCustomService.displayName),
                         value = when (uiState.subtitleAiModel) {
                             com.arflix.tv.ui.screens.player.subtitles.SubtitleAiModel.GROQ_LLAMA_70B -> "Groq - GPT-OSS 120B"
                             com.arflix.tv.ui.screens.player.subtitles.SubtitleAiModel.GEMINI_FLASH_25 -> "Google - Gemini 3.5 Flash Lite"
@@ -5668,8 +5710,17 @@ private fun MobileSettingsSubPage(
                         showDivider = false,
                         onClick = onSubtitleAiQrClick
                     )
+                    if (store != null) {
+                        CustomAiSection(
+                            store = store,
+                            profiles = customProfiles,
+                            targetLanguageName = uiState.defaultSubtitle.takeUnless {
+                                it.equals("Off", ignoreCase = true)
+                            }.orEmpty(),
+                        )
+                    }
                     LiveAiSubsMobileRows()
-                    if (uiState.subtitleAiEnabled) {
+                    if (uiState.subtitleAiEnabled && activeCustomService == null) {
                         Text(
                             text = when (uiState.subtitleAiModel) {
                                 com.arflix.tv.ui.screens.player.subtitles.SubtitleAiModel.GROQ_LLAMA_70B ->
@@ -5685,6 +5736,44 @@ private fun MobileSettingsSubPage(
                         )
                     }
                 }
+            }
+            "News" -> {
+                val newsSettings: com.arflix.tv.ui.screens.news.NewsSettingsViewModel = hiltViewModel()
+                val selection by newsSettings.selection.collectAsStateWithLifecycle()
+                var dialog by remember { mutableStateOf<com.arflix.tv.ui.screens.news.NewsSettingsDialog?>(null) }
+                com.arflix.tv.ui.screens.news.NewsSettingsDialogHost(dialog, newsSettings) { dialog = null }
+                val visible = "news" !in uiState.hiddenNavigationSections
+                MobileSettingsCategory(title = stringResource(R.string.nav_news)) {
+                    MobileSettingsRow(
+                        icon = Icons.Default.Newspaper,
+                        title = stringResource(R.string.navigation_show_news),
+                        subtitle = stringResource(R.string.settings_profile_scoped),
+                        value = stringResource(if (visible) R.string.on else R.string.off),
+                        toggleChecked = visible,
+                        onClick = { viewModel.setNavigationSectionVisible("news", !visible) }
+                    )
+                    MobileSettingsRow(
+                        icon = Icons.Default.Tune,
+                        title = stringResource(R.string.news_topics_section),
+                        subtitle = com.arflix.tv.ui.screens.news.newsTopicsSummary(selection),
+                        value = null,
+                        onClick = { dialog = com.arflix.tv.ui.screens.news.NewsSettingsDialog.TOPICS }
+                    )
+                    MobileSettingsRow(
+                        icon = Icons.Default.Newspaper,
+                        title = stringResource(R.string.news_sources_section),
+                        subtitle = com.arflix.tv.ui.screens.news.newsSourcesSummary(selection),
+                        value = null,
+                        showDivider = false,
+                        onClick = { dialog = com.arflix.tv.ui.screens.news.NewsSettingsDialog.SOURCES }
+                    )
+                }
+                Text(
+                    text = stringResource(R.string.news_saved_on_device),
+                    style = ArflixTypography.caption,
+                    color = TextSecondary,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                )
             }
             "Appearance" -> {
                 MobileSettingsCategory(title = stringResource(R.string.settings_section_appearance)) {
@@ -5799,13 +5888,17 @@ private fun MobileSettingsSubPage(
                 }
                 MobileSettingsCategory(title = stringResource(R.string.navigation_sections)) {
                     com.arflix.tv.util.OPTIONAL_NAVIGATION_SECTIONS
-                        .filter { it != "tv" || !uiState.isKidsProfile }
+                        .filter { it !in com.arflix.tv.util.KIDS_HIDDEN_NAVIGATION_SECTIONS || !uiState.isKidsProfile }
+                        // The News switch lives on its own News page.
+                        .filter { it != "news" }
                         .forEach { section ->
                             val visible = section !in uiState.hiddenNavigationSections
                             MobileSettingsRow(
                                 icon = when (section) {
                                     "search" -> Icons.Default.Search
                                     "watchlist" -> Icons.Default.Bookmark
+                                    "news" -> Icons.Default.Newspaper
+                                    "music" -> Icons.Default.LibraryMusic
                                     else -> Icons.Default.LiveTv
                                 },
                                 title = navigationVisibilityTitle(section),
@@ -6316,25 +6409,22 @@ private fun UpdateActionButton(
     highlighted: Boolean = false,
     enabled: Boolean = true
 ) {
+    val accent = resolveAccentColor(fallback = Pink)
     val background = when {
         !enabled -> Color.White.copy(alpha = 0.06f)
-        highlighted && isFocused -> Pink
-        isFocused -> Color.White.copy(alpha = 0.16f)
-        highlighted -> Pink.copy(alpha = 0.18f)
+        highlighted -> accent.copy(alpha = 0.18f)
         else -> Color.White.copy(alpha = 0.08f)
     }
     val textColor = when {
         !enabled -> TextSecondary.copy(alpha = 0.6f)
-        highlighted && isFocused -> Color.Black
         highlighted -> Color.White
         isFocused -> TextPrimary
         else -> TextSecondary
     }
     val borderColor = when {
         !enabled -> Color.White.copy(alpha = 0.1f)
-        highlighted && isFocused -> Pink.copy(alpha = 0.95f)
-        highlighted -> Pink.copy(alpha = 0.4f)
-        isFocused -> Color.White.copy(alpha = 0.75f)
+        isFocused -> accent
+        highlighted -> accent.copy(alpha = 0.4f)
         else -> Color.White.copy(alpha = 0.12f)
     }
 
@@ -6343,7 +6433,7 @@ private fun UpdateActionButton(
             .clip(RoundedCornerShape(12.dp))
             .background(background, RoundedCornerShape(12.dp))
             .border(
-                width = if (isFocused || highlighted) 1.5.dp else 1.dp,
+                width = if (isFocused) 2.dp else 1.dp,
                 color = borderColor,
                 shape = RoundedCornerShape(12.dp)
             )
@@ -6643,6 +6733,7 @@ private fun tvSettingsSectionTitle(section: String): String {
         "ai_subtitles" -> stringResource(R.string.ai_subtitles_section)
         "playback" -> stringResource(R.string.playback)
         "appearance" -> stringResource(R.string.interface_label)
+        "news" -> stringResource(R.string.nav_news)
         "profiles" -> stringResource(R.string.profiles)
         "network" -> stringResource(R.string.network)
         "stream_integrations" -> stringResource(R.string.settings_stream_integrations)
@@ -6663,6 +6754,7 @@ private fun tvSettingsSectionDescription(section: String): String {
         "ai_subtitles" -> stringResource(R.string.settings_desc_ai_subtitles)
         "playback" -> stringResource(R.string.settings_desc_playback)
         "appearance" -> stringResource(R.string.settings_desc_appearance)
+        "news" -> stringResource(R.string.news_saved_on_device)
         "profiles" -> stringResource(R.string.settings_desc_profiles)
         "network" -> stringResource(R.string.settings_desc_network)
         "stream_integrations" -> stringResource(R.string.settings_desc_stream_integrations)
@@ -6834,6 +6926,11 @@ private fun tvSettingsFocusedHelp(section: String, focusedIndex: Int): TvSetting
             else -> TvSettingsHelp(stringResource(R.string.playback), stringResource(R.string.settings_help_playback_desc))
         }
         "appearance" -> TvSettingsHelp(stringResource(R.string.interface_label), stringResource(R.string.settings_help_interface_desc))
+        "news" -> when (focusedIndex) {
+            1 -> TvSettingsHelp(stringResource(R.string.news_topics_section), stringResource(R.string.news_topics_desc))
+            2 -> TvSettingsHelp(stringResource(R.string.news_sources_section), stringResource(R.string.news_sources_desc))
+            else -> TvSettingsHelp(stringResource(R.string.nav_news), stringResource(R.string.settings_desc_news))
+        }
         "profiles" -> TvSettingsHelp(stringResource(R.string.profiles), stringResource(R.string.settings_help_profiles_desc))
         "network" -> TvSettingsHelp(stringResource(R.string.network), stringResource(R.string.settings_desc_network))
         "stream_integrations" -> when (focusedIndex) {
@@ -6902,6 +6999,8 @@ private fun formatCompactCount(value: Int): String {
 private fun navigationVisibilityTitle(section: String): String = stringResource(when (section) {
     "search" -> R.string.navigation_show_search
     "watchlist" -> R.string.navigation_show_library
+    "news" -> R.string.navigation_show_news
+    "music" -> R.string.navigation_show_music
     else -> R.string.navigation_show_tv
 })
 
@@ -7022,18 +7121,28 @@ private fun TvGeneralSettingsRows(
     showAddonStreamDetails: Boolean = false,
     onShowAddonStreamDetailsToggle: (Boolean) -> Unit = {},
     hiddenNavigationSections: Set<String> = emptySet(),
-    onNavigationSectionVisibleChange: (String, Boolean) -> Unit = { _, _ -> }
+    onNavigationSectionVisibleChange: (String, Boolean) -> Unit = { _, _ -> },
+    newsTopicsSummary: String = "",
+    newsSourcesSummary: String = "",
+    onNewsTopicsClick: () -> Unit = {},
+    onNewsSourcesClick: () -> Unit = {}
 ) {
     Column {
         tvGeneralRowsForSection(section).forEachIndexed { localIndex, rowId ->
             if (localIndex > 0) Spacer(modifier = Modifier.height(10.dp))
             when (rowId) {
-                in 56..58 -> {
-                    val section = com.arflix.tv.util.OPTIONAL_NAVIGATION_SECTIONS[rowId - 56]
+                in 56..58, NEWS_TAB_ROW -> {
+                    val section = navigationSectionForRow(rowId)
                     SettingsToggleRow(navigationVisibilityTitle(section), stringResource(R.string.settings_profile_scoped),
                         section !in hiddenNavigationSections, focusedIndex == localIndex,
                         { onNavigationSectionVisibleChange(section, it) }, Modifier.settingsFocusSlot(localIndex))
                 }
+                62 -> SettingsRow(icon = Icons.Default.Tune, title = stringResource(R.string.news_topics_section),
+                    subtitle = stringResource(R.string.news_topics_desc), value = newsTopicsSummary,
+                    isFocused = focusedIndex == localIndex, onClick = onNewsTopicsClick, modifier = Modifier.settingsFocusSlot(localIndex))
+                63 -> SettingsRow(icon = Icons.Default.Newspaper, title = stringResource(R.string.news_sources_section),
+                    subtitle = stringResource(R.string.news_sources_desc), value = newsSourcesSummary,
+                    isFocused = focusedIndex == localIndex, onClick = onNewsSourcesClick, modifier = Modifier.settingsFocusSlot(localIndex))
                 55 -> SettingsToggleRow(stringResource(R.string.show_addon_stream_details),
                     stringResource(R.string.show_addon_stream_details_desc), showAddonStreamDetails,
                     focusedIndex == localIndex, onShowAddonStreamDetailsToggle, Modifier.settingsFocusSlot(localIndex))
@@ -8412,7 +8521,7 @@ internal fun IptvSettings(
                                 } else onDeleteSelectedPlaylists(selected.ids)
                             }
                             selection = IptvSourceSelection()
-                        }.background(Color(0xFFDC2626), RoundedCornerShape(8.dp)), contentAlignment = Alignment.Center) {
+                        }.background(DangerRed, RoundedCornerShape(8.dp)), contentAlignment = Alignment.Center) {
                             Icon(Icons.Default.Delete, contentDescription = stringResource(R.string.delete), tint = Color.White, modifier = Modifier.size(20.dp))
                         }
                         Spacer(modifier = Modifier.width(12.dp))
@@ -8614,7 +8723,7 @@ internal fun IptvSettings(
                 val rowIndex = index + 1
                 val epgSourceCount = playlist.settingsEpgInput().lineSequence().count { it.isNotBlank() }
                 val focusRingColor = resolveAccentColor(fallback = Pink)
-                Row(modifier = Modifier.settingsFocusSlot(rowIndex).fillMaxWidth().background(if (focusedIndex == rowIndex) Color.White.copy(alpha = 0.12f) else Color.White.copy(alpha = 0.05f), RoundedCornerShape(12.dp)).border(width = if (focusedIndex == rowIndex) 2.dp else 0.dp, color = if (focusedIndex == rowIndex) focusRingColor else Color.Transparent, shape = RoundedCornerShape(12.dp)).clickable { onEditPlaylist(index) }.padding(horizontal = 16.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+                Row(modifier = Modifier.settingsFocusSlot(rowIndex).fillMaxWidth().background(Color.White.copy(alpha = 0.05f), RoundedCornerShape(12.dp)).border(width = if (focusedIndex == rowIndex) 2.dp else 0.dp, color = if (focusedIndex == rowIndex) focusRingColor else Color.Transparent, shape = RoundedCornerShape(12.dp)).clickable { onEditPlaylist(index) }.padding(horizontal = 16.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
                     Icon(imageVector = Icons.Default.LiveTv, contentDescription = null, tint = TextSecondary, modifier = Modifier.size(24.dp))
                     Spacer(modifier = Modifier.width(16.dp))
                     Column(modifier = Modifier.weight(1f)) {
@@ -8668,7 +8777,7 @@ internal fun IptvSettings(
                 stalkerPortals.forEachIndexed { index, portal ->
                     val rowIndex = playlists.size + 1 + index
                     val focusRingColor = resolveAccentColor(fallback = Pink)
-                    Row(modifier = Modifier.settingsFocusSlot(rowIndex).fillMaxWidth().background(if (focusedIndex == rowIndex) Color.White.copy(alpha = 0.12f) else Color.White.copy(alpha = 0.05f), RoundedCornerShape(12.dp)).border(width = if (focusedIndex == rowIndex) 2.dp else 0.dp, color = if (focusedIndex == rowIndex) focusRingColor else Color.Transparent, shape = RoundedCornerShape(12.dp)).clickable { onEditStalkerPortal(portal) }.padding(horizontal = 16.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Row(modifier = Modifier.settingsFocusSlot(rowIndex).fillMaxWidth().background(Color.White.copy(alpha = 0.05f), RoundedCornerShape(12.dp)).border(width = if (focusedIndex == rowIndex) 2.dp else 0.dp, color = if (focusedIndex == rowIndex) focusRingColor else Color.Transparent, shape = RoundedCornerShape(12.dp)).clickable { onEditStalkerPortal(portal) }.padding(horizontal = 16.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
                         Icon(imageVector = Icons.Default.LiveTv, contentDescription = null, tint = TextSecondary, modifier = Modifier.size(24.dp))
                         Spacer(modifier = Modifier.width(16.dp))
                         Column(modifier = Modifier.weight(1f)) {
@@ -9060,7 +9169,7 @@ internal fun CatalogDiscoveryModal(
                                 modifier = Modifier.fillMaxSize(),
                                 verticalArrangement = Arrangement.spacedBy(12.dp)
                             ) {
-                                itemsIndexed(results, key = { _, item -> item.id }) { _, item ->
+                                itemsIndexed(results, key = { _, item -> item.id }, contentType = { _, _ -> "SettingsScreen.results" }) { _, item ->
                                     val isAdded = normalizeCatalogDiscoveryUrl(item.sourceUrl) in normalizedAddedCatalogUrls
                                     CatalogDiscoveryResultRow(
                                         result = item,
@@ -9116,7 +9225,7 @@ private fun CatalogDiscoveryInputButton(
     Column(
         modifier = modifier
             .clip(RoundedCornerShape(12.dp))
-            .background(if (isFocused) Color.White else Color.Black.copy(alpha = 0.36f))
+            .background(Color.Black.copy(alpha = 0.36f))
             .border(
                 width = if (isFocused) 2.dp else 1.dp,
                 color = if (isFocused) inputFocusColor else Color.White.copy(alpha = 0.55f),
@@ -9129,7 +9238,7 @@ private fun CatalogDiscoveryInputButton(
         Text(
             text = label,
             style = ArflixTypography.caption,
-            color = if (isFocused) Color.Black.copy(alpha = 0.68f) else TextSecondary,
+            color = TextSecondary,
             maxLines = 1
         )
         Spacer(modifier = Modifier.height(4.dp))
@@ -9137,7 +9246,6 @@ private fun CatalogDiscoveryInputButton(
             text = value.ifBlank { placeholder },
             style = ArflixTypography.body,
             color = when {
-                isFocused -> Color.Black
                 value.isBlank() -> TextSecondary.copy(alpha = 0.7f)
                 else -> TextPrimary
             },
@@ -9259,7 +9367,7 @@ private fun CatalogDiscoveryResultRow(
                 .onFocusChanged { isFocused = it.isFocused || it.hasFocus }
                 .clickable(onClick = { if (!isAdded) onAdd() })
                 .background(
-                    if (isFocused) Color.White.copy(alpha = 0.12f) else Color.Black.copy(alpha = 0.38f),
+                    Color.Black.copy(alpha = 0.38f),
                     RoundedCornerShape(16.dp)
                 )
                 .border(
@@ -9372,7 +9480,7 @@ private fun CatalogDiscoveryResultRow(
             .onFocusChanged { isFocused = it.isFocused || it.hasFocus }
             .clickable(onClick = { if (!isAdded) onAdd() })
             .background(
-                if (isFocused) Color.White.copy(alpha = 0.12f) else Color.Black.copy(alpha = 0.38f),
+                Color.Black.copy(alpha = 0.38f),
                 RoundedCornerShape(16.dp)
             )
             .border(
@@ -9583,6 +9691,7 @@ private fun DiscoveryActionButton(
     modifier: Modifier = Modifier
 ) {
     var isFocused by remember { mutableStateOf(false) }
+    val focusAccent = resolveAccentColor(fallback = Pink)
     Box(
         modifier = modifier
             .widthIn(min = if (label.length <= 5) 112.dp else 132.dp)
@@ -9590,7 +9699,6 @@ private fun DiscoveryActionButton(
             .background(
                 when {
                     !enabled -> Color.Black.copy(alpha = 0.18f)
-                    isFocused -> Color.White
                     highlighted -> Color.Black.copy(alpha = 0.46f)
                     else -> Color.Black.copy(alpha = 0.36f)
                 },
@@ -9600,7 +9708,7 @@ private fun DiscoveryActionButton(
                 width = if (isFocused) 2.dp else 1.dp,
                 color = when {
                     !enabled -> Color.White.copy(alpha = 0.18f)
-                    isFocused -> Color.White
+                    isFocused -> focusAccent
                     highlighted -> Color.White.copy(alpha = 0.74f)
                     else -> Color.White.copy(alpha = 0.55f)
                 },
@@ -9613,7 +9721,6 @@ private fun DiscoveryActionButton(
     ) {
         val contentColor = when {
             !enabled -> TextSecondary.copy(alpha = 0.72f)
-            isFocused -> Color.Black
             else -> TextPrimary
         }
         Row(
@@ -9696,7 +9803,7 @@ private fun CatalogsSettings(
                     Text(stringResource(R.string.settings_n_selected, selectedIds.size), style = ArflixTypography.sectionTitle, color = TextPrimary)
                     Spacer(modifier = Modifier.weight(1f))
                     if (selectedIds.isNotEmpty()) {
-                        Box(modifier = Modifier.size(36.dp).clickable { selectedIds.forEach { id -> val cat = catalogs.find { it.id == id }; if (cat != null) onDeleteCatalog(cat) }; selectionMode = false; selectedIds = emptySet() }.background(Color(0xFFDC2626), RoundedCornerShape(8.dp)), contentAlignment = Alignment.Center) {
+                        Box(modifier = Modifier.size(36.dp).clickable { selectedIds.forEach { id -> val cat = catalogs.find { it.id == id }; if (cat != null) onDeleteCatalog(cat) }; selectionMode = false; selectedIds = emptySet() }.background(DangerRed, RoundedCornerShape(8.dp)), contentAlignment = Alignment.Center) {
                             Icon(Icons.Default.Delete, contentDescription = stringResource(R.string.delete), tint = Color.White, modifier = Modifier.size(20.dp))
                         }
                         Spacer(modifier = Modifier.width(12.dp))
@@ -9857,27 +9964,27 @@ private fun CatalogsSettings(
             }
         }
         LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
-          item(key = "heading") {
+          item(key = "heading", contentType = "SettingsScreen.heading") {
             header()
             if (selectionMode) {
                 Row(modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text(stringResource(R.string.settings_n_selected, selectedIds.size), style = ArflixTypography.sectionTitle, color = TextPrimary)
                     Spacer(modifier = Modifier.weight(1f))
-                    if (selectedIds.isNotEmpty()) { Box(modifier = Modifier.size(36.dp).clickable { selectedIds.forEach { id -> val cat = catalogs.find { it.id == id }; if (cat != null) onDeleteCatalog(cat) }; selectionMode = false; selectedIds = emptySet() }.background(Color(0xFFDC2626), RoundedCornerShape(8.dp)), contentAlignment = Alignment.Center) { Icon(Icons.Default.Delete, contentDescription = stringResource(R.string.delete), tint = Color.White, modifier = Modifier.size(20.dp)) }; Spacer(modifier = Modifier.width(12.dp)) }
+                    if (selectedIds.isNotEmpty()) { Box(modifier = Modifier.size(36.dp).clickable { selectedIds.forEach { id -> val cat = catalogs.find { it.id == id }; if (cat != null) onDeleteCatalog(cat) }; selectionMode = false; selectedIds = emptySet() }.background(DangerRed, RoundedCornerShape(8.dp)), contentAlignment = Alignment.Center) { Icon(Icons.Default.Delete, contentDescription = stringResource(R.string.delete), tint = Color.White, modifier = Modifier.size(20.dp)) }; Spacer(modifier = Modifier.width(12.dp)) }
                     Box(modifier = Modifier.size(36.dp).clickable { selectionMode = false; selectedIds = emptySet() }.background(Color.White.copy(alpha = 0.15f), RoundedCornerShape(8.dp)), contentAlignment = Alignment.Center) { Icon(Icons.Default.Close, contentDescription = stringResource(R.string.close), tint = Color.White, modifier = Modifier.size(20.dp)) }
                 }
             }
             Text(text = stringResource(R.string.catalogs), style = ArflixTypography.caption, color = TextSecondary.copy(alpha = 0.65f), modifier = Modifier.padding(bottom = 20.dp))
           }
-          item(key = "add") {
+          item(key = "add", contentType = "SettingsScreen.add") {
             SettingsRow(icon = Icons.Default.Add, title = stringResource(R.string.add_catalog), subtitle = stringResource(R.string.add_catalog_desc), value = stringResource(R.string.settings_badge_add), isFocused = focusedIndex == 0, onClick = onAddCatalog, modifier = Modifier.settingsFocusSlot(0))
             Spacer(modifier = Modifier.height(16.dp))
           }
-          item(key = "import") {
+          item(key = "import", contentType = "SettingsScreen.import") {
             SettingsRow(icon = Icons.Default.Widgets, title = stringResource(R.string.settings_catalog_pack_import_title), subtitle = stringResource(R.string.settings_catalog_pack_import_desc), value = stringResource(R.string.settings_catalog_pack_import_badge), isFocused = focusedIndex == 1, onClick = onImportCatalogPack, modifier = Modifier.settingsFocusSlot(1))
             Spacer(modifier = Modifier.height(16.dp))
           }
-          item(key = "collections") {
+          item(key = "collections", contentType = "SettingsScreen.collections") {
             SettingsRow(icon = if (builtInCollectionsEnabled) Icons.Default.Visibility else Icons.Default.VisibilityOff, title = stringResource(R.string.settings_builtin_collections_title), subtitle = stringResource(R.string.settings_builtin_collections_desc), value = stringResource(if (builtInCollectionsEnabled) R.string.on else R.string.off), isFocused = focusedIndex == 2, onClick = onToggleBuiltInCollections, modifier = Modifier.settingsFocusSlot(2))
             Spacer(modifier = Modifier.height(16.dp))
           }
@@ -9978,7 +10085,7 @@ private fun TvCatalogSettingsRow(
                 // outlined action chips and both text lines on every scroll frame.
                 Row(modifier = Modifier.settingsFocusSlot(rowFocusIndex).fillMaxWidth().graphicsLayer {
                     compositingStrategy = androidx.compose.ui.graphics.CompositingStrategy.Offscreen
-                }.background(if (isSelected) Pink.copy(alpha = 0.2f) else if (isRowFocused) Color.White.copy(alpha = 0.12f) else Color.White.copy(alpha = 0.05f), RoundedCornerShape(12.dp)).border(width = if (isRowFocused) 2.dp else 0.dp, color = if (isRowFocused) focusRingColor else Color.Transparent, shape = RoundedCornerShape(12.dp)).clickable { onRenameCatalog(catalog) }.padding(horizontal = 16.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+                }.background(if (isSelected) Pink.copy(alpha = 0.2f) else Color.White.copy(alpha = 0.05f), RoundedCornerShape(12.dp)).border(width = if (isRowFocused) 2.dp else 0.dp, color = if (isRowFocused) focusRingColor else Color.Transparent, shape = RoundedCornerShape(12.dp)).clickable { onRenameCatalog(catalog) }.padding(horizontal = 16.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(title, style = ArflixTypography.cardTitle.copy(fontSize = 16.sp), color = if (isRowFocused || isSelected) TextPrimary else TextSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         Spacer(modifier = Modifier.height(4.dp))
@@ -10022,25 +10129,20 @@ private fun CatalogActionChip(
     enabled: Boolean = true,
     onClick: () -> Unit = {}
 ) {
-    // Support both D-pad focus AND touch pressed state
-    val accent = resolveAccentColor(fallback = Color.White)
+    // Support both D-pad focus AND touch pressed state. Focus is shown as a themed
+    // border only (never a fill), matching every other settings control.
+    val accent = resolveAccentColor(fallback = Pink)
     var isPressed by remember { mutableStateOf(false) }
     val visualActive = isFocused || isPressed
+    val borderAccent = if (isDestructive) DangerRed else accent
     val bgColor = when {
         !enabled -> Color.Black.copy(alpha = 0.4f)
-        visualActive && isDestructive -> Color(0xFFDC2626)
-        visualActive -> accent
         else -> Color.White.copy(alpha = 0.08f)
     }
-    // Choose foreground (icon) color based on accent luminance for contrast
-    val accentFg = if (visualActive) {
-        val l = 0.299f * accent.red + 0.587f * accent.green + 0.114f * accent.blue
-        if (l > 0.5f) Color.Black else Color.White
-    } else Color.White
     val fgColor = when {
         !enabled -> Color.White.copy(alpha = 0.5f)
-        visualActive && isDestructive -> Color.White
-        visualActive -> accentFg
+        visualActive && isDestructive -> DangerRed
+        visualActive -> Color.White
         else -> Color.White.copy(alpha = 0.7f)
     }
     Box(
@@ -10061,8 +10163,8 @@ private fun CatalogActionChip(
             .clickable(enabled = enabled, onClick = onClick)
             .background(bgColor, RoundedCornerShape(8.dp))
             .border(
-                width = if (visualActive) 1.5.dp else 1.dp,
-                color = if (visualActive) accent else Color.White.copy(alpha = 0.15f),
+                width = if (visualActive) 2.dp else 1.dp,
+                color = if (visualActive) borderAccent else Color.White.copy(alpha = 0.15f),
                 shape = RoundedCornerShape(8.dp)
             ),
         contentAlignment = Alignment.Center
@@ -10217,8 +10319,8 @@ private fun StremioAddonsSettings(
                     .settingsFocusSlot(addons.size)
                     .fillMaxWidth()
                     .clickable(enabled = !isRefreshingAddons, onClick = onRefreshAddons)
-                    .background(if (focusedIndex == addons.size) Color.White.copy(alpha = 0.12f) else Color.White.copy(alpha = 0.05f), RoundedCornerShape(12.dp))
-                    .border(width = if (focusedIndex == addons.size) 2.dp else 0.dp, color = if (focusedIndex == addons.size) Pink else Color.Transparent, shape = RoundedCornerShape(12.dp))
+                    .background(Color.White.copy(alpha = 0.05f), RoundedCornerShape(12.dp))
+                    .settingsFocusOutline(focusedIndex == addons.size, cornerRadius = 12.dp)
                     .padding(horizontal = 16.dp, vertical = 14.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.Center
@@ -10243,8 +10345,8 @@ private fun StremioAddonsSettings(
                     .settingsFocusSlot(addons.size + 1)
                     .fillMaxWidth()
                     .clickable(onClick = onBrowseCommunityAddons)
-                    .background(if (focusedIndex == addons.size + 1) Color.White.copy(alpha = 0.12f) else Color.White.copy(alpha = 0.05f), RoundedCornerShape(12.dp))
-                    .border(width = if (focusedIndex == addons.size + 1) 2.dp else 0.dp, color = if (focusedIndex == addons.size + 1) Pink else Color.Transparent, shape = RoundedCornerShape(12.dp))
+                    .background(Color.White.copy(alpha = 0.05f), RoundedCornerShape(12.dp))
+                    .settingsFocusOutline(focusedIndex == addons.size + 1, cornerRadius = 12.dp)
                     .padding(horizontal = 16.dp, vertical = 14.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.Center
@@ -10259,8 +10361,8 @@ private fun StremioAddonsSettings(
                     .settingsFocusSlot(addons.size + 2)
                     .fillMaxWidth()
                     .clickable(onClick = onAddCustomAddon)
-                    .background(if (focusedIndex == addons.size + 2) Color.White.copy(alpha = 0.12f) else Color.White.copy(alpha = 0.05f), RoundedCornerShape(12.dp))
-                    .border(width = if (focusedIndex == addons.size + 2) 2.dp else 0.dp, color = if (focusedIndex == addons.size + 2) Pink else Color.Transparent, shape = RoundedCornerShape(12.dp))
+                    .background(Color.White.copy(alpha = 0.05f), RoundedCornerShape(12.dp))
+                    .settingsFocusOutline(focusedIndex == addons.size + 2, cornerRadius = 12.dp)
                     .padding(horizontal = 16.dp, vertical = 14.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.Center
@@ -10318,7 +10420,7 @@ private fun AddonRow(
             .fillMaxWidth()
             .clickable { onToggle() }
             .background(
-                if (isFocused) Color.White.copy(alpha = 0.12f) else Color.White.copy(alpha = 0.05f),
+                Color.White.copy(alpha = 0.05f),
                 RoundedCornerShape(12.dp)
             )
             .border(
@@ -10391,7 +10493,7 @@ private fun AddonRow(
                 modifier = Modifier
                     .border(
                         width = if (isToggleFocused) 2.dp else 0.dp,
-                        color = if (isToggleFocused) Color.White else Color.Transparent,
+                        color = if (isToggleFocused) focusRingColor else Color.Transparent,
                         shape = RoundedCornerShape(16.dp)
                     )
                     .padding(2.dp)
@@ -10852,7 +10954,7 @@ private fun AccountActionRow(
         modifier = Modifier
             .fillMaxWidth()
             .background(
-                if (isFocused) Color.White.copy(alpha = 0.12f) else Color.White.copy(alpha = 0.05f),
+                Color.White.copy(alpha = 0.05f),
                 RoundedCornerShape(12.dp)
             )
             .border(
@@ -11538,8 +11640,8 @@ private fun AccountRow(
     secondaryActionLabel: String? = null,
     expirationText: String? = null
 ) {
-    val foreground = if (isFocused) Color.Black else TextPrimary
-    val secondary = if (isFocused) Color.Black.copy(alpha = 0.65f) else TextSecondary
+    val foreground = TextPrimary
+    val secondary = TextSecondary
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -11547,9 +11649,10 @@ private fun AccountRow(
                 if (isConnected) onDisconnect() else onConnect()
             }
             .background(
-                if (isFocused) Color.White else Color.White.copy(alpha = 0.05f),
+                Color.White.copy(alpha = 0.05f),
                 RoundedCornerShape(8.dp)
             )
+            .settingsFocusOutline(isFocused)
             .padding(horizontal = 16.dp, vertical = 14.dp)
     ) {
         Row(
@@ -12287,7 +12390,7 @@ private fun InputModal(
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .background(Color.White.copy(alpha = if (isFocused) 0.12f else 0.05f), RoundedCornerShape(12.dp))
+                                    .background(Color.White.copy(alpha = 0.05f), RoundedCornerShape(12.dp))
                                     .border(
                                         width = if (isFocused) 2.dp else 1.dp,
                                         color = if (isFocused) regexFieldFocusColor else Color.White.copy(alpha = 0.2f),
@@ -12420,7 +12523,7 @@ private fun InputModal(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clip(RoundedCornerShape(12.dp))
-                                .background(Color.White.copy(alpha = if (isFocused) 0.12f else 0.05f), RoundedCornerShape(12.dp))
+                                .background(Color.White.copy(alpha = 0.05f), RoundedCornerShape(12.dp))
                                 .border(
                                     width = if (isFocused) 2.dp else 1.dp,
                                     color = if (isFocused) resolveAccentColor(fallback = Pink) else Color.White.copy(alpha = 0.2f),
@@ -12673,7 +12776,7 @@ private fun SubtitlePickerModal(
                     state = listState,
                     modifier = Modifier.heightIn(max = 360.dp).arvioDpadFocusGroup()
                 ) {
-                    itemsIndexed(options) { index, option ->
+                    itemsIndexed(options, contentType = { _, _ -> "SettingsScreen.options" }) { index, option ->
                         val isFocused = index == safeIndex
                         val isSelected = option.equals(selected, ignoreCase = true)
                         val optionFocusColor = resolveAccentColor(fallback = Pink)
@@ -12682,7 +12785,7 @@ private fun SubtitlePickerModal(
                                 .fillMaxWidth()
                                 .clip(RoundedCornerShape(12.dp))
                                 .background(
-                                    if (isFocused) Color.White.copy(alpha = 0.12f) else Color.Transparent,
+                                    Color.Transparent,
                                     RoundedCornerShape(12.dp)
                                 )
                                 .border(
@@ -13140,7 +13243,8 @@ private fun IptvCategoriesSettings(
                 ) {
                     itemsIndexed(
                         items = orderedGroups,
-                        key = { _, group -> com.arflix.tv.data.model.PlaylistGroupKey.build(playlistId, group) }
+                        key = { _, group -> com.arflix.tv.data.model.PlaylistGroupKey.build(playlistId, group) },
+                        contentType = { _, _ -> "SettingsScreen.items" },
                     ) { index, group ->
                         val rowFocusIndex = index + firstGroupIndex
                         val isRowFocused = focusedIndex == rowFocusIndex
@@ -13429,7 +13533,8 @@ private fun StalkerCatalogCategoryList(
             ) {
                 itemsIndexed(
                     items = categories,
-                    key = { _, category -> category.id }
+                    key = { _, category -> category.id },
+                    contentType = { _, _ -> "SettingsScreen.items2" },
                 ) { index, category ->
                     MobileStalkerCatalogRow(
                         title = category.title,
@@ -13452,7 +13557,8 @@ private fun StalkerCatalogCategoryList(
         ) {
             itemsIndexed(
                 items = categories,
-                key = { _, category -> category.id }
+                key = { _, category -> category.id },
+                contentType = { _, _ -> "SettingsScreen.items3" },
             ) { index, category ->
                 val rowFocusIndex = index + firstCategoryIndex
                 val isRowFocused = focusedIndex == rowFocusIndex
@@ -13462,9 +13568,10 @@ private fun StalkerCatalogCategoryList(
                         .settingsFocusSlot(rowFocusIndex)
                         .fillMaxWidth()
                         .background(
-                            if (isRowFocused) Color.White.copy(alpha = 0.08f) else Color.Transparent,
+                            Color.Transparent,
                             RoundedCornerShape(12.dp)
                         )
+                        .settingsFocusOutline(isRowFocused, cornerRadius = 12.dp)
                         .clickable { onToggleCategory(category.id) }
                         .padding(horizontal = 16.dp, vertical = 14.dp),
                     verticalAlignment = Alignment.CenterVertically
@@ -13553,7 +13660,8 @@ private fun MobileIptvCategoryReorderList(
         ) {
             itemsIndexed(
                 items = orderedGroups,
-                key = { _, group -> com.arflix.tv.data.model.PlaylistGroupKey.build(playlistId, group) }
+                key = { _, group -> com.arflix.tv.data.model.PlaylistGroupKey.build(playlistId, group) },
+                contentType = { _, _ -> "SettingsScreen.items4" },
             ) { index, group ->
                 val groupKey = com.arflix.tv.data.model.PlaylistGroupKey.build(playlistId, group)
                 MobileIptvCategoryRow(
@@ -13929,7 +14037,7 @@ private fun CatalogPackImportDialog(
                         Text(
                             text = stringResource(R.string.settings_catalog_pack_import_failed),
                             style = ArflixTypography.sectionTitle,
-                            color = Color(0xFFDC2626)
+                            color = DangerRed
                         )
                         Spacer(modifier = Modifier.height(12.dp))
                         Text(
@@ -14145,7 +14253,7 @@ private fun CatalogPackDeleteConfirmDialog(
                 Text(
                     text = stringResource(R.string.settings_catalog_pack_delete_title),
                     style = ArflixTypography.sectionTitle,
-                    color = Color(0xFFDC2626)
+                    color = DangerRed
                 )
                 Spacer(modifier = Modifier.height(12.dp))
                 Text(
@@ -14316,19 +14424,19 @@ private fun YouTubeCollectionModal(
                     modifier = Modifier.padding(top = 2.dp, bottom = 12.dp)
                 )
                 LazyColumn(state = listState, modifier = Modifier.fillMaxWidth().weight(1f, fill = false)) {
-                    item(key = "add") {
+                    item(key = "add", contentType = "SettingsScreen.add2") {
                         YouTubeModalRow(
                             title = stringResource(R.string.youtube_add_link), subtitle = stringResource(R.string.youtube_add_link_desc),
                             isFocused = focusedIndex == 0, onClick = { focusedIndex = 0; activate(0) }
                         ) { YouTubeActionChip(Icons.Default.Add, highlighted = focusedIndex == 0, onClick = { focusedIndex = 0; activate(0) }) }
                     }
-                    item(key = "rename") {
+                    item(key = "rename", contentType = "SettingsScreen.rename") {
                         YouTubeModalRow(
                             title = stringResource(R.string.youtube_rename_row), subtitle = catalog.title,
                             isFocused = focusedIndex == 1, onClick = { focusedIndex = 1; activate(1) }
                         ) { YouTubeActionChip(Icons.Default.Edit, highlighted = focusedIndex == 1, onClick = { focusedIndex = 1; activate(1) }) }
                     }
-                    itemsIndexed(videos, key = { _, video -> video.id }) { index, video ->
+                    itemsIndexed(videos, key = { _, video -> video.id }, contentType = { _, _ -> "SettingsScreen.videos" }) { index, video ->
                         val rowIndex = index + 2
                         val rowFocused = focusedIndex == rowIndex
                         val armed = armedVideoId == video.id
@@ -14393,12 +14501,12 @@ private fun YouTubeModalRow(
     imageUrl: String? = null,
     actions: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit
 ) {
-    val accent = if (danger) Color(0xFFDC2626) else Pink
+    val accent = if (danger) DangerRed else resolveAccentColor(fallback = Pink)
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 4.dp)
-            .background(Color.White.copy(alpha = if (isFocused) 0.12f else 0.04f), RoundedCornerShape(10.dp))
+            .background(Color.White.copy(alpha = 0.04f), RoundedCornerShape(10.dp))
             .border(if (isFocused) 2.dp else 1.dp, if (isFocused) accent else Color.White.copy(alpha = 0.08f), RoundedCornerShape(10.dp))
             .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
             .padding(horizontal = 14.dp, vertical = 10.dp),
@@ -14435,7 +14543,7 @@ private fun YouTubeActionChip(
             .size(40.dp)
             .background(
                 when {
-                    highlighted && danger -> Color(0xFFDC2626)
+                    highlighted && danger -> DangerRed
                     highlighted -> Color.White
                     else -> Color.White.copy(alpha = 0.08f)
                 },

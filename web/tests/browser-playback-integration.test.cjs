@@ -1374,6 +1374,18 @@ function autoplayPreferenceGlobals(preference = {}) {
   };
 }
 
+// advanceEpisode shares the next-episode lookup and search with the Up next
+// prefetch (resolveNextEpisode / startNextSearch): extract them with the same globals.
+function withNextEpisodeHelpers(globals) {
+  const scope = { ...globals, nextSearchRef: { current: null } };
+  const pick = (name) => extracted('lib/store.tsx', (node) => ts.isVariableDeclaration(node)
+    && node.name.getText() === name && ts.isCallExpression(node.initializer)
+    ? node.initializer.arguments[0] : undefined, scope);
+  scope.resolveNextEpisode = pick('resolveNextEpisode');
+  scope.startNextSearch = pick('startNextSearch');
+  return scope;
+}
+
 function advanceHarness(sources, preference) {
   const selected = { id: 42, mediaType: 'tv', seasonNumber: 1, episodeNumber: 3, isWatched: false };
   const selections = [];
@@ -1381,7 +1393,7 @@ function advanceHarness(sources, preference) {
   const h = storeHarness(async (input) => input, undefined, { selected, selectedEpisode: { season: 1, episode: 3 } });
   const advance = extracted('lib/store.tsx', (node) => ts.isVariableDeclaration(node)
     && node.name.getText() === 'advanceEpisode' && ts.isCallExpression(node.initializer)
-    ? node.initializer.arguments[0] : undefined, {
+    ? node.initializer.arguments[0] : undefined, withNextEpisodeHelpers({
     ...h.globals,
     sourceGeneration: { current: 0 }, addonsRef: { current: [] },
     nextLocalEpisode: (item) => item,
@@ -1396,7 +1408,7 @@ function advanceHarness(sources, preference) {
     needsAudioConversion: () => false, browserAutoplayCandidates: (streams) => [...new Map(streams.map((s) => [s.url, s])).values()]
       .sort((a, b) => Number(b.url.includes('/torbox/')) - Number(a.url.includes('/torbox/'))),
     playStream: (stream) => selections.push(stream)
-  });
+  }));
   return { advance, selections, progressive, timers: h.state.timers };
 }
 
@@ -1461,7 +1473,7 @@ test('advanceEpisode starts at zero despite playStream retaining the previous ep
     { selected, selectedEpisode });
   const advance = extracted('lib/store.tsx', (node) => ts.isVariableDeclaration(node)
     && node.name.getText() === 'advanceEpisode' && ts.isCallExpression(node.initializer)
-    ? node.initializer.arguments[0] : undefined, {
+    ? node.initializer.arguments[0] : undefined, withNextEpisodeHelpers({
     ...h.globals,
     sourceGeneration: { current: 0 }, addonsRef: { current: [] },
     nextLocalEpisode: (item) => item,
@@ -1476,7 +1488,7 @@ test('advanceEpisode starts at zero despite playStream retaining the previous ep
     appendVodSources: async () => [], appendTelegramSources: async () => [],
     ...autoplayPreferenceGlobals(),
     playStream: (...args) => { selections.push(args); h.play(...args); }
-  });
+  }));
   assert.equal(await advance(), true);
   await flush();
   assert.equal(updates.episode.episode, 4);
@@ -1543,4 +1555,33 @@ test('addon visibility is queued locally even when its cloud save fails',async()
   });
   await assert.rejects(toggle([{id:'enabled-again',enabled:true},{id:'still-disabled',enabled:false}]),/Cloud sync pending/);
   assert.equal(settings.length,1);assert.equal(Array.from(settings[0].disabledAddonIds).join(','),'still-disabled');
+});
+
+test('the next episode search started at Up next is reused when advancing', async () => {
+  let searches = 0;
+  const debrid = { url: 'https://tio.example/torbox/key12345/hash/4', addonId: 'torrentio' };
+  const h = storeHarness(async (input) => input, undefined, { selected: { id: 42, mediaType: 'tv', seasonNumber: 1, episodeNumber: 3 }, selectedEpisode: { season: 1, episode: 3 } });
+  const selections = [];
+  const scope = withNextEpisodeHelpers({
+    ...h.globals, sourceGeneration: { current: 0 }, addonsRef: { current: [] },
+    nextLocalEpisode: (item) => item,
+    getSeasonEpisodes: async () => [{ episodeNumber: 4, name: 'Next episode' }],
+    playbackPlan: () => ({ route: 'here', method: 'direct' }),
+    setSelectedEpisode: () => {}, setSelected: () => {}, setStreams: () => {}, mergeStreams: () => {},
+    getStreamsProgressive: async (_a, _i, _s, _e, publish) => { searches += 1; publish([debrid]); return []; },
+    appendHomeServerSources: async () => [], appendVodSources: async () => [], appendTelegramSources: async () => [],
+    ...autoplayPreferenceGlobals(),
+    needsAudioConversion: () => false, browserAutoplayCandidates: (streams) => streams,
+    playStream: (stream) => selections.push(stream)
+  });
+  const prefetch = extracted('lib/store.tsx', (node) => ts.isVariableDeclaration(node)
+    && node.name.getText() === 'prefetchNextEpisode' && ts.isCallExpression(node.initializer) ? node.initializer.arguments[0] : undefined, scope);
+  const advance = extracted('lib/store.tsx', (node) => ts.isVariableDeclaration(node)
+    && node.name.getText() === 'advanceEpisode' && ts.isCallExpression(node.initializer) ? node.initializer.arguments[0] : undefined, scope);
+  await prefetch();
+  await flush();
+  assert.equal(searches, 1);
+  assert.equal(await advance(), true);
+  assert.equal(searches, 1, 'no second search');
+  assert.equal(selections[0].url, debrid.url);
 });

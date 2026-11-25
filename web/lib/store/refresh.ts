@@ -7,7 +7,7 @@ import { useCallback, useEffect } from "react";
 import { shouldRefreshAutomatically } from "../automaticRefresh";
 import { loadLocalAddons, normalizeAddons, saveLocalAddons } from "../addons";
 import { mergeCatalogs } from "../catalogs";
-import { getContinueWatching, pullCloudContinueWatchingDismissals, pullCloudPayload, pullCloudTrackingSelection, pullCloudWatchedKeys, pullCloudWatchlist, saveCloudAddons, saveCloudTrackingSelection } from "../cloud";
+import { chooseTraktToken, getContinueWatching, pullCloudContinueWatchingDismissals, pullCloudPayload, pullCloudRevision, pullCloudTrackingSelection, pullCloudWatchedKeys, pullCloudWatchlist, saveCloudAddons, saveCloudTrackingSelection } from "../cloud";
 import { completionTimes, includeIptvContinueWatching, mergePartialContinueWatching, mergeTrackerContinueWatching, pruneCompletedResume } from "../continueWatching";
 import { episodeAvailabilityKey } from "../episodeAvailability";
 import { savePlaylists } from "../iptv";
@@ -15,6 +15,7 @@ import { dedupeMedia, historyToItem, hydrateTraktItems, traktItemToMedia, traktP
 import { removeStored } from "../storage";
 import { flushSettingsOutbox, hasPendingSettings, settingsWithPendingEdits } from "../settingsOutbox";
 import { continueWatchingActivitySignature, createTraktActivityCheck } from "../traktActivity";
+import { createAccountChangeCheck } from "../accountChange";
 import { mdblistClient } from "../mdblist";
 import { simklClient } from "../simkl";
 import { defaultTrackingPreferences, loadTrackingPreferences, readsFrom, sameTrackingSources, saveTrackingPreferences, syncClient } from "../sync";
@@ -112,7 +113,20 @@ export function useRefreshData(store: StoreCore) {
               if (!isCurrent()) return;
             }
           } else {
-            traktClient.setToken(cloudTracking.traktToken);
+            // A browser-rotated token that is newer than the cloud copy stays; it is republished below.
+            const chosenTrakt = chooseTraktToken(traktClient.token, cloudTracking.traktToken);
+            const keepsLocalTrakt = Boolean(chosenTrakt) && chosenTrakt === traktClient.token && chosenTrakt !== cloudTracking.traktToken;
+            traktClient.setToken(chosenTrakt);
+            if (keepsLocalTrakt && chosenTrakt) {
+              void saveCloudTrackingSelection(authClient, profileId, {
+                provider: "TRAKT",
+                traktToken: chosenTrakt,
+                simklToken: simklClient.token,
+                mdbListApiKey: mdblistClient.key,
+                trackingPreferences: loadTrackingPreferences(profileId),
+                changedDomains: ["trakt"]
+              }).catch(() => undefined);
+            }
             if (!simklClient.isV2Connected) simklClient.setToken(cloudTracking.simklToken);
             mdblistClient.setKey(cloudTracking.mdbListApiKey);
             if (cloudTracking.mdbListAccessToken) {
@@ -439,7 +453,7 @@ export function useRefreshData(store: StoreCore) {
 }
 
 export function useRefreshTriggers(store: StoreCore & Pick<ReturnType<typeof useRefreshData>, "refreshData">) {
-  const { activeProfileId, auth, cloudProfilesHydrated, lastRefreshStartedRef, playingRef, previousSectionRef, refreshData, refreshInFlightRef, section, traktActivityRef, traktConnected, view } = store;
+  const { accountRevisionRef, activeProfileId, auth, cloudProfilesHydrated, lastRefreshStartedRef, playingRef, previousSectionRef, refreshData, refreshInFlightRef, section, traktActivityRef, traktConnected, view } = store;
   useEffect(() => {
     // Also runs on the profile-selection screen ("profiles" view): the last-used
     // profile is almost always the one picked, so Continue Watching and the
@@ -463,6 +477,22 @@ export function useRefreshTriggers(store: StoreCore & Pick<ReturnType<typeof use
     const timer = window.setInterval(() => { void monitor.check(); }, 120_000);
     return () => { monitor.dispose(); window.clearInterval(timer); };
   }, [activeProfileId, auth?.userId, cloudProfilesHydrated, refreshData, traktConnected, view]);
+
+  useEffect(() => {
+    // Other devices save to the account document, and nothing tells this page. Once a minute, while
+    // the page is visible and idle, ask the server whether the document changed (a metadata read,
+    // no download) and refresh only if it did. Unchanged costs one tiny request.
+    if (view !== "app" || !authClient.session || !cloudProfilesHydrated) return;
+    const monitor = createAccountChangeCheck({
+      key: `${auth?.userId ?? "local"}:${activeProfileId}`,
+      snapshot: accountRevisionRef,
+      isActive: () => document.visibilityState === "visible" && !playingRef.current && !refreshInFlightRef.current,
+      read: () => pullCloudRevision(authClient),
+      refresh: () => refreshData(undefined, true)
+    });
+    const timer = window.setInterval(() => { void monitor.check(); }, 60_000);
+    return () => { monitor.dispose(); window.clearInterval(timer); };
+  }, [accountRevisionRef, activeProfileId, auth?.userId, cloudProfilesHydrated, playingRef, refreshData, refreshInFlightRef, view]);
 
   useEffect(() => {
     if (view === "login" || (authClient.session && !cloudProfilesHydrated)) return undefined;

@@ -53,7 +53,7 @@ Version code 323. Install **ARVIO-v2.4-sideload-release.apk** to update the GitH
 - MDBList OAuth, resilient Trakt/SIMKL activation, Continue Watching reconciliation, immediate watched/watchlist feedback and reliable catalog/add-on deletions across cloud sync.
 - Telegram release/search recovery, Jellyfin 12 authentication, Home/Settings performance, preserved navigation state, mobile predictive back and official Obtainium support.
 - Web collection parity, improved browser/iPad playback, settings hydration and collection setup guides.
-- Contributors: @Himanth-reddy, @ReichiMD, @silentbil, @Saelon600, @test01203 and @GAPP99. Optional collection import example credit: Kaptain / ImKaptain and nuvio-art.
+- Contributors: @Himanth-reddy, @ReichiMD, @silentbil, @Saelon600, @test01203 and @GAPP99. Optional collection import example credit: Kaptain / ImKaptain.
 - Version 2.0.1, version code 318. [Release notes](releases/v2.0.1/RELEASE_NOTES.md), [merged contributions](releases/v2.0.1/MERGED_CONTRIBUTIONS.md), [commit history](releases/v2.0.1/COMMIT_CHANGELOG.md).
 
 ## [2.0.0] - 2026-09-19
@@ -162,7 +162,7 @@ Version code 323. Install **ARVIO-v2.4-sideload-release.apk** to update the GitH
 - Added Catalog Packs so multiple catalogs can be discovered, installed, grouped, deep-linked, and removed together. Contributor: @Himanth-reddy via #463.
 - Added MDBList as a remote sync provider alongside Trakt across Android TV, mobile, and web, with follow-up matching and sync fixes. Contributor: @silentbil via #488 and #489.
 - Added a configurable episode-rating heatmap to TV and mobile details pages without additional metadata requests. Contributor: @NightCorpse via #469.
-- Added compatibility for Nuvio-style JavaScript scraper plugins and redesigned plugin settings for TV and mobile. Contributor: @Himanth-reddy via #466.
+- Added compatibility for JavaScript scraper plugins and redesigned plugin settings for TV and mobile. Contributor: @Himanth-reddy via #466.
 - Preserved legacy catalog-kind fallback behavior so older catalog configurations continue to load.
 - Switched AI subtitle translation to Gemini 3.5 Flash Lite and improved MDBList integration behavior. Contributor: @silentbil via #489.
 - Added rounded launcher icons and Android 13+ themed icon support. Contributor: @Himanth-reddy via #499.

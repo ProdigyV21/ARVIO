@@ -46,3 +46,16 @@ test('sign-in hands over without flashing a Back button, and only says "required
   assert.match(login, /if \(redirecting\) return \(/);
   assert.match(login, /\{cloudLoginRequired && <p className="login-tag">/);
 });
+
+test('the play offer names the chosen title and every headline is translated', () => {
+  const offer = read('components/shell/PremiumOffer.tsx');
+  assert.match(offer, /translateUi\("Watch \{title\} with ARVIO Premium", \{ title \}\)/);
+  assert.doesNotMatch(offer, /premium-offer-eyebrow/);
+  for (const locale of ['es', 'pt-BR', 'fr', 'de', 'nl']) {
+    const dictionary = JSON.parse(read(`lib/i18n/generated/${locale}.json`));
+    for (const key of ['Watch {title} with ARVIO Premium', 'Watch this with ARVIO Premium', 'Watch Live TV with ARVIO Premium', 'Download with ARVIO Premium', 'Open streams with ARVIO Premium']) {
+      assert.ok(dictionary[key] && dictionary[key] !== key, `${locale}: ${key}`);
+    }
+    assert.match(dictionary['Watch {title} with ARVIO Premium'], /\{title\}/);
+  }
+});

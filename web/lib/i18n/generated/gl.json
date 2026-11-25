@@ -1565,5 +1565,16 @@
   "Maximum of 10 IPTV playlists reached": "Alcanzouse o máximo de 10 listas IPTV",
   "Regional price · save {value0} vs. 12 monthly payments": "Prezo rexional · aforra un {value0} fronte a 12 pagamentos mensuais",
   "One payment, no automatic renewal. About {value0} a month.": "Un só pagamento, sen renovación automática. Uns {value0} ao mes.",
-  "12-month pass · {value0}": "Pase de 12 meses · {value0}"
+  "12-month pass · {value0}": "Pase de 12 meses · {value0}",
+  "Look around for free. Premium is needed to play.": "Explora de balde. Para reproducir precisas Premium.",
+  "Watch {title} with ARVIO Premium": "Mira {title} con ARVIO Premium",
+  "Watch this with ARVIO Premium": "Mírao con ARVIO Premium",
+  "Watch Live TV with ARVIO Premium": "Mira TV en directo con ARVIO Premium",
+  "Download with ARVIO Premium": "Descarga con ARVIO Premium",
+  "Open streams with ARVIO Premium": "Abre fluxos con ARVIO Premium",
+  "Filter categories": "Filtrar categorías",
+  "Clear filter": "Borrar filtro",
+  "No categories match \"{value0}\".": "Ningunha categoría coincide con \"{value0}\".",
+  "Chromecast": "Chromecast",
+  "This browser can't play some sources, so ARVIO tries the next one.": "Este navegador non pode reproducir algunhas fontes, así que ARVIO proba a seguinte."
 }

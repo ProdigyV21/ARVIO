@@ -2371,8 +2371,11 @@ class HomeServerRepository @Inject constructor(
                             "UserId" to connection.userId,
                             "StartTimeTicks" to "0",
                             "IsPlayback" to "true",
-                            "AutoOpenLiveStream" to "true",
-                            "MaxStreamingBitrate" to "2147483647"
+                            "AutoOpenLiveStream" to "true"
+                            // No MaxStreamingBitrate: ARVIO has no client bitrate ceiling. Sending a huge
+                            // one still counts as a ceiling to Silo, which cannot show that a source of
+                            // unknown bitrate fits under it and so transcodes that title instead of
+                            // playing it directly. The server still applies the account's own limits.
                         )
                     ),
                     JsonObject(),

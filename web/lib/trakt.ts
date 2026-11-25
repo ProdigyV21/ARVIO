@@ -40,6 +40,8 @@ function normalizeToken(token: TraktToken | null): TraktToken | null {
 
 export class TraktClient {
   token: TraktToken | null = null;
+  /** Trakt refresh tokens are single use, so a rotated pair must reach the other devices. */
+  onTokenRefreshed?: (profileId: string, token: TraktToken) => Promise<void> | void;
   private profileId: string | null = null;
   private refreshInFlight: { profileId: string | null; token: string; promise: Promise<TraktToken | null> } | null = null;
   private calendarMetadata = new Map<string, { at: number; promise: Promise<unknown> }>();
@@ -687,6 +689,11 @@ export class TraktClient {
       refresh_token: response.refresh_token ?? token.refresh_token,
       expires_at: Date.now() + response.expires_in * 1000
     });
+    // The old refresh token is spent now. Publish the new pair without making the caller wait.
+    const rotated = this.token;
+    if (rotated && this.onTokenRefreshed) {
+      void Promise.resolve().then(() => this.onTokenRefreshed?.(profileId ?? "", rotated)).catch(() => undefined);
+    }
     return this.token;
   }
 

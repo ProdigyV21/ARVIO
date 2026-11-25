@@ -1118,3 +1118,10 @@
 .livetv-search input:focus-visible { outline: none !important; box-shadow: none !important; }
 .livetv-search:focus-within { border-color: var(--accent, #fff); box-shadow: 0 0 0 1px var(--accent, #fff); color: #fff; }
 html.is-tv .livetv-search:focus-within { box-shadow: 0 0 0 3px var(--accent, #fff); }
+
+/* Category filter: playlists can carry close to a thousand groups. It reuses the
+   channel search box look, sized a little smaller so the two read as a pair. */
+.livetv-cats .livetv-cat-filter,
+.tv-guide-workspace .livetv-cats .livetv-cat-filter { min-height: 38px; margin: 10px 0 8px; }
+.livetv-cats .livetv-cat-filter input { font-size: 14px; }
+.livetv-cat-empty { margin: 8px 4px; color: #a3a8ae; font-size: 13px; overflow-wrap: anywhere; }

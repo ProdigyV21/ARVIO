@@ -1565,5 +1565,16 @@
   "Maximum of 10 IPTV playlists reached": "Dosiahlo sa maximum 10 zoznamov IPTV",
   "Regional price · save {value0} vs. 12 monthly payments": "Regionálna cena · ušetríte {value0} v porovnaní s 12 mesačnými platbami",
   "One payment, no automatic renewal. About {value0} a month.": "Jedna platba, žiadne automatické obnovenie. Približne {value0} mesačne.",
-  "12-month pass · {value0}": "Ročné predplatné · {value0}"
+  "12-month pass · {value0}": "Ročné predplatné · {value0}",
+  "Look around for free. Premium is needed to play.": "Prezerajte zadarmo. Na prehrávanie potrebujete Premium.",
+  "Watch {title} with ARVIO Premium": "Sledujte {title} s ARVIO Premium",
+  "Watch this with ARVIO Premium": "Sledujte to s ARVIO Premium",
+  "Watch Live TV with ARVIO Premium": "Sledujte živé vysielanie s ARVIO Premium",
+  "Download with ARVIO Premium": "Sťahujte s ARVIO Premium",
+  "Open streams with ARVIO Premium": "Otvárajte streamy s ARVIO Premium",
+  "Filter categories": "Filtrovať kategórie",
+  "Clear filter": "Vymazať filter",
+  "No categories match \"{value0}\".": "Žiadne kategórie nezodpovedajú „{value0}“.",
+  "Chromecast": "Chromecast",
+  "This browser can't play some sources, so ARVIO tries the next one.": "Tento prehliadač nedokáže prehrať niektoré zdroje, preto ARVIO skúša ďalší."
 }

@@ -12,6 +12,8 @@ import { subtitleLanguageName, SubtitleTranslator } from "@/lib/subtitleAi";
 import { trackLanguageName, languageCode } from "@/lib/languages";
 import { trackPremiumAttempt, trackPremiumDaily, trackPremiumMilestone, trackPremiumEvent } from "@/lib/premiumAnalytics";
 import { playbackAttemptDetail } from "@/lib/playbackTelemetry";
+import { fileMbps, recordPlaybackSample } from "@/lib/connectionBudget";
+import { readTally, recordStall, recordStart, startupBucket, subtractReported, tallyMetadata } from "@/lib/playbackStartStats";
 import { parseDebridStream, cachedDebridDirectUrl, resolveDebridDirectUrl, isUncachedDebridStream } from "@/lib/debrid";
 import { type SubtitleLoadState, groupSubtitles, positionSubtitleCues } from "@/lib/playerSubtitles";
 import type { RemuxAudioTrack } from "@/lib/remux";
@@ -33,6 +35,8 @@ import { usePlaybackEngine } from "./usePlaybackEngine";
 import { useProgressTracking } from "./useProgressTracking";
 import { usePlatformControls } from "./usePlatformControls";
 import { usePlayerKeys } from "./usePlayerKeys";
+import { useScreenWakeLock } from "./useScreenWakeLock";
+import { loadTrickplay, type Trickplay } from "@/lib/trickplay";
 import { useSkipAndUpNext, PlayerSkipUpNext } from "./skipUpNext";
 import { LiveDockControls, PlayerTopBar, PlayerControlsBar } from "./PlayerControls";
 import { PlayerStatusLayers, PlayerEndScreen } from "./PlayerScreens";
@@ -56,6 +60,7 @@ export function VideoPlayer({
   canAdvance,
   onSelectStream: selectStream,
   onAdvance: advance,
+  onPrefetchNext,
   onToast,
   onClose: close
 }: {
@@ -78,6 +83,8 @@ export function VideoPlayer({
   canAdvance: boolean;
   onSelectStream: (stream: StreamSource, options?: { forceTranscode?: boolean; forceRemux?: boolean; forceBrowser?: boolean }) => void;
   onAdvance: () => Promise<boolean>;
+  /** Look the next episode's sources up while Up next shows, so advancing starts at once. */
+  onPrefetchNext?: () => Promise<void> | void;
   onToast: (message: string) => void;
   onClose: () => void;
 }) {
@@ -333,16 +340,62 @@ export function VideoPlayer({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [liveTv, settings.audioLanguage]);
 
+  // Startup time runs from opening a title (or the next episode) to its first
+  // frame; source hops, URL refreshes and restarts in between count as part of
+  // the wait, never as another start. null = this title's start is counted.
+  const startupClockRef = useRef<number | null>(typeof performance === "undefined" ? 0 : performance.now());
+  const startKey = `${item?.mediaType ?? ""}:${item?.id ?? ""}:${selectedEpisode?.season ?? item?.seasonNumber ?? ""}:${selectedEpisode?.episode ?? item?.episodeNumber ?? ""}`;
+  const countedKeyRef = useRef(startKey);
+  useEffect(() => {
+    if (countedKeyRef.current === startKey) return;
+    countedKeyRef.current = startKey;
+    startupClockRef.current = performance.now();
+  }, [startKey]);
   useEffect(() => {
     setBooted(false);
     const video = videoRef.current;
     if (!video) return undefined;
     const onReady = () => setBooted(true);
     void trackPremiumDaily(authClient, "playback_requested", { playback_type: liveTv ? "live" : "vod" });
+    let started = false;
+    let seekedAt = 0;
+    // This session's evidence for connectionBudget: minutes watched and stalls.
+    let watched = 0;
+    let lastTime = -1;
+    let sessionStalls = 0;
+    let sampled = false;
+    const sessionStream = stream;
+    const onSeeking = () => { seekedAt = performance.now(); lastTime = -1; };
+    // A stall = buffering after the first frame that no seek explains.
+    const onWaiting = () => {
+      if (started && !liveTv && !video.seeking && performance.now() - seekedAt > 1500) { recordStall(); sessionStalls += 1; }
+    };
+    const onTimeUpdate = () => {
+      const now = video.currentTime;
+      if (lastTime >= 0 && !video.paused && now > lastTime && now - lastTime < 2) watched += now - lastTime;
+      lastTime = now;
+    };
+    const sampleConnection = () => {
+      if (sampled || liveTv || !started || sessionStream.transcoded || streamTransport(sessionStream) !== "file") return;
+      sampled = true;
+      recordPlaybackSample(fileMbps(streamSizeBytes(sessionStream), video.duration), watched, sessionStalls);
+    };
     const onPlaying = () => {
       onReady();
       void trackPremiumMilestone(authClient, "first_playback", { playback_type: liveTv ? "live" : "vod" });
-      void trackPremiumDaily(authClient, "playback_started", { playback_type: liveTv ? "live" : "vod" });
+      if (!started && startupClockRef.current !== null) {
+        const stream = currentStreamRef.current;
+        const detail = playbackAttemptDetail(stream, { liveTv, debrid: Boolean(parseDebridStream(stream.originalUrl ?? stream.url)) });
+        const elapsed = performance.now() - startupClockRef.current;
+        startupClockRef.current = null;
+        // Earlier film/series starts ride along on the one daily event; this
+        // start joins the tally after. Channel zapping is not counted.
+        const earlier = liveTv ? {} : tallyMetadata(readTally());
+        void trackPremiumDaily(authClient, "playback_started", { playback_type: liveTv ? "live" : "vod", ...detail, startup: startupBucket(elapsed), ...earlier },
+          undefined, () => subtractReported(earlier));
+        if (!liveTv) recordStart(detail.method, elapsed);
+      }
+      started = true;
       if (!liveTv) {
         // Autoplay waits briefly for this addon next time (see autoplaySelection).
         rememberSuccessfulSource(currentStreamRef.current);
@@ -351,9 +404,18 @@ export function VideoPlayer({
     };
     video.addEventListener("playing", onPlaying);
     video.addEventListener("loadeddata", onReady);
+    video.addEventListener("seeking", onSeeking);
+    video.addEventListener("waiting", onWaiting);
+    video.addEventListener("timeupdate", onTimeUpdate);
+    window.addEventListener("pagehide", sampleConnection);
     return () => {
+      sampleConnection();
+      video.removeEventListener("timeupdate", onTimeUpdate);
+      window.removeEventListener("pagehide", sampleConnection);
       video.removeEventListener("playing", onPlaying);
       video.removeEventListener("loadeddata", onReady);
+      video.removeEventListener("seeking", onSeeking);
+      video.removeEventListener("waiting", onWaiting);
     };
   }, [stream.url, remuxRestartKey, liveTv]);
 
@@ -754,7 +816,7 @@ export function VideoPlayer({
     });
   }, [onToast]);
 
-  const { pipAvailable, pipActive, airPlayAvailable, airPlayAllowed, togglePip } = usePlatformControls({ canAdvance, item, liveTv, onAdvance, onToast, seekBy, stream, subtitleLabel, title, translateUi, videoRef });
+  const { pipAvailable, pipActive, airPlayAvailable, airPlayAllowed, togglePip, castAvailable, castConnected, toggleCast } = usePlatformControls({ canAdvance, item, liveTv, onAdvance, onToast, seekBy, stream, subtitleLabel, title, translateUi, videoRef });
 
   const openPanel = useCallback((panel: Exclude<PlayerPanel, null>) => {
     const next = activePanel === panel ? null : panel;
@@ -869,6 +931,23 @@ export function VideoPlayer({
   usePlayerKeys({ activePanel, booted, containerRef, dock, ended, error, flashControls, hideControlsNow, liveTv, onClose, openPanel, revealControls, seekBy, setActivePanel, showControls, toggleFullscreen, togglePlay, videoRef });
 
   const { activeSkip, showSkip, skipNow, nextEpisode, showUpNext, dismissUpNext, playNextNow } = useSkipAndUpNext({ booted, canAdvance, current, duration, ended, error, flashControls, item, liveTv, metadataPriority, nextCountdown, nextDismissed, onAdvance, selectedEpisode, setNextCountdown, setUpNextDismissed, stream, upNextDismissed, upNextShownRef, videoRef });
+  useEffect(() => { if (showUpNext) void onPrefetchNext?.(); }, [showUpNext, onPrefetchNext]);
+  useScreenWakeLock(videoRef, !error && !ended);
+  // Seek previews from the person's own Jellyfin/Plex server, when it has them.
+  const [trickplay, setTrickplay] = useState<Trickplay | null>(null);
+  useEffect(() => {
+    setTrickplay(null);
+    const video = videoRef.current;
+    if (liveTv || !booted || !video || !(stream.homeServer || stream.playbackSession)) return undefined;
+    const controller = new AbortController();
+    let loaded: Trickplay | null = null;
+    void loadTrickplay(stream, settings.homeServers ?? [], video.videoWidth && video.videoHeight ? video.videoWidth / video.videoHeight : 16 / 9, controller.signal)
+      .then((result) => { if (controller.signal.aborted) result?.destroy(); else { loaded = result; setTrickplay(result); } })
+      .catch(() => undefined);
+    return () => { controller.abort(); loaded?.destroy(); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stream.url, booted, liveTv]);
+  const seekPreview = trickplay && hoverTime !== null ? trickplay.at(hoverTime) : null;
 
   // ---------- Touch: tap toggles the controls, double-tap seeks ±10 s ----------
   const lastTap = useRef<{ at: number; x: number } | null>(null);
@@ -972,11 +1051,11 @@ export function VideoPlayer({
       <PlayerSkipUpNext activeSkip={activeSkip} dismissUpNext={dismissUpNext} nextCountdown={nextCountdown} nextEpisode={nextEpisode} playNextNow={playNextNow} showSkip={showSkip} showUpNext={showUpNext} skipNow={skipNow} />
       <PlayerEndScreen item={item} onClose={onClose} onOpenDetails={onOpenDetails} showEndScreen={showEndScreen} title={title} togglePlay={togglePlay} />
 
-      <PlayerTopBar airPlayAllowed={airPlayAllowed} airPlayAvailable={airPlayAvailable} airPlayBlockedReason={airPlayBlockedReason} mediaMeta={mediaMeta} onClose={onClose} onToast={onToast} pauseOverview={pauseOverview} pipActive={pipActive} pipAvailable={pipAvailable} playing={playing} stream={stream} title={title} togglePip={togglePip} videoRef={videoRef} />
+      <PlayerTopBar airPlayAllowed={airPlayAllowed} airPlayAvailable={airPlayAvailable} airPlayBlockedReason={airPlayBlockedReason} castAvailable={castAvailable} castConnected={castConnected} toggleCast={toggleCast} mediaMeta={mediaMeta} onClose={onClose} onToast={onToast} pauseOverview={pauseOverview} pipActive={pipActive} pipAvailable={pipAvailable} playing={playing} stream={stream} title={title} togglePip={togglePip} videoRef={videoRef} />
 
       <PlayerSidePanel activePanel={activePanel} activeSubtitle={activeSubtitle} aiAvailable={aiAvailable} aiError={aiError} aiSubsActive={aiSubsActive} aiTargetName={aiTargetName} aiTranslating={aiTranslating} audioProbeState={audioProbeState} bufferAheadSec={bufferAheadSec} buffering={buffering} changeSubtitleDelay={changeSubtitleDelay} copyUrl={copyUrl} embeddedChoice={embeddedChoice} embeddedTracks={embeddedTracks} error={error} externalOptions={externalOptions} onSelectStream={onSelectStream} onToast={onToast} openExternalOption={openExternalOption} playbackRate={playbackRate} probeAudioTracks={probeAudioTracks} remuxAudioIndex={remuxAudioIndex} remuxTracks={remuxTracks} selectEmbedded={selectEmbedded} selectSubtitle={selectSubtitle} setActivePanel={setActivePanel} setAiSubsActive={setAiSubsActive} setPlaybackRate={setPlaybackRate} setSubtitleRetry={setSubtitleRetry} settings={settings} sourceGroups={sourceGroups} stream={stream} subtitleDelayMs={subtitleDelayMs} subtitleGroups={subtitleGroups} subtitleState={subtitleState} switchRemuxAudio={switchRemuxAudio} transportRef={transportRef} transportTracks={transportTracks} updateSettings={updateSettings} videoRef={videoRef} />
 
-      <PlayerControlsBar activePanel={activePanel} appleMobile={appleMobile} badges={badges} bufPct={bufPct} canAdvance={canAdvance} duration={duration} error={error} fullscreen={fullscreen} hoverPct={hoverPct} hoverTime={hoverTime} liveTv={liveTv} muted={muted} openPanel={openPanel} pct={pct} playing={playing} playNextNow={playNextNow} scrubDisplayTime={scrubDisplayTime} seekBy={seekBy} setHoverPct={setHoverPct} setHoverTime={setHoverTime} setScrubTo={setScrubTo} toggleFullscreen={toggleFullscreen} togglePlay={togglePlay} transportRef={transportRef} videoRef={videoRef} volume={volume} />
+      <PlayerControlsBar activePanel={activePanel} appleMobile={appleMobile} badges={badges} bufPct={bufPct} canAdvance={canAdvance} duration={duration} error={error} fullscreen={fullscreen} hoverPct={hoverPct} hoverTime={hoverTime} seekPreview={seekPreview} liveTv={liveTv} muted={muted} openPanel={openPanel} pct={pct} playing={playing} playNextNow={playNextNow} scrubDisplayTime={scrubDisplayTime} seekBy={seekBy} setHoverPct={setHoverPct} setHoverTime={setHoverTime} setScrubTo={setScrubTo} toggleFullscreen={toggleFullscreen} togglePlay={togglePlay} transportRef={transportRef} videoRef={videoRef} volume={volume} />
     </section>
   );
 }

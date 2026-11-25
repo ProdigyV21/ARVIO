@@ -124,9 +124,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -891,8 +892,19 @@ fun HomeScreen(
         }
     }
 
+    // While Home is on screen, ask once a minute whether another device saved to the account.
+    // The server answers with a revision (nothing is downloaded); a pull happens only on a change.
+    LaunchedEffect(lifecycleOwner) {
+        lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            while (true) {
+                delay(60_000L)
+                viewModel.checkForRemoteCloudChange()
+            }
+        }
+    }
+
     // The startup preload bypasses the kids filter, so a kids profile never falls back to it.
-    val rawDisplayCategoriesBase = if (uiState.categories.isNotEmpty() || kidsFilterState.isActive) {
+    val rawDisplayCategoriesBase =if (uiState.categories.isNotEmpty() || kidsFilterState.isActive) {
         uiState.categories
     } else {
         preloadedCategories
@@ -3031,6 +3043,7 @@ internal fun HomeInputLayer(
                                     SidebarItem.HOME -> Unit
                                     SidebarItem.WATCHLIST -> onNavigateToWatchlist()
                                     SidebarItem.TV -> onNavigateToTv(null, null)
+                                    SidebarItem.NEWS -> com.arflix.tv.ui.components.NewsNavigation.open()
                                     SidebarItem.SETTINGS -> onNavigateToSettings()
                                     null -> Unit
                                 }
@@ -3602,7 +3615,7 @@ private fun MobileHomeRowsLayer(
                         ),
                         horizontalArrangement = Arrangement.spacedBy(mobileItemSpacing)
                     ) {
-                        items(8, key = { "skeleton_${category.id}_$it" }) {
+                        items(8, key = { "skeleton_${category.id}_$it" }, contentType = { "HomeScreen.rows" }) {
                             if (isPortrait) {
                                 SkeletonPosterCard(width = rowMobileItemWidth)
                             } else {
@@ -3692,7 +3705,7 @@ private fun MobileHomeRowsLayer(
                         }
 
                         if (showViewAll) {
-                            // Like Nuvio, the "View all" card replaces the loading tail;
+                            // The "View all" card replaces the loading tail;
                             // the next page still loads as it scrolls into view.
                             item(key = "${category.id}_view_all", contentType = "view_all_card") {
                                 HomeViewAllCard(

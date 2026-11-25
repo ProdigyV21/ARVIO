@@ -54,6 +54,8 @@ import com.arflix.tv.ui.screens.settings.SettingsScreen
 import com.arflix.tv.ui.screens.settings.telegram.TelegramSettingsScreen
 import com.arflix.tv.ui.screens.tv.live.LiveTvScreen
 import com.arflix.tv.ui.screens.watchlist.WatchlistScreen
+import com.arflix.tv.ui.screens.news.NewsScreen
+import com.arflix.tv.ui.screens.music.MusicScreen
 import com.arflix.tv.ui.screens.watchlist.calendar.ReleaseCalendarViewModel
 import com.arflix.tv.ui.screens.home.HOME_COMING_UP_ROW_ID
 import com.arflix.tv.ui.screens.profile.ProfileSelectionScreen
@@ -91,6 +93,8 @@ sealed class Screen(val route: String) {
     data object Home : Screen("home")
     data object Search : Screen("search")
     data object Watchlist : Screen("watchlist")
+    data object News : Screen("news")
+    data object Music : Screen("music")
     data object CollectionDetails : Screen(
         "collections/{catalogId}?serviceRow={serviceRow}&serviceFilter={serviceFilter}"
     ) {
@@ -244,13 +248,15 @@ fun AppNavigation(
     val isKidsProfile = currentProfile?.isKidsProfile == true
     SideEffect { KidsNavigation.hideLiveTv = isKidsProfile }
     val navigateTopLevel: (String) -> Unit = navigate@{ route ->
-        if (isKidsProfile && route.substringBefore('?') == "tv") return@navigate
+        if (isKidsProfile && route.substringBefore('?') in com.arflix.tv.util.KIDS_HIDDEN_NAVIGATION_SECTIONS) return@navigate
         navController.navigate(route) {
             popUpTo(Screen.Home.route) { saveState = true }
             launchSingleTop = true
             restoreState = true
         }
     }
+
+    SideEffect { com.arflix.tv.ui.components.NewsNavigation.open = { navigateTopLevel(Screen.News.route) } }
 
     val navigateHome: () -> Unit = {
         // Pop back to the EXISTING Home entry rather than replacing it.
@@ -380,6 +386,31 @@ fun AppNavigation(
                     },
                     onBack = { navigateHome() }
                 )
+            }
+        }
+
+        composable(Screen.News.route) {
+            NavigationRailScreen(navigationRailInset, bottomInset = navigationRailBottomInset) {
+                NewsScreen(
+                    currentProfile = currentProfile,
+                    onNavigateToHome = { navigateHome() },
+                    onNavigateToSearch = { navigateTopLevel(Screen.Search.route) },
+                    onNavigateToWatchlist = { navigateTopLevel(Screen.Watchlist.route) },
+                    onNavigateToTv = { navigateTopLevel(Screen.Tv.createRoute()) },
+                    onNavigateToSettings = { navigateTopLevel(Screen.Settings.route) },
+                    onSwitchProfile = {
+                        onSwitchProfile()
+                        navController.navigateToProfileSelection()
+                    },
+                    onBack = { navigateHome() }
+                )
+            }
+        }
+
+        // Music: the user's own music server. A touch-only tab; TV has no entry to it.
+        composable(Screen.Music.route) {
+            NavigationRailScreen(navigationRailInset, bottomInset = navigationRailBottomInset) {
+                MusicScreen(onFullscreenChanged = onOverlayFullscreenChanged, onBack = { navigateHome() })
             }
         }
 

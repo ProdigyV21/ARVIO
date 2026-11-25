@@ -4666,10 +4666,31 @@ class HomeViewModel @Inject constructor(
     private val cloudPullThrottleMs = 30_000L
     private var cloudPullJob: Job? = null
 
-    fun pullCloudStateOnResume() {
-        val now = android.os.SystemClock.elapsedRealtime()
+    /**
+     * Called about once a minute while Home is on screen. With cloud sync there is no live channel,
+     * so a change another device saved (progress, watchlist, addons, settings) would otherwise wait
+     * for the next resume. This asks the server whether the account document changed, which downloads
+     * nothing, and pulls only when it did.
+     */
+    fun checkForRemoteCloudChange() {
         if (cloudPullJob?.isActive == true) return
-        if (lastCloudPullTimestamp != 0L && now - lastCloudPullTimestamp < cloudPullThrottleMs) return
+        viewModelScope.launch(Dispatchers.IO) {
+            val changed = runCatching { cloudSyncRepository.remoteChangedSinceLastCheck() }
+                .getOrElse { if (it is CancellationException) throw it else false }
+            // A change is remembered until a pull really starts, so it is not lost to a pull in flight.
+            if (changed) remoteChangePending = true
+            if (remoteChangePending && pullCloudStateOnResume(force = true)) remoteChangePending = false
+        }
+    }
+
+    @Volatile
+    private var remoteChangePending = false
+
+    /** Returns true when a pull was started. */
+    fun pullCloudStateOnResume(force: Boolean = false): Boolean {
+        val now = android.os.SystemClock.elapsedRealtime()
+        if (cloudPullJob?.isActive == true) return false
+        if (!force && lastCloudPullTimestamp != 0L && now - lastCloudPullTimestamp < cloudPullThrottleMs) return false
         lastCloudPullTimestamp = now
         cloudPullJob = viewModelScope.launch(Dispatchers.IO) {
             // Give the local Home/CW snapshots first access to IO and the main
@@ -4691,6 +4712,8 @@ class HomeViewModel @Inject constructor(
             val result = runCatching {
                 cloudSyncRepository.pullFromCloud()
             }
+            // This pull already brought in whatever the server holds now.
+            if (result.isSuccess) runCatching { cloudSyncRepository.rememberRemoteRevision() }
             result.onSuccess { restoreResult ->
                 if (restoreResult == CloudSyncRepository.RestoreResult.RESTORED) {
                     val profileId = profileManager.getProfileIdSync().ifBlank { "default" }
@@ -4708,6 +4731,7 @@ class HomeViewModel @Inject constructor(
                 android.util.Log.w("HomeViewModel", "ON_RESUME cloud pull failed: ${it.message}")
             }
         }
+        return true
     }
 
     fun refreshContinueWatchingOnly(force: Boolean = false) {

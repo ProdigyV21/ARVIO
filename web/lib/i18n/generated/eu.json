@@ -1564,5 +1564,16 @@
   "Maximum of 10 IPTV playlists reached": "10 IPTV zerrendako muga gainditu da",
   "Regional price · save {value0} vs. 12 monthly payments": "Eskualdeko prezioa · aurreztu {value0} hileko 12 ordainketarekin alderatuta",
   "One payment, no automatic renewal. About {value0} a month.": "Ordainketa bakarra, berritze automatikorik gabe. Hilean {value0} inguru.",
-  "12-month pass · {value0}": "12 hilabeteko txartela · {value0}"
+  "12-month pass · {value0}": "12 hilabeteko txartela · {value0}",
+  "Look around for free. Premium is needed to play.": "Arakatu doan. Erreproduzitzeko Premium behar da.",
+  "Watch {title} with ARVIO Premium": "Ikusi {title} ARVIO Premiumekin",
+  "Watch this with ARVIO Premium": "Ikusi hau ARVIO Premiumekin",
+  "Watch Live TV with ARVIO Premium": "Ikusi zuzeneko telebista ARVIO Premiumekin",
+  "Download with ARVIO Premium": "Deskargatu ARVIO Premiumekin",
+  "Open streams with ARVIO Premium": "Ireki streamak ARVIO Premiumekin",
+  "Filter categories": "Iragazi kategoriak",
+  "Clear filter": "Garbitu iragazkia",
+  "No categories match \"{value0}\".": "Ez dago \"{value0}\"-rekin bat datorren kategoriarik.",
+  "Chromecast": "Chromecast",
+  "This browser can't play some sources, so ARVIO tries the next one.": "Nabigatzaile honek ezin ditu iturri batzuk erreproduzitu; beraz, ARVIOk hurrengoa probatzen du."
 }

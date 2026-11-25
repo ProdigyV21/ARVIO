@@ -1,5 +1,7 @@
 package com.arflix.tv.ui.components
 
+import com.arflix.tv.ui.focus.TvPivotScroll
+
 
 import androidx.activity.BackEventCompat
 import androidx.activity.compose.BackHandler
@@ -109,9 +111,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.unit.sp
-import androidx.tv.foundation.lazy.list.TvLazyColumn
-import androidx.tv.foundation.lazy.list.TvLazyListState
-import androidx.tv.foundation.lazy.list.rememberTvLazyListState
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Text
 import com.arflix.tv.data.model.IptvVodSourceIds
@@ -258,7 +258,7 @@ internal fun sourceFocusScrollDelta(
  * Follow measured row bounds, not a guessed number of rows. Release names and
  * badges wrap, so whole-item jumps skip unequal distances and flash on repeats.
  */
-private suspend fun TvLazyListState.scrollToKeepFocusVisible(focusedIndex: Int, itemCount: Int, edgePadding: Int) {
+private suspend fun LazyListState.scrollToKeepFocusVisible(focusedIndex: Int, itemCount: Int, edgePadding: Int) {
     if (itemCount == 0) return
     val target = focusedIndex.coerceIn(0, itemCount - 1)
     val layout = snapshotFlow { layoutInfo }.first {
@@ -413,8 +413,8 @@ fun StreamSelector(
     var focusedFilterIndex by remember { mutableIntStateOf(0) }
     var selectedFilterIndex by remember { mutableIntStateOf(0) }
     var focusZone by remember { mutableStateOf("streams") } // "streams" or "addons"
-    val listState = rememberTvLazyListState()
-    val addonListState = rememberTvLazyListState()
+    val listState = rememberLazyListState()
+    val addonListState = rememberLazyListState()
     val focusRequester = remember { FocusRequester() }
     val pluginPrefix = stringResource(R.string.plugin_prefix)
 
@@ -981,7 +981,7 @@ fun StreamSelector(
                                 .weight(1f)
                                 .arvioDpadFocusGroup()
                         ) {
-                            items(flatPresentations.size, key = { streamKeys[it] }) { index ->
+                            items(flatPresentations.size, key = { streamKeys[it] }, contentType = { "StreamSelector.flatPresentations" }) { index ->
                                 val presentation = flatPresentations[index]
                                 MobileStreamCard(
                                     presentation = presentation,
@@ -1023,8 +1023,8 @@ private fun OledSourceSelectorTv(
     selectedTabIndex: Int,
     focusedTabIndex: Int,
     addonRailFocused: Boolean,
-    listState: TvLazyListState,
-    addonListState: TvLazyListState,
+    listState: LazyListState,
+    addonListState: LazyListState,
     focusedIndex: Int,
     streamsFocused: Boolean,
     count4K: Int,
@@ -1167,7 +1167,7 @@ private fun OledSourceSelectorTv(
                 )
                 else -> BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
                     val rowViewportHeight = (maxHeight - 44.dp).coerceAtLeast(0.dp)
-                    TvLazyColumn(
+                    TvPivotScroll { LazyColumn(
                         state = listState,
                         contentPadding = PaddingValues(bottom = 10.dp),
                         verticalArrangement = Arrangement.spacedBy(5.dp),
@@ -1176,7 +1176,7 @@ private fun OledSourceSelectorTv(
                             .arvioDpadFocusGroup()
                     ) {
                         flatPresentations.forEachIndexed { index, presentation ->
-                            item(key = streamKeys[index]) {
+                            item(key = streamKeys[index], contentType = "StreamSelector.item") {
                                 OledSourceRow(
                                     presentation = presentation,
                                     showAddonStreamDetails = showAddonStreamDetails,
@@ -1188,7 +1188,7 @@ private fun OledSourceSelectorTv(
                                 )
                             }
                         }
-                    }
+                    } }
 
                     val canScrollUp by remember { derivedStateOf { listState.canScrollBackward } }
                     val canScrollDown by remember { derivedStateOf { listState.canScrollForward } }
@@ -2013,7 +2013,7 @@ private fun SourceAddonRail(
     selectedTabIndex: Int,
     focusedTabIndex: Int,
     isFocused: Boolean,
-    listState: TvLazyListState,
+    listState: LazyListState,
     totalSources: Int,
     count4K: Int,
     count1080: Int,
@@ -2038,13 +2038,13 @@ private fun SourceAddonRail(
         )
         Spacer(modifier = Modifier.height(10.dp))
         Box(modifier = Modifier.weight(1f)) {
-            TvLazyColumn(
+            TvPivotScroll { LazyColumn(
                 state = listState,
                 verticalArrangement = Arrangement.spacedBy(5.dp),
                 modifier = Modifier.fillMaxSize()
             ) {
                 tabLabels.forEachIndexed { index, label ->
-                    item(key = tabKeys.getOrElse(index) { "source_addon:fallback:$index" }) {
+                    item(key = tabKeys.getOrElse(index) { "source_addon:fallback:$index" }, contentType = "StreamSelector.item2") {
                         AddonRailItem(
                             text = label,
                             isSelected = index == selectedTabIndex,
@@ -2053,7 +2053,7 @@ private fun SourceAddonRail(
                         )
                     }
                 }
-            }
+            } }
 
             val canScrollUp by remember { derivedStateOf { listState.canScrollBackward } }
             val canScrollDown by remember { derivedStateOf { listState.canScrollForward } }

@@ -90,7 +90,7 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalLayoutDirection
-import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
@@ -819,7 +819,7 @@ fun SearchScreen(
                         FocusZone.PANEL -> false
                         FocusZone.SIDEBAR -> {
                             if (hasProfile && sidebarFocusIndex == 0) onSwitchProfile()
-                            else when (topBarFocusedItem(sidebarFocusIndex, hasProfile)) { SidebarItem.SEARCH -> Unit; SidebarItem.HOME -> onNavigateToHome(); SidebarItem.WATCHLIST -> onNavigateToWatchlist(); SidebarItem.TV -> onNavigateToTv(); SidebarItem.SETTINGS -> onNavigateToSettings(); null -> Unit }
+                            else when (topBarFocusedItem(sidebarFocusIndex, hasProfile)) { SidebarItem.SEARCH -> Unit; SidebarItem.HOME -> onNavigateToHome(); SidebarItem.WATCHLIST -> onNavigateToWatchlist(); SidebarItem.TV -> onNavigateToTv(); SidebarItem.NEWS -> com.arflix.tv.ui.components.NewsNavigation.open(); SidebarItem.SETTINGS -> onNavigateToSettings(); null -> Unit }
                             true
                         }
                         FocusZone.SEARCH_INPUT -> {
@@ -1371,7 +1371,7 @@ private fun RowsLayer(
             modifier = Modifier.fillMaxSize().arvioDpadFocusGroup(),
             verticalArrangement = Arrangement.spacedBy(if (isTouchDevice) 20.dp else 0.dp)
         ) {
-            items(categories.size, key = { categories[it].id }) { index ->
+            items(categories.size, key = { categories[it].id }, contentType = { "SearchScreen.categories" }) { index ->
                 val category = categories[index]
                 val isCurrentRow = !isTouchDevice && isFocused && index == currentRowIndex
                 val rowKey = remember(category.id) { "search:${category.id}" }
@@ -1468,7 +1468,7 @@ private fun RowsLayer(
                             },
                             horizontalArrangement = Arrangement.spacedBy(if (isTouchDevice) 14.dp else 18.dp)
                         ) {
-                            itemsIndexed(category.items, key = { _, item -> "${item.mediaType}_${item.id}" }) { itemIdx, item ->
+                            itemsIndexed(category.items, key = { _, item -> "${item.mediaType}_${item.id}" }, contentType = { _, _ -> "SearchScreen.category" }) { itemIdx, item ->
                                 val itemIsFocused = !isTouchDevice && isCurrentRow && itemIdx == currentItemIndex
                                 MediaCard(
                                     item = item.copy(
@@ -1601,7 +1601,7 @@ private fun ContentGrid(
         verticalArrangement = Arrangement.spacedBy(if (isTouchDevice) 18.dp else 26.dp),
         modifier = modifier.fillMaxSize().arvioDpadFocusGroup()
     ) {
-        items(items.size, key = { "${items[it].mediaType}_${items[it].id}" }) { idx ->
+        items(items.size, key = { "${items[it].mediaType}_${items[it].id}" }, contentType = { "SearchScreen.items" }) { idx ->
             val item = items[idx]
             val itemIsFocused = manualFocusIndex != null && isZoneFocused && idx == manualFocusIndex
             MediaCard(
@@ -1626,7 +1626,7 @@ private fun ContentGrid(
             )
         }
         if (loadFailed || scanPaused) {
-            item(key = "discover_retry", span = { GridItemSpan(maxLineSpan) }) {
+            item(key = "discover_retry", span = { GridItemSpan(maxLineSpan) }, contentType = "SearchScreen.discover_retry") {
                 val retryFocused = isZoneFocused && manualFocusIndex == items.size
                 Text(
                     text = if (loadFailed) stringResource(R.string.search_discover_load_failed) + " · " + stringResource(R.string.retry)
@@ -1641,7 +1641,7 @@ private fun ContentGrid(
             }
         }
         if (isLoading) {
-            item(span = { GridItemSpan(maxLineSpan) }) {
+            item(span = { GridItemSpan(maxLineSpan) }, contentType = "SearchScreen.span") {
                 Box(Modifier.fillMaxWidth().height(80.dp), contentAlignment = Alignment.Center) { LoadingIndicator(color = Pink, size = 32.dp) }
             }
         }

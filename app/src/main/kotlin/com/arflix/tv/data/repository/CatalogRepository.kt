@@ -1045,7 +1045,7 @@ class CatalogRepository @Inject constructor(
     }
 
     /**
-     * Installs a collections document (Nuvio export format or ARVIO wrapper) from a
+     * Installs a collections document (collections export format or ARVIO wrapper) from a
      * URL or pasted JSON. Returns null when the input is not a collections document,
      * so the caller can fall back to the regular catalog-pack flow.
      */

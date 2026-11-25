@@ -14,7 +14,7 @@ import { requestSourceSettings } from "@/lib/sourceSetup";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createHeroController } from "@/lib/homeHero";
-import { HOME_WATCHLIST_ROW_ID, withHomeWatchlistRow } from "@/lib/homeRows";
+import { HOME_WATCHLIST_ROW_ID, homeItemKey, trimRepeatedTitles, withHomeWatchlistRow } from "@/lib/homeRows";
 import { requestPlayOnOpen } from "@/lib/playIntent";
 import { useAppPick } from "@/lib/store";
 import { useKidsFilter } from "@/lib/useKids";
@@ -59,12 +59,24 @@ export function HomeScreen({ onCollectionOpenChange }: { onCollectionOpenChange?
     const seen = new Set<string>();
     return withHomeWatchlistRow(categories, watchlist, settings.watchlistOnHome === true).map((category) => {
       if (category.id === HOME_WATCHLIST_ROW_ID) return category;
-      const kept = category.items.filter((item) => !seen.has(`${item.mediaType}-${item.id}`));
-      const items = kept.length >= Math.min(8, category.items.length) ? kept : category.items;
-      items.forEach((item) => seen.add(`${item.mediaType}-${item.id}`));
+      const items = trimRepeatedTitles(category.items, seen);
+      items.forEach((item) => seen.add(homeItemKey(item)));
       return items === category.items ? category : { ...category, items };
     });
   }, [categories, watchlist, settings.watchlistOnHome]);
+
+  // Catalog rows load one by one, so they repeat each other too (Black Clover
+  // opened both anime rows). Each row reports what it shows; later rows skip it.
+  const [railShown, setRailShown] = useState<ReadonlyMap<string, string>>(() => new Map());
+  const reportRailShown = useCallback((catalogId: string, keys: string[]) => {
+    const joined = keys.join(",");
+    setRailShown((prev) => {
+      if (prev.get(catalogId) === joined) return prev;
+      const next = new Map(prev);
+      next.set(catalogId, joined);
+      return next;
+    });
+  }, []);
 
   const [heroSeeded, setHeroSeeded] = useState(false);
   const [railOutcomes, setRailOutcomes] = useState<ReadonlyMap<string, LazyRailOutcome>>(() => new Map());
@@ -75,6 +87,19 @@ export function HomeScreen({ onCollectionOpenChange }: { onCollectionOpenChange?
       .map((catalog) => catalog.id),
     [homeCatalogs]
   );
+  const railHideKeys = useMemo(() => {
+    const running = new Set<string>();
+    for (const category of dedupedCategories) {
+      if (category.id === "continue_watching" || category.id === HOME_WATCHLIST_ROW_ID) continue;
+      category.items.forEach((item) => running.add(homeItemKey(item)));
+    }
+    const result = new Map<string, ReadonlySet<string>>();
+    for (const catalog of homeCatalogs) {
+      result.set(catalog.id, new Set(running));
+      railShown.get(catalog.id)?.split(",").forEach((key) => key && running.add(key));
+    }
+    return result;
+  }, [dedupedCategories, homeCatalogs, railShown]);
   const heroFolders = useMemo(
     () => homeCatalogs
       .filter((catalog) => String(catalog.kind).toUpperCase() === "COLLECTION_RAIL")
@@ -228,6 +253,8 @@ export function HomeScreen({ onCollectionOpenChange }: { onCollectionOpenChange?
           onLoaded={seedHeroFromRow}
           onSettled={markRailSettled}
           onViewAll={openViewAll}
+          hideKeys={railHideKeys.get(catalog.id)}
+          onShown={reportRailShown}
         />
       }</RowBoundary>)}
       {/* Like Android, a catalog list without the row still shows it, after the others. */}

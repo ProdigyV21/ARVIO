@@ -2,7 +2,7 @@
 import { useTranslation } from "@/lib/i18n";
 import "./details.css";
 
-import { ArrowLeft, BadgeCheck, Bookmark, CalendarDays, Check, ChevronDown, Clapperboard, EyeOff, Folder, Loader2, MapPin, MoreHorizontal, Play, RotateCcw, Star, Trash2, UserCircle, X } from "lucide-react";
+import { ArrowLeft, BadgeCheck, Bookmark, CalendarDays, Check, ChevronDown, Clapperboard, EyeOff, Folder, Loader2, MapPin, MoreHorizontal, Play, RotateCcw, Smartphone, Star, Trash2, UserCircle, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { MediaCard } from "@/components/media/MediaCard";
@@ -27,6 +27,10 @@ import { syncClient, syncSeasonWatched } from "@/lib/sync";
 import { getLogoUrl, getPersonDetails } from "@/lib/tmdb";
 import type { EpisodeInfo, MediaItem, PersonCredit, PersonDetails, ReviewInfo, WatchHistoryEntry } from "@/lib/types";
 import { EpisodeCard } from "./EpisodeCard";
+import { preconnectOrigin } from "@/lib/preconnect";
+import { arvioAppLink } from "@/lib/appLink";
+import { isAndroid } from "@/lib/externalPlayers";
+import { config as appConfig } from "@/lib/config";
 import { loadDetails, loadReviews, loadSeasonEpisodes } from "./detailsLoaders";
 import { buildDetailMeta, cleanReviewText, formatDate } from "./detailsText";
 import { SourcePickerModal, useCompactSources } from "./SourcePicker";
@@ -154,6 +158,8 @@ function DetailsView({ item }: { item: MediaItem }) {
   }, [starting, activeStream]);
   const [logo, setLogo] = useState<string | null>(null);
   const [relayTraktLink, setRelayTraktLink] = useState(false);
+  // Pressing Play resolves the stream through the resolver: warm that connection now.
+  useEffect(() => { preconnectOrigin(appConfig.resolverUrl); }, []);
   useEffect(() => { let active = true; void relaySupportsTraktLink().then((ok) => { if (active) setRelayTraktLink(ok); }); return () => { active = false; }; }, []);
   // Trakt's own page, found through Simkl's id mapping; the relay redirect and
   // a title search remain the fallbacks.
@@ -249,6 +255,8 @@ function DetailsView({ item }: { item: MediaItem }) {
 
   const isTv = displayItem.mediaType === "tv";
   const inWatchlist = watchlist.some((entry) => entry.mediaType === item.mediaType && entry.id === item.id);
+  // Android phones and tablets: hand the title to the ARVIO app (full codec support).
+  const appLink = useMemo(() => (isAndroid() ? arvioAppLink(displayItem, displayItem.mediaType === "tv" ? selectedEpisode : null) : null), [displayItem, selectedEpisode]);
   const detailWatched = isWatched(displayItem, selectedEpisode?.season, selectedEpisode?.episode);
 
   // ---------- Resume, from any entry point ----------
@@ -342,6 +350,19 @@ function DetailsView({ item }: { item: MediaItem }) {
     await loadEpisodeStreams(displayItem, season, episode);
     setStarting(false);
     setAutoplayRequest({ resumeSeconds: resume });
+  };
+
+  // A series has no sources until an episode is chosen: open the list on the
+  // episode Play would start (resume or next), instead of an empty list.
+  const openSources = () => {
+    if (isTv && !selectedEpisode) {
+      if (plan.season == null || plan.episode == null) {
+        episodesRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+        return;
+      }
+      void loadEpisodeStreams(displayItem, plan.season, plan.episode);
+    }
+    setSourcePickerVisible(true);
   };
 
   const playPrimary = (fromStart = false) => {
@@ -457,7 +478,6 @@ function DetailsView({ item }: { item: MediaItem }) {
                 <b>{detailImdbRating}</b>
               </span>
             ) : null}
-            {detailWatched && <span className="detail-watched-chip"><BadgeCheck size={13} /> {translateUi(" Watched")}</span>}
             {displayItem.genres?.slice(0, 3).map((genre) => <span key={genre}>{genre}</span>)}
           </div>
           {externalRatings.length ? (
@@ -490,7 +510,11 @@ function DetailsView({ item }: { item: MediaItem }) {
                 <RotateCcw size={18} /> {translateUi(plan.startOverLabel)}
               </button>
             ) : null}
-            <button type="button" className="secondary text-button" onClick={() => setSourcePickerVisible(true)}><Folder size={18} /> {translateUi("Sources")}</button>
+            {/* Android: the app plays what this browser cannot (MKV, DTS, HDR), so it sits next to Play. */}
+            {appLink ? (
+              <a href={appLink} className="secondary text-button detail-app-button"><Smartphone size={18} /> {translateUi("Open in {value0}", { value0: "ARVIO" })}</a>
+            ) : null}
+            <button type="button" className="secondary text-button" onClick={openSources}><Folder size={18} /> {translateUi("Sources")}</button>
             {inWatchlist ? (
               <button type="button" className="secondary text-button" onClick={() => void toggleWatchlist(displayItem)}><Trash2 size={18} /> {translateUi(" Remove")}</button>
             ) : (
