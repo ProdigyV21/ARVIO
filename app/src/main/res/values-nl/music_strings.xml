@@ -21,6 +21,8 @@
     <string name="music_shelf_frequent">Vaak gespeeld</string>
     <string name="music_shelf_random">Ontdek</string>
     <string name="music_songs">Nummers</string>
+    <string name="music_playlists">Playlists</string>
+    <string name="music_charts_credit">Hitlijsten en playlists: Deezer. Nummers spelen af via je eigen bronnen.</string>
     <string name="music_play">Afspelen</string>
     <string name="music_empty_library">Nog geen muziek gevonden op deze server.</string>
     <string name="music_no_results">Niets gevonden voor \"%1$s\"</string>

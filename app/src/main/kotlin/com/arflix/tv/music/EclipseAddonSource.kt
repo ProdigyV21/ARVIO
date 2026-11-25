@@ -98,7 +98,8 @@ class EclipseAddonSource(
         val body = get(url("search", query = mapOf("q" to query)))
         return MusicSearchResult(
             artists = body.list("artists").map { parseArtist(it) },
-            albums = body.list("albums").map { parseAlbum(it, "album") } + body.list("playlists").map { parseAlbum(it, "playlist") },
+            albums = body.list("albums").map { parseAlbum(it, "album") },
+            playlists = body.list("playlists").map { parseAlbum(it, "playlist") },
             tracks = body.list("tracks").map { parseTrack(it, null, null) },
         )
     }

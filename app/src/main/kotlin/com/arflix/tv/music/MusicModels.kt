@@ -55,8 +55,10 @@ data class MusicSearchResult(
     val artists: List<MusicArtist> = emptyList(),
     val albums: List<MusicAlbum> = emptyList(),
     val tracks: List<MusicTrack> = emptyList(),
+    /** Playlists (an addon's, or the charts'); they open like albums. */
+    val playlists: List<MusicAlbum> = emptyList(),
 ) {
-    val isEmpty: Boolean get() = artists.isEmpty() && albums.isEmpty() && tracks.isEmpty()
+    val isEmpty: Boolean get() = artists.isEmpty() && albums.isEmpty() && tracks.isEmpty() && playlists.isEmpty()
 }
 
 /** The album lists the Music home and Albums tab show. */

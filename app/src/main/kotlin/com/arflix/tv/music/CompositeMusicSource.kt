@@ -68,6 +68,7 @@ class CompositeMusicSource(
             artists = parts.flatMap { (i, r) -> r.artists.map { it.tagged(i) } },
             albums = parts.flatMap { (i, r) -> r.albums.map { it.tagged(i) } },
             tracks = parts.flatMap { (i, r) -> r.tracks.map { it.tagged(i) } },
+            playlists = parts.flatMap { (i, r) -> r.playlists.map { it.tagged(i) } },
         )
     }
 
