@@ -625,6 +625,7 @@ private fun PlaceholderCard(
     showSubtitle: Boolean = true,
     modifier: Modifier = Modifier
 ) {
+    android.os.Trace.beginSection("UI:PlaceholderCard")
     val aspectRatio = if (isLandscape) 16f / 9f else 2f / 3f
     val shape = rememberArvioCardShape(ArvioSkin.radius.md)
 
@@ -667,6 +668,7 @@ private fun PlaceholderCard(
             }
         }
     }
+    android.os.Trace.endSection()
 }
 
 /**

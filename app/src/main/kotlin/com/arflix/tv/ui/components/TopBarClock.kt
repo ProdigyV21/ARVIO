@@ -42,6 +42,7 @@ fun TopBarClock(
     modifier: Modifier = Modifier,
     profile: Profile? = null
 ) {
+    android.os.Trace.beginSection("UI:TopBarClock")
     val context = LocalContext.current
     var currentTime by remember { mutableStateOf(getCurrentTime(context)) }
 
@@ -76,6 +77,7 @@ fun TopBarClock(
             )
         }
     }
+    android.os.Trace.endSection()
 }
 
 /**
@@ -87,6 +89,7 @@ private fun ProfileIndicator(
     profile: Profile,
     modifier: Modifier = Modifier
 ) {
+    android.os.Trace.beginSection("UI:ProfileIndicator")
     Row(
         modifier = modifier
             .clip(RoundedCornerShape(16.dp))
@@ -119,6 +122,7 @@ private fun ProfileIndicator(
             color = Color.White.copy(alpha = 0.9f)
         )
     }
+    android.os.Trace.endSection()
 }
 
 private fun getCurrentTime(context: Context): String {

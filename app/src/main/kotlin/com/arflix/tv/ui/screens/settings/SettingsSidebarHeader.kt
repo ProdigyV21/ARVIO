@@ -15,6 +15,7 @@ import com.arflix.tv.ui.theme.TextPrimary
 
 @Composable
 internal fun SettingsSidebarHeader(availableUpdateTag: String?, awaitingCompilation: Boolean) {
+    android.os.Trace.beginSection("UI:SettingsSidebarHeader")
     Text(
         text = stringResource(R.string.settings),
         style = ArflixTypography.cardTitle.copy(fontSize = 19.sp),
@@ -38,4 +39,5 @@ internal fun SettingsSidebarHeader(availableUpdateTag: String?, awaitingCompilat
             modifier = Modifier.padding(start = 8.dp, end = 4.dp, bottom = 12.dp)
         )
     }
+    android.os.Trace.endSection()
 }

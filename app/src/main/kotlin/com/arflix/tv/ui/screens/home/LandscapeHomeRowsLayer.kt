@@ -83,6 +83,7 @@ fun LandscapeHomeRowsLayer(
     onRetry: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
+    android.os.Trace.beginSection("UI:LandscapeHomeRowsLayer")
     val landscapeItemSpacing = 16.dp
 
     val heroItems = remember(categories) {
@@ -383,4 +384,5 @@ fun LandscapeHomeRowsLayer(
         }
     }
     }
+    android.os.Trace.endSection()
 }

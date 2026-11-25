@@ -105,6 +105,7 @@ fun AppTopBar(
     hasUpdateBadge: Boolean = false,
     modifier: Modifier = Modifier
 ) {
+    android.os.Trace.beginSection("UI:AppTopBar")
     val showProfile = profile != null
     val hasProfile = showProfile
     val currentTime = rememberTopBarTime(clockFormat)
@@ -189,6 +190,7 @@ fun AppTopBar(
             }
         }
     }
+    android.os.Trace.endSection()
 }
 
 @OptIn(ExperimentalTvMaterial3Api::class)
@@ -198,6 +200,7 @@ private fun TopBarNavChip(
     isFocused: Boolean,
     isSelected: Boolean,
 ) {
+    android.os.Trace.beginSection("UI:TopBarNavChip")
     val accent = resolveAccentColor(fallback = Color.White)
 
     val containerColor by animateColorAsState(
@@ -267,6 +270,7 @@ private fun TopBarNavChip(
             overflow = TextOverflow.Ellipsis
         )
     }
+    android.os.Trace.endSection()
 }
 
 /**
@@ -279,6 +283,7 @@ private fun TopBarSettingsGear(
     isSelected: Boolean,
     hasBadge: Boolean = false
 ) {
+    android.os.Trace.beginSection("UI:TopBarSettingsGear")
     val accent = resolveAccentColor(fallback = Color.White)
 
     val iconColor by animateColorAsState(
@@ -336,6 +341,7 @@ private fun TopBarSettingsGear(
             )
         }
     }
+    android.os.Trace.endSection()
 }
 
 /**
@@ -348,6 +354,7 @@ private fun TopBarProfileAvatar(
     profile: Profile,
     isFocused: Boolean
 ) {
+    android.os.Trace.beginSection("UI:TopBarProfileAvatar")
     val containerColor by animateColorAsState(
         targetValue = if (isFocused) Color.White.copy(alpha = 0.2f) else Color.Transparent,
         animationSpec = tween(if (isFocused) AnimationConstants.DURATION_FAST else 0),
@@ -385,6 +392,7 @@ private fun TopBarProfileAvatar(
             )
         }
     }
+    android.os.Trace.endSection()
 }
 
 @Composable

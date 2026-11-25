@@ -645,6 +645,7 @@ private suspend fun androidx.compose.foundation.lazy.LazyListState.animateHomeSc
 /** The hero preview player (channels, service videos): no controls, never focusable. */
 @Composable
 internal fun HomeHeroVideoSurface(player: ExoPlayer, modifier: Modifier = Modifier) {
+    android.os.Trace.beginSection("UI:HomeHeroVideoSurface")
     AndroidView(
         factory = { ctx ->
             PlayerView(ctx).apply {
@@ -668,6 +669,7 @@ internal fun HomeHeroVideoSurface(player: ExoPlayer, modifier: Modifier = Modifi
         },
         modifier = modifier
     )
+    android.os.Trace.endSection()
 }
 
 @Composable
@@ -805,6 +807,7 @@ fun HomeScreen(
     onExitApp: () -> Unit = {},
     upcomingItems: List<MediaItem> = emptyList()
 ) {
+    android.os.Trace.beginSection("UI:HomeScreen")
     val isMobile = LocalDeviceType.current.isTouchDevice()
 
     // Use preloaded data from StartupViewModel if available
@@ -1851,6 +1854,7 @@ fun HomeScreen(
             )
         }
     }
+    android.os.Trace.endSection()
 }
 
 @OptIn(ExperimentalTvMaterial3Api::class)
@@ -1867,6 +1871,7 @@ private fun HeroSection(
     compactForTrailer: Boolean = false,
     modifier: Modifier = Modifier
 ) {
+    android.os.Trace.beginSection("UI:HeroSection")
     val context = LocalContext.current
     val metadataLogoImageLoader = context.imageLoader
     val density = LocalDensity.current
@@ -2217,6 +2222,7 @@ private fun HeroSection(
             }
         }
     }
+    android.os.Trace.endSection()
 }
 
 private fun formatBudgetCompact(budget: Long): String {
@@ -2245,6 +2251,7 @@ internal fun TopRankRibbon(
     compact: Boolean,
     modifier: Modifier = Modifier
 ) {
+    android.os.Trace.beginSection("UI:TopRankRibbon")
     val clamped = rank.coerceIn(1, 10)
     val resId = when (clamped) {
         1 -> R.drawable.rank_banner_01
@@ -2279,6 +2286,7 @@ internal fun TopRankRibbon(
             .width(width)
             .alpha(if (isFocused) 1f else 0.97f)
     )
+    android.os.Trace.endSection()
 }
 
 @Composable
@@ -2295,6 +2303,7 @@ private fun HomeHeroLayer(
     isIptvItem: (MediaItem) -> Boolean = { false },
     getIptvChannelId: (MediaItem) -> String? = { null }
 ) {
+    android.os.Trace.beginSection("UI:HomeHeroLayer")
     if (isMobile) {
         // Mobile hero is rendered inline inside MobileHomeRowsLayer's LazyColumn — no fixed overlay needed.
     } else {
@@ -2328,6 +2337,7 @@ private fun HomeHeroLayer(
             }
         }
     }
+    android.os.Trace.endSection()
 }
 
 /** Compact mobile hero overlay with gradient, title, metadata, description, and action buttons. */
@@ -2339,6 +2349,7 @@ private fun MobileHeroOverlay(
     onPlay: () -> Unit,
     onDetails: () -> Unit
 ) {
+    android.os.Trace.beginSection("UI:MobileHeroOverlay")
     val context = LocalContext.current
     val metadataLogoImageLoader = context.imageLoader
     val mobileHeroGradient = remember {
@@ -2537,6 +2548,7 @@ private fun MobileHeroOverlay(
             }
         }
     }
+    android.os.Trace.endSection()
 }
 
 @Composable
@@ -2545,6 +2557,7 @@ private fun MobileHomeHeader(
     onSwitchProfile: () -> Unit,
     onNavigateToSearch: () -> Unit,
 ) {
+    android.os.Trace.beginSection("UI:MobileHomeHeader")
     Row(
         Modifier.fillMaxWidth().statusBarsPadding()
             .padding(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 8.dp),
@@ -2563,6 +2576,7 @@ private fun MobileHomeHeader(
                 modifier = Modifier.size(26.dp))
         }
     }
+    android.os.Trace.endSection()
 }
 
 /** Mobile hero carousel; immersive artwork extends behind the safe-area header. */
@@ -2815,6 +2829,7 @@ internal fun HomeInputLayer(
     onBillboardOpen: (item: MediaItem, play: Boolean) -> Unit = { _, _ -> },
     onOpenContextMenu: (MediaItem, Boolean) -> Unit,
 ) {
+    android.os.Trace.beginSection("UI:HomeInputLayer")
     val focusRequester = remember { FocusRequester() }
     val homeView = androidx.compose.ui.platform.LocalView.current
     val isRtl = androidx.compose.ui.platform.LocalLayoutDirection.current == androidx.compose.ui.unit.LayoutDirection.Rtl
@@ -3323,6 +3338,7 @@ internal fun HomeInputLayer(
             } else null
         )
     }
+    android.os.Trace.endSection()
 }
 
 @Composable
@@ -3362,6 +3378,7 @@ private fun HomeRowsLayer(
     onItemClick: (MediaItem) -> Unit,
     onItemLongClick: ((MediaItem, Boolean) -> Unit)? = null
 ) {
+    android.os.Trace.beginSection("UI:HomeRowsLayer")
     val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
 
     if (!isMobile && netflix != null) {
@@ -3456,6 +3473,7 @@ private fun HomeRowsLayer(
             onItemClick = onItemClick
         )
     }
+    android.os.Trace.endSection()
 }
 
 /** Mobile-optimized rows: free-scrolling LazyColumn with smaller cards, no viewport constraint. */
@@ -3480,6 +3498,7 @@ private fun MobileHomeRowsLayer(
     onViewAllCategory: (String) -> Unit = {},
     onCategoryVisiblePosition: (String, Int) -> Unit = { _, _ -> }
 ) {
+    android.os.Trace.beginSection("UI:MobileHomeRowsLayer")
     val mobileItemSpacing = 14.dp
     val bottomBarHeight = LocalBottomBarHeight.current
     val posterHero = com.arflix.tv.ui.components.rememberMobileHomeHeroStyle() == com.arflix.tv.ui.components.MobileHomeHeroStyle.POSTER
@@ -3761,6 +3780,7 @@ private fun MobileHomeRowsLayer(
                 0.75f to Color.Black.copy(alpha = 0.55f), 1f to Color.Transparent))
             .statusBarsPadding().height(12.dp))
     }
+    android.os.Trace.endSection()
 }
 
 /** TV-optimized rows: D-pad controlled, viewport-constrained to bottom half of screen. */
@@ -3784,6 +3804,7 @@ private fun TvHomeRowsLayer(
     featuredTrailerVolume: Float = 0f,
     onItemClick: (MediaItem) -> Unit
 ) {
+    android.os.Trace.beginSection("UI:TvHomeRowsLayer")
     val currentRowIndex = focusState.currentRowIndex
     val rowWindowStart = remember(categories, currentRowIndex, limitRowsDuringStartup) {
         if (!limitRowsDuringStartup || categories.size <= 3) {
@@ -3966,6 +3987,7 @@ private fun TvHomeRowsLayer(
             }
         }
     }
+    android.os.Trace.endSection()
 }
 
 /** Trailing card of a home row that opens the row's full grid ("View all"). */
@@ -3977,6 +3999,7 @@ internal fun HomeViewAllCard(
     enableSystemFocus: Boolean,
     onClick: () -> Unit
 ) {
+    android.os.Trace.beginSection("UI:HomeViewAllCard")
     val shape = rememberArvioCardShape(ArvioSkin.radius.md)
     ArvioFocusableSurface(
         modifier = Modifier
@@ -4017,6 +4040,7 @@ internal fun HomeViewAllCard(
             )
         }
     }
+    android.os.Trace.endSection()
 }
 
 @Composable
@@ -4036,6 +4060,7 @@ private fun ArcticFuseRatingBadge(
     rating: String,
     backgroundColor: Color
 ) {
+    android.os.Trace.beginSection("UI:ArcticFuseRatingBadge")
     Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(4.dp)
@@ -4060,10 +4085,12 @@ private fun ArcticFuseRatingBadge(
             color = Color.White
         )
     }
+    android.os.Trace.endSection()
 }
 
 @Composable
 private fun PrimeLogo(modifier: Modifier = Modifier) {
+    android.os.Trace.beginSection("UI:PrimeLogo")
     // Simple text-based logo for now, but blue "prime" with smile curve
     Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically) {
         // "prime" text
@@ -4078,10 +4105,12 @@ private fun PrimeLogo(modifier: Modifier = Modifier) {
         )
         // Smile curve path could be drawn here, but text is sufficient for now
     }
+    android.os.Trace.endSection()
 }
 
 @Composable
 private fun IncludedWithPrimeBadge() {
+    android.os.Trace.beginSection("UI:IncludedWithPrimeBadge")
     Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp)
@@ -4103,11 +4132,13 @@ private fun IncludedWithPrimeBadge() {
             color = TextPrimary
         )
     }
+    android.os.Trace.endSection()
 }
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 private fun MetaPill(text: String) {
+    android.os.Trace.beginSection("UI:MetaPill")
     Box(
         modifier = Modifier
             .background(
@@ -4125,11 +4156,13 @@ private fun MetaPill(text: String) {
             color = TextPrimary
         )
     }
+    android.os.Trace.endSection()
 }
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 private fun ImdbBadge(rating: String) {
+    android.os.Trace.beginSection("UI:ImdbBadge")
     // Kept for compatibility but not strictly in new hero design
     Box(
         modifier = Modifier
@@ -4161,6 +4194,7 @@ private fun ImdbBadge(rating: String) {
             )
         }
     }
+    android.os.Trace.endSection()
 }
 
 @OptIn(ExperimentalTvMaterial3Api::class)
@@ -4186,6 +4220,7 @@ internal fun ContentRow(
     onItemClick: (MediaItem) -> Unit,
     onItemFocused: (MediaItem, Int) -> Unit
 ) {
+    android.os.Trace.beginSection("UI:ContentRow")
     val isCollectionRow = category.id.startsWith("collection_row_")
     val effectiveCategoryHasMore = !isCollectionRow && categoryHasMore
     val rowState = rememberLazyListState()
@@ -4571,4 +4606,5 @@ internal fun ContentRow(
             }
         }  // Close Box
     }  // Close Column
+    android.os.Trace.endSection()
 }

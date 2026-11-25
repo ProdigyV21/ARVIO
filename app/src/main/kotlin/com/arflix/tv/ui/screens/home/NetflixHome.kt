@@ -752,6 +752,7 @@ private fun NetflixBillboardButton(
     icon: @Composable (Color) -> Unit,
     highlighted: Boolean
 ) {
+    android.os.Trace.beginSection("UI:NetflixBillboardButton")
     val content = if (highlighted) Color.Black else Color.White
     Row(
         modifier = Modifier
@@ -769,6 +770,7 @@ private fun NetflixBillboardButton(
             maxLines = 1
         )
     }
+    android.os.Trace.endSection()
 }
 
 /** "Series • Drama • 2026 • 16+": the Netflix metadata line. */
@@ -1509,6 +1511,7 @@ private fun MediaItem.isIptvChannel(): Boolean = status?.startsWith("iptv:") == 
 /** "LIVE  Channel • Group": the channel's metadata line. */
 @Composable
 private fun NetflixLiveLine(item: MediaItem) {
+    android.os.Trace.beginSection("UI:NetflixLiveLine")
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(
             text = stringResource(R.string.live).uppercase(),
@@ -1526,6 +1529,7 @@ private fun NetflixLiveLine(item: MediaItem) {
             overflow = TextOverflow.Ellipsis
         )
     }
+    android.os.Trace.endSection()
 }
 
 /** The focused channel's card: border and logo. Its live preview is [NetflixChannelPreview]. */
@@ -1554,6 +1558,7 @@ private fun NetflixChannelCard(
 
 @Composable
 private fun NetflixChannelLogo(item: MediaItem) {
+    android.os.Trace.beginSection("UI:NetflixChannelLogo")
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -1579,6 +1584,7 @@ private fun NetflixChannelLogo(item: MediaItem) {
             )
         }
     }
+    android.os.Trace.endSection()
 }
 
 /**
@@ -1593,6 +1599,7 @@ private fun NetflixChannelPreview(
     streamItem: MediaItem?,
     modifier: Modifier = Modifier
 ) {
+    android.os.Trace.beginSection("UI:NetflixChannelPreview")
     var frameShown by remember(focusedItem.id) { mutableStateOf(false) }
     val latestFocused by rememberUpdatedState(focusedItem)
     val latestStream by rememberUpdatedState(streamItem)
@@ -1616,6 +1623,7 @@ private fun NetflixChannelPreview(
         HomeHeroVideoSurface(player = player, modifier = Modifier.fillMaxSize())
         if (!frameShown) NetflixChannelLogo(focusedItem)
     }
+    android.os.Trace.endSection()
 }
 
 

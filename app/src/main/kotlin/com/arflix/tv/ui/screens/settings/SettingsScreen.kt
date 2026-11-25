@@ -586,6 +586,7 @@ fun SettingsScreen(
     onBack: () -> Unit = {},
     onSubPageChanged: (Boolean) -> Unit = {}
 ) {
+    android.os.Trace.beginSection("UI:SettingsScreen")
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     var showCredits by remember { mutableStateOf(false) }
     var showPlaybackCompatibility by remember { mutableStateOf(false) }
@@ -3599,6 +3600,7 @@ fun SettingsScreen(
         }
 
     }
+    android.os.Trace.endSection()
 }
 
 @Composable
@@ -3606,6 +3608,7 @@ internal fun ModalScrim(
     onDismiss: () -> Unit,
     content: @Composable BoxScope.() -> Unit
 ) {
+    android.os.Trace.beginSection("UI:ModalScrim")
     val scrimInteraction = remember { MutableInteractionSource() }
     val contentInteraction = remember { MutableInteractionSource() }
 
@@ -3631,6 +3634,7 @@ internal fun ModalScrim(
             content = content
         )
     }
+    android.os.Trace.endSection()
 }
 
 @Composable
@@ -3646,6 +3650,7 @@ private fun QualityFiltersModal(
     focusedActionIndex: Int = -1,
     onFocusedActionIndexChange: (Int) -> Unit = {}
 ) {
+    android.os.Trace.beginSection("UI:QualityFiltersModal")
     val modalFocusRequester = remember { FocusRequester() }
     val listState = rememberLazyListState()
     val hasFilters = filters.isNotEmpty()
@@ -3854,6 +3859,7 @@ private fun QualityFiltersModal(
             }
         }
     }
+    android.os.Trace.endSection()
 }
 
 @Composable
@@ -3901,6 +3907,7 @@ private fun QualityFilterEditorModal(
     onDismiss: () -> Unit,
     onSave: () -> Unit
 ) {
+    android.os.Trace.beginSection("UI:QualityFilterEditorModal")
     // Focus order: 0 device name, 1 regex, 2 cancel, 3 save
     var focusedIndex by remember { mutableIntStateOf(0) }
     val totalItems = 4
@@ -4026,6 +4033,7 @@ private fun QualityFilterEditorModal(
             }
         }
     }
+    android.os.Trace.endSection()
 }
 
 @OptIn(ExperimentalTvMaterial3Api::class)
@@ -4046,6 +4054,7 @@ internal fun TraktActivationModal(
     outcome: TraktAuthOutcome? = null,
     onRetry: (() -> Unit)? = null
 ) {
+    android.os.Trace.beginSection("UI:TraktActivationModal")
     val resolvedTitle = title ?: stringResource(R.string.settings_connect_trakt)
     val resolvedInstruction = instruction ?: stringResource(R.string.settings_trakt_instruction, verificationUrl)
     val resolvedOpenUrlLabel = openUrlLabel ?: stringResource(R.string.settings_open_auth_page)
@@ -4448,6 +4457,7 @@ internal fun TraktActivationModal(
             }
         }
     }
+    android.os.Trace.endSection()
 }
 
 /**
@@ -4465,6 +4475,7 @@ private fun ActivationDialogButton(
     focusRequester: FocusRequester?,
     onClick: () -> Unit
 ) {
+    android.os.Trace.beginSection("UI:ActivationDialogButton")
     var isFocused by remember { mutableStateOf(false) }
 
     Box(
@@ -4516,6 +4527,7 @@ private fun ActivationDialogButton(
             )
         }
     }
+    android.os.Trace.endSection()
 }
 
 @OptIn(ExperimentalTvMaterial3Api::class)
@@ -4525,6 +4537,7 @@ private fun MdbListConnectDialog(
     onConnect: (String) -> Unit,
     onDismiss: () -> Unit
 ) {
+    android.os.Trace.beginSection("UI:MdbListConnectDialog")
     var apiKey by remember { mutableStateOf("") }
     androidx.compose.material3.AlertDialog(
         onDismissRequest = onDismiss,
@@ -4566,6 +4579,7 @@ private fun MdbListConnectDialog(
             }
         }
     )
+    android.os.Trace.endSection()
 }
 
 @OptIn(ExperimentalTvMaterial3Api::class)
@@ -4575,6 +4589,7 @@ private fun DiscordActivationModal(
     isLoading: Boolean,
     onDismiss: () -> Unit
 ) {
+    android.os.Trace.beginSection("UI:DiscordActivationModal")
     val accentColor = Color(0xFF5865F2) // Discord Blurple
     val focusRequester = remember { FocusRequester() }
     val qrContainerSize = 190.dp
@@ -4722,6 +4737,7 @@ private fun DiscordActivationModal(
             }
         }
     }
+    android.os.Trace.endSection()
 }
 
 @OptIn(ExperimentalTvMaterial3Api::class)
@@ -4761,6 +4777,7 @@ private fun MobileSettingsLayout(
     onDisconnectCloud: () -> Unit = {},
     onDisconnectTrakt: () -> Unit = {}
 ) {
+    android.os.Trace.beginSection("UI:MobileSettingsLayout")
     // Every phone sub-page is opened from the main list and goes back to it. The
     // categories list is the one exception: it is opened from the TV sources page,
     // so sending Back to the main list skips a level and loses the page the user
@@ -5027,6 +5044,7 @@ private fun MobileSettingsLayout(
             }
         }
     }
+    android.os.Trace.endSection()
 }
 
 /**
@@ -5065,6 +5083,7 @@ private fun MobileSettingsMainPage(
     onSwitchProfile: () -> Unit,
     onNavigateToTelegram: () -> Unit = {}
 ) {
+    android.os.Trace.beginSection("UI:MobileSettingsMainPage")
     val context = LocalContext.current
     var showCredits by remember { mutableStateOf(false) }
     if (showCredits) {
@@ -5259,6 +5278,7 @@ private fun MobileSettingsMainPage(
             }
         }
     }
+    android.os.Trace.endSection()
 }
 
 @Composable
@@ -6115,6 +6135,7 @@ private fun MobilePrivacySubPage(
     uiState: SettingsUiState,
     viewModel: SettingsViewModel
 ) {
+    android.os.Trace.beginSection("UI:MobilePrivacySubPage")
     val context = LocalContext.current
     MobileSettingsCategory(title = stringResource(R.string.settings_diagnostics_sharing).uppercase()) {
         MobileSettingsRow(
@@ -6150,6 +6171,7 @@ private fun MobilePrivacySubPage(
             onClick = { openExternalUrl(context, PRIVACY_POLICY_URL) }
         )
     }
+    android.os.Trace.endSection()
 }
 
 @Composable
@@ -6160,6 +6182,7 @@ private fun MobileCloudAccountSubPage(
     onSwitchProfile: () -> Unit,
     context: android.content.Context
 ) {
+    android.os.Trace.beginSection("UI:MobileCloudAccountSubPage")
     val catalogsCount = uiState.catalogs.size
     val addonsCount = stremioAddons.size
     var showSignOutConfirmDialog by remember { mutableStateOf(false) }
@@ -6334,6 +6357,7 @@ private fun MobileCloudAccountSubPage(
             onClick = { openExternalUrl(context, ACCOUNT_DELETION_URL) }
         )
     }
+    android.os.Trace.endSection()
 }
 
 private enum class Zone {
@@ -6346,6 +6370,7 @@ private fun UnknownSourcesModal(
     onDismiss: () -> Unit,
     onOpenSettings: () -> Unit
 ) {
+    android.os.Trace.beginSection("UI:UnknownSourcesModal")
     var focusedIndex by remember { mutableIntStateOf(1) }
     val focusRequester = remember { FocusRequester() }
 
@@ -6401,6 +6426,7 @@ private fun UnknownSourcesModal(
             }
         }
     }
+    android.os.Trace.endSection()
 }
 
 @Composable
@@ -6411,6 +6437,7 @@ private fun UpdateActionButton(
     highlighted: Boolean = false,
     enabled: Boolean = true
 ) {
+    android.os.Trace.beginSection("UI:UpdateActionButton")
     val accent = resolveAccentColor(fallback = Pink)
     val background = when {
         !enabled -> Color.White.copy(alpha = 0.06f)
@@ -6449,6 +6476,7 @@ private fun UpdateActionButton(
             color = textColor
         )
     }
+    android.os.Trace.endSection()
 }
 
 @Composable
@@ -6597,6 +6625,7 @@ private fun TvSettingsSectionHeader(
 
 @Composable
 private fun TvSettingsStatusPill(label: String) {
+    android.os.Trace.beginSection("UI:TvSettingsStatusPill")
     Row(
         modifier = Modifier
             .height(26.dp)
@@ -6619,6 +6648,7 @@ private fun TvSettingsStatusPill(label: String) {
             overflow = TextOverflow.Ellipsis
         )
     }
+    android.os.Trace.endSection()
 }
 
 @Composable
@@ -6706,6 +6736,7 @@ private fun TvSettingsInsightPanel(
 
 @Composable
 private fun TvSettingsFactRow(label: String, value: String) {
+    android.os.Trace.beginSection("UI:TvSettingsFactRow")
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically
@@ -6728,6 +6759,7 @@ private fun TvSettingsFactRow(label: String, value: String) {
             modifier = Modifier.widthIn(max = 132.dp)
         )
     }
+    android.os.Trace.endSection()
 }
 
 private data class TvSettingsHelp(
@@ -7426,6 +7458,7 @@ private fun GeneralSettings(
     customUserAgent: String = "",
     onCustomUserAgentClick: () -> Unit = {}
 ) {
+    android.os.Trace.beginSection("UI:GeneralSettings")
     Column {
         // ── Language & Subtitles ──
         Text(
@@ -7869,6 +7902,7 @@ private fun GeneralSettings(
             )
         }
     }
+    android.os.Trace.endSection()
 }
 
 private fun maskAiApiKey(key: String, notSetLabel: String = "Not set"): String {
@@ -7891,6 +7925,7 @@ private fun AiModelDialog(
     onModelSelected: (com.arflix.tv.ui.screens.player.subtitles.SubtitleAiModel) -> Unit,
     onDismiss: () -> Unit
 ) {
+    android.os.Trace.beginSection("UI:AiModelDialog")
     val isMobile = LocalDeviceType.current.isTouchDevice()
     val options = listOf(
         Triple(com.arflix.tv.ui.screens.player.subtitles.SubtitleAiModel.GROQ_LLAMA_70B, "Groq – GPT-OSS 120B", stringResource(R.string.ai_groq_model_note)),
@@ -7960,6 +7995,7 @@ private fun AiModelDialog(
             }
         }
     }
+    android.os.Trace.endSection()
 }
 
 @Composable
@@ -7969,6 +8005,7 @@ private fun AiApiKeyDialog(
     onDismiss: () -> Unit,
     model: com.arflix.tv.ui.screens.player.subtitles.SubtitleAiModel = com.arflix.tv.ui.screens.player.subtitles.SubtitleAiModel.GROQ_LLAMA_70B
 ) {
+    android.os.Trace.beginSection("UI:AiApiKeyDialog")
     val isMobile = LocalDeviceType.current.isTouchDevice()
     var value by remember(currentKey) { mutableStateOf(currentKey) }
     val inputFocusRequester = remember { FocusRequester() }
@@ -8069,6 +8106,7 @@ private fun AiApiKeyDialog(
             }
         }
     }
+    android.os.Trace.endSection()
 }
 
 @Composable
@@ -8077,6 +8115,7 @@ private fun CustomUserAgentDialog(
     onSave: (String) -> Unit,
     onDismiss: () -> Unit
 ) {
+    android.os.Trace.beginSection("UI:CustomUserAgentDialog")
     val isMobile = LocalDeviceType.current.isTouchDevice()
     var value by remember(currentValue) { mutableStateOf(currentValue) }
     val inputFocusRequester = remember { FocusRequester() }
@@ -8175,6 +8214,7 @@ private fun CustomUserAgentDialog(
             }
         }
     }
+    android.os.Trace.endSection()
 }
 
 @Composable
@@ -8184,6 +8224,7 @@ private fun AiKeyQrOverlay(
     keyReceived: Boolean = false,
     onClose: () -> Unit
 ) {
+    android.os.Trace.beginSection("UI:AiKeyQrOverlay")
     val focusRequester = remember { FocusRequester() }
     LaunchedEffect(Unit) { focusRequester.requestFocus() }
     BackHandler { onClose() }
@@ -8248,6 +8289,7 @@ private fun AiKeyQrOverlay(
             }
         }
     }
+    android.os.Trace.endSection()
 }
 
 @OptIn(ExperimentalTvMaterial3Api::class, ExperimentalFoundationApi::class)
@@ -8264,6 +8306,7 @@ private fun HomeServerSettings(
     onTest: () -> Unit,
     onDisconnect: () -> Unit
 ) {
+    android.os.Trace.beginSection("UI:HomeServerSettings")
     val isMobile = LocalDeviceType.current.isTouchDevice()
     val hasConnections = connections.isNotEmpty()
 
@@ -8412,6 +8455,7 @@ private fun HomeServerSettings(
             }
         }
     }
+    android.os.Trace.endSection()
 }
 
 @Composable
@@ -8474,6 +8518,7 @@ internal fun IptvSettings(
     onMoveStalkerPortalBy: (portalId: String, steps: Int) -> Unit = { _, _ -> },
     pageScrollState: ScrollState? = null,
 ) {
+    android.os.Trace.beginSection("UI:IptvSettings")
     val isMobile = LocalDeviceType.current.isTouchDevice()
     var selection by remember { mutableStateOf(IptvSourceSelection()) }
     val selectionMode = selection.isActive
@@ -8914,6 +8959,7 @@ internal fun IptvSettings(
             }
         }
     }
+    android.os.Trace.endSection()
 }
 
 @OptIn(ExperimentalTvMaterial3Api::class)
@@ -9232,6 +9278,7 @@ private fun CatalogDiscoveryInputButton(
     modifier: Modifier = Modifier,
     onClick: () -> Unit
 ) {
+    android.os.Trace.beginSection("UI:CatalogDiscoveryInputButton")
     var isFocused by remember { mutableStateOf(false) }
     val inputFocusColor = resolveAccentColor(fallback = Color.White)
     Column(
@@ -9265,6 +9312,7 @@ private fun CatalogDiscoveryInputButton(
             overflow = TextOverflow.Ellipsis
         )
     }
+    android.os.Trace.endSection()
 }
 
 @OptIn(ExperimentalTvMaterial3Api::class)
@@ -9277,6 +9325,7 @@ private fun CatalogDiscoveryTextInputDialog(
     onConfirm: (String) -> Unit,
     onDismiss: () -> Unit
 ) {
+    android.os.Trace.beginSection("UI:CatalogDiscoveryTextInputDialog")
     var value by remember(initialValue) { mutableStateOf(initialValue) }
     androidx.compose.ui.window.Dialog(
         onDismissRequest = onDismiss,
@@ -9353,6 +9402,7 @@ private fun CatalogDiscoveryTextInputDialog(
             }
         }
     }
+    android.os.Trace.endSection()
 }
 
 @OptIn(ExperimentalTvMaterial3Api::class)
@@ -9630,6 +9680,7 @@ private fun CatalogDiscoveryAddPill(
     isAdded: Boolean,
     modifier: Modifier = Modifier
 ) {
+    android.os.Trace.beginSection("UI:CatalogDiscoveryAddPill")
     Box(
         modifier = modifier
             .widthIn(min = 112.dp)
@@ -9665,6 +9716,7 @@ private fun CatalogDiscoveryAddPill(
             )
         }
     }
+    android.os.Trace.endSection()
 }
 
 @OptIn(ExperimentalTvMaterial3Api::class)
@@ -9674,6 +9726,7 @@ private fun SourceChip(
     active: Boolean,
     compact: Boolean = false
 ) {
+    android.os.Trace.beginSection("UI:SourceChip")
     Text(
         text = label,
         style = if (compact) ArflixTypography.label else ArflixTypography.body,
@@ -9690,6 +9743,7 @@ private fun SourceChip(
             )
             .padding(horizontal = if (compact) 8.dp else 12.dp, vertical = if (compact) 3.dp else 5.dp)
     )
+    android.os.Trace.endSection()
 }
 
 @OptIn(ExperimentalTvMaterial3Api::class)
@@ -9702,6 +9756,7 @@ private fun DiscoveryActionButton(
     enabled: Boolean = true,
     modifier: Modifier = Modifier
 ) {
+    android.os.Trace.beginSection("UI:DiscoveryActionButton")
     var isFocused by remember { mutableStateOf(false) }
     val focusAccent = resolveAccentColor(fallback = Pink)
     Box(
@@ -9757,6 +9812,7 @@ private fun DiscoveryActionButton(
             )
         }
     }
+    android.os.Trace.endSection()
 }
 
 private fun normalizeCatalogDiscoveryUrl(url: String): String {
@@ -9803,6 +9859,7 @@ private fun CatalogsSettings(
     onMoveCatalogBy: (CatalogConfig, Int) -> Unit = { _, _ -> },
     pageScrollState: ScrollState? = null
 ) {
+    android.os.Trace.beginSection("UI:CatalogsSettings")
     val isMobile = LocalDeviceType.current.isTouchDevice()
     var selectionMode by remember { mutableStateOf(false) }
     var selectedIds by remember { mutableStateOf(setOf<String>()) }
@@ -10022,6 +10079,7 @@ private fun CatalogsSettings(
             }
         }
     }
+    android.os.Trace.endSection()
 }
 
 // A restartable row boundary lets Compose skip unchanged neighbours on DPAD moves.
@@ -10143,6 +10201,7 @@ private fun CatalogActionChip(
     enabled: Boolean = true,
     onClick: () -> Unit = {}
 ) {
+    android.os.Trace.beginSection("UI:CatalogActionChip")
     // Support both D-pad focus AND touch pressed state. Focus is shown as a themed
     // border only (never a fill), matching every other settings control.
     val accent = resolveAccentColor(fallback = Pink)
@@ -10190,6 +10249,7 @@ private fun CatalogActionChip(
             modifier = Modifier.size(16.dp)
         )
     }
+    android.os.Trace.endSection()
 }
 
 @OptIn(ExperimentalTvMaterial3Api::class)
@@ -10206,6 +10266,7 @@ private fun StremioAddonsSettings(
     onBrowseCommunityAddons: () -> Unit = {},
     onRefreshAddons: () -> Unit = {}
 ) {
+    android.os.Trace.beginSection("UI:StremioAddonsSettings")
     val isMobile = LocalDeviceType.current.isTouchDevice()
     val context = LocalContext.current
 
@@ -10387,6 +10448,7 @@ private fun StremioAddonsSettings(
             }
         }
     }
+    android.os.Trace.endSection()
 }
 
 @Composable
@@ -10395,6 +10457,7 @@ private fun AddonStatusChip(
     background: Color,
     textColor: Color
 ) {
+    android.os.Trace.beginSection("UI:AddonStatusChip")
     Box(
         modifier = Modifier
             .background(background, CircleShape)
@@ -10408,6 +10471,7 @@ private fun AddonStatusChip(
             maxLines = 1
         )
     }
+    android.os.Trace.endSection()
 }
 
 @Composable
@@ -10420,6 +10484,7 @@ private fun AddonRow(
     onDelete: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    android.os.Trace.beginSection("UI:AddonRow")
     val actions = addonRowActions(addon)
     val focusedRowAction = if (isFocused) actions.getOrNull(focusedAction) else null
     val isToggleFocused = focusedRowAction == AddonRowAction.TOGGLE
@@ -10552,6 +10617,7 @@ private fun AddonRow(
             }
         }
     }
+    android.os.Trace.endSection()
 }
 
 @OptIn(ExperimentalTvMaterial3Api::class)
@@ -10602,6 +10668,7 @@ private fun AccountsSettings(
     onOpenCredits: () -> Unit,
     onNavigateToTelegram: () -> Unit = {}
 ) {
+    android.os.Trace.beginSection("UI:AccountsSettings")
     Column {
         if (LocalDeviceType.current.isTouchDevice()) {
             Text(
@@ -10951,6 +11018,7 @@ private fun AccountsSettings(
             modifier = Modifier.settingsFocusSlot(21)
         )
     }
+    android.os.Trace.endSection()
 }
 
 
@@ -10963,6 +11031,7 @@ private fun AccountActionRow(
     isEnabled: Boolean,
     isFocused: Boolean
 ) {
+    android.os.Trace.beginSection("UI:AccountActionRow")
     val focusRingColor = resolveAccentColor(fallback = Pink)
     Row(
         modifier = Modifier
@@ -11021,6 +11090,7 @@ private fun AccountActionRow(
             )
         }
     }
+    android.os.Trace.endSection()
 }
 
 @OptIn(ExperimentalTvMaterial3Api::class)
@@ -11054,6 +11124,7 @@ private fun AccountDisconnectConfirmDialog(
     onConfirm: () -> Unit,
     onDismiss: () -> Unit
 ) {
+    android.os.Trace.beginSection("UI:AccountDisconnectConfirmDialog")
     val focusRequester = remember { FocusRequester() }
     var focusedButton by remember { mutableIntStateOf(0) } // 0 = cancel, 1 = disconnect
     val isRtl = LocalLayoutDirection.current == LayoutDirection.Rtl
@@ -11159,6 +11230,7 @@ private fun AccountDisconnectConfirmDialog(
             }
         }
     }
+    android.os.Trace.endSection()
 }
 
 // ========== Tracking Integrations Mobile Sub-Page ==========
@@ -11187,6 +11259,7 @@ private fun TrackingIntegrationsPage(
     onWriteTarget: (com.arflix.tv.data.repository.sync.SyncProvider, Boolean) -> Unit = { _, _ -> },
     onForceSync: () -> Unit = {}
 ) {
+    android.os.Trace.beginSection("UI:TrackingIntegrationsPage")
     var showMdbListDisconnectConfirm by remember { mutableStateOf(false) }
     var showTraktDisconnectConfirm by remember { mutableStateOf(false) }
     if (showMdbListDisconnectConfirm) {
@@ -11449,6 +11522,7 @@ private fun TrackingIntegrationsPage(
             }
         }
     }
+    android.os.Trace.endSection()
 }
 
 @Composable
@@ -11486,6 +11560,7 @@ private fun TrackingRoutingRow(
     showDivider: Boolean,
     onClick: () -> Unit
 ) {
+    android.os.Trace.beginSection("UI:TrackingRoutingRow")
     Column(modifier = Modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier
@@ -11518,6 +11593,7 @@ private fun TrackingRoutingRow(
             )
         }
     }
+    android.os.Trace.endSection()
 }
 
 @Composable
@@ -11526,6 +11602,7 @@ private fun TrackingStatChip(
     value: String,
     modifier: Modifier = Modifier
 ) {
+    android.os.Trace.beginSection("UI:TrackingStatChip")
     Column(
         modifier = modifier
             .clip(RoundedCornerShape(12.dp))
@@ -11546,6 +11623,7 @@ private fun TrackingStatChip(
             color = TextSecondary
         )
     }
+    android.os.Trace.endSection()
 }
 
 @Composable
@@ -11561,6 +11639,7 @@ private fun TrackingServiceRow(
     onConnect: () -> Unit,
     onDisconnect: () -> Unit
 ) {
+    android.os.Trace.beginSection("UI:TrackingServiceRow")
     val rowAlpha = if (comingSoon) 0.5f else 1f
 
     Column(modifier = Modifier.alpha(rowAlpha)) {
@@ -11637,6 +11716,7 @@ private fun TrackingServiceRow(
             )
         }
     }
+    android.os.Trace.endSection()
 }
 
 @OptIn(ExperimentalTvMaterial3Api::class)
@@ -11656,6 +11736,7 @@ private fun AccountRow(
     secondaryActionLabel: String? = null,
     expirationText: String? = null
 ) {
+    android.os.Trace.beginSection("UI:AccountRow")
     val foreground = TextPrimary
     val secondary = TextSecondary
     Column(
@@ -11780,6 +11861,7 @@ private fun AccountRow(
             )
         }
     }
+    android.os.Trace.endSection()
 }
 
 /**
@@ -11835,6 +11917,7 @@ private fun InputModalLegacy(
     onConfirm: () -> Unit,
     onDismiss: () -> Unit
 ) {
+    android.os.Trace.beginSection("UI:InputModalLegacy")
     // Track which element is focused: 0 to fields.size-1 = text fields, fields.size = paste button, fields.size+1 = cancel, fields.size+2 = confirm
     var focusedIndex by remember { mutableIntStateOf(0) } // Start on first text field
     val totalItems = fields.size + 3 // fields + paste + cancel + confirm
@@ -12091,6 +12174,7 @@ private fun InputModalLegacy(
             }
         }
     }
+    android.os.Trace.endSection()
 }
 
 /**
@@ -12719,6 +12803,7 @@ private fun SubtitlePickerModal(
     onSelect: (String) -> Unit,
     onDismiss: () -> Unit
 ) {
+    android.os.Trace.beginSection("UI:SubtitlePickerModal")
     val focusRequester = remember { FocusRequester() }
     val listState = rememberLazyListState()
     val safeIndex = focusedIndex.coerceIn(0, (options.size - 1).coerceAtLeast(0))
@@ -12843,6 +12928,7 @@ private fun SubtitlePickerModal(
             }
         }
     }
+    android.os.Trace.endSection()
 }
 
 /** All TMDB-supported languages as (code, displayName) pairs. */
@@ -12852,6 +12938,7 @@ private fun UiModeWarningDialog(
     onConfirm: () -> Unit,
     onDismiss: () -> Unit
 ) {
+    android.os.Trace.beginSection("UI:UiModeWarningDialog")
     var focusedIndex by remember { mutableIntStateOf(0) } // 0 = Confirm, 1 = Cancel
     val focusRequester = remember { FocusRequester() }
 
@@ -12980,6 +13067,7 @@ private fun UiModeWarningDialog(
             }
         }
     }
+    android.os.Trace.endSection()
 }
 
 val TMDB_LANGUAGES = listOf(
@@ -13077,6 +13165,7 @@ private fun IptvCategoriesSettings(
     onMoveDown: (String) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
+    android.os.Trace.beginSection("UI:IptvCategoriesSettings")
     val isMobile = LocalDeviceType.current.isTouchDevice()
     val heldAccent = resolveAccentColor(fallback = Pink)
     val orderedGroups = remember(groupOrder, availableGroups, playlistId) {
@@ -13334,6 +13423,7 @@ private fun IptvCategoriesSettings(
             }
         }
     }
+    android.os.Trace.endSection()
 }
 
 /**
@@ -13352,6 +13442,7 @@ private fun StalkerCategoryTabBar(
     onSelectTab: (StalkerCategoryTab) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    android.os.Trace.beginSection("UI:StalkerCategoryTabBar")
     val accent = resolveAccentColor(fallback = Pink)
     Row(
         modifier = modifier
@@ -13396,6 +13487,7 @@ private fun StalkerCategoryTabBar(
             }
         }
     }
+    android.os.Trace.endSection()
 }
 
 /**
@@ -13423,6 +13515,7 @@ private fun StalkerCatalogCategoryList(
     onBulkToggle: (visible: Boolean) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    android.os.Trace.beginSection("UI:StalkerCatalogCategoryList")
     val isMobile = LocalDeviceType.current.isTouchDevice()
     val listState = rememberLazyListState()
     val firstCategoryIndex = firstStalkerCategoryIndex(categories.size)
@@ -13619,6 +13712,7 @@ private fun StalkerCatalogCategoryList(
             }
         }
     }
+    android.os.Trace.endSection()
 }
 
 /**
@@ -13639,6 +13733,7 @@ private fun MobileIptvCategoryReorderList(
     onMoveDown: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    android.os.Trace.beginSection("UI:MobileIptvCategoryReorderList")
     val listState = rememberLazyListState()
     // The gesture hands back the row's key, and the key is what the move is addressed by. Nothing
     // here counts positions: a group that has already moved keeps its name, its position does not.
@@ -13693,6 +13788,7 @@ private fun MobileIptvCategoryReorderList(
             }
         }
     }
+    android.os.Trace.endSection()
 }
 
 /**
@@ -13702,6 +13798,7 @@ private fun MobileIptvCategoryReorderList(
  */
 @Composable
 private fun MobileSourceRowTitle(name: String, showMenuHint: Boolean) {
+    android.os.Trace.beginSection("UI:MobileSourceRowTitle")
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text(
             name,
@@ -13720,12 +13817,15 @@ private fun MobileSourceRowTitle(name: String, showMenuHint: Boolean) {
             )
         }
     }
+    android.os.Trace.endSection()
 }
 
 /** A short upright line between the part of a row that opens its menu and the switch and handle. */
 @Composable
 private fun MobileSourceRowDivider() {
+    android.os.Trace.beginSection("UI:MobileSourceRowDivider")
     Box(modifier = Modifier.padding(horizontal = 12.dp).width(1.dp).height(28.dp).background(Color.White.copy(alpha = 0.08f)))
+    android.os.Trace.endSection()
 }
 
 /**
@@ -13741,6 +13841,7 @@ private fun MobileSourceMenuSheet(
     onEdit: () -> Unit,
     onDelete: () -> Unit
 ) {
+    android.os.Trace.beginSection("UI:MobileSourceMenuSheet")
     var deleteArmed by remember { mutableStateOf(false) }
     val sheetState = androidx.compose.material3.rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val scope = rememberCoroutineScope()
@@ -13784,10 +13885,12 @@ private fun MobileSourceMenuSheet(
             }
         }
     }
+    android.os.Trace.endSection()
 }
 
 @Composable
 private fun MobileSourceMenuItem(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, color: Color, onClick: () -> Unit) {
+    android.os.Trace.beginSection("UI:MobileSourceMenuItem")
     Row(
         modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 24.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -13796,6 +13899,7 @@ private fun MobileSourceMenuItem(icon: androidx.compose.ui.graphics.vector.Image
         Spacer(modifier = Modifier.width(16.dp))
         Text(label, style = ArflixTypography.body.copy(fontSize = 15.sp), color = color)
     }
+    android.os.Trace.endSection()
 }
 
 /**
@@ -13805,6 +13909,7 @@ private fun MobileSourceMenuItem(icon: androidx.compose.ui.graphics.vector.Image
  */
 @Composable
 private fun MobileReorderHandle(handle: Modifier, isHeld: Boolean, accent: Color) {
+    android.os.Trace.beginSection("UI:MobileReorderHandle")
     Spacer(modifier = Modifier.width(8.dp))
     Box(modifier = Modifier.size(40.dp).then(handle), contentAlignment = Alignment.Center) {
         Icon(
@@ -13814,6 +13919,7 @@ private fun MobileReorderHandle(handle: Modifier, isHeld: Boolean, accent: Color
             modifier = Modifier.size(22.dp)
         )
     }
+    android.os.Trace.endSection()
 }
 
 /**
@@ -13831,6 +13937,7 @@ private fun MobileIptvCategoryRow(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    android.os.Trace.beginSection("UI:MobileIptvCategoryRow")
     val heldAccent = resolveAccentColor(fallback = Pink)
     Column(
         modifier = modifier
@@ -13891,6 +13998,7 @@ private fun MobileIptvCategoryRow(
             )
         }
     }
+    android.os.Trace.endSection()
 }
 
 /**
@@ -13913,6 +14021,7 @@ private fun MobileStalkerCatalogRow(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    android.os.Trace.beginSection("UI:MobileStalkerCatalogRow")
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -13963,6 +14072,7 @@ private fun MobileStalkerCatalogRow(
             )
         }
     }
+    android.os.Trace.endSection()
 }
 
 @OptIn(ExperimentalTvMaterial3Api::class)
@@ -13974,6 +14084,7 @@ private fun CatalogPackImportDialog(
     onConfirm: (CatalogPackManifest) -> Unit,
     onDismiss: () -> Unit
 ) {
+    android.os.Trace.beginSection("UI:CatalogPackImportDialog")
     val focusRequester = remember { FocusRequester() }
     var focusedIndex by remember(pendingPack) { mutableIntStateOf(0) } // 0 = Confirm, 1 = Cancel/Dismiss
     val isTouchDevice = LocalDeviceType.current.isTouchDevice()
@@ -14206,6 +14317,7 @@ private fun CatalogPackImportDialog(
             }
         }
     }
+    android.os.Trace.endSection()
 }
 
 @OptIn(ExperimentalTvMaterial3Api::class)
@@ -14215,6 +14327,7 @@ private fun CatalogPackDeleteConfirmDialog(
     onConfirm: () -> Unit,
     onDismiss: () -> Unit
 ) {
+    android.os.Trace.beginSection("UI:CatalogPackDeleteConfirmDialog")
     val focusRequester = remember { FocusRequester() }
     var focusedIndex by remember { mutableIntStateOf(0) } // 0 = Confirm, 1 = Cancel
     val isTouchDevice = LocalDeviceType.current.isTouchDevice()
@@ -14335,6 +14448,7 @@ private fun CatalogPackDeleteConfirmDialog(
             }
         }
     }
+    android.os.Trace.endSection()
 }
 
 /**
@@ -14517,6 +14631,7 @@ private fun YouTubeModalRow(
     imageUrl: String? = null,
     actions: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit
 ) {
+    android.os.Trace.beginSection("UI:YouTubeModalRow")
     val accent = if (danger) DangerRed else resolveAccentColor(fallback = Pink)
     Row(
         modifier = Modifier
@@ -14544,6 +14659,7 @@ private fun YouTubeModalRow(
         Spacer(modifier = Modifier.width(12.dp))
         actions()
     }
+    android.os.Trace.endSection()
 }
 
 @Composable
@@ -14554,6 +14670,7 @@ private fun YouTubeActionChip(
     enabled: Boolean = true,
     danger: Boolean = false
 ) {
+    android.os.Trace.beginSection("UI:YouTubeActionChip")
     Box(
         modifier = Modifier
             .size(40.dp)
@@ -14580,4 +14697,5 @@ private fun YouTubeActionChip(
             modifier = Modifier.size(20.dp)
         )
     }
+    android.os.Trace.endSection()
 }

@@ -79,6 +79,7 @@ fun Sidebar(
     onItemSelected: (SidebarItem) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
+    android.os.Trace.beginSection("UI:Sidebar")
     val centerItems = visibleNavigationItems().filter { it != SidebarItem.SETTINGS }
     val bottomItem = SidebarItem.SETTINGS
     val hasProfile = profile != null
@@ -145,6 +146,7 @@ fun Sidebar(
             Spacer(modifier = Modifier.height(7.dp))
         }
     }
+    android.os.Trace.endSection()
 }
 
 @OptIn(ExperimentalTvMaterial3Api::class)
@@ -153,6 +155,7 @@ private fun SidebarProfileAvatar(
     profile: Profile,
     isFocused: Boolean
 ) {
+    android.os.Trace.beginSection("UI:SidebarProfileAvatar")
     val scale by animateFloatAsState(
         targetValue = if (isFocused) 1.12f else 1f,
         animationSpec = tween(
@@ -204,6 +207,7 @@ private fun SidebarProfileAvatar(
             )
         }
     }
+    android.os.Trace.endSection()
 }
 
 @OptIn(ExperimentalTvMaterial3Api::class)
@@ -214,6 +218,7 @@ private fun SidebarIcon(
     isFocused: Boolean,
     hasBadge: Boolean = false
 ) {
+    android.os.Trace.beginSection("UI:SidebarIcon")
     val accent = resolveAccentColor(fallback = Color.White)
 
     // Animated icon color - white when focused, accent when selected-only
@@ -313,4 +318,5 @@ private fun SidebarIcon(
             }
         }
     }
+    android.os.Trace.endSection()
 }
