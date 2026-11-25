@@ -173,3 +173,7 @@
 @media(prefers-reduced-motion:reduce) {
  .library-calendar,.library-calendar * { scroll-behavior:auto; transition:none; }
 }
+/* A selected day without releases (today, on open) is an outlined cell, not a
+   solid white block; focus and days with artwork keep the bright treatment. */
+.library-calendar .calendar-day.is-selected:not(.has-releases):not(:focus-visible) { background:rgba(255,255,255,.08); color:inherit; box-shadow:inset 0 0 0 1.5px rgba(255,255,255,.8); }
+.library-calendar .calendar-day.is-selected:not(.has-releases):not(:focus-visible) .calendar-day-number { color:inherit; }

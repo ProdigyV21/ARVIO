@@ -303,3 +303,18 @@ test('HLS, DASH and MPEG-TS transports are not sent to file remux', () => {
     assertPlan(module, source, 'direct', 'here', 'direct');
   }
 });
+
+test('Atmos on a Blu-ray release counts as TrueHD, Atmos on a streaming release does not', () => {
+  for (const mse of [false, true]) {
+    const module = compatibility({ mse });
+    for (const source of ['The Matrix 1999 UHD Blu-ray 2160p HDR Remux Multi Atmos 7.1-DTOne', 'Movie.2160p.BluRay.REMUX.HEVC.Atmos-GRP', 'Movie 1080p BDRip Atmos']) {
+      assert.equal(module.audioDecodableForDevice(stream({ source })), false, `${source}, mse=${mse}`);
+    }
+  }
+  const module = compatibility({ mse: true });
+  for (const source of ['Movie 2160p WEB-DL DDP5.1 Atmos', 'Movie.2160p.BluRay.REMUX.DTS-HD.MA', 'Movie 1080p Atmos', 'Movie 2160p UHD BluRay Atmos EAC3']) {
+    assert.equal(module.audioDecodableForDevice(stream({ source })), true, source);
+  }
+  // Known codec metadata always wins over the release name.
+  assert.equal(module.audioDecodableForDevice(stream({ source: 'Movie UHD BluRay Remux Atmos', media: { audioCodec: 'eac3' } })), true);
+});

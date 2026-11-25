@@ -119,7 +119,8 @@ export function HomeHero({ controller, fallback, loading = true, onOpen, onPlay 
         onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) controller.setHolding(false); }}>
         {item ? <>
           <div className="hero-title">
-            {logo ? <img className="hero-logo" src={logo} alt={item.title} onError={() => setFailedLogo(logo)} /> : <h2>{item.title}</h2>}
+            {/* Keyed: a reused <img> keeps showing the previous title's logo until the new one has loaded. */}
+            {logo ? <img key={logo} className="hero-logo" src={logo} alt={item.title} onError={() => setFailedLogo(logo)} /> : <h2>{item.title}</h2>}
           </div>
           <div className="hero-meta">
             {imdbRating && <span className="hero-imdb"><ImdbLogo height={20} /><b>{imdbRating}</b></span>}
