@@ -2033,7 +2033,14 @@ fun LiveTvScreen(
     var addonLoading by remember { mutableStateOf(false) }
     var addonReady by remember(currentProfile?.id, sportsAddonInstallations, sportsRefresh) { mutableStateOf(false) }
     LaunchedEffect(currentProfile?.id, sportsAddonInstallations, sportsRefresh) {
-        while (sportsAddonInstallations.isNotEmpty()) {
+        if (sportsAddonInstallations.isEmpty()) return@LaunchedEffect
+        val installations = sportsAddonInstallations.map { com.arflix.tv.data.model.sportsAddonInstallation(it) }.toSet()
+        // The schedule from the last run shows at once; the network refresh replaces it.
+        if (addonEvents.isEmpty()) {
+            val restored = viewModel.restoreSportsAddonEvents(installations)
+            if (restored.isNotEmpty() && addonEvents.isEmpty()) addonEvents = restored
+        }
+        while (true) {
             addonLoading = true
             try {
                 val refreshing = addonEvents.isNotEmpty()
@@ -2042,16 +2049,19 @@ fun LiveTvScreen(
                 }
                 addonEvents = refreshed
                 addonReady = true
+                viewModel.saveSportsAddonEvents(installations, refreshed)
             } finally { addonLoading = false }
             delay(120_000)
         }
     }
     var sportsArtwork by remember(currentProfile?.id) { mutableStateOf(emptyList<com.arflix.tv.data.model.SportsEventArtwork>()) }
-    val metadataRequest = remember(currentProfile?.id, state.snapshot.loadedAt, sportsRefresh) { Any() }
+    val metadataRequest = remember(currentProfile?.id, state.snapshot.loadedAt, sportsRefresh, sportsAddonInstallations.isNotEmpty()) { Any() }
     var completedMetadataRequest by remember { mutableStateOf<Any?>(null) }
     LaunchedEffect(metadataRequest) {
         awaitSportsWorkSlot()
-        if (state.snapshot.loadedAt.toEpochMilli() > 0L) {
+        // Fixtures (banners, badges, scores) do not depend on a playlist; sports add-ons
+        // without one need them too.
+        if (state.snapshot.loadedAt.toEpochMilli() > 0L || sportsAddonInstallations.isNotEmpty()) {
             sportsMetadataLoading = true
             try {
                 val cached = viewModel.cachedSportsMetadata()

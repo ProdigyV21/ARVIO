@@ -40,6 +40,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
@@ -216,6 +217,8 @@ internal fun SportsGuidePane(
     val cachedPresentation = remember(events) { SportsPresentationCache.rowsFor(events) }
     var presentationRows by remember { mutableStateOf(cachedPresentation.orEmpty()) }
     var presentationLoading by remember { mutableStateOf(cachedPresentation == null) }
+    // The events the rows were last built from (identity), to tell "not built yet" from "empty".
+    var builtFor by remember { mutableStateOf<List<SportsGuideEvent>?>(null) }
     // null = the overview; otherwise days from today (-7..7).
     var dayOffset by rememberSaveable { mutableStateOf<Int?>(null) }
     var sportsFilter by rememberSaveable { mutableStateOf(SPORTS_FILTER_ALL) }
@@ -264,6 +267,7 @@ internal fun SportsGuidePane(
                 }
             }
             if (built != presentationRows) presentationRows = built
+            builtFor = events
         } finally {
             presentationLoading = false
         }
@@ -464,7 +468,9 @@ internal fun SportsGuidePane(
                 }
             }
         }
-        val isProcessing = loading || presentationLoading
+        // Rows are built a frame after new events arrive; never flash an empty state then.
+        val isProcessing = loading || presentationLoading ||
+            (rows.isEmpty() && builtFor !== events)
         val browsing = dayOffset != null || sportsFilter != SPORTS_FILTER_ALL
         if (rows.isEmpty() && !browsing && isProcessing) {
             // Shaped like the page that is coming, so it does not jump when rows arrive.
@@ -536,7 +542,7 @@ internal fun SportsGuidePane(
                         .distinctBy { it.id }.map { it.name }
                 },
             )
-            LazyColumn(Modifier.weight(1f).fillMaxWidth().testTag("sports-guide-list"), state = listState, contentPadding = PaddingValues(bottom = 24.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()),
+            LazyColumn(Modifier.weight(1f).fillMaxWidth().clipToBounds().testTag("sports-guide-list"), state = listState, contentPadding = PaddingValues(bottom = 24.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()),
             verticalArrangement = Arrangement.spacedBy(2.dp)) {
             val rowKeys = disambiguatedLazyKeys(rows) { it.id }
             itemsIndexed(rows, key = { index, _ -> rowKeys[index] }, contentType = { _, _ -> "sports-row" }) { rowIndex, row ->
@@ -743,7 +749,7 @@ internal fun SportsGuidePane(
                         .clickable(onClick = ::dismiss).padding(10.dp))
             }
             event?.fixture?.let { fixture ->
-                Text(listOfNotNull(event.competition, fixture.venue, fixture.round?.let { stringResource(R.string.live_sports_round, it) }).joinToString(" · "),
+                Text(listOfNotNull(event.competition, fixture.venue, fixture.round?.takeIf { it.isNotBlank() && it != "0" }?.let { stringResource(R.string.live_sports_round, it) }).joinToString(" · "),
                     color = LiveColors.FgDim, fontSize = 11.sp, maxLines = 2, overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.padding(top = 10.dp))
                 // Chips, not plain text: on a TV each needs a visible focus state.
@@ -976,7 +982,7 @@ private fun SportsFocusPreview(
 ) {
     val event = eventProvider()
     Row(
-        modifier.fillMaxWidth().height(SportsPreviewHeight).padding(horizontal = 18.dp, vertical = 8.dp)
+        modifier.fillMaxWidth().zIndex(1f).background(LiveColors.Bg).height(SportsPreviewHeight).padding(horizontal = 18.dp, vertical = 8.dp)
             .testTag("sports-focus-preview"),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(20.dp),
@@ -1011,8 +1017,8 @@ private fun SportsFocusPreview(
     }
 }
 
-private val SportsPreviewHeight = 140.dp
-private val SportsPreviewArtWidth = 220.dp
+private val SportsPreviewHeight = 124.dp
+private val SportsPreviewArtWidth = 192.dp
 
 @Composable
 private fun PickerBadge(label: String) {
