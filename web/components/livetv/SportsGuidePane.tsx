@@ -4,7 +4,10 @@ import { useTranslation } from "@/lib/i18n";
 
 
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent } from "react";
-import { X, Tv, PanelLeft, ChevronRight, Play, RefreshCw, Bell, BellRing, Star, Trophy } from "lucide-react";
+import { X, Tv, PanelLeft, ChevronRight, Play, RefreshCw, Bell, BellRing, Star, Trophy, LayoutGrid } from "lucide-react";
+import { MultiviewOverlay } from "@/components/livetv/MultiviewOverlay";
+import { addMultiviewTile, multiviewCapacity, type MultiviewTile } from "@/lib/multiview";
+import { useAppPick } from "@/lib/store";
 import { guideSports, isOnAir, isConfirmedLive, hasSportsChannels, availableEventChannels, sportsPresentationRows, sportsChannelSummary, type SportsGuideEvent } from "@/lib/sportsGuide";
 import { sportsChannelKey, sportsBroadcasterKeys } from "@/lib/sportsCatalogue";
 import type { InstalledAddon, IptvChannel, IptvNowNext } from "@/lib/types";
@@ -236,6 +239,32 @@ export function SportsGuidePane({ channels, guide, onPlay, onEnter, onOpenCatego
   const memoryKeys = selected ? channelMemoryKeys(selected) : [];
   const sourceChannels = withRememberedFirst([...confirmedChannels, ...possibleChannels], channelMemory, memoryKeys);
   const rememberedId = memoryKeys.map(key => channelMemory[key]).find(Boolean);
+  // Multiview: up to four live games at once (each uses one connection of the subscription).
+  const { closePlayer } = useAppPick("closePlayer");
+  const [multiview, setMultiview] = useState<MultiviewTile[]>([]);
+  const [multiviewOpen, setMultiviewOpen] = useState(false);
+  const capacity = useMemo(() => typeof window === "undefined" ? 2 : multiviewCapacity({
+    deviceMemory: (navigator as Navigator & { deviceMemory?: number }).deviceMemory, cores: navigator.hardwareConcurrency, width: window.innerWidth,
+  }), []);
+  const multiviewTileFor = (event: SportsGuideEvent, list: IptvChannel[]): MultiviewTile => ({
+    key: `game:${event.id}`, title: event.title, channels: list.filter(ch => accessibleIds.has(ch.id)).slice(0, 5),
+  });
+  const multiviewCandidates = useMemo(() => multiviewOpen ? visibleEvents.filter(event => !isNetworkEvent(event) && isOnAir(event, now)).map(event =>
+    multiviewTileFor(event, withRememberedFirst([...availableEventChannels(event, now), ...(event.possibleChannels ?? [])]
+      .filter((ch, i, all) => all.findIndex(other => other.id === ch.id) === i), channelMemory, channelMemoryKeys(event)))).filter(tile => tile.channels.length > 0) : [],
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  [multiviewOpen, visibleEvents, now, channelMemory]);
+  const addToMultiview = (tile: MultiviewTile) => {
+    const result = addMultiviewTile(multiview, tile, capacity);
+    if (result.kind === "added") setMultiview(result.tiles);
+  };
+  const openMultiview = (event: SportsGuideEvent) => {
+    if (!premiumAllows("live", () => openMultiview(event))) return;
+    closePlayer();
+    addToMultiview(multiviewTileFor(event, sourceChannels));
+    close();
+    setMultiviewOpen(true);
+  };
   const playFromSheet = (event: SportsGuideEvent, ch: IptvChannel) => {
     const keys = channelMemoryKeys(event);
     if (keys.length) rememberChannel(keys, ch.id);
@@ -284,6 +313,8 @@ export function SportsGuidePane({ channels, guide, onPlay, onEnter, onOpenCatego
         })}
       </div>
       <div className="tv-sports-chip-row" role="tablist" aria-label={translateUi("Filter")}>
+        {multiview.length > 0 && <button type="button" className="tv-sports-chip" onKeyDown={chipKeys} onClick={() => { closePlayer(); setMultiviewOpen(true); }}>
+          <LayoutGrid size={14} /> {translateUi("Multiview")} ({multiview.length})</button>}
         {[["all", translateUi("All sports")], ["live", translateUi("Live now")], ...filterSports.map(sport => [sport.id, sport.title])].map(([id, label]) =>
           <button type="button" role="tab" key={id} aria-selected={filter === id} className={`tv-sports-chip${filter === id ? " is-selected" : ""}`}
             onKeyDown={chipKeys} onClick={() => { setFilter(id); setFocusedOrder(null); }}>{label}</button>)}
@@ -346,6 +377,8 @@ export function SportsGuidePane({ channels, guide, onPlay, onEnter, onOpenCatego
       {selected && !isNetworkEvent(selected) && <SportsEventActions event={selected} now={now} reminded={isReminded(reminders, selected.id)} followed={new Set(follows.map(followKey))}
         onToggleReminder={on => updateReminders(current => withReminder(current, selected, on))} onToggleFollow={onToggleFollow}
         canAlert={!isFinished(selected) && followsTeam(selected, follows)} scoreAlerts={scoreAlerts} onToggleScoreAlerts={setScoreAlerts} />}
+      {selected && !isNetworkEvent(selected) && isOnAir(selected, now) && sourceChannels.some(ch => accessibleIds.has(ch.id)) && <div className="tv-event-actions">
+        <button type="button" className="tv-event-action" onClick={() => openMultiview(selected)}><LayoutGrid size={18} />{translateUi("Watch in multiview")}</button></div>}
       {selected?.fixture && showDetails ? <SportsGameInfo key={selected.fixture.id} fixtureId={selected.fixture.id} teams={eventTeams(selected)} showScore={showScore}
         spoilerSensitive={isFinished(selected) || isConfirmedLive(selected, now)} /> : <>
       <h3>{selected?.addonSources?.length ? translateUi("Sources") : selected && isOnAir(selected, now) ? translateUi("Channels") : translateUi("Scheduled channels")}<span>{selected ? sportsChannelSummary(selected, now) : translateUi("No channels")}</span></h3>
@@ -362,6 +395,11 @@ export function SportsGuidePane({ channels, guide, onPlay, onEnter, onOpenCatego
       }} />)}
       </>}
     </dialog>
+    {multiviewOpen && multiview.length > 0 && <MultiviewOverlay tiles={multiview} capacity={capacity} candidates={multiviewCandidates}
+      onAdd={addToMultiview}
+      onRemove={index => setMultiview(current => { const next = current.filter((_, i) => i !== index); if (!next.length) setMultiviewOpen(false); return next; })}
+      onFullscreen={channel => { setMultiviewOpen(false); onPlay(channel); }}
+      onClose={() => setMultiviewOpen(false)} />}
   </section>;
 }
 
