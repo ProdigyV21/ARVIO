@@ -28,6 +28,8 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SportsSoccer
 import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.GridView
+import androidx.compose.material.icons.filled.FiberManualRecord
 import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.Menu
 import androidx.compose.material3.LocalTextStyle
@@ -199,6 +201,12 @@ internal fun SportsGuidePane(
     onToggleScoreAlerts: (Boolean) -> Unit = {},
     // A channel picked on a game's sheet, with the game's other channels (best first) for failover.
     onPlayFromEvent: ((SportsGuideEvent, IptvChannel, List<IptvChannel>) -> Unit)? = null,
+    // Multiview and recording: a game's channels (best first), and shortcuts above the rows.
+    onMultiview: ((SportsGuideEvent, List<IptvChannel>) -> Unit)? = null,
+    onRecord: ((SportsGuideEvent, List<IptvChannel>) -> Unit)? = null,
+    recordedEventIds: Set<String> = emptySet(),
+    onOpenMultiview: (() -> Unit)? = null,
+    onOpenRecordings: (() -> Unit)? = null,
 ) {
     // Only a schedule refresh consumes this order. Focus alone must not rebuild
     // every catalogue and invalidate all visible lazy rows.
@@ -508,6 +516,16 @@ internal fun SportsGuidePane(
                 },
                 onDownFromFilters = { if (rows.isNotEmpty()) moveTo(0, 0) },
                 onLeaveStart = ::leaveCards,
+                tools = listOfNotNull(
+                    onOpenMultiview?.let { SPORTS_TOOL_MULTIVIEW to stringResource(R.string.multiview_title) },
+                    onOpenRecordings?.let { SPORTS_TOOL_RECORDINGS to stringResource(R.string.recordings_title) },
+                ),
+                onTool = { tool ->
+                    when (tool) {
+                        SPORTS_TOOL_MULTIVIEW -> onOpenMultiview?.invoke()
+                        SPORTS_TOOL_RECORDINGS -> onOpenRecordings?.invoke()
+                    }
+                },
             )
             if (rows.isEmpty()) Column(Modifier.fillMaxWidth().weight(1f), verticalArrangement = Arrangement.Center,
                 horizontalAlignment = Alignment.CenterHorizontally) {
@@ -736,6 +754,13 @@ internal fun SportsGuidePane(
                 onToggleFollow = onToggleFollow,
                 scoreAlerts = scoreAlerts,
                 onToggleScoreAlerts = onToggleScoreAlerts,
+            )
+            if (!actionEvent.isNetwork && event != null && sourceChannels.isNotEmpty()) SportsWatchActions(
+                canWatch = canOpenChannel,
+                canRecord = !event.isFinished() && event.programme.endUtcMillis > now,
+                recorded = event.id in recordedEventIds,
+                onMultiview = onMultiview?.let { add -> { dismiss(); add(event, sourceChannels) } },
+                onRecord = onRecord?.let { record -> { record(event, sourceChannels) } },
             )
             val detailsFixture = if (showDetails && event != null && !event.isNetwork) event.fixture else null
             if (detailsFixture != null && event != null) {
@@ -1049,6 +1074,9 @@ private fun SportsDayAndFilterChips(
     onUpFromDays: () -> Unit,
     onDownFromFilters: () -> Unit,
     onLeaveStart: () -> Unit,
+    // Shortcuts (Multiview, Recordings) at the start of the filter row; never "selected".
+    tools: List<Pair<String, String>> = emptyList(),
+    onTool: (String) -> Unit = {},
 ) {
     val labelOverview = stringResource(R.string.sports_overview)
     val labelToday = stringResource(R.string.live_label_today)
@@ -1065,12 +1093,12 @@ private fun SportsDayAndFilterChips(
             }
         }
     }
-    val filters: List<Pair<String, String>> = listOf(
+    val filters: List<Pair<String, String>> = tools + listOf(
         SPORTS_FILTER_ALL to stringResource(R.string.sports_filter_all),
         SPORTS_FILTER_LIVE to stringResource(R.string.sports_filter_live),
     ) + sports.map { it.name to it.title }
     val selectedDayIndex = days.indexOfFirst { it.first == dayOffset }.coerceAtLeast(0)
-    val selectedFilterIndex = filters.indexOfFirst { it.first == filter }.coerceAtLeast(0)
+    val selectedFilterIndex = (tools.size + filters.drop(tools.size).indexOfFirst { it.first == filter }.coerceAtLeast(0))
     val dayState = rememberLazyListState(initialFirstVisibleItemIndex = (selectedDayIndex - 2).coerceAtLeast(0))
     val filterState = rememberLazyListState()
     Column(Modifier.fillMaxWidth().padding(bottom = 4.dp)) {
@@ -1079,9 +1107,12 @@ private fun SportsDayAndFilterChips(
             onSelect = { onDay(days[it].first) })
         SportsChipRow(filters, selectedFilterIndex, filterState, touch, filterFocus,
             onUp = { runCatching { dayFocus.requestFocus() } }, onDown = onDownFromFilters, onLeaveStart = onLeaveStart,
-            onSelect = { onFilter(filters[it].first) })
+            onSelect = { index -> if (index < tools.size) onTool(filters[index].first) else onFilter(filters[index].first) })
     }
 }
+
+internal const val SPORTS_TOOL_MULTIVIEW = "tool:multiview"
+internal const val SPORTS_TOOL_RECORDINGS = "tool:recordings"
 
 @Composable
 private fun <T> SportsChipRow(
@@ -1163,6 +1194,37 @@ private fun SportsEventActions(
             icon = Icons.Default.EmojiEvents,
             active = scoreAlerts,
         ) { onToggleScoreAlerts(!scoreAlerts) }
+    }
+}
+
+/** Watch alongside other games, or record this one from the user's own channels. */
+@Composable
+private fun SportsWatchActions(
+    canWatch: Boolean,
+    canRecord: Boolean,
+    recorded: Boolean,
+    onMultiview: (() -> Unit)?,
+    onRecord: (() -> Unit)?,
+) {
+    val showMultiview = canWatch && onMultiview != null
+    val showRecord = (canRecord || recorded) && onRecord != null
+    if (!showMultiview && !showRecord) return
+    Row(Modifier.fillMaxWidth().padding(top = 8.dp).horizontalScroll(androidx.compose.foundation.rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        if (showMultiview && onMultiview != null) SportsActionChip(
+            label = stringResource(R.string.multiview_add_to),
+            icon = Icons.Default.GridView,
+            active = false,
+            modifier = Modifier.testTag("sports-multiview"),
+            onClick = onMultiview,
+        )
+        if (showRecord && onRecord != null) SportsActionChip(
+            label = stringResource(if (recorded) R.string.recording_scheduled_chip else R.string.recording_record),
+            icon = Icons.Default.FiberManualRecord,
+            active = recorded,
+            modifier = Modifier.testTag("sports-record"),
+            onClick = onRecord,
+        )
     }
 }
 
