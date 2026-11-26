@@ -21,6 +21,10 @@ const routes = [
   { route: '/stremio-addons-android-tv/', updated: '2026-10-08' },
   { route: '/live-tv-epg/', pt: '/pt-br/tv-ao-vivo-epg/', es: '/es/tv-en-vivo-epg/', updated: '2026-10-05' },
   { route: '/trakt-simkl-sync/', pt: '/pt-br/sincronizacao-trakt-simkl/', es: '/es/sincronizacion-trakt-simkl/', updated: '2026-10-05' },
+  { route: '/how-arvio-works/', updated: '2026-11-26' },
+  { route: '/music-guide/', updated: '2026-11-26' },
+  { route: '/live-sports/', updated: '2026-11-26' },
+  { route: '/profiles-sync-personalize/', updated: '2026-11-26' },
   { route: '/ai-subtitles-android-tv/', pt: '/pt-br/legendas-ia-android-tv/', es: '/es/subtitulos-ia-android-tv/', updated: '2026-10-05' }
 ];
 const entities = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ', ndash: '–', mdash: '—', lsquo: '‘', rsquo: '’', ldquo: '“', rdquo: '”', copy: '©', hellip: '…' };

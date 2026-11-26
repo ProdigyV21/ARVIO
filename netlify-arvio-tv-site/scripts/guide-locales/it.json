@@ -787,6 +787,26 @@
   "web": "/it/arvio-web/"
  },
  "standaloneLabels": {
+  "/how-arvio-works/": [
+   "Inizia qui · In inglese",
+   "Come funziona ARVIO",
+   "Cos'è e cosa non è ARVIO, come si combinano cataloghi, fonti e account, e i tuoi primi 10 minuti."
+  ],
+  "/music-guide/": [
+   "Musica · In inglese",
+   "La musica in ARVIO",
+   "Collega Navidrome, Jellyfin o un addon musicale, crea playlist e importa quelle di Spotify."
+  ],
+  "/live-sports/": [
+   "Sport · In inglese",
+   "Sport in diretta sui tuoi canali",
+   "Scopri quali partite vanno in onda sui tuoi canali, con risultati senza spoiler."
+  ],
+  "/profiles-sync-personalize/": [
+   "Profili · In inglese",
+   "Profili, modalità bambini, sincronizzazione e colori",
+   "Profili con PIN, profili bambini, ARVIO Cloud e colore di accento."
+  ],
   "/arvio-iphone-ipad/": [
    "iPhone e iPad · In inglese",
    "ARVIO su iPhone e iPad",

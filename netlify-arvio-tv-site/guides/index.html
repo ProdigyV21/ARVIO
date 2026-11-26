@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Android TV Setup Guides: Jellyfin, Addons &amp; IPTV | ARVIO</title>
-  <meta name="description" content="Set up Jellyfin, Plex, Emby, compatible Stremio addons, debrid sources and IPTV in ARVIO. Find Android TV instructions, browser limits and free self-hosting guides.">
+  <title>ARVIO Guides: Setup, Music, Live Sports &amp; Help | ARVIO</title>
+  <meta name="description" content="Simple ARVIO guides for every device: how ARVIO works, installing on TV, phone and browser, connecting your own media server or TV provider, music, live sports, profiles and sync.">
   <link rel="canonical" href="https://arvio.tv/guides/">
   <!-- hreflang:start -->
   <link rel="alternate" hreflang="en" href="https://arvio.tv/guides/">
@@ -26,13 +26,13 @@
   <link rel="stylesheet" href="/guides/guide.css">
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="ARVIO">
-  <meta property="og:title" content="Android TV Setup Guides: Jellyfin, Addons &amp; IPTV | ARVIO">
-  <meta property="og:description" content="Set up Jellyfin, Plex, Emby, compatible Stremio addons, debrid sources and IPTV in ARVIO. Find Android TV instructions, browser limits and free self-hosting guides.">
+  <meta property="og:title" content="ARVIO Guides: Setup, Music, Live Sports &amp; Help | ARVIO">
+  <meta property="og:description" content="Simple ARVIO guides for every device: how ARVIO works, installing on TV, phone and browser, connecting your own media server or TV provider, music, live sports, profiles and sync.">
   <meta property="og:url" content="https://arvio.tv/guides/">
   <meta property="og:image" content="https://arvio.tv/assets/arvio-social.webp">
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="Android TV Setup Guides: Jellyfin, Addons &amp; IPTV | ARVIO">
-  <meta name="twitter:description" content="Set up Jellyfin, Plex, Emby, compatible Stremio addons, debrid sources and IPTV in ARVIO. Find Android TV instructions, browser limits and free self-hosting guides.">
+  <meta name="twitter:title" content="ARVIO Guides: Setup, Music, Live Sports &amp; Help | ARVIO">
+  <meta name="twitter:description" content="Simple ARVIO guides for every device: how ARVIO works, installing on TV, phone and browser, connecting your own media server or TV provider, music, live sports, profiles and sync.">
   <meta name="twitter:image" content="https://arvio.tv/assets/arvio-social.webp">
   <script type="application/ld+json">
   {
@@ -40,7 +40,7 @@
     "@type": "CollectionPage",
     "name": "ARVIO Guides",
     "url": "https://arvio.tv/guides/",
-    "description": "Set up Jellyfin, Plex, Emby, compatible Stremio addons, debrid sources and IPTV in ARVIO. Find Android TV instructions, browser limits and free self-hosting guides.",
+    "description": "Simple ARVIO guides for every device: how ARVIO works, installing on TV, phone and browser, connecting your own media server or TV provider, music, live sports, profiles and sync.",
     "isPartOf": {"@type": "WebSite", "name": "ARVIO", "url": "https://arvio.tv/"}
   }
   </script>
@@ -70,96 +70,68 @@
   </header>
 
   <main id="content">
-    <section class="guide-intro">
+    <section class="hub-intro">
       <div class="shell">
         <nav class="breadcrumb" aria-label="Breadcrumb">
           <a href="/">ARVIO</a><span aria-hidden="true">/</span><span>Guides</span>
         </nav>
-        <p class="eyebrow">Product guides</p>
-        <h1>Android TV setup guides for your media services.</h1>
-        <p class="lead">Start with the free Android app, run ARVIO Web on your own server, or choose managed browser hosting. These guides help you connect your own sources and get a working setup on the device you use.</p>
-        <nav class="guide-jump" aria-label="Choose your setup"><a href="/android-tv-media-hub/">Install the free app</a><a href="/self-host-arvio-web/">Self-host the webapp</a><a href="/arvio-web/">Try managed hosting</a></nav>
+        <p class="eyebrow">Help and guides</p>
+        <h1>How can we help?</h1>
+        <p class="lead">Short, step-by-step guides for every part of ARVIO. Pick your device, find your topic, or type what you are looking for.</p>
+        <form class="hub-search" role="search" action="#topics" onsubmit="return false">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+          <label for="guide-search" class="sr-only">Search the guides</label>
+          <input id="guide-search" type="search" placeholder="Try “Jellyfin”, “music” or “nothing plays”" autocomplete="off">
+        </form>
+        <p class="hub-popular"><span>Popular:</span><a href="/how-arvio-works/">How ARVIO works</a><a href="/browser-playback-guide/">Nothing plays</a><a href="/music-guide/">Music</a><a href="/live-sports/">Live sports</a><a href="/profiles-sync-personalize/#kids">Kids profiles</a></p>
       </div>
     </section>
 
-    <section class="section">
+    <section class="section compact">
       <div class="shell">
-        <div class="guide-directory">
-          <a class="guide-card" href="/arvio-iphone-ipad/">
-            <small>iPhone and iPad</small>
-            <h2>ARVIO on iPhone and iPad</h2>
-            <p>Open ARVIO Web in Safari, sign in with your ARVIO account, add it to your Home Screen and look around before you pay.</p>
-          </a>
-          <a class="guide-card" href="/self-host-arvio-web/">
-            <small>Free browser setup</small>
-            <h2>Self-host with Docker or Node.js</h2>
-            <p>Actual setup commands, your own API keys, local profiles, network access and updates. No ARVIO subscription required.</p>
-          </a>
-          <a class="guide-card" href="/browser-playback-guide/">
-            <small>Get your first video playing</small>
-            <h2>Browser playback checklist</h2>
-            <p>Separate source access from format problems, test live TV and home servers, and check the device you actually use.</p>
-          </a>
-          <a class="guide-card" href="/collections-catalogs/">
-            <small>Home customization</small>
-            <h2>Create collections and add catalogs</h2>
-            <p>Start with a JSON template, host it free on GitHub, import it by URL, or add a Trakt or MDBList catalog. Direct file uploads are not yet supported.</p>
-          </a>
-          <a class="guide-card" href="/collection-studio/">
-            <small>Build and share</small>
-            <h2>Collection Studio</h2>
-            <p>Try three ready-to-use discovery collections, customize up to eight folders, export JSON and share a preview. Free, with no account required.</p>
-          </a>
-          <a class="guide-card" href="/android-tv-media-hub/">
-            <small>Start here</small>
-            <h2>Android TV: install ARVIO and add sources</h2>
-            <p>Official APK and Google Play downloads, addon manifest setup, home servers and help when a title has no playable source.</p>
-          </a>
-          <a class="guide-card" href="/jellyfin-android-tv/">
-            <small>Home servers</small>
-            <h2>Jellyfin client for Android TV</h2>
-            <p>Try an alternative Jellyfin interface, connect your server, browse libraries and check playback and browser limitations.</p>
-          </a>
-          <a class="guide-card" href="/plex-emby-jellyfin/">
-            <small>Home servers</small>
-            <h2>Plex, Emby and Jellyfin in one app</h2>
-            <p>Connect multiple servers, choose libraries and understand the different Android and browser sign-in options.</p>
-          </a>
-          <a class="guide-card" href="/debrid-usenet-android-tv/">
-            <small>Sources and playback</small>
-            <h2>Debrid playback on Android TV</h2>
-            <p>Understand the player, addon and provider roles, connect resolved sources and troubleshoot missing or unplayable results.</p>
-          </a>
-          <a class="guide-card" href="/stremio-addons-android-tv/">
-            <small>Addon setup</small>
-            <h2>Stremio-compatible addons in ARVIO</h2>
-            <p>Install a manifest URL, configure from your phone, refresh addons on TV and check what compatibility does and does not include.</p>
-          </a>
-          <a class="guide-card" href="/trakt-simkl-sync/">
-            <small>Tracking</small>
-            <h2>Trakt and Simkl on Android TV</h2>
-            <p>Connect accounts, choose watchlist and Continue Watching sources, enable playback scrobbling and troubleshoot sync.</p>
-          </a>
-          <a class="guide-card" href="/live-tv-epg/">
-            <small>Live TV</small>
-            <h2>IPTV player: M3U, Xtream and EPG</h2>
-            <p>Set up your authorized M3U playlist, Xtream account or Stalker portal on Android, add XMLTV and check browser compatibility.</p>
-          </a>
-          <a class="guide-card" href="/ai-subtitles-android-tv/">
-            <small>Accessibility</small>
-            <h2>AI subtitle translation on Android TV</h2>
-            <p>Translate existing text subtitles with your own Groq or Gemini key, choose your language and troubleshoot source or API issues.</p>
-          </a>
-          <a class="guide-card" href="/fire-tv-media-player/">
-            <small>Devices</small>
-            <h2>ARVIO on Fire TV</h2>
-            <p>Check Fire OS versus Vega OS compatibility, install the official APK and troubleshoot sideloading or playback.</p>
-          </a>
-          <a class="guide-card" href="/arvio-web/">
-            <small>Choose your hosting</small>
-            <h2>ARVIO on iPhone, iPad, Windows and Mac</h2>
-            <p>Open the browser app, compare hosted login with free self-hosting, and check sync, source access and playback limits.</p>
-          </a>
+        <a class="start-card" href="/how-arvio-works/">
+          <div>
+            <p class="eyebrow">New to ARVIO? Start here</p>
+            <h2>How ARVIO works, in plain words.</h2>
+            <p>ARVIO is the player, not the content. Five minutes with this guide answers most questions, from “why does nothing play?” to “is this legal?”.</p>
+            <span class="fake-link">Read the beginner guide →</span>
+          </div>
+          <ol class="flow" aria-label="ARVIO in three steps">
+            <li><span class="step-num">1</span><div><b>Install ARVIO</b><span>Free on Android TV, Fire TV and phones. ARVIO Web for iPhone, iPad and computers.</span></div></li>
+            <li><span class="step-num">2</span><div><b>Connect what you have</b><span>Your media server, your TV provider or an add-on you are allowed to use.</span></div></li>
+            <li><span class="step-num">3</span><div><b>Watch on every screen</b><span>A free ARVIO Cloud account keeps profiles and progress in sync.</span></div></li>
+          </ol>
+        </a>
+
+        <div class="topic-head" style="margin-top:56px"><h2>Pick your device</h2><p>Each one has its own short install guide.</p></div>
+        <div class="device-grid">
+          <a class="device-tile" href="/android-tv-media-hub/"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="2" y="4" width="20" height="13" rx="2"/><path d="M8 21h8"/></svg><strong>Android TV &amp; Google TV</strong><span>Free app from Google Play or the official APK.</span></a>
+          <a class="device-tile" href="/fire-tv-media-player/"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="9" y="2" width="6" height="20" rx="2"/><path d="M12 6v.01M12 10v.01"/></svg><strong>Fire TV</strong><span>Free APK on Fire OS devices.</span></a>
+          <a class="device-tile" href="/music-guide/"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="6" y="2" width="12" height="20" rx="2.5"/><path d="M11 18h2"/></svg><strong>Android phone &amp; tablet</strong><span>Same free app, with the Music tab.</span></a>
+          <a class="device-tile" href="/arvio-iphone-ipad/"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M1 20h22"/></svg><strong>iPhone, iPad &amp; computer</strong><span>ARVIO Web in your browser.</span></a>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="topics">
+      <div class="shell">
+        <section class="topic-group" id="start" aria-labelledby="start-h"><div class="topic-head"><h2 id="start-h">Start here</h2><p>Install ARVIO and understand the basics.</p></div><div class="topic-grid"><a class="topic-card has-new" href="/how-arvio-works/" data-search="beginner new start basics what is arvio legal free how does it work"><span class="new">New</span><h3>How ARVIO works, in plain words</h3><p>What ARVIO is and is not, the four building blocks and your first 10 minutes.</p></a><a class="topic-card" href="/android-tv-media-hub/" data-search="android tv google tv shield chromecast install apk"><h3>Android TV: install and add your first source</h3><p>Google Play or the official APK, then connect a server, live TV or an add-on.</p></a><a class="topic-card" href="/fire-tv-media-player/" data-search="fire tv stick amazon fire os vega sideload"><h3>ARVIO on Fire TV</h3><p>Check whether your Fire TV can run Android apps, then install the official APK.</p></a><a class="topic-card" href="/arvio-iphone-ipad/" data-search="iphone ipad ios safari apple"><h3>ARVIO on iPhone and iPad</h3><p>Open ARVIO Web in Safari, sign in and add it to your Home Screen.</p></a><a class="topic-card" href="/arvio-web/" data-search="web browser windows mac laptop premium hosted"><h3>ARVIO Web on Windows, Mac and more</h3><p>Use ARVIO in any modern browser, hosted by us or on your own server.</p></a><a class="topic-card" href="/self-host-arvio-web/" data-search="self host docker node server free unraid"><h3>Self-host ARVIO Web for free</h3><p>Run the browser app yourself with Docker or Node.js and your own API keys.</p></a></div></section>
+<section class="topic-group" id="media" aria-labelledby="media-h"><div class="topic-head"><h2 id="media-h">Watch your own media</h2><p>Connect the films and series you already have.</p></div><div class="topic-grid"><a class="topic-card" href="/plex-emby-jellyfin/" data-search="plex emby jellyfin home server nas library"><h3>Plex, Emby and Jellyfin in one app</h3><p>Connect one or more home servers and choose which libraries to show.</p></a><a class="topic-card" href="/jellyfin-android-tv/" data-search="jellyfin client server"><h3>A better Jellyfin app for your TV</h3><p>Connect your Jellyfin server, browse libraries and resume where you stopped.</p></a><a class="topic-card" href="/stremio-addons-android-tv/" data-search="addon add-on stremio manifest install configure"><h3>How add-ons work</h3><p>Install an add-on by URL, configure it from your phone and refresh it on TV.</p></a><a class="topic-card" href="/debrid-usenet-android-tv/" data-search="debrid usenet real debrid torbox premiumize"><h3>Debrid services and playback</h3><p>How ARVIO, add-ons and paid cloud services fit together, and fixing empty results.</p></a><a class="topic-card" href="/browser-playback-guide/" data-search="playback not playing error buffering format help troubleshoot"><h3>Playback checklist</h3><p>Nothing plays? Find out in minutes whether it is the source, the format or the device.</p></a></div></section>
+<section class="topic-group" id="live" aria-labelledby="live-h"><div class="topic-head"><h2 id="live-h">Live TV and sports</h2><p>Use the channels from your own TV provider.</p></div><div class="topic-grid"><a class="topic-card" href="/live-tv-epg/" data-search="live tv iptv m3u xtream stalker epg xmltv channels guide"><h3>Live TV with your provider&#x27;s channels</h3><p>Add the M3U, Xtream or portal login from your provider and a program guide (EPG).</p></a><a class="topic-card has-new" href="/live-sports/" data-search="sports football soccer match game score live events"><span class="new">New</span><h3>Live sports on your own channels</h3><p>See which matches are on your channels now, spoiler-free scores and what is coming.</p></a></div></section>
+<section class="topic-group" id="music" aria-labelledby="music-h"><div class="topic-head"><h2 id="music-h">Music</h2><p>Your own music library, with charts and playlists.</p></div><div class="topic-grid"><a class="topic-card has-new" href="/music-guide/" data-search="music songs navidrome subsonic jellyfin spotify playlist audius charts"><span class="new">New</span><h3>Music: set up, playlists and Spotify import</h3><p>Connect Navidrome, Jellyfin or a music add-on, like songs and rebuild Spotify playlists.</p></a></div></section>
+<section class="topic-group" id="yours" aria-labelledby="yours-h"><div class="topic-head"><h2 id="yours-h">Make it yours</h2><p>Profiles, sync, looks and smarter home rows.</p></div><div class="topic-grid"><a class="topic-card has-new" href="/profiles-sync-personalize/" data-search="profile kids children pin parental cloud sync account accent colour color theme oled tabs"><span class="new">New</span><h3>Profiles, kids mode, sync and accent colours</h3><p>Profiles with PINs, kids profiles, ARVIO Cloud and changing how ARVIO looks.</p></a><a class="topic-card" href="/collections-catalogs/" data-search="collections catalogs home rows trakt mdblist import json"><h3>Collections and catalogs</h3><p>Add Trakt or MDBList rows and import collections to shape your home screen.</p></a><a class="topic-card" href="/collection-studio/" data-search="collection studio builder folders"><h3>Collection Studio</h3><p>Build a home row with folders in your browser, then import it into ARVIO. Free.</p></a><a class="topic-card" href="/trakt-simkl-sync/" data-search="trakt simkl watchlist history scrobble tracking"><h3>Trakt and Simkl</h3><p>Sync watchlists and progress, and log what you watch automatically.</p></a><a class="topic-card" href="/ai-subtitles-android-tv/" data-search="subtitles translate ai groq gemini language"><h3>AI subtitle translation</h3><p>Translate subtitles into your language with your own free API key.</p></a></div></section>
+        <div class="hub-empty" id="hub-empty" role="status">No guide matches that yet. Try a simpler word, start with <a href="/how-arvio-works/">how ARVIO works</a>, or ask in the <a href="https://discord.gg/UavuEYMfQ4">ARVIO Discord</a>.</div>
+      </div>
+    </section>
+
+    <section class="section compact" id="quick-answers">
+      <div class="shell">
+        <div class="topic-head"><h2>Quick answers</h2><p>The questions we hear most.</p></div>
+        <div class="quick-answers">
+          <article><h3>Does ARVIO come with films or channels?</h3><p>No. ARVIO is a player and organizer. It plays what you connect: your own server, your TV provider's channels or add-ons from services you are allowed to use. <a href="/how-arvio-works/#sources">Where to get sources</a></p></article>
+          <article><h3>I see posters, but nothing plays.</h3><p>Posters come from catalogs; video comes from sources. A poster means the title exists, not that one of your sources has it. <a href="/browser-playback-guide/">Playback checklist</a></p></article>
+          <article><h3>Is ARVIO free?</h3><p>Yes. The Android, TV and Fire TV app is free and open source with no ads. Only the hosted ARVIO Web has an optional paid plan, and you can self-host it for free.</p></article>
+          <article><h3>Will you recommend add-ons or playlists?</h3><p>We do not recommend or support unlicensed add-ons or playlists. Your own media, the services you pay for and official free channels work best and keep working. <a href="/how-arvio-works/#sources">Legal options</a></p></article>
         </div>
       </div>
     </section>
@@ -176,12 +148,12 @@
     <section class="cta-band">
       <div class="shell cta-inner">
         <div>
-          <h2>Free and open source on Android.</h2>
-          <p>Install from Google Play or inspect the complete project on GitHub.</p>
+          <h2>Still stuck?</h2>
+          <p>Ask the community on Discord. Mention your device, ARVIO version and the exact message you see.</p>
         </div>
         <div class="actions">
-          <a class="button" href="https://play.google.com/store/apps/details?id=com.arvio.tv">Get ARVIO on Google Play</a>
-          <a class="button secondary" href="https://github.com/ProdigyV21/ARVIO">View source</a>
+          <a class="button" href="https://discord.gg/UavuEYMfQ4">Ask on Discord</a>
+          <a class="button secondary" href="https://play.google.com/store/apps/details?id=com.arvio.tv">Get ARVIO on Google Play</a>
         </div>
       </div>
     </section>
@@ -192,7 +164,7 @@
       <div class="footer-main">
         <div class="footer-brand">
           <img src="/assets/arvio-wordmark.png" alt="ARVIO">
-          <p>Open-source media management for Android TV, Google TV and Android mobile.</p>
+          <p>Open-source media management for Android TV, Google TV, Android phones and the browser.</p>
         </div>
         <nav class="footer-links" aria-label="Footer navigation">
           <a href="/">Home</a><a href="/guides/">Guides</a><a href="/privacy">Privacy</a><a href="https://github.com/ProdigyV21/ARVIO">GitHub</a>
@@ -201,5 +173,29 @@
       <div class="footer-bottom"><span>© 2026 ARVIO</span><span>ARVIO provides software, not media.</span></div>
     </div>
   </footer>
+  <script>
+  (function () {
+    var input = document.getElementById('guide-search');
+    if (!input) return;
+    var cards = Array.prototype.slice.call(document.querySelectorAll('.topic-card'));
+    var groups = Array.prototype.slice.call(document.querySelectorAll('.topic-group'));
+    var empty = document.getElementById('hub-empty');
+    cards.forEach(function (card) { card._text = (card.textContent + ' ' + (card.getAttribute('data-search') || '')).toLowerCase(); });
+    function apply() {
+      var words = input.value.toLowerCase().trim().split(/\s+/).filter(Boolean);
+      var shown = 0;
+      cards.forEach(function (card) {
+        var hit = words.every(function (w) { return card._text.indexOf(w) !== -1; });
+        card.hidden = !hit; if (hit) shown++;
+      });
+      groups.forEach(function (g) { g.hidden = !g.querySelector('.topic-card:not([hidden])'); });
+      empty.classList.toggle('show', shown === 0);
+    }
+    input.addEventListener('input', apply);
+    input.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') { var first = document.querySelector('.topic-card:not([hidden])'); if (first) { e.preventDefault(); document.getElementById('topics').scrollIntoView({behavior:'smooth'}); first.focus(); } }
+    });
+  })();
+  </script>
 </body>
 </html>
