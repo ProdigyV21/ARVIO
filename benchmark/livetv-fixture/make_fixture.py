@@ -20,8 +20,6 @@ from xml.sax.saxutils import escape
 
 # Public test streams published for player testing.
 DEFAULT_STREAMS = [
-    "https://cph-p2p-msl.akamaized.net/hls/live/2000341/test/master.m3u8",
-    "https://moctobpltc-i.akamaihd.net/hls/live/571329/eight/playlist.m3u8",
     "https://demo.unified-streaming.com/k8s/live/stable/scte35.isml/.m3u8",
     "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8",
     "https://devstreaming-cdn.apple.com/videos/streaming/examples/bipbop_16x9/bipbop_16x9_variant.m3u8",
