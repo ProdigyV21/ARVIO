@@ -3031,6 +3031,66 @@ fun LiveTvScreen(
         playLiveFullscreen(channel.enrich(0))
     }
 
+    // -- Multiview and recordings (Sports) ------------------------------------------------------
+    // Multiview runs on the Sports page, where the Live TV player is already suspended, so its
+    // tiles get the connections the player gave back. Recordings run in their own service.
+    val multiviewCapacity = remember(context) { deviceMultiviewCapacity(context) }
+    var multiviewTiles by remember { mutableStateOf<List<MultiviewTile>>(emptyList()) }
+    var multiviewOpen by remember { mutableStateOf(false) }
+    var recordingsOpen by remember { mutableStateOf(false) }
+    val liveRecordings by remember(context) { com.arflix.tv.recording.LiveRecordingStore.recordings(context.applicationContext) }.collectAsState()
+    val recordedEventIds = remember(liveRecordings) { liveRecordings.filter { !it.isFinal }.mapNotNullTo(hashSetOf()) { it.eventId } }
+    LaunchedEffect(Unit) { com.arflix.tv.recording.LiveRecordingScheduler.kick(context.applicationContext) }
+
+    fun multiviewTileFor(event: SportsGuideEvent, channels: List<IptvChannel>): MultiviewTile? {
+        val ordered = channels.distinctBy { it.id }
+        val first = ordered.firstOrNull() ?: return null
+        return MultiviewTile(key = "game:${event.id}", title = event.title, channel = first, alternates = ordered.drop(1).take(4))
+    }
+
+    fun addToMultiview(event: SportsGuideEvent, channels: List<IptvChannel>) {
+        val tile = multiviewTileFor(event, channels) ?: return
+        when (val result = multiviewTiles.adding(tile, multiviewCapacity)) {
+            is MultiviewAddResult.Added -> multiviewTiles = result.tiles
+            is MultiviewAddResult.AlreadyThere -> Unit
+            MultiviewAddResult.Full -> android.widget.Toast.makeText(
+                context, context.getString(R.string.multiview_full, multiviewCapacity), android.widget.Toast.LENGTH_LONG,
+            ).show()
+        }
+        multiviewOpen = true
+    }
+
+    fun toggleRecording(event: SportsGuideEvent, channels: List<IptvChannel>) {
+        val app = context.applicationContext
+        val existing = liveRecordings.firstOrNull { it.eventId == event.id && !it.isFinal }
+        if (existing != null) {
+            com.arflix.tv.recording.LiveRecordingScheduler.cancel(app, existing.id)
+            android.widget.Toast.makeText(context, context.getString(R.string.recording_cancelled_toast), android.widget.Toast.LENGTH_SHORT).show()
+            return
+        }
+        val recordable = channels.distinctBy { it.id }.filter { it.drmInfo == null && !it.id.startsWith("sports-addon:") }
+        if (recordable.isEmpty()) {
+            android.widget.Toast.makeText(context, context.getString(R.string.recording_error_protected), android.widget.Toast.LENGTH_LONG).show()
+            return
+        }
+        com.arflix.tv.recording.LiveRecordingScheduler.add(app, com.arflix.tv.recording.LiveRecording(
+            id = com.arflix.tv.recording.LiveRecordingScheduler.newId(),
+            title = event.title,
+            channels = recordable.take(5),
+            programmeStart = event.programme.startUtcMillis,
+            programmeEnd = event.programme.endUtcMillis,
+            createdAt = System.currentTimeMillis(),
+            eventId = event.id,
+            sport = event.sport.name,
+        ))
+        val live = event.programme.startUtcMillis <= System.currentTimeMillis()
+        android.widget.Toast.makeText(
+            context,
+            context.getString(if (live) R.string.recording_started_toast else R.string.recording_scheduled_toast, event.title),
+            android.widget.Toast.LENGTH_LONG,
+        ).show()
+    }
+
     fun playAddonSource(event: com.arflix.tv.data.model.SportsAddonEvent, stream: com.arflix.tv.data.repository.SportsAddonStream) {
         if (sportsAddonInstallations.none { com.arflix.tv.data.model.sportsAddonInstallation(it) == event.installation }) return
         if (stream.external) {
@@ -4315,6 +4375,8 @@ fun LiveTvScreen(
                         // row still receives keys. Handle it here at the outermost preview
                         // node and swallow everything — including KeyUp — while it is open,
                         // otherwise the row underneath navigates or opens the channel.
+                        // Multiview owns every key while it is on screen.
+                        if (multiviewOpen && sportsSelected && !isFullScreen) return@onPreviewKeyEvent false
                         val isSelectKey = event.key == Key.DirectionCenter || event.key == Key.Enter
                         if (isSelectKey) {
                             if (selectKeyGuard.consume(
@@ -4734,6 +4796,11 @@ fun LiveTvScreen(
                         },
                         onPlay = { channel -> playLiveFullscreen(channel.enrich(0)) },
                         onPlayFromEvent = ::playSportsChannel,
+                        onMultiview = ::addToMultiview,
+                        onRecord = ::toggleRecording,
+                        recordedEventIds = recordedEventIds,
+                        onOpenMultiview = { multiviewOpen = true },
+                        onOpenRecordings = { recordingsOpen = true },
                         networkEvents = sportsNetworkRow,
                         channelMemory = sportsChannelMemory,
                         loadGameDetails = viewModel::loadSportsGameDetails,
@@ -4912,6 +4979,11 @@ fun LiveTvScreen(
                         onOpenCategories = { openCategoryDrawer() },
                         onPlay = { channel -> playLiveFullscreen(channel.enrich(0)) },
                         onPlayFromEvent = ::playSportsChannel,
+                        onMultiview = ::addToMultiview,
+                        onRecord = ::toggleRecording,
+                        recordedEventIds = recordedEventIds,
+                        onOpenMultiview = { multiviewOpen = true },
+                        onOpenRecordings = { recordingsOpen = true },
                         networkEvents = sportsNetworkRow,
                         channelMemory = sportsChannelMemory,
                         loadGameDetails = viewModel::loadSportsGameDetails,
@@ -5617,6 +5689,37 @@ fun LiveTvScreen(
                 modifier = Modifier.align(Alignment.Center),
             )
         }
+
+        if (multiviewOpen && sportsSelected && !isFullScreen) {
+            val multiviewCandidates = remember(sportsDisplayEvents, sportsChannelMemory, guideClockMillis) {
+                sportsDisplayEvents.filter { it.isOnAir(guideClockMillis) }.mapNotNull { event ->
+                    val channels = (event.availableChannels(guideClockMillis) + event.possibleChannels)
+                        .distinctBy { it.id }.withRememberedFirst(sportsChannelMemory, event.channelMemoryKeys())
+                    multiviewTileFor(event, channels)
+                }
+            }
+            MultiviewOverlay(
+                tiles = multiviewTiles,
+                capacity = multiviewCapacity,
+                candidates = multiviewCandidates,
+                resolve = { channel -> viewModel.resolvePlayableStreamUrl(channel) },
+                policyFor = viewModel.iptvRepository::streamPolicyFor,
+                onAdd = { tile -> (multiviewTiles.adding(tile, multiviewCapacity) as? MultiviewAddResult.Added)?.let { multiviewTiles = it.tiles } },
+                onReplace = { index, tile ->
+                    multiviewTiles = multiviewTiles.mapIndexed { i, old -> if (i == index) tile else old }.distinctBy { it.key }
+                },
+                onRemove = { index ->
+                    multiviewTiles = multiviewTiles.filterIndexed { i, _ -> i != index }
+                    if (multiviewTiles.isEmpty()) multiviewOpen = false
+                },
+                onFullscreen = { tile ->
+                    multiviewOpen = false
+                    playLiveFullscreen(tile.channel.enrich(0))
+                },
+                onClose = { multiviewOpen = false },
+            )
+        }
+        if (recordingsOpen) RecordingsDialog(onDismiss = { recordingsOpen = false })
 
         PlaybackDiagnosticBanner(
             diagnostic = playbackDiagnostic,

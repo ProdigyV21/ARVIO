@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="multiview_title">Multiview</string>
+    <string name="multiview_add_to">Kijk in multiview</string>
+    <string name="multiview_add_game">Wedstrijd toevoegen</string>
+    <string name="multiview_hint">Voeg tot %1$d wedstrijden toe. Met de pijlen kies je welke je hoort, OK voor opties.</string>
+    <string name="multiview_no_connection">Geen vrije verbinding: je abonnement staat op dit apparaat %1$d stream(s) tegelijk toe. Verhoog de verbindingslimiet in de IPTV-instellingen als je abonnement meer toestaat.</string>
+    <string name="multiview_tile_failed">Deze zender startte niet.</string>
+    <string name="multiview_fullscreen">Volledig scherm</string>
+    <string name="multiview_swap_game">Andere wedstrijd</string>
+    <string name="multiview_remove_tile">Uit multiview halen</string>
+    <string name="multiview_exit">Multiview sluiten</string>
+    <string name="multiview_pick_title">Live wedstrijden</string>
+    <string name="multiview_no_candidates">Er zijn nu geen andere live wedstrijden met een zender.</string>
+    <string name="multiview_full">Multiview is vol: dit apparaat toont %1$d wedstrijden tegelijk.</string>
+    <string name="recordings_title">Opnames</string>
+    <string name="recordings_storage_hint">Opgeslagen op dit apparaat, in de opslag van de app. Een opname gebruikt één verbinding van je abonnement.</string>
+    <string name="recordings_empty">Nog geen opnames. Open een wedstrijd en kies Opnemen.</string>
+    <string name="recordings_play">Afspelen</string>
+    <string name="recordings_cancel">Opname annuleren</string>
+    <string name="recordings_delete">Verwijderen</string>
+    <string name="recordings_status_scheduled">Gepland · %1$s</string>
+    <string name="recordings_status_recording">Neemt op… %1$s · %2$s</string>
+    <string name="recordings_status_cancelled">Geannuleerd · %1$s</string>
+    <string name="recordings_status_failed">Mislukt: %1$s</string>
+    <string name="recording_record">Opnemen</string>
+    <string name="recording_scheduled_chip">Opname gepland</string>
+    <string name="recording_stop">Opname stoppen</string>
+    <string name="recording_waiting_connection">Wacht op een vrije verbinding…</string>
+    <string name="recording_error_missed">De wedstrijd is niet opgenomen (het apparaat stond uit of de app kon niet starten).</string>
+    <string name="recording_error_protected">Deze zender is beveiligd en kan niet worden opgenomen.</string>
+    <string name="recording_error_disk_full">Gestopt: het apparaat is bijna vol.</string>
+    <string name="recording_error_stream">Zender gestopt (%1$s)</string>
+    <string name="recording_notification_recording">Neemt op: %1$s</string>
+    <string name="recording_notification_scheduled">Opname straks: %1$s</string>
+    <string name="recording_notification_idle">Opnames</string>
+    <string name="recording_notification_tap_to_start">Tik om %1$s op te nemen</string>
+    <string name="recording_notification_tap_hint">Android liet ARVIO de opname niet op de achtergrond starten.</string>
+    <string name="recording_channel_name">Opnames</string>
+    <string name="recording_cancelled_toast">Opname geannuleerd</string>
+    <string name="recording_started_toast">%1$s wordt opgenomen</string>
+    <string name="recording_scheduled_toast">%1$s wordt opgenomen</string>
+</resources>
