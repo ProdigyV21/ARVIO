@@ -3,7 +3,7 @@ package com.arflix.tv.ui.screens.tv.live
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateColorAsState
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
@@ -12,6 +12,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -318,7 +319,9 @@ internal fun SportsToolbar(
             else -> false
         }
     }
-    Row(modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 8.dp).testTag("sports-toolbar"),
+    // Phones scroll the row sideways instead of squeezing the pills.
+    val scroll = if (touch) Modifier.horizontalScroll(androidx.compose.foundation.rememberScrollState()) else Modifier
+    Row(modifier.fillMaxWidth().then(scroll).padding(horizontal = if (touch) 14.dp else 18.dp, vertical = 8.dp).testTag("sports-toolbar"),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         SportsPill(dayLabel, Icons.Default.CalendarToday, active = dayActive, chevron = true, touch = touch,
             modifier = Modifier.focusRequester(firstFocus).keys(first = true).testTag("sports-day-picker"), onClick = onPickDay)
@@ -330,7 +333,7 @@ internal fun SportsToolbar(
             icon = null, active = liveOn, touch = touch,
             leading = { Box(Modifier.size(8.dp).background(LiveColors.LiveRed, CircleShape)) },
             modifier = Modifier.keys(first = false).testTag("sports-live-toggle"), onClick = onToggleLive)
-        Spacer(Modifier.weight(1f))
+        if (!touch) Spacer(Modifier.weight(1f))
         if (onMultiview != null) SportsPill(stringResource(R.string.multiview_title), Icons.Default.GridView, iconOnly = touch, touch = touch,
             modifier = Modifier.keys(first = false).testTag("sports-tool-multiview"), onClick = onMultiview)
         if (onRecordings != null) SportsPill(stringResource(R.string.recordings_title), Icons.Default.VideoLibrary, iconOnly = touch, touch = touch,
