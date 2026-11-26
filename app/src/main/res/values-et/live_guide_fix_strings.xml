@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="live_menu_fix_guide">Paranda kava</string>
+    <string name="live_guide_fix_title">Paranda kava</string>
+    <string name="live_guide_fix_source_heading">Kasuta kava kanalilt</string>
+    <string name="live_guide_fix_automatic">Automaatne</string>
+    <string name="live_guide_fix_automatic_desc">Teenusepakkuja sobitatud kava</string>
+    <string name="live_guide_fix_none">Kava puudub</string>
+    <string name="live_guide_fix_none_desc">Peida vale kava</string>
+    <string name="live_guide_fix_search_hint">Otsi kanalit</string>
+    <string name="live_guide_fix_no_suggestions">Sarnaseid kanaleid pole. Otsi nime järgi.</string>
+    <string name="live_guide_fix_no_results">Kanaleid ei leitud</string>
+    <string name="live_guide_fix_offset_title">Kava ajad</string>
+    <string name="live_guide_fix_offset_desc">Nihutab kõiki %1$s saateid. Kasuta, kui saated algavad varem või hiljem kui märgitud.</string>
+    <string name="live_guide_fix_earlier">Varem</string>
+    <string name="live_guide_fix_later">Hiljem</string>
+    <string name="settings_iptv_start_last_channel">Alusta viimasest kanalist</string>
+    <string name="settings_iptv_start_last_channel_desc">Rakenduse avamisel mängib viimati vaadatud kanal täisekraanil</string>
+</resources>

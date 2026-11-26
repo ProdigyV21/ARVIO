@@ -77,6 +77,7 @@ fun ProgramCell(
     focusable: Boolean = true,
     renderContent: Boolean = true,
     isCatchupSupported: Boolean = false,
+    isReminded: Boolean = false,
     onClick: () -> Unit,
     onFocused: () -> Unit = {},
     onMoveLeft: () -> Boolean = { false },
@@ -95,7 +96,8 @@ fun ProgramCell(
         LocalLayoutDirection.current == LayoutDirection.Ltr) {
         ChannelProgrammeCanvas(program, width, rowHeight, isNow, isPast,
             isCatchupSupported, contentStartOffsetPx, onClick, modifier,
-            nowProgress = if (isNow) liveProgrammeProgress(program, clockTickMillis) else 0f)
+            nowProgress = if (isNow) liveProgrammeProgress(program, clockTickMillis) else 0f,
+            isReminded = isReminded)
         return
     }
     val isRtl = LocalLayoutDirection.current == LayoutDirection.Rtl
@@ -149,6 +151,7 @@ fun ProgramCell(
                 val radius = LiveDims.CellRadius.toPx()
                 drawRoundRect(bg, cornerRadius = CornerRadius(radius))
                 if (isNow && nowProgress > 0f) drawLiveProgress(nowProgress, if (focused) Color.Black else progressColor)
+                if (isReminded) drawReminderDot(if (focused) Color.Black else progressColor)
             }
             .then(if (focusable) Modifier.focusable() else Modifier)
             .then(
@@ -186,11 +189,9 @@ fun ProgramCell(
                     AnnotatedString(formatClock(program.startUtcMillis)),
                     program.description?.takeIf { it.isNotBlank() }?.let(::AnnotatedString),
                 )
-                if (isNow || (isPast && isCatchupSupported)) {
-                    onClick {
-                        currentOnClick()
-                        true
-                    }
+                onClick {
+                    currentOnClick()
+                    true
                 }
             }
             .padding(horizontal = 6.dp, vertical = 2.dp),

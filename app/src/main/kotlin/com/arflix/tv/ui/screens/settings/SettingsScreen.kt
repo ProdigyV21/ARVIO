@@ -812,8 +812,8 @@ fun SettingsScreen(
                 }
             } else {
                 // Add-Playlist + M3U rows + Stalker rows + order + VOD search
-                // + EPG actions + favorites-on-home + refresh + clear + fallback logos
-                7 + uiState.iptvPlaylists.size + uiState.iptvStalkerPortals.size
+                // + EPG actions + favorites-on-home + refresh + clear + fallback logos + start in last channel
+                8 + uiState.iptvPlaylists.size + uiState.iptvStalkerPortals.size
             }
             "stream_integrations" -> uiState.streamProviderItems.size
             "home_server" -> uiState.homeServerConnections.size + 3
@@ -1722,6 +1722,9 @@ fun SettingsScreen(
                                                     contentFocusIndex == m3uCount + stalkerCount + 7 -> {
                                                         viewModel.setFallbackChannelLogosEnabled(!uiState.fallbackChannelLogosEnabled)
                                                     }
+                                                    contentFocusIndex == m3uCount + stalkerCount + 8 -> {
+                                                        viewModel.setIptvStartLastChannel(!uiState.iptvStartLastChannel)
+                                                    }
                                                 }
                                             }
                                         }
@@ -2422,6 +2425,8 @@ fun SettingsScreen(
                             onEpgVodActionsToggle = viewModel::setEpgVodActionsEnabled,
                             fallbackChannelLogosEnabled = uiState.fallbackChannelLogosEnabled,
                             onFallbackChannelLogosToggle = viewModel::setFallbackChannelLogosEnabled,
+                            startLastChannelEnabled = uiState.iptvStartLastChannel,
+                            onStartLastChannelToggle = viewModel::setIptvStartLastChannel,
                             favoritesOnHomeEnabled = uiState.iptvFavoritesOnHome,
                             onFavoritesOnHomeToggle = viewModel::setIptvFavoritesOnHome,
                         )
@@ -2488,6 +2493,8 @@ fun SettingsScreen(
                             onEpgVodActionsToggle = viewModel::setEpgVodActionsEnabled,
                             fallbackChannelLogosEnabled = uiState.fallbackChannelLogosEnabled,
                             onFallbackChannelLogosToggle = viewModel::setFallbackChannelLogosEnabled,
+                            startLastChannelEnabled = uiState.iptvStartLastChannel,
+                            onStartLastChannelToggle = viewModel::setIptvStartLastChannel,
                             favoritesOnHomeEnabled = uiState.iptvFavoritesOnHome,
                             onFavoritesOnHomeToggle = viewModel::setIptvFavoritesOnHome,
                         )
@@ -6037,6 +6044,8 @@ private fun MobileSettingsSubPage(
                     onEpgVodActionsToggle = viewModel::setEpgVodActionsEnabled,
                     fallbackChannelLogosEnabled = uiState.fallbackChannelLogosEnabled,
                     onFallbackChannelLogosToggle = viewModel::setFallbackChannelLogosEnabled,
+                    startLastChannelEnabled = uiState.iptvStartLastChannel,
+                    onStartLastChannelToggle = viewModel::setIptvStartLastChannel,
                     favoritesOnHomeEnabled = uiState.iptvFavoritesOnHome,
                     onFavoritesOnHomeToggle = viewModel::setIptvFavoritesOnHome,
                     onMovePlaylistBy = { id, steps -> viewModel.moveIptvPlaylistBy(id, steps) },
@@ -8478,6 +8487,8 @@ internal fun IptvSettings(
     onEpgVodActionsToggle: (Boolean) -> Unit = {},
     fallbackChannelLogosEnabled: Boolean = false,
     onFallbackChannelLogosToggle: (Boolean) -> Unit = {},
+    startLastChannelEnabled: Boolean = false,
+    onStartLastChannelToggle: (Boolean) -> Unit = {},
     favoritesOnHomeEnabled: Boolean = true,
     onFavoritesOnHomeToggle: (Boolean) -> Unit = {},
     // Touch only: a row dragged by its handle moves several places in one go.
@@ -8724,6 +8735,14 @@ internal fun IptvSettings(
                     isFocused = false,
                     onClick = { onFallbackChannelLogosToggle(!fallbackChannelLogosEnabled) },
                 )
+                MobileSettingsRow(
+                    icon = Icons.Default.PlayArrow,
+                    title = stringResource(R.string.settings_iptv_start_last_channel),
+                    subtitle = stringResource(R.string.settings_iptv_start_last_channel_desc),
+                    value = stringResource(if (startLastChannelEnabled) R.string.on else R.string.off),
+                    isFocused = false,
+                    onClick = { onStartLastChannelToggle(!startLastChannelEnabled) },
+                )
             }
             MobileSettingsCategory(title = stringResource(R.string.settings_section_actions)) {
                 val refreshSubtitle = when { isLoading -> stringResource(R.string.settings_refreshing_channels_epg); error != null -> error; playlists.none { it.epgUrl.isNotBlank() || it.epgUrls.orEmpty().isNotEmpty() } -> stringResource(R.string.settings_reload_playlists_now); else -> stringResource(R.string.settings_reload_playlist_epg_now) }
@@ -8911,6 +8930,15 @@ internal fun IptvSettings(
                 isFocused = focusedIndex == trailingBase + 6,
                 onToggle = onFallbackChannelLogosToggle,
                 modifier = Modifier.settingsFocusSlot(trailingBase + 6),
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+            SettingsToggleRow(
+                title = stringResource(R.string.settings_iptv_start_last_channel),
+                subtitle = stringResource(R.string.settings_iptv_start_last_channel_desc),
+                isEnabled = startLastChannelEnabled,
+                isFocused = focusedIndex == trailingBase + 7,
+                onToggle = onStartLastChannelToggle,
+                modifier = Modifier.settingsFocusSlot(trailingBase + 7),
             )
             if (isLoading && !progressText.isNullOrBlank()) {
                 Spacer(modifier = Modifier.height(12.dp))

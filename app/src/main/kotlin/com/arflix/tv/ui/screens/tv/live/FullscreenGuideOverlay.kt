@@ -106,6 +106,7 @@ internal fun FullscreenGuideOverlay(
     onDismiss: () -> Unit,
     onProgramSelect: (IptvProgram?) -> Unit,
     onLeftClick: (() -> Unit)? = null,
+    onProgramInfo: (IptvProgram) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     if (channel == null) return
@@ -268,6 +269,7 @@ internal fun FullscreenGuideOverlay(
                     isTouchDevice = isTouchDevice,
                     onDismiss = onDismiss,
                     onProgramSelect = onProgramSelect,
+                    onProgramInfo = onProgramInfo,
                 )
             }
         }
@@ -289,6 +291,7 @@ private fun FullscreenGuideContent(
     isTouchDevice: Boolean,
     onDismiss: () -> Unit,
     onProgramSelect: (IptvProgram?) -> Unit,
+    onProgramInfo: (IptvProgram) -> Unit,
 ) {
     Column(
         modifier = Modifier.fillMaxSize(),
@@ -398,7 +401,7 @@ private fun FullscreenGuideContent(
                                 GuideProgramState.PastPlayable,
                                 GuideProgramState.Live -> onProgramSelect(item.program)
                                 GuideProgramState.PastUnavailable,
-                                GuideProgramState.Future -> Unit
+                                GuideProgramState.Future -> onProgramInfo(item.program)
                             }
                         },
                     )

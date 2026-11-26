@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="live_menu_fix_guide">گائیڈ درست کریں</string>
+    <string name="live_guide_fix_title">گائیڈ درست کریں</string>
+    <string name="live_guide_fix_source_heading">اس کی گائیڈ استعمال کریں</string>
+    <string name="live_guide_fix_automatic">خودکار</string>
+    <string name="live_guide_fix_automatic_desc">آپ کے فراہم کنندہ کی ملائی گئی گائیڈ</string>
+    <string name="live_guide_fix_none">کوئی گائیڈ نہیں</string>
+    <string name="live_guide_fix_none_desc">غلط گائیڈ چھپائیں</string>
+    <string name="live_guide_fix_search_hint">چینل تلاش کریں</string>
+    <string name="live_guide_fix_no_suggestions">کوئی ملتے جلتے چینل نہیں۔ نام سے تلاش کریں۔</string>
+    <string name="live_guide_fix_no_results">کوئی چینل نہیں ملا</string>
+    <string name="live_guide_fix_offset_title">گائیڈ کے اوقات</string>
+    <string name="live_guide_fix_offset_desc">%1$s کے ہر پروگرام کو آگے پیچھے کرتا ہے۔ جب پروگرام بتائے گئے وقت سے پہلے یا بعد میں شروع ہوں تو اسے استعمال کریں۔</string>
+    <string name="live_guide_fix_earlier">پہلے</string>
+    <string name="live_guide_fix_later">بعد میں</string>
+    <string name="settings_iptv_start_last_channel">آخری چینل پر شروع کریں</string>
+    <string name="settings_iptv_start_last_channel_desc">ایپ کھولنے پر آپ کا آخری دیکھا گیا چینل پوری اسکرین پر چلتا ہے</string>
+</resources>

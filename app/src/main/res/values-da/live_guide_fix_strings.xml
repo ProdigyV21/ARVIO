@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="live_menu_fix_guide">Ret guide</string>
+    <string name="live_guide_fix_title">Ret guide</string>
+    <string name="live_guide_fix_source_heading">Brug guiden fra</string>
+    <string name="live_guide_fix_automatic">Automatisk</string>
+    <string name="live_guide_fix_automatic_desc">Guiden din udbyder matchede</string>
+    <string name="live_guide_fix_none">Ingen guide</string>
+    <string name="live_guide_fix_none_desc">Skjul en forkert guide</string>
+    <string name="live_guide_fix_search_hint">Søg efter en kanal</string>
+    <string name="live_guide_fix_no_suggestions">Ingen lignende kanaler. Søg efter en ved navn.</string>
+    <string name="live_guide_fix_no_results">Ingen kanaler fundet</string>
+    <string name="live_guide_fix_offset_title">Tider i guiden</string>
+    <string name="live_guide_fix_offset_desc">Flytter alle programmer i %1$s. Brug det, når programmer starter tidligere eller senere end angivet.</string>
+    <string name="live_guide_fix_earlier">Tidligere</string>
+    <string name="live_guide_fix_later">Senere</string>
+    <string name="settings_iptv_start_last_channel">Start på sidste kanal</string>
+    <string name="settings_iptv_start_last_channel_desc">Når appen åbnes, afspilles den kanal, du så sidst, i fuld skærm</string>
+</resources>

@@ -245,6 +245,8 @@ fun AppNavigation(
 ) {
     // Activity-scoped results survive Home/Library navigation and remain profile-scoped internally.
     val calendarViewModel: ReleaseCalendarViewModel = hiltViewModel()
+    // Activity-scoped: the "start in last channel" choice is made once per app launch.
+    val liveTvStartup: com.arflix.tv.ui.screens.tv.LiveTvStartupViewModel = hiltViewModel()
     // Live TV carries no age ratings: a kids profile loses the tab and every way into it.
     val isKidsProfile = currentProfile?.isKidsProfile == true
     SideEffect { KidsNavigation.hideLiveTv = isKidsProfile }
@@ -326,6 +328,17 @@ fun AppNavigation(
 
         // Home screen
         composable(Screen.Home.route) {
+            // Settings > TV > Start in last channel: the first Home of a launch hands over
+            // to that channel, full screen. Back from it lands on this Home.
+            LaunchedEffect(currentProfile?.id) {
+                if (liveTvStartup.decided || currentProfile == null) return@LaunchedEffect
+                liveTvStartup.decided = true
+                if (isKidsProfile) return@LaunchedEffect
+                val channelId = liveTvStartup.startupChannelId() ?: return@LaunchedEffect
+                // A link the app was opened with (or a quick tap elsewhere) wins.
+                if (navController.currentDestination?.route != Screen.Home.route) return@LaunchedEffect
+                navigateTopLevel(Screen.Tv.createRoute(channelId))
+            }
             NavigationRailScreen(navigationRailInset, bottomInset = navigationRailBottomInset) {
               CalendarIdlePreload(calendarViewModel, currentProfile?.id) {
                 val upcoming by calendarViewModel.homeUpcomingItems.collectAsState()

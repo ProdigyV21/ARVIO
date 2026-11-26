@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="live_menu_fix_guide">Corectează ghidul</string>
+    <string name="live_guide_fix_title">Corectează ghidul</string>
+    <string name="live_guide_fix_source_heading">Folosește ghidul de la</string>
+    <string name="live_guide_fix_automatic">Automat</string>
+    <string name="live_guide_fix_automatic_desc">Ghidul asociat de furnizor</string>
+    <string name="live_guide_fix_none">Fără ghid</string>
+    <string name="live_guide_fix_none_desc">Ascunde un ghid greșit</string>
+    <string name="live_guide_fix_search_hint">Caută un canal</string>
+    <string name="live_guide_fix_no_suggestions">Nu există canale similare. Caută după nume.</string>
+    <string name="live_guide_fix_no_results">Nu s-au găsit canale</string>
+    <string name="live_guide_fix_offset_title">Orele din ghid</string>
+    <string name="live_guide_fix_offset_desc">Mută fiecare emisiune din %1$s. Folosește când emisiunile încep mai devreme sau mai târziu decât e afișat.</string>
+    <string name="live_guide_fix_earlier">Mai devreme</string>
+    <string name="live_guide_fix_later">Mai târziu</string>
+    <string name="settings_iptv_start_last_channel">Pornește pe ultimul canal</string>
+    <string name="settings_iptv_start_last_channel_desc">La deschiderea aplicației rulează ultimul canal urmărit, pe tot ecranul</string>
+</resources>

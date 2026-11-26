@@ -94,3 +94,13 @@ test('score alerts: goals and full time after a baseline, never for the watched 
   assert.equal(x.detectScoreAlerts(states(x.followedScores([score('1', 50, 48, 'live', 'Basketball')], follows)), basket).length, 0);
   assert.ok(x.anyActiveGame(goal, now));
 });
+
+test('any channel fails over to its other copies by guide id or name without quality tags', () => {
+  const failed = { ...ch('a', 'NL: NPO 1 HD'), tvgId: 'npo1.nl' };
+  const all = [failed, { ...ch('b', 'NPO 1 FHD'), tvgId: 'NPO1.nl' }, ch('c', 'NL: NPO 1 SD'), ch('d', 'NPO 2 HD'), ch('e', 'RTL 4')];
+  const failover = x.channelCopyFailover(failed, all);
+  assert.deepEqual(plain(failover.channels.map(c => c.id)), ['a', 'b', 'c']);
+  assert.equal(failover.eventId, 'channel:a');
+  assert.equal(x.nextFailover(failover, 'a').channel.id, 'b');
+  assert.equal(x.channelCopyFailover(ch('e', 'RTL 4'), all), undefined);
+});

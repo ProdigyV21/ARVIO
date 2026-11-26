@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="live_menu_fix_guide">Rekebisha mwongozo</string>
+    <string name="live_guide_fix_title">Rekebisha mwongozo</string>
+    <string name="live_guide_fix_source_heading">Tumia mwongozo wa</string>
+    <string name="live_guide_fix_automatic">Kiotomatiki</string>
+    <string name="live_guide_fix_automatic_desc">Mwongozo ambao mtoa huduma wako alilinganisha</string>
+    <string name="live_guide_fix_none">Hakuna mwongozo</string>
+    <string name="live_guide_fix_none_desc">Ficha mwongozo usio sahihi</string>
+    <string name="live_guide_fix_search_hint">Tafuta chaneli</string>
+    <string name="live_guide_fix_no_suggestions">Hakuna chaneli zinazofanana. Tafuta kwa jina.</string>
+    <string name="live_guide_fix_no_results">Hakuna chaneli zilizopatikana</string>
+    <string name="live_guide_fix_offset_title">Saa za mwongozo</string>
+    <string name="live_guide_fix_offset_desc">Husogeza kila kipindi cha %1$s. Tumia wakati vipindi vinaanza mapema au baadaye kuliko ilivyoorodheshwa.</string>
+    <string name="live_guide_fix_earlier">Mapema</string>
+    <string name="live_guide_fix_later">Baadaye</string>
+    <string name="settings_iptv_start_last_channel">Anza kwenye chaneli ya mwisho</string>
+    <string name="settings_iptv_start_last_channel_desc">Kufungua programu kunacheza chaneli uliyotazama mwisho, skrini nzima</string>
+</resources>

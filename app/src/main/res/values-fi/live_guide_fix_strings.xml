@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="live_menu_fix_guide">Korjaa opas</string>
+    <string name="live_guide_fix_title">Korjaa opas</string>
+    <string name="live_guide_fix_source_heading">Käytä tämän kanavan opasta</string>
+    <string name="live_guide_fix_automatic">Automaattinen</string>
+    <string name="live_guide_fix_automatic_desc">Palveluntarjoajan yhdistämä opas</string>
+    <string name="live_guide_fix_none">Ei opasta</string>
+    <string name="live_guide_fix_none_desc">Piilota väärä opas</string>
+    <string name="live_guide_fix_search_hint">Hae kanavaa</string>
+    <string name="live_guide_fix_no_suggestions">Ei samankaltaisia kanavia. Hae nimellä.</string>
+    <string name="live_guide_fix_no_results">Kanavia ei löytynyt</string>
+    <string name="live_guide_fix_offset_title">Oppaan ajat</string>
+    <string name="live_guide_fix_offset_desc">Siirtää jokaista %1$s-ohjelmaa. Käytä, kun ohjelmat alkavat ilmoitettua aiemmin tai myöhemmin.</string>
+    <string name="live_guide_fix_earlier">Aiemmin</string>
+    <string name="live_guide_fix_later">Myöhemmin</string>
+    <string name="settings_iptv_start_last_channel">Aloita viimeisimmältä kanavalta</string>
+    <string name="settings_iptv_start_last_channel_desc">Sovelluksen avaaminen toistaa viimeksi katsotun kanavan koko näytöllä</string>
+</resources>

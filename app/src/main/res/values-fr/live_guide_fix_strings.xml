@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="live_menu_fix_guide">Corriger le guide</string>
+    <string name="live_guide_fix_title">Corriger le guide</string>
+    <string name="live_guide_fix_source_heading">Utiliser le guide de</string>
+    <string name="live_guide_fix_automatic">Automatique</string>
+    <string name="live_guide_fix_automatic_desc">Le guide associé par votre fournisseur</string>
+    <string name="live_guide_fix_none">Aucun guide</string>
+    <string name="live_guide_fix_none_desc">Masquer un guide erroné</string>
+    <string name="live_guide_fix_search_hint">Rechercher une chaîne</string>
+    <string name="live_guide_fix_no_suggestions">Aucune chaîne similaire. Recherchez-en une par nom.</string>
+    <string name="live_guide_fix_no_results">Aucune chaîne trouvée</string>
+    <string name="live_guide_fix_offset_title">Horaires du guide</string>
+    <string name="live_guide_fix_offset_desc">Décale tous les programmes de %1$s. À utiliser quand les émissions commencent plus tôt ou plus tard qu’indiqué.</string>
+    <string name="live_guide_fix_earlier">Plus tôt</string>
+    <string name="live_guide_fix_later">Plus tard</string>
+    <string name="settings_iptv_start_last_channel">Démarrer sur la dernière chaîne</string>
+    <string name="settings_iptv_start_last_channel_desc">À l’ouverture, l’app lance la dernière chaîne regardée en plein écran</string>
+</resources>

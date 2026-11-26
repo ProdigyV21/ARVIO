@@ -38,6 +38,13 @@ export function useProgressTracking({ activeProfileId, addons, canAdvance, item,
       }).catch(() => {
         if (trackingWarningShown || authClient.session?.userId !== userId) return;
         trackingWarningShown = true;
+        // This effect restarts for every source switch and episode: without a
+        // shared cooldown one outage repeated the same toast all evening.
+        // (Kept on globalThis so it survives remounts of the player.)
+        const shared = globalThis as typeof globalThis & { arvioTrackingWarningAt?: number };
+        const now = Date.now();
+        if (now - (shared.arvioTrackingWarningAt ?? -Infinity) < 30 * 60_000) return;
+        shared.arvioTrackingWarningAt = now;
         onToast("A tracking service could not save playback. Check your tracking connections.");
       });
     };

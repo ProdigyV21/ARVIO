@@ -16,7 +16,13 @@ import { ChannelLogo } from "@/components/livetv/ChannelLogo";
 import { ChannelProgramInfo } from "@/components/livetv/ChannelProgramInfo";
 import { ChannelRow, GuideGrid, type GuideCallbacks } from "@/components/livetv/GuideGrid";
 import { ChannelMenu, type ChannelMenuState } from "@/components/livetv/ChannelMenu";
+import { GuideFixDialog } from "@/components/livetv/GuideFixDialog";
+import { peekStartupChannel, takeStartupChannel } from "@/lib/liveTvStartup";
+import { applyGuideFixes, guideChannelOf, normalizeGuideOffsets, type GuideFixes } from "@/lib/iptvGuideFixes";
 import { LiveZapOverlay } from "@/components/livetv/LiveZapOverlay";
+import { ProgrammeInfo, type ProgrammeInfoState } from "@/components/livetv/ProgrammeInfo";
+import { nextShowOf, programmeReminder, programmeReminderId, remindedProgrammeIds, withProgrammeReminder } from "@/lib/programmeReminders";
+import { useSportsPreferences } from "@/lib/sportsPreferences";
 import { PlaylistErrors, PlaylistManager, type PlaylistError } from "@/components/livetv/PlaylistManager";
 import { channelIdentityIndex, normalizeTvSession, resolveChannelReferences } from "@/lib/iptvSession";
 import { IPTV_SNAPSHOT_TTL_MS, iptvPlaylistSignature } from "@/lib/iptv";
@@ -114,6 +120,9 @@ export function LiveTvScreen() {
   const [catchup, setCatchup] = useState<{ channelId: string; programs: CatchupProgram[]; loading: boolean } | null>(null);
   const [archiveOpen, setArchiveOpen] = useState(false);
   const [menu, setMenu] = useState<ChannelMenuState | null>(null);
+  const [programmeInfo, setProgrammeInfo] = useState<ProgrammeInfoState | null>(null);
+  const { reminders, updateReminders } = useSportsPreferences(authClient, activeProfile?.id);
+  const remindedProgrammes = useMemo(() => remindedProgrammeIds(reminders), [reminders]);
   const [zapDigits, setZapDigits] = useState("");
   const [zapInfo, setZapInfo] = useState<IptvChannel | null>(null);
   const tvSession = useMemo(() => normalizeTvSession(settings.iptvTvSession), [settings.iptvTvSession]);
@@ -221,8 +230,20 @@ export function LiveTvScreen() {
     if (activeCategory.startsWith("group:")) return applyChannelOrder(sorted, settings.iptvChannelOrder?.[activeCategory.slice(6)]);
     return sorted;
   }, [activeCategory, channels, favoriteChannels, recentChannels, groups, settings.iptvSortOrder, settings.iptvChannelOrder]);
+  // The user's guide fixes (another channel's guide, none, or a time correction) apply
+  // where the guide is shown; the loaded guide stays as the provider sent it.
+  const guideFixes = useMemo<GuideFixes>(() => ({ sources: settings.iptvGuideSources ?? {}, offsets: settings.iptvGuideOffsets ?? {} }),
+    [settings.iptvGuideSources, settings.iptvGuideOffsets]);
+  const guideFixesRef = useRef(guideFixes);
+  guideFixesRef.current = guideFixes;
   // Search also matches the titles of programmes whose guide is loaded.
-  const nowNext = iptvSnapshot.nowNext;
+  const nowNext = useMemo(() => applyGuideFixes(guideFixes, iptvSnapshot.nowNext), [guideFixes, iptvSnapshot.nowNext]);
+  const [guideFixChannel, setGuideFixChannel] = useState<IptvChannel | null>(null);
+  const sourceNames = useMemo(() => Object.fromEntries([
+    ...playlists.map((playlist) => [playlist.id, playlist.name] as const),
+    ...portals.map((portal) => [portal.id, portal.name || portal.id] as const)
+  ]), [playlists, portals]);
+  const menuNextShow = menu ? nextShowOf(nowNext[menu.channel.id]) : undefined;
   const needle = query.trim().toLowerCase();
   const visibleChannels = useMemo(() => needle
     ? categoryChannels.filter((channel) => channelMatchesQuery(channel, needle, nowNext[channel.id], hasGroupNames ? groupNames?.[groupKey(channel)] : undefined))
@@ -268,6 +289,15 @@ export function LiveTvScreen() {
     if (!categoriesOpenByDefault(window.innerWidth)) setGroupsOpen(false);
   }, [lastChannelKey, playChannel, activeChannel?.id]);
 
+  // Start in last channel: play it as soon as the playlist knows it.
+  useEffect(() => {
+    const startupId = peekStartupChannel();
+    if (!startupId || !allChannels.length) return;
+    const channel = allChannels.find((item) => item.id === startupId);
+    takeStartupChannel();
+    if (channel) watchChannel(channel);
+  }, [allChannels, watchChannel]);
+
   // Catch-up listings for the selected channel (channels the panel archives).
   useEffect(() => {
     if (!archiveOpen || !selectedChannel?.catchupDays || selectedChannel.catchupType !== "xtream") {
@@ -294,9 +324,18 @@ export function LiveTvScreen() {
   const nowNextRef = useRef(nowNext);
   nowNextRef.current = nowNext;
   const [guideSettled, setGuideSettled] = useState<Set<string>>(() => new Set());
-  const requestGuide = useCallback((channel: IptvChannel) => {
-    const entry = nowNextRef.current[channel.id];
+  const allChannelsRef = useRef(allChannels);
+  allChannelsRef.current = allChannels;
+  const requestGuide = useCallback((requested: IptvChannel) => {
+    const entry = nowNextRef.current[requested.id];
     if (entry?.now && entry.now.endUtcMillis > Date.now()) return;
+    // A fixed channel loads its source's guide; one set to "no guide" loads nothing.
+    const guideId = guideChannelOf(guideFixesRef.current, requested.id);
+    const channel = !guideId ? undefined : guideId === requested.id ? requested : allChannelsRef.current.find((item) => item.id === guideId);
+    if (!channel) {
+      setGuideSettled((current) => current.has(requested.id) ? current : new Set(current).add(requested.id));
+      return;
+    }
     guideQueueRef.current.set(channel.id, channel);
     if (guideTimerRef.current) return;
     guideTimerRef.current = window.setTimeout(() => {
@@ -304,9 +343,12 @@ export function LiveTvScreen() {
       const batch = Array.from(guideQueueRef.current.values());
       guideQueueRef.current.clear();
       if (!batch.length) return;
+      // Rows showing another channel's guide settle with it.
+      const settledIds = batch.map((item) => item.id);
+      for (const [target, source] of Object.entries(guideFixesRef.current.sources)) if (settledIds.includes(source)) settledIds.push(target);
       void loadIptvGuide(batch).finally(() => setGuideSettled((current) => {
         const next = new Set(current);
-        for (const item of batch) next.add(item.id);
+        for (const id of settledIds) next.add(id);
         return next;
       }));
     }, GUIDE_BATCH_DELAY_MS);
@@ -365,6 +407,7 @@ export function LiveTvScreen() {
     onCatchup: (channel, program) => playCatchupRef.current(channel, program),
     onToggleFavorite: (channel) => toggleFavorite(channel.id),
     onMenu: (channel, anchor) => setMenu({ channel, anchor }),
+    onProgramInfo: (channel, program, anchor) => setProgrammeInfo({ channel, program, anchor }),
     groupName: groupNameFor
   }), [requestGuide, toggleFavorite, groupNameFor]);
 
@@ -655,6 +698,7 @@ export function LiveTvScreen() {
                 clockFormat={settings.clockFormat}
                 namePrefix={channelNamePrefix}
                 callbacks={guideCallbacks}
+                reminded={remindedProgrammes}
               />
             )}
             </>}
@@ -736,11 +780,46 @@ export function LiveTvScreen() {
         favorite={favoriteIds.has(menu.channel.id)}
         canMoveUp={menuFavoriteIndex > 0}
         canMoveDown={menuFavoriteIndex >= 0 && menuFavoriteIndex < favorites.length - 1}
+        nextShowTitle={menuNextShow?.title}
+        onNextShow={() => { if (menuNextShow) setProgrammeInfo({ channel: menu.channel, program: menuNextShow, anchor: menu.anchor }); }}
         onPlay={() => watchChannel(menu.channel)}
         onToggleFavorite={() => toggleFavorite(menu.channel.id)}
         onMove={(direction) => moveFavorite(menu.channel.id, direction)}
         onHideGroup={() => hideChannelGroup(menu.channel)}
+        onFixGuide={() => setGuideFixChannel(menu.channel)}
         onClose={() => setMenu(null)}
+      />}
+      {guideFixChannel && <GuideFixDialog
+        channel={guideFixChannel}
+        channels={allChannels}
+        guide={nowNext}
+        fixes={guideFixes}
+        sourceNames={sourceNames}
+        onPickSource={(sourceId) => {
+          const next = { ...(settingsRef.current.iptvGuideSources ?? {}) };
+          if (sourceId) next[guideFixChannel.id] = sourceId; else delete next[guideFixChannel.id];
+          updateSettings({ iptvGuideSources: next });
+          const source = sourceId ? allChannels.find((item) => item.id === sourceId) : undefined;
+          if (source) requestGuide(source);
+          setGuideFixChannel(null);
+        }}
+        onOffsetChange={(playlistId, minutes) => {
+          updateSettings({ iptvGuideOffsets: normalizeGuideOffsets({ ...(settingsRef.current.iptvGuideOffsets ?? {}), [playlistId]: minutes }) });
+        }}
+        onClose={() => setGuideFixChannel(null)}
+      />}
+      {programmeInfo && <ProgrammeInfo
+        state={programmeInfo}
+        reminded={remindedProgrammes.has(programmeReminderId(programmeInfo.channel.id, programmeInfo.program))}
+        clockFormat={settings.clockFormat}
+        onToggleReminder={() => {
+          const reminder = programmeReminder([programmeInfo.channel.id], programmeInfo.program);
+          if (!reminder) return;
+          const on = !remindedProgrammes.has(reminder.eventId);
+          updateReminders(current => withProgrammeReminder(current, reminder, on));
+        }}
+        onWatch={() => watchChannel(programmeInfo.channel)}
+        onClose={() => setProgrammeInfo(null)}
       />}
       <LiveZapOverlay digits={zapDigits} digitMatch={zapDigitMatch} info={zapInfo} guide={zapInfo ? nowNext[zapInfo.id] : undefined} clockFormat={settings.clockFormat} />
     </div>

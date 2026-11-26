@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="live_menu_fix_guide">Corrigir guia</string>
+    <string name="live_guide_fix_title">Corrigir guia</string>
+    <string name="live_guide_fix_source_heading">Usar o guia de</string>
+    <string name="live_guide_fix_automatic">Automático</string>
+    <string name="live_guide_fix_automatic_desc">O guia que seu provedor associou</string>
+    <string name="live_guide_fix_none">Sem guia</string>
+    <string name="live_guide_fix_none_desc">Ocultar um guia errado</string>
+    <string name="live_guide_fix_search_hint">Pesquisar um canal</string>
+    <string name="live_guide_fix_no_suggestions">Nenhum canal parecido. Pesquise pelo nome.</string>
+    <string name="live_guide_fix_no_results">Nenhum canal encontrado</string>
+    <string name="live_guide_fix_offset_title">Horários do guia</string>
+    <string name="live_guide_fix_offset_desc">Move todos os programas de %1$s. Use quando os programas começam antes ou depois do indicado.</string>
+    <string name="live_guide_fix_earlier">Mais cedo</string>
+    <string name="live_guide_fix_later">Mais tarde</string>
+    <string name="settings_iptv_start_last_channel">Iniciar no último canal</string>
+    <string name="settings_iptv_start_last_channel_desc">Ao abrir o app, o último canal assistido toca em tela cheia</string>
+</resources>

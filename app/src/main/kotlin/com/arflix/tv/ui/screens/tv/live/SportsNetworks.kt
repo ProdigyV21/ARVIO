@@ -147,6 +147,15 @@ internal data class SportsFailover(
     }
 }
 
+/**
+ * The failover for any channel: its other copies (same guide id or name) from
+ * every playlist, the failed one first. Null when there is no other copy.
+ */
+internal fun channelCopyFailover(failed: IptvChannel, copies: List<IptvChannel>): SportsFailover? {
+    val channels = (listOf(failed) + copies).distinctBy { it.id }.take(8)
+    return if (channels.size > 1) SportsFailover("channel:${failed.id}", failed.name, channels) else null
+}
+
 /** The failover for a channel chosen on a game's sheet: the chosen one first, then the others. */
 internal fun sportsFailoverFor(event: SportsGuideEvent, chosen: IptvChannel, candidates: List<IptvChannel>): SportsFailover? {
     val channels = (listOf(chosen) + candidates).distinctBy { it.id }.take(8)

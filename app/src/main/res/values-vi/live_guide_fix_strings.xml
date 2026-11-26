@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="live_menu_fix_guide">Sửa lịch phát sóng</string>
+    <string name="live_guide_fix_title">Sửa lịch phát sóng</string>
+    <string name="live_guide_fix_source_heading">Dùng lịch của</string>
+    <string name="live_guide_fix_automatic">Tự động</string>
+    <string name="live_guide_fix_automatic_desc">Lịch do nhà cung cấp ghép</string>
+    <string name="live_guide_fix_none">Không có lịch</string>
+    <string name="live_guide_fix_none_desc">Ẩn lịch bị sai</string>
+    <string name="live_guide_fix_search_hint">Tìm kênh</string>
+    <string name="live_guide_fix_no_suggestions">Không có kênh tương tự. Hãy tìm theo tên.</string>
+    <string name="live_guide_fix_no_results">Không tìm thấy kênh</string>
+    <string name="live_guide_fix_offset_title">Giờ trong lịch</string>
+    <string name="live_guide_fix_offset_desc">Dời mọi chương trình của %1$s. Dùng khi chương trình bắt đầu sớm hoặc muộn hơn ghi trong lịch.</string>
+    <string name="live_guide_fix_earlier">Sớm hơn</string>
+    <string name="live_guide_fix_later">Muộn hơn</string>
+    <string name="settings_iptv_start_last_channel">Bắt đầu ở kênh cuối</string>
+    <string name="settings_iptv_start_last_channel_desc">Mở ứng dụng sẽ phát kênh bạn xem gần nhất ở chế độ toàn màn hình</string>
+</resources>

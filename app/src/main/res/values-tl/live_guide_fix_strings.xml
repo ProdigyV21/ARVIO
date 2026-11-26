@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="live_menu_fix_guide">Ayusin ang gabay</string>
+    <string name="live_guide_fix_title">Ayusin ang gabay</string>
+    <string name="live_guide_fix_source_heading">Gamitin ang gabay ng</string>
+    <string name="live_guide_fix_automatic">Awtomatiko</string>
+    <string name="live_guide_fix_automatic_desc">Ang gabay na itinugma ng iyong provider</string>
+    <string name="live_guide_fix_none">Walang gabay</string>
+    <string name="live_guide_fix_none_desc">Itago ang maling gabay</string>
+    <string name="live_guide_fix_search_hint">Maghanap ng channel</string>
+    <string name="live_guide_fix_no_suggestions">Walang katulad na channel. Maghanap ayon sa pangalan.</string>
+    <string name="live_guide_fix_no_results">Walang nahanap na channel</string>
+    <string name="live_guide_fix_offset_title">Mga oras sa gabay</string>
+    <string name="live_guide_fix_offset_desc">Inililipat ang bawat programa ng %1$s. Gamitin kapag mas maaga o mas huli nagsisimula ang mga palabas kaysa nakalista.</string>
+    <string name="live_guide_fix_earlier">Mas maaga</string>
+    <string name="live_guide_fix_later">Mamaya</string>
+    <string name="settings_iptv_start_last_channel">Magsimula sa huling channel</string>
+    <string name="settings_iptv_start_last_channel_desc">Pagbukas ng app, pinapatugtog ang huling channel na pinanood mo, full screen</string>
+</resources>

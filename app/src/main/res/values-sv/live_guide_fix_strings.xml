@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="live_menu_fix_guide">Rätta guiden</string>
+    <string name="live_guide_fix_title">Rätta guiden</string>
+    <string name="live_guide_fix_source_heading">Använd guiden från</string>
+    <string name="live_guide_fix_automatic">Automatiskt</string>
+    <string name="live_guide_fix_automatic_desc">Guiden som din leverantör kopplade</string>
+    <string name="live_guide_fix_none">Ingen guide</string>
+    <string name="live_guide_fix_none_desc">Dölj en felaktig guide</string>
+    <string name="live_guide_fix_search_hint">Sök efter en kanal</string>
+    <string name="live_guide_fix_no_suggestions">Inga liknande kanaler. Sök efter namn.</string>
+    <string name="live_guide_fix_no_results">Inga kanaler hittades</string>
+    <string name="live_guide_fix_offset_title">Tider i guiden</string>
+    <string name="live_guide_fix_offset_desc">Flyttar varje program i %1$s. Använd när program börjar tidigare eller senare än angivet.</string>
+    <string name="live_guide_fix_earlier">Tidigare</string>
+    <string name="live_guide_fix_later">Senare</string>
+    <string name="settings_iptv_start_last_channel">Starta på senaste kanalen</string>
+    <string name="settings_iptv_start_last_channel_desc">När appen öppnas spelas kanalen du såg senast i helskärm</string>
+</resources>

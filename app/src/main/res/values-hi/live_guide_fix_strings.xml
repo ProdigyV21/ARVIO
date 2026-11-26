@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="live_menu_fix_guide">गाइड ठीक करें</string>
+    <string name="live_guide_fix_title">गाइड ठीक करें</string>
+    <string name="live_guide_fix_source_heading">इसकी गाइड इस्तेमाल करें</string>
+    <string name="live_guide_fix_automatic">स्वचालित</string>
+    <string name="live_guide_fix_automatic_desc">आपके प्रदाता द्वारा मिलाई गई गाइड</string>
+    <string name="live_guide_fix_none">कोई गाइड नहीं</string>
+    <string name="live_guide_fix_none_desc">गलत गाइड छिपाएं</string>
+    <string name="live_guide_fix_search_hint">चैनल खोजें</string>
+    <string name="live_guide_fix_no_suggestions">कोई मिलते-जुलते चैनल नहीं। नाम से खोजें।</string>
+    <string name="live_guide_fix_no_results">कोई चैनल नहीं मिला</string>
+    <string name="live_guide_fix_offset_title">गाइड का समय</string>
+    <string name="live_guide_fix_offset_desc">%1$s के हर कार्यक्रम को खिसकाता है। जब शो बताए गए समय से पहले या बाद में शुरू हों तब इसका उपयोग करें।</string>
+    <string name="live_guide_fix_earlier">पहले</string>
+    <string name="live_guide_fix_later">बाद में</string>
+    <string name="settings_iptv_start_last_channel">आखिरी चैनल पर शुरू करें</string>
+    <string name="settings_iptv_start_last_channel_desc">ऐप खोलने पर आपका आखिरी देखा चैनल फ़ुल स्क्रीन में चलता है</string>
+</resources>

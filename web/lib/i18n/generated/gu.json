@@ -1613,5 +1613,18 @@
   "Clear filter": "ફિલ્ટર સાફ કરો",
   "No categories match \"{value0}\".": "\"{value0}\" સાથે કોઈ કેટેગરી મેળ ખાતી નથી.",
   "Chromecast": "Chromecast",
-  "This browser can't play some sources, so ARVIO tries the next one.": "આ બ્રાઉઝર કેટલાક સ્રોતો ચલાવી શકતું નથી, તેથી ARVIO આગલો અજમાવે છે."
+  "This browser can't play some sources, so ARVIO tries the next one.": "આ બ્રાઉઝર કેટલાક સ્રોતો ચલાવી શકતું નથી, તેથી ARVIO આગલો અજમાવે છે.",
+  "Fix guide": "માર્ગદર્શિકા સુધારો",
+  "Guide times": "માર્ગદર્શિકાના સમય",
+  "Moves every programme of {value0}. Use it when shows start earlier or later than listed.": "{value0} ના દરેક કાર્યક્રમને ખસેડે છે. જ્યારે શો દર્શાવેલ સમય કરતાં વહેલા અથવા મોડા શરૂ થાય ત્યારે તેનો ઉપયોગ કરો.",
+  "Earlier": "વહેલું",
+  "Use the guide of": "આની માર્ગદર્શિકા વાપરો",
+  "Search for a channel": "ચેનલ શોધો",
+  "The guide your provider matched": "તમારા પ્રદાતાએ જોડેલી માર્ગદર્શિકા",
+  "No guide": "કોઈ માર્ગદર્શિકા નહીં",
+  "Hide a guide that is wrong": "ખોટી માર્ગદર્શિકા છુપાવો",
+  "No channels found": "કોઈ ચેનલ મળી નથી",
+  "No similar channels. Search for one by name.": "કોઈ સમાન ચેનલ નથી. નામથી શોધો.",
+  "Start in last channel": "છેલ્લી ચેનલમાં શરૂ કરો",
+  "Opening the app plays the channel you watched last, full screen": "એપ ખોલતાં તમે છેલ્લે જોયેલી ચેનલ પૂર્ણ સ્ક્રીનમાં ચાલે છે"
 }

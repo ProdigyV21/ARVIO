@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="live_menu_fix_guide">గైడ్‌ను సరిచేయండి</string>
+    <string name="live_guide_fix_title">గైడ్‌ను సరిచేయండి</string>
+    <string name="live_guide_fix_source_heading">దీని గైడ్‌ను ఉపయోగించండి</string>
+    <string name="live_guide_fix_automatic">ఆటోమేటిక్</string>
+    <string name="live_guide_fix_automatic_desc">మీ ప్రొవైడర్ జత చేసిన గైడ్</string>
+    <string name="live_guide_fix_none">గైడ్ లేదు</string>
+    <string name="live_guide_fix_none_desc">తప్పు గైడ్‌ను దాచండి</string>
+    <string name="live_guide_fix_search_hint">ఛానెల్ కోసం వెతకండి</string>
+    <string name="live_guide_fix_no_suggestions">సమానమైన ఛానెల్‌లు లేవు. పేరుతో వెతకండి.</string>
+    <string name="live_guide_fix_no_results">ఛానెల్‌లు కనుగొనబడలేదు</string>
+    <string name="live_guide_fix_offset_title">గైడ్ సమయాలు</string>
+    <string name="live_guide_fix_offset_desc">%1$s లోని ప్రతి కార్యక్రమాన్ని జరుపుతుంది. కార్యక్రమాలు పేర్కొన్న సమయం కంటే ముందు లేదా తర్వాత మొదలైతే దీన్ని ఉపయోగించండి.</string>
+    <string name="live_guide_fix_earlier">ముందుగా</string>
+    <string name="live_guide_fix_later">తర్వాత</string>
+    <string name="settings_iptv_start_last_channel">చివరి ఛానెల్‌లో ప్రారంభించండి</string>
+    <string name="settings_iptv_start_last_channel_desc">యాప్ తెరిస్తే మీరు చివరిగా చూసిన ఛానెల్ పూర్తి స్క్రీన్‌లో ప్లే అవుతుంది</string>
+</resources>

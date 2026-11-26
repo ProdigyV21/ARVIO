@@ -402,7 +402,17 @@ data class IptvCloudProfileState(
      * -> name. Keys use the playlist's own group name, like [hiddenGroups] and
      * [channelOrder]; only the label shown in Live TV changes.
      */
-    val groupNames: Map<String, String> = emptyMap()
+    val groupNames: Map<String, String> = emptyMap(),
+    /** Channel id -> channel whose guide it shows, or "none" ([IptvGuideFixes.sources]). */
+    val guideSources: Map<String, String> = emptyMap(),
+    /**
+     * Playlist/portal id -> minutes added to its guide times ([IptvGuideFixes.offsetMinutes]).
+     * Doubles on purpose: JSON numbers from any device parse, and Gson never fails the
+     * whole profile on a fractional value.
+     */
+    val guideOffsets: Map<String, Double> = emptyMap(),
+    /** Open the app straight into the last watched channel, full screen. */
+    val startLastChannel: Boolean = false
 )
 
 /** Longest category display name kept (matches ARVIO Web). */
@@ -1611,6 +1621,60 @@ class IptvRepository @Inject constructor(
             decodeGroupNames(prefs[groupNamesKey()].orEmpty())
         }.distinctUntilChanged()
 
+    /** The user's guide corrections: guide picked per channel and time offset per playlist. */
+    fun observeGuideFixes(): Flow<IptvGuideFixes> =
+        profileManager.activeProfileId.combine(context.settingsDataStore.data) { _, prefs ->
+            decodeGuideFixes(prefs[guideSourcesKey()].orEmpty(), prefs[guideOffsetsKey()].orEmpty())
+        }.distinctUntilChanged()
+
+    /**
+     * Shows [sourceChannelId]'s guide on [channelId]. Null goes back to the guide the
+     * provider matched; [IptvGuideFixes.GUIDE_SOURCE_NONE] shows no guide.
+     */
+    suspend fun setGuideSource(channelId: String, sourceChannelId: String?) {
+        val id = channelId.trim()
+        if (id.isEmpty()) return
+        editLocalIptvSettings { prefs ->
+            val current = decodeGuideFixes(prefs[guideSourcesKey()].orEmpty(), "").sources.toMutableMap()
+            val source = sourceChannelId?.trim().orEmpty()
+            if (source.isEmpty() || source == id) current.remove(id) else current[id] = source
+            if (current.isEmpty()) prefs.remove(guideSourcesKey()) else prefs[guideSourcesKey()] = gson.toJson(current)
+        }
+        invalidationBus.markDirty(CloudSyncScope.IPTV, profileManager.getProfileIdSync(), "guide source")
+    }
+
+    /** Moves every programme time of one playlist's guide by [minutes] (0 removes the correction). */
+    suspend fun setGuideOffset(playlistId: String, minutes: Int) {
+        val id = playlistId.trim()
+        if (id.isEmpty()) return
+        editLocalIptvSettings { prefs ->
+            val current = decodeGuideFixes("", prefs[guideOffsetsKey()].orEmpty()).offsetMinutes.toMutableMap()
+            val normalized = normalizeGuideOffsets(mapOf(id to minutes))[id]
+            if (normalized == null) current.remove(id) else current[id] = normalized
+            if (current.isEmpty()) prefs.remove(guideOffsetsKey()) else prefs[guideOffsetsKey()] = gson.toJson(current)
+        }
+        invalidationBus.markDirty(CloudSyncScope.IPTV, profileManager.getProfileIdSync(), "guide offset")
+    }
+
+    fun observeStartLastChannel(): Flow<Boolean> =
+        profileManager.activeProfileId.combine(context.settingsDataStore.data) { _, prefs ->
+            prefs[startLastChannelKey()] == "true"
+        }.distinctUntilChanged()
+
+    suspend fun setStartLastChannel(enabled: Boolean) {
+        editLocalIptvSettings { prefs ->
+            if (enabled) prefs[startLastChannelKey()] = "true" else prefs.remove(startLastChannelKey())
+        }
+        invalidationBus.markDirty(CloudSyncScope.IPTV, profileManager.getProfileIdSync(), "start last channel")
+    }
+
+    /** The channel to open the app in, when the user turned that on and has watched one. */
+    suspend fun startupChannelId(): String? {
+        val prefs = context.settingsDataStore.data.first()
+        if (prefs[startLastChannelKey()] != "true") return null
+        return decodeTvSessionState(prefs[tvSessionKey()].orEmpty()).lastChannelId.trim().takeIf { it.isNotEmpty() }
+    }
+
     fun observeVodSearchEnabled(): Flow<Boolean> =
         context.settingsDataStore.data.map { prefs ->
             prefs[IPTV_VOD_SEARCH_ENABLED_KEY] ?: true
@@ -2639,13 +2703,16 @@ class IptvRepository @Inject constructor(
             prefs.remove(tvSessionKey())
             prefs.remove(channelOrderKey())
             prefs.remove(groupNamesKey())
+            prefs.remove(guideSourcesKey())
+            prefs.remove(guideOffsetsKey())
             IptvCloudFields.stamp(prefs, profileId, org.json.JSONObject()
                 .put("playlists", org.json.JSONArray()).put("m3uUrl", "").put("epgUrl", "")
                 .put("stalkerPortals", org.json.JSONArray()).put("stalkerPortalUrl", "").put("stalkerMacAddress", "")
                 .put("favoriteGroups", org.json.JSONArray()).put("favoriteChannels", org.json.JSONArray())
                 .put("hiddenGroups", org.json.JSONArray()).put("lockedGroups", org.json.JSONArray())
                 .put("groupOrder", org.json.JSONArray()).put("groupOrderSchema", IPTV_GROUP_ORDER_SCHEMA)
-                .put("channelOrder", org.json.JSONObject()).put("groupNames", org.json.JSONObject()))
+                .put("channelOrder", org.json.JSONObject()).put("groupNames", org.json.JSONObject())
+                .put("guideSources", org.json.JSONObject()).put("guideOffsets", org.json.JSONObject()))
         }
         groupOrderLocallyDirty = true
         cachedStalkerApis = emptyMap()
@@ -4816,6 +4883,9 @@ class IptvRepository @Inject constructor(
             "groupOrder" to json(groupOrderKeyFor(profileId)) { org.json.JSONArray() },
             "channelOrder" to json(channelOrderKeyFor(profileId)) { org.json.JSONObject() },
             "groupNames" to json(groupNamesKeyFor(profileId)) { org.json.JSONObject() },
+            "guideSources" to json(guideSourcesKeyFor(profileId)) { org.json.JSONObject() },
+            "guideOffsets" to json(guideOffsetsKeyFor(profileId)) { org.json.JSONObject() },
+            "startLastChannel" to (prefs[startLastChannelKeyFor(profileId)] == "true"),
             "sortOrder" to normalizeIptvSortOrder(prefs[sortOrderKeyFor(profileId)]),
         )
     }
@@ -4942,6 +5012,28 @@ class IptvRepository @Inject constructor(
     private fun groupNamesKey(): Preferences.Key<String> = profileManager.profileStringKey("iptv_group_names")
     private fun groupNamesKeyFor(profileId: String): Preferences.Key<String> =
         profileManager.profileStringKeyFor(profileId, "iptv_group_names")
+    private fun guideSourcesKey(): Preferences.Key<String> = profileManager.profileStringKey("iptv_guide_sources")
+    private fun guideSourcesKeyFor(profileId: String): Preferences.Key<String> =
+        profileManager.profileStringKeyFor(profileId, "iptv_guide_sources")
+    private fun guideOffsetsKey(): Preferences.Key<String> = profileManager.profileStringKey("iptv_guide_offsets")
+    private fun guideOffsetsKeyFor(profileId: String): Preferences.Key<String> =
+        profileManager.profileStringKeyFor(profileId, "iptv_guide_offsets")
+    private fun startLastChannelKey(): Preferences.Key<String> = profileManager.profileStringKey("iptv_start_last_channel")
+    private fun startLastChannelKeyFor(profileId: String): Preferences.Key<String> =
+        profileManager.profileStringKeyFor(profileId, "iptv_start_last_channel")
+
+    private fun decodeGuideFixes(sourcesRaw: String, offsetsRaw: String): IptvGuideFixes {
+        val mapType = TypeToken.getParameterized(Map::class.java, String::class.java, Any::class.java).type
+        val sources = runCatching {
+            val type = TypeToken.getParameterized(Map::class.java, String::class.java, String::class.java).type
+            if (sourcesRaw.isBlank()) emptyMap() else normalizeGuideSources(gson.fromJson<Map<String, String>>(sourcesRaw, type))
+        }.getOrDefault(emptyMap())
+        val offsets = runCatching {
+            if (offsetsRaw.isBlank()) emptyMap() else normalizeGuideOffsets(gson.fromJson<Map<String, Any?>>(offsetsRaw, mapType))
+        }.getOrDefault(emptyMap())
+        return IptvGuideFixes(sources, offsets)
+    }
+
     private fun tvSessionKey(): Preferences.Key<String> = profileManager.profileStringKey("iptv_tv_session")
     private fun tvSessionKeyFor(profileId: String): Preferences.Key<String> =
         profileManager.profileStringKeyFor(profileId, "iptv_tv_session")
@@ -5141,6 +5233,10 @@ class IptvRepository @Inject constructor(
         val tvSessionRaw = prefs[tvSessionKeyFor(safeProfileId)].orEmpty()
         val channelOrderRaw = prefs[channelOrderKeyFor(safeProfileId)].orEmpty()
         val groupNamesRaw = prefs[groupNamesKeyFor(safeProfileId)].orEmpty()
+        val guideFixes = decodeGuideFixes(
+            prefs[guideSourcesKeyFor(safeProfileId)].orEmpty(),
+            prefs[guideOffsetsKeyFor(safeProfileId)].orEmpty(),
+        )
         val playlists = decodePlaylists(playlistsRaw)
         val stalkerPortals = readStalkerPortalsFor(prefs, safeProfileId)
         val validSourceIds = buildSet {
@@ -5188,7 +5284,10 @@ class IptvRepository @Inject constructor(
             playlists = playlists,
             tvSession = decodeTvSessionState(tvSessionRaw),
             channelOrder = decodeChannelOrder(channelOrderRaw),
-            groupNames = decodeGroupNames(groupNamesRaw)
+            groupNames = decodeGroupNames(groupNamesRaw),
+            guideSources = guideFixes.sources,
+            guideOffsets = guideFixes.offsetMinutes.mapValues { it.value.toDouble() },
+            startLastChannel = prefs[startLastChannelKeyFor(safeProfileId)] == "true"
         )
     }
 
@@ -5255,6 +5354,10 @@ class IptvRepository @Inject constructor(
         // Same Portal 1 migration as the other category keys.
         val normalizedGroupNames = normalizeIptvGroupNames(runCatching { state.groupNames }.getOrNull())
             .mapKeys { (key, _) -> StalkerPortalSupport.migrateLegacyPlaylistGroupKey(key) }
+        val normalizedGuideSources = normalizeGuideSources(runCatching { state.guideSources }.getOrNull())
+        val normalizedGuideOffsets = normalizeGuideOffsets(runCatching { state.guideOffsets }.getOrNull())
+        @Suppress("SENSELESS_COMPARISON")
+        val importedStartLastChannel = runCatching { state.startLastChannel == true }.getOrDefault(false)
         val normalizedFavoriteChannels = state.favoriteChannels
             .map(StalkerPortalSupport::migrateLegacyChannelId)
             .filter { it.isNotBlank() }
@@ -5308,6 +5411,12 @@ class IptvRepository @Inject constructor(
             else prefs[channelOrderKeyFor(safeProfileId)] = gson.toJson(normalizedChannelOrder)
             if (normalizedGroupNames.isEmpty()) prefs.remove(groupNamesKeyFor(safeProfileId))
             else prefs[groupNamesKeyFor(safeProfileId)] = gson.toJson(normalizedGroupNames)
+            if (normalizedGuideSources.isEmpty()) prefs.remove(guideSourcesKeyFor(safeProfileId))
+            else prefs[guideSourcesKeyFor(safeProfileId)] = gson.toJson(normalizedGuideSources)
+            if (normalizedGuideOffsets.isEmpty()) prefs.remove(guideOffsetsKeyFor(safeProfileId))
+            else prefs[guideOffsetsKeyFor(safeProfileId)] = gson.toJson(normalizedGuideOffsets)
+            if (importedStartLastChannel) prefs[startLastChannelKeyFor(safeProfileId)] = "true"
+            else prefs.remove(startLastChannelKeyFor(safeProfileId))
         }
         if (preservedConcurrentEdit) return true
         groupOrderLocallyDirty = false

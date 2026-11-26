@@ -6,7 +6,7 @@ import { authClient, useAppPick } from "@/lib/store";
 import { useTranslation } from "@/lib/i18n";
 import { setSportsFailover, sportsFailover, sportsWatchingEventId, useSportsPreferences } from "@/lib/sportsPreferences";
 import { loadSportsScores } from "@/lib/sportsArtwork";
-import { anyActiveGame, detectScoreAlerts, failoverCovers, followedScores, nextFailover, SPORTS_SCORE_POLL_IDLE_MS, SPORTS_SCORE_POLL_LIVE_MS,
+import { anyActiveGame, channelCopyFailover, detectScoreAlerts, failoverCovers, followedScores, nextFailover, SPORTS_SCORE_POLL_IDLE_MS, SPORTS_SCORE_POLL_LIVE_MS,
   type SportsScoreAlert, type SportsScoreState } from "@/lib/sportsExtras";
 
 /**
@@ -16,7 +16,9 @@ import { anyActiveGame, detectScoreAlerts, failoverCovers, followedScores, nextF
  */
 export function SportsLiveHost() {
   const translateUi = useTranslation();
-  const { activeProfile, activeChannel, playChannel, setToast } = useAppPick("activeProfile", "activeChannel", "playChannel", "setToast");
+  const { activeProfile, activeChannel, playChannel, setToast, iptvSnapshot } = useAppPick("activeProfile", "activeChannel", "playChannel", "setToast", "iptvSnapshot");
+  const allChannelsRef = useRef(iptvSnapshot.allChannels ?? iptvSnapshot.channels);
+  allChannelsRef.current = iptvSnapshot.allChannels ?? iptvSnapshot.channels;
   const { follows, scoreAlerts } = useSportsPreferences(authClient, activeProfile?.id);
   const [queue, setQueue] = useState<SportsScoreAlert[]>([]);
   const followsTeams = follows.some(f => f.kind === "team");
@@ -58,8 +60,12 @@ export function SportsLiveHost() {
   useEffect(() => {
     // The player's final failure event does not bubble; listen in the capture phase.
     const onFailed = () => {
-      const failover = sportsFailover(), failedId = channelRef.current?.id;
-      if (!failover || !failedId || !failoverCovers(failover, failedId)) return;
+      const failed = channelRef.current, failedId = failed?.id;
+      if (!failed || !failedId) return;
+      // Not only games: any channel moves on to another copy of itself, each tried once.
+      const current = sportsFailover();
+      const failover = failoverCovers(current, failedId) ? current : channelCopyFailover(failed, allChannelsRef.current ?? []);
+      if (!failover) return;
       const next = nextFailover(failover, failedId);
       if (!next) return;
       setSportsFailover(next.failover, sportsWatchingEventId());

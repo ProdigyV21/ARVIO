@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="live_menu_watch_from_start">Vanaf het begin kijken</string>
+    <string name="live_menu_next_show">Volgend programma · Herinner me</string>
+    <string name="live_picture_fit">Beeld: passend</string>
+    <string name="live_picture_fill">Beeld: vullend</string>
+    <string name="live_picture_stretch">Beeld: uitgerekt</string>
+    <string name="live_sleep_off">Slaaptimer</string>
+    <string name="live_sleep_minutes">Slaap: %1$d min</string>
+</resources>

@@ -12,6 +12,7 @@ import { discardPendingProgress, flushProgressOutbox, installProgressRetry, pend
 import { mergeTvSessions, normalizeTvSession } from "./iptvSession";
 import { normalizeIptvPlaylist as normalizeRuntimeIptvPlaylist } from "./iptv";
 import { normalizeGroupNames } from "./iptvGroups";
+import { normalizeGuideOffsets, normalizeGuideSources } from "./iptvGuideFixes";
 import { legacyStalkerFields, mergeStalkerPortalEdits, migrateIptvCloudState, migrateLegacyStalkerChannelIds, migrateLegacyStalkerKeys, normalizeStalkerPortals, portalsFromCloud } from "./stalkerPortals";
 import type { StalkerPortalEntry } from "./types";
 import { tmdbImageUrl } from "./mediaImages";
@@ -81,6 +82,11 @@ interface AndroidIptvProfileState {
   channelOrder?: Record<string, string[]>;
   /** { "<playlistId>|<group>": "<display name>" } — category names set by the user. */
   groupNames?: Record<string, string>;
+  /** { "<channelId>": "<source channel id>" | "none" } — the guide a channel shows instead. */
+  guideSources?: Record<string, string>;
+  /** { "<playlistId>": minutes } — guide time correction per playlist/portal. */
+  guideOffsets?: Record<string, number>;
+  startLastChannel?: boolean;
 }
 
 function canUseBackendSync(auth: AuthClient) {
@@ -659,6 +665,9 @@ function iptvFromAndroid(value: unknown, root?: RawPayload): Partial<AppSettings
     groupOrder: (state.groupOrderSchema ?? 0) >= 3 ? stringArray(state.groupOrder) : [],
     iptvChannelOrder: normalizeChannelOrder(state.channelOrder),
     iptvGroupNames: normalizeGroupNames(state.groupNames),
+    iptvGuideSources: normalizeGuideSources(state.guideSources),
+    iptvGuideOffsets: normalizeGuideOffsets(state.guideOffsets),
+    iptvStartLastChannel: state.startLastChannel === true,
     iptvSortOrder: state.sortOrder === "number" || state.sortOrder === "name" ? state.sortOrder : "provider",
     iptvStalkerPortals: stalkerPortals,
     iptvStalkerUrl: legacyStalker.stalkerPortalUrl,
@@ -1232,7 +1241,10 @@ function androidIptvSettings(settings: AppSettings): Record<string, unknown> {
     sortOrder: settings.iptvSortOrder ?? "provider",
     // Only once known, so a browser that never read it cannot blank the TV's.
     ...(settings.iptvChannelOrder !== undefined ? { channelOrder: settings.iptvChannelOrder } : {}),
-    ...(settings.iptvGroupNames !== undefined ? { groupNames: settings.iptvGroupNames } : {})
+    ...(settings.iptvGroupNames !== undefined ? { groupNames: settings.iptvGroupNames } : {}),
+    ...(settings.iptvGuideSources !== undefined ? { guideSources: settings.iptvGuideSources } : {}),
+    ...(settings.iptvGuideOffsets !== undefined ? { guideOffsets: settings.iptvGuideOffsets } : {}),
+    ...(settings.iptvStartLastChannel !== undefined ? { startLastChannel: settings.iptvStartLastChannel } : {})
   };
 }
 
@@ -1240,6 +1252,9 @@ function androidIptvSettings(settings: AppSettings): Record<string, unknown> {
 function sameIptvField(field: string, a: unknown, b: unknown) {
   if (field === "channelOrder") return sameFieldValue(normalizeChannelOrder(a), normalizeChannelOrder(b));
   if (field === "groupNames") return sameFieldValue(normalizeGroupNames(a), normalizeGroupNames(b));
+  if (field === "guideSources") return sameFieldValue(normalizeGuideSources(a), normalizeGuideSources(b));
+  if (field === "guideOffsets") return sameFieldValue(normalizeGuideOffsets(a), normalizeGuideOffsets(b));
+  if (field === "startLastChannel") return (a === true) === (b === true);
   if (field === "stalkerPortals") return sameFieldValue(normalizeStalkerPortals(a), normalizeStalkerPortals(b));
   return sameFieldValue(a, b);
 }
@@ -1289,9 +1304,11 @@ export function mergeIptvSettings(cloudState: Record<string, unknown>, settings:
       portalsMerged = true;
       continue;
     }
-    if (field === "channelOrder" || field === "groupNames") {
-      // Per category: only the categories this browser reordered / renamed (or reset) change.
-      const normalize = (input: unknown): Record<string, unknown> => field === "channelOrder" ? normalizeChannelOrder(input) : normalizeGroupNames(input);
+    if (field === "channelOrder" || field === "groupNames" || field === "guideSources" || field === "guideOffsets") {
+      // Per key: only the categories / channels / playlists this browser changed (or reset) change.
+      const normalize = (input: unknown): Record<string, unknown> => field === "channelOrder" ? normalizeChannelOrder(input)
+        : field === "groupNames" ? normalizeGroupNames(input)
+        : field === "guideSources" ? normalizeGuideSources(input) : normalizeGuideOffsets(input);
       const local = normalize(value);
       const previous = base ? normalize(base[field]) : {};
       const next = base ? normalize(existing[field]) : {};
