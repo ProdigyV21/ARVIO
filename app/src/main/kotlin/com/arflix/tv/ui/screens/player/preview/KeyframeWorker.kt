@@ -33,6 +33,13 @@ private const val RESULT = 3
 private const val PREPARE = 4
 private const val PREPARED = 5
 
+/**
+ * Free device memory the worker needs before decoding. One software keyframe decode at a time
+ * (one thread while video plays) stays well under this; 2-3 GB TVs keep ~150-270 MiB free
+ * during 4K remux playback, so a higher floor refused almost every preview there.
+ */
+private const val WORKER_MIN_FREE_BYTES = 128L * 1024 * 1024
+
 /** A disposable process: no MediaCodec, audio device, main-player state or remote credentials. */
 class KeyframeWorkerService : Service() {
     private val worker = Executors.newSingleThreadExecutor()
@@ -47,7 +54,7 @@ class KeyframeWorkerService : Service() {
                     Process.setThreadPriority(Process.THREAD_PRIORITY_LOWEST)
                     val memory = ActivityManager.MemoryInfo()
                     (getSystemService(ACTIVITY_SERVICE) as ActivityManager).getMemoryInfo(memory)
-                    val ready = !memory.lowMemory && memory.availMem >= 256L * 1024 * 1024 && runCatching {
+                    val ready = !memory.lowMemory && memory.availMem >= WORKER_MIN_FREE_BYTES && runCatching {
                         // Load code only. No URL, connection, demuxer or decoder is opened.
                         KeyframeNative.ensureLoaded()
                         nativeReady = true
@@ -73,7 +80,7 @@ class KeyframeWorkerService : Service() {
                         val memory = ActivityManager.MemoryInfo()
                         (getSystemService(ACTIVITY_SERVICE) as ActivityManager).getMemoryInfo(memory)
                         val started = SystemClock.elapsedRealtime()
-                        val result = if (!memory.lowMemory && memory.availMem >= 256L * 1024 * 1024 &&
+                        val result = if (!memory.lowMemory && memory.availMem >= WORKER_MIN_FREE_BYTES &&
                             url.startsWith("http://127.0.0.1:") && position >= 0 && size > 0) {
                             runCatching { KeyframeNative.frame(url, position, id, size, playbackPaused) }.getOrNull()
                         } else null
