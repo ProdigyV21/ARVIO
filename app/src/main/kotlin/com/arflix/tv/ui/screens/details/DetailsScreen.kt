@@ -1510,11 +1510,26 @@ internal fun DetailsContent(
                                 label = "mobile_logo_crossfade"
                             ) { currentLogoUrl ->
                                 if (!currentLogoUrl.isNullOrBlank()) {
+                                    // Black title logos vanish on the dark scrim; those are drawn white.
+                                    val logoContext = LocalContext.current
+                                    var logoDark by remember(currentLogoUrl) { mutableStateOf(false) }
+                                    val logoRequest = remember(currentLogoUrl, logoContext) {
+                                        coil.request.ImageRequest.Builder(logoContext)
+                                            .data(currentLogoUrl)
+                                            .allowHardware(false)
+                                            .build()
+                                    }
                                     AsyncImage(
-                                        model = currentLogoUrl,
+                                        model = logoRequest,
                                         contentDescription = item.title,
                                         contentScale = ContentScale.Fit,
                                         onError = { mobileLogoFailed = true },
+                                        onSuccess = { state ->
+                                            (state.result.drawable as? android.graphics.drawable.BitmapDrawable)?.bitmap?.let {
+                                                logoDark = com.arflix.tv.ui.components.logoBitmapIsDark(it)
+                                            }
+                                        },
+                                        colorFilter = if (logoDark) androidx.compose.ui.graphics.ColorFilter.tint(Color.White) else null,
                                         alignment = Alignment.Center,
                                         modifier = Modifier
                                             .fillMaxWidth(0.78f)
