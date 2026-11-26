@@ -69,6 +69,7 @@ internal object LiveTvPerf {
     }
 
     private fun log(message: String) {
-        runCatching { Log.i(TAG, message) }
+        // Warn level: release builds strip Log.v/d/i (proguard-rules.pro).
+        runCatching { Log.w(TAG, message) }
     }
 }
