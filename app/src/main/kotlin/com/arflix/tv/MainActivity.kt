@@ -923,6 +923,7 @@ fun ArflixApp(
     // keep writing to the same state, so a route change resets it rather than replacing it.
     var barHiddenByScroll by remember { mutableStateOf(false) }
     LaunchedEffect(currentRoute) { barHiddenByScroll = false }
+    androidx.compose.runtime.SideEffect { com.arflix.tv.ui.components.MobileTabBar.reveal = { barHiddenByScroll = false } }
     val barScrollConnection = remember(isLandscapeRail) {
         object : NestedScrollConnection {
             override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {

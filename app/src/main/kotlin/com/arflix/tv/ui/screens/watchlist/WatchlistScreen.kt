@@ -245,6 +245,7 @@ fun WatchlistScreen(
     }
     fun selectSection(next: LibrarySection) {
         section = next; openedList = null; query = ""; mediaFilter = null
+        com.arflix.tv.ui.components.MobileTabBar.reveal()
         search = false; sourcesOpen = false; filters = false
         if (next == LibrarySection.WATCHLISTS) viewModel.selectSource(WatchlistSourceItem.MyWatchlist.id)
         if (next == LibrarySection.SERVERS && servers.selectedSourceRef == null) {
