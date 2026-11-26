@@ -1121,8 +1121,6 @@
     <string name="home_sports_opening">Opening live event...</string>
     <string name="home_sports_playback_failed">Could not play this live event</string>
     <string name="home_sports_event_not_live">This event is not live yet</string>
-    <string name="home_optimizing_notice">Still optimizing ARVIO for this device. Scrolling may be slow for now.</string>
-    <string name="settings_optimizing_notice">Still optimizing for this device. Scrolling may be slow for now.</string>
     <string name="home_cd_primary_provider">Primary streaming provider</string>
     <string name="home_cd_rank">Rank #%1$d</string>
     <string name="search_filter_all">All</string>

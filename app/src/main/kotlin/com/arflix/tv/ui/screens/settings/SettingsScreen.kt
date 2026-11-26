@@ -2044,8 +2044,7 @@ fun SettingsScreen(
                         .padding(vertical = 18.dp, horizontal = 10.dp)
                 ) {
                     val availableUpdate = uiState.updateStatus as? com.arflix.tv.updater.UpdateStatus.UpdateAvailable
-                    val awaitingCompilation = com.arflix.tv.ui.components.rememberAwaitingProfileCompilation()
-                    SettingsSidebarHeader(availableUpdate?.update?.tag, awaitingCompilation)
+                    SettingsSidebarHeader(availableUpdate?.update?.tag)
 
                     Column(
                         modifier = Modifier
