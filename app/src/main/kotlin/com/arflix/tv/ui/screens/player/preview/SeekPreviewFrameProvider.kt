@@ -301,6 +301,8 @@ class SeekPreviewFrameProvider internal constructor(
         val cachedTargets = ConcurrentSkipListSet<Long>()
         val networkBytes = AtomicLong()
         val speculativeBytes = AtomicLong()
+        /** The addon's size, else the length the server reported once previews opened the file. */
+        fun knownSizeBytes(): Long? = source.sizeBytes ?: proxy?.contentLength?.takeIf { it > 0 }
         fun close() {
             images?.close()
             proxy?.close()
@@ -485,7 +487,7 @@ class SeekPreviewFrameProvider internal constructor(
         if (SystemClock.elapsedRealtime() < source.warmRetryAtMs) return
         if (source.unavailable) return
         val target = withContext(Dispatchers.IO) {
-            source.coverage.next(positionMs, source.source.durationMs, source.source.sizeBytes,
+            source.coverage.next(positionMs, source.source.durationMs, source.knownSizeBytes(),
                 SystemClock.elapsedRealtime(), source.speculativeBytes.get(), preferWindow) { at ->
                 val key = frameKey(source, at)
                 memoryFrame(source, at, 0) != null ||
@@ -559,7 +561,7 @@ class SeekPreviewFrameProvider internal constructor(
                             NATIVE_BACKGROUND_PREVIEW_NETWORK_BYTES else BACKGROUND_PREVIEW_NETWORK_BYTES
                         source.extractionBudgetBytes = if (wideCoverage)
                             minOf(backgroundBudget,
-                                (PREVIEW_SPECULATIVE_BYTES - source.speculativeBytes.get()).coerceAtLeast(0))
+                                (previewSpeculativeBudget(source.knownSizeBytes()) - source.speculativeBytes.get()).coerceAtLeast(0))
                         else if (background && !playbackPaused) backgroundBudget
                         else MAX_EXTRACTION_NETWORK_BYTES
                         origin = SeekPreviewOrigin.DECODER

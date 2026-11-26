@@ -1965,8 +1965,9 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
             }
     }
 
-    // Disabled for TV and mobile until seek previews are consistently reliable.
-    val seekThumbnailsEnabled = false
+    // Previews are made off the main player: a separate low-priority process decodes one keyframe
+    // at a time, and background preparation pauses on a thin buffer or dropped frames.
+    val seekThumbnailsEnabled = true
     val useNativeSeekKeyframes = seekThumbnailsEnabled && uiState.selectedStreamUrl?.let {
         it.startsWith("https://", ignoreCase = true) || it.startsWith("http://", ignoreCase = true)
     } == true &&
