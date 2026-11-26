@@ -1,6 +1,7 @@
 // App store (lib/store.tsx): Starting playback: browser or external player, the next episode, trailers, Live TV and catch-up.
 import { resolveStalkerChannel } from "../stalker";
 import { browserAutoplayCandidates } from "../browserAutoplay";
+import { browserPlaybackTier } from "../sourceRank";
 import { needsAudioConversion } from "../autoplayVerify";
 import { isPreferredAutoplaySource, loadAutoplayPreference, orderByPreference } from "../autoplaySelection";
 import { recordBrowserPlaybackFailure, playbackPlan } from "../streamCompatibility";
@@ -229,7 +230,7 @@ export function usePlaybackActions(store: StoreCore & Pick<ReturnType<typeof use
       const choose = (rows: StreamSource[]) => {
         if (!isCurrent() || started) return;
         for (const row of rows) arrived.set(`${row.addonId ?? row.addonName ?? ""}|${row.url}`, row);
-        const candidates = orderByPreference(browserAutoplayCandidates([...arrived.values()]), preference, (row) => playbackPlan(row).method);
+        const candidates = orderByPreference(browserAutoplayCandidates([...arrived.values()]), preference, (row) => String(browserPlaybackTier(row)));
         if (!settled && !candidates.some((row) => isPreferredAutoplaySource(row, preference, (entry) => Boolean(parseDebridStream(entry.originalUrl ?? entry.url))))) return;
         const candidate = candidates[0];
         if (!candidate) return;

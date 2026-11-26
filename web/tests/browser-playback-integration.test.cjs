@@ -1398,7 +1398,7 @@ function advanceHarness(sources, preference) {
     sourceGeneration: { current: 0 }, addonsRef: { current: [] },
     nextLocalEpisode: (item) => item,
     getSeasonEpisodes: async () => [{ episodeNumber: 4, name: 'Next episode' }],
-    playbackPlan: () => ({ route: 'here', method: 'direct' }),
+    playbackPlan: () => ({ route: 'here', method: 'direct' }), browserPlaybackTier: () => 0,
     setSelectedEpisode: () => {}, setSelected: () => {}, setStreams: () => {}, mergeStreams: () => {},
     // The fast free host answers first; the debrid/preferred addon later.
     getStreamsProgressive: async (_addons, _item, _season, _episode, publish) => { publish(sources.fast); await progressive.promise; publish(sources.late); return []; },
