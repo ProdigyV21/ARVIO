@@ -5805,132 +5805,135 @@ fun LiveTvScreen(
             )
         }
 
-        if (!searchOpen && isFullScreen && subtitlePickerOpen) {
-            LiveTrackPickerOverlay(
-                title = stringResource(R.string.live_subtitles),
-                icon = Icons.Filled.Subtitles,
-                channelName = playingChannel?.name.orEmpty(),
-                options = withAiSubtitlesOption(
-                    liveSubtitleOptions(liveTracks, stringResource(R.string.live_subtitles_off)),
-                    offLabel = stringResource(R.string.live_subtitles_off),
-                    aiLabel = stringResource(R.string.live_ai_subtitles),
-                    aiAvailable = liveAiSubsSettings.enabled,
-                    aiSelected = liveAiSubsOn,
-                ),
-                onDismiss = {
-                    subtitlePickerOpen = false
-                    returnToHudControls()
-                },
-                onPick = { key ->
-                    if (key == LIVE_SUBTITLES_AI) {
-                        // AI subtitles replace the stream's own (which keep feeding them, hidden);
-                        // remembered per channel.
-                        playingChannelId?.let {
-                            liveAiSubsChoices[it] = true
-                            liveSubtitleChoices.remove(it)
+        // Own composable lambda: keeps LiveTvScreen() under the JVM 64 KB method limit.
+        LiveTvRenderBoundary(liveGroupNames) {
+            if (!searchOpen && isFullScreen && subtitlePickerOpen) {
+                LiveTrackPickerOverlay(
+                    title = stringResource(R.string.live_subtitles),
+                    icon = Icons.Filled.Subtitles,
+                    channelName = playingChannel?.name.orEmpty(),
+                    options = withAiSubtitlesOption(
+                        liveSubtitleOptions(liveTracks, stringResource(R.string.live_subtitles_off)),
+                        offLabel = stringResource(R.string.live_subtitles_off),
+                        aiLabel = stringResource(R.string.live_ai_subtitles),
+                        aiAvailable = liveAiSubsSettings.enabled,
+                        aiSelected = liveAiSubsOn,
+                    ),
+                    onDismiss = {
+                        subtitlePickerOpen = false
+                        returnToHudControls()
+                    },
+                    onPick = { key ->
+                        if (key == LIVE_SUBTITLES_AI) {
+                            // AI subtitles replace the stream's own (which keep feeding them, hidden);
+                            // remembered per channel.
+                            playingChannelId?.let {
+                                liveAiSubsChoices[it] = true
+                                liveSubtitleChoices.remove(it)
+                            }
+                        } else {
+                            playingChannelId?.let {
+                                liveAiSubsChoices[it] = false
+                                liveSubtitleChoices[it] = key
+                            }
+                            applyLiveSubtitleChoice(exoPlayer, key)
                         }
-                    } else {
-                        playingChannelId?.let {
-                            liveAiSubsChoices[it] = false
-                            liveSubtitleChoices[it] = key
+                    },
+                )
+            }
+
+            if (!searchOpen && isFullScreen && audioPickerOpen) {
+                LiveTrackPickerOverlay(
+                    title = stringResource(R.string.live_audio),
+                    icon = Icons.Filled.Audiotrack,
+                    channelName = playingChannel?.name.orEmpty(),
+                    options = liveAudioOptions(liveTracks),
+                    onDismiss = {
+                        audioPickerOpen = false
+                        returnToHudControls()
+                    },
+                    onPick = { key ->
+                        playingChannelId?.let { liveAudioChoices[it] = key }
+                        LivePlayerPrefs.saveAudioChoices(context, liveAudioChoices.toMap())
+                        applyLiveAudioChoice(exoPlayer, key)
+                    },
+                )
+            }
+
+            if (!searchOpen) {
+                FullscreenSourcesOverlay(
+                    visible = isFullScreen && sourcesChannel != null,
+                    isLoading = sourcesLoading,
+                    failed = sourcesFailed,
+                    currentChannel = sourcesChannel,
+                    variants = sourcesVariants,
+                    onPick = { variant ->
+                        sourcesChannel = null
+                        if (variant.id != playingChannelId) {
+                            retainedPlayingChannel = variant
+                            playingChannelId = variant.id
+                            epgPrefetchAnchorId = variant.id
+                            playingCatchupProgram = null
+                            catchupPlaybackOffsetMs = 0L
                         }
-                        applyLiveSubtitleChoice(exoPlayer, key)
+                        hudPokeSignal++
+                    },
+                    onDismiss = {
+                        sourcesChannel = null
+                        hudPokeSignal++
                     }
-                },
-            )
-        }
+                )
+                val pickerChannel = variantPickerChannel
+                VariantPickerOverlay(
+                    channel = pickerChannel,
+                    variants = pickerChannel?.let { variantGroups[variantGroupKey(it)] }.orEmpty(),
+                    onDismiss = { variantPickerChannel = null },
+                    onPick = { playVariant(it) },
+                )
+            }
 
-        if (!searchOpen && isFullScreen && audioPickerOpen) {
-            LiveTrackPickerOverlay(
-                title = stringResource(R.string.live_audio),
-                icon = Icons.Filled.Audiotrack,
-                channelName = playingChannel?.name.orEmpty(),
-                options = liveAudioOptions(liveTracks),
-                onDismiss = {
-                    audioPickerOpen = false
-                    returnToHudControls()
-                },
-                onPick = { key ->
-                    playingChannelId?.let { liveAudioChoices[it] = key }
-                    LivePlayerPrefs.saveAudioChoices(context, liveAudioChoices.toMap())
-                    applyLiveAudioChoice(exoPlayer, key)
-                },
-            )
-        }
-
-        if (!searchOpen) {
-            FullscreenSourcesOverlay(
-                visible = isFullScreen && sourcesChannel != null,
-                isLoading = sourcesLoading,
-                failed = sourcesFailed,
-                currentChannel = sourcesChannel,
-                variants = sourcesVariants,
-                onPick = { variant ->
-                    sourcesChannel = null
-                    if (variant.id != playingChannelId) {
-                        retainedPlayingChannel = variant
-                        playingChannelId = variant.id
-                        epgPrefetchAnchorId = variant.id
-                        playingCatchupProgram = null
-                        catchupPlaybackOffsetMs = 0L
-                    }
-                    hudPokeSignal++
-                },
-                onDismiss = {
-                    sourcesChannel = null
-                    hudPokeSignal++
+            guideFixChannel?.let { channel ->
+                val allChannels = visibleEnrichedState.value.all
+                val sourceNames = remember(state.config) {
+                    state.config.playlists.associate { it.id to it.name } +
+                        state.config.stalkerPortals.associate { it.id to it.name.ifBlank { it.id } }
                 }
-            )
-            val pickerChannel = variantPickerChannel
-            VariantPickerOverlay(
-                channel = pickerChannel,
-                variants = pickerChannel?.let { variantGroups[variantGroupKey(it)] }.orEmpty(),
-                onDismiss = { variantPickerChannel = null },
-                onPick = { playVariant(it) },
-            )
-        }
-
-        guideFixChannel?.let { channel ->
-            val allChannels = visibleEnrichedState.value.all
-            val sourceNames = remember(state.config) {
-                state.config.playlists.associate { it.id to it.name } +
-                    state.config.stalkerPortals.associate { it.id to it.name.ifBlank { it.id } }
+                // Read once per opening: what is on now is a hint, and following every guide
+                // update would re-rank a list the user is moving through.
+                val candidates = remember(channel.id, allChannels) {
+                    val nowMs = System.currentTimeMillis()
+                    allChannels.asSequence()
+                        .filter { it.id != channel.id }
+                        .map { candidate ->
+                            GuideSourceOption(
+                                channelId = candidate.id,
+                                name = candidate.name,
+                                playlistName = sourceNames[com.arflix.tv.data.repository.guidePlaylistIdOf(candidate.id)],
+                                nowTitle = actionGuideNowNext[candidate.id]?.atTime(nowMs)?.now?.title,
+                            )
+                        }
+                        .toList()
+                }
+                val currentSource = guideFixes.sources[channel.id]
+                val guideChannelId = guideFixes.guideChannelOf(channel.id)
+                val offsetPlaylistId = com.arflix.tv.data.repository.guidePlaylistIdOf(guideChannelId ?: channel.id)
+                GuideFixDialog(
+                    channelName = channel.name,
+                    currentSourceId = currentSource,
+                    currentSourceName = currentSource?.let { id -> allChannels.firstOrNull { it.id == id }?.name },
+                    offsetPlaylistName = sourceNames[offsetPlaylistId]?.takeIf { guideChannelId != null },
+                    offsetMinutes = guideFixes.offsetMinutes[offsetPlaylistId] ?: 0,
+                    candidates = candidates,
+                    onPickSource = { sourceId ->
+                        guideFixChannel = null
+                        viewModel.setGuideSource(channel.id, sourceId)
+                    },
+                    onOffsetChange = { minutes ->
+                        viewModel.setGuideOffset(offsetPlaylistId, minutes)
+                    },
+                    onDismiss = { guideFixChannel = null },
+                )
             }
-            // Read once per opening: what is on now is a hint, and following every guide
-            // update would re-rank a list the user is moving through.
-            val candidates = remember(channel.id, allChannels) {
-                val nowMs = System.currentTimeMillis()
-                allChannels.asSequence()
-                    .filter { it.id != channel.id }
-                    .map { candidate ->
-                        GuideSourceOption(
-                            channelId = candidate.id,
-                            name = candidate.name,
-                            playlistName = sourceNames[com.arflix.tv.data.repository.guidePlaylistIdOf(candidate.id)],
-                            nowTitle = actionGuideNowNext[candidate.id]?.atTime(nowMs)?.now?.title,
-                        )
-                    }
-                    .toList()
-            }
-            val currentSource = guideFixes.sources[channel.id]
-            val guideChannelId = guideFixes.guideChannelOf(channel.id)
-            val offsetPlaylistId = com.arflix.tv.data.repository.guidePlaylistIdOf(guideChannelId ?: channel.id)
-            GuideFixDialog(
-                channelName = channel.name,
-                currentSourceId = currentSource,
-                currentSourceName = currentSource?.let { id -> allChannels.firstOrNull { it.id == id }?.name },
-                offsetPlaylistName = sourceNames[offsetPlaylistId]?.takeIf { guideChannelId != null },
-                offsetMinutes = guideFixes.offsetMinutes[offsetPlaylistId] ?: 0,
-                candidates = candidates,
-                onPickSource = { sourceId ->
-                    guideFixChannel = null
-                    viewModel.setGuideSource(channel.id, sourceId)
-                },
-                onOffsetChange = { minutes ->
-                    viewModel.setGuideOffset(offsetPlaylistId, minutes)
-                },
-                onDismiss = { guideFixChannel = null },
-            )
         }
 
         channelMenu?.let { menu ->
@@ -6036,180 +6039,183 @@ fun LiveTvScreen(
             }
         }
 
-        val actionData = programActionDialog
-        if (actionData != null) {
-            val program = actionData.program
-            val channel = actionData.channel
-            val isNow = program.isLive(guideClockMillis)
-            androidx.compose.material3.AlertDialog(
-                onDismissRequest = { programActionDialog = null },
-                title = {
-                    androidx.tv.material3.Text(
-                        text = program.title,
-                        style = ArflixTypography.cardTitle,
-                        color = Color.White,
-                        maxLines = 2,
-                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                    )
-                },
-                text = {
-                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        // Own composable lambda: keeps LiveTvScreen() under the JVM 64 KB method limit.
+        LiveTvRenderBoundary(liveGroupNames) {
+            val actionData = programActionDialog
+            if (actionData != null) {
+                val program = actionData.program
+                val channel = actionData.channel
+                val isNow = program.isLive(guideClockMillis)
+                androidx.compose.material3.AlertDialog(
+                    onDismissRequest = { programActionDialog = null },
+                    title = {
                         androidx.tv.material3.Text(
-                            text = channel.name,
-                            style = ArflixTypography.caption,
-                            color = TextSecondary,
+                            text = program.title,
+                            style = ArflixTypography.cardTitle,
+                            color = Color.White,
+                            maxLines = 2,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                         )
-                        androidx.tv.material3.Text(
-                            text = "${formatClock(program.startUtcMillis)} - ${formatClock(program.endUtcMillis)}",
-                            style = ArflixTypography.body,
-                            color = TextSecondary,
-                        )
-                        if (isNow) {
-                            Badge(stringResource(R.string.live_badge_live), Color.White, LiveColors.LiveRed)
+                    },
+                    text = {
+                        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                            androidx.tv.material3.Text(
+                                text = channel.name,
+                                style = ArflixTypography.caption,
+                                color = TextSecondary,
+                            )
+                            androidx.tv.material3.Text(
+                                text = "${formatClock(program.startUtcMillis)} - ${formatClock(program.endUtcMillis)}",
+                                style = ArflixTypography.body,
+                                color = TextSecondary,
+                            )
+                            if (isNow) {
+                                Badge(stringResource(R.string.live_badge_live), Color.White, LiveColors.LiveRed)
+                            }
                         }
-                    }
-                },
-                confirmButton = {
-                    val vodMatch = programActionVodMatch
-                    if (vodMatch != null) {
+                    },
+                    confirmButton = {
+                        val vodMatch = programActionVodMatch
+                        if (vodMatch != null) {
+                            androidx.compose.material3.TextButton(
+                                onClick = {
+                                    invalidateProgramActionLookup()
+                                    onNavigateToDetails(vodMatch.mediaType, vodMatch.id)
+                                },
+                            ) {
+                                androidx.tv.material3.Text(
+                                    text = stringResource(R.string.epg_search_sources),
+                                    style = ArflixTypography.button,
+                                    color = Pink,
+                                )
+                            }
+                        }
+                    },
+                    dismissButton = {
                         androidx.compose.material3.TextButton(
                             onClick = {
-                                invalidateProgramActionLookup()
-                                onNavigateToDetails(vodMatch.mediaType, vodMatch.id)
+                                programActionDialog = null
+                                when (epgDialogWatchLiveAction()) {
+                                    EpgInteractionAction.PlayLiveFullscreen -> playLiveFullscreen(channel)
+                                    else -> Unit
+                                }
                             },
                         ) {
                             androidx.tv.material3.Text(
-                                text = stringResource(R.string.epg_search_sources),
+                                text = stringResource(R.string.epg_watch_live),
                                 style = ArflixTypography.button,
+                                color = Color.White,
+                            )
+                        }
+                    },
+                    containerColor = BackgroundElevated,
+                    tonalElevation = 8.dp,
+                )
+            }
+
+            val infoData = programmeInfo
+            if (infoData != null) {
+                val infoProgram = infoData.program
+                val infoChannel = infoData.channel
+                val reminderId = programmeReminderId(infoChannel.id, infoProgram)
+                val reminded = sportsReminders.any { it.eventId == reminderId && !it.dismissed }
+                ProgrammeInfoDialog(
+                    channelName = infoChannel.name,
+                    program = infoProgram,
+                    nowMillis = guideClockMillis,
+                    timeRange = "${formatClock(infoProgram.startUtcMillis)} - ${formatClock(infoProgram.endUtcMillis)}",
+                    reminded = reminded,
+                    canRemind = infoProgram.startUtcMillis > guideClockMillis,
+                    onToggleReminder = {
+                        val reminder = programmeReminder(listOf(infoChannel.id), infoProgram)
+                        if (reminder != null) {
+                            coroutineScope.launch {
+                                viewModel.sportsPreferences.updateReminders { it.withProgrammeReminder(reminder, !reminded) }
+                            }
+                        }
+                        programmeInfo = null
+                    },
+                    onWatchChannel = {
+                        programmeInfo = null
+                        playLiveFullscreen(infoChannel)
+                    },
+                    onDismiss = { programmeInfo = null },
+                )
+            }
+
+            val lockedAction = pendingLockedGroupAction
+            if (lockedAction != null) {
+                PinEntryDialog(
+                    title = stringResource(R.string.live_group_enter_pin),
+                    onPinConfirmed = { enteredPin ->
+                        if (PinUtil.verifyPin(enteredPin, currentProfile?.pin)) {
+                            pendingLockedGroupAction = null
+                            lockedGroupPinError = ""
+                            when (lockedAction) {
+                                is LockedGroupPinAction.OpenCategory -> {
+                                    unlockedGroupKeys = unlockedGroupKeys + lockedAction.groupKey
+                                    enterSelectedCategory(lockedAction.categoryId)
+                                }
+                                is LockedGroupPinAction.ToggleLock -> {
+                                    val key = PlaylistGroupKey.build(lockedAction.playlistId, lockedAction.groupName)
+                                    unlockedGroupKeys = unlockedGroupKeys - key
+                                    viewModel.toggleLockedGroup(lockedAction.playlistId, lockedAction.groupName)
+                                }
+                            }
+                        } else {
+                            lockedGroupPinError = context.getString(R.string.live_group_pin_incorrect)
+                        }
+                    },
+                    onDismiss = {
+                        pendingLockedGroupAction = null
+                        lockedGroupPinError = ""
+                    },
+                    pinError = lockedGroupPinError,
+                )
+            }
+
+                if (showMissingProfilePinDialog) {
+                androidx.compose.material3.AlertDialog(
+                    onDismissRequest = { showMissingProfilePinDialog = false },
+                    title = {
+                        androidx.tv.material3.Text(
+                            text = stringResource(R.string.live_group_pin_required_title),
+                            color = Color.White,
+                        )
+                    },
+                    text = {
+                        androidx.tv.material3.Text(
+                            text = stringResource(R.string.live_group_pin_required_message),
+                            color = TextSecondary,
+                        )
+                    },
+                    confirmButton = {
+                        androidx.compose.material3.TextButton(
+                            onClick = {
+                                showMissingProfilePinDialog = false
+                                onNavigateToSettings()
+                            },
+                        ) {
+                            androidx.tv.material3.Text(
+                                text = stringResource(R.string.settings),
                                 color = Pink,
                             )
                         }
-                    }
-                },
-                dismissButton = {
-                    androidx.compose.material3.TextButton(
-                        onClick = {
-                            programActionDialog = null
-                            when (epgDialogWatchLiveAction()) {
-                                EpgInteractionAction.PlayLiveFullscreen -> playLiveFullscreen(channel)
-                                else -> Unit
-                            }
-                        },
-                    ) {
-                        androidx.tv.material3.Text(
-                            text = stringResource(R.string.epg_watch_live),
-                            style = ArflixTypography.button,
-                            color = Color.White,
-                        )
-                    }
-                },
-                containerColor = BackgroundElevated,
-                tonalElevation = 8.dp,
-            )
-        }
-
-        val infoData = programmeInfo
-        if (infoData != null) {
-            val infoProgram = infoData.program
-            val infoChannel = infoData.channel
-            val reminderId = programmeReminderId(infoChannel.id, infoProgram)
-            val reminded = sportsReminders.any { it.eventId == reminderId && !it.dismissed }
-            ProgrammeInfoDialog(
-                channelName = infoChannel.name,
-                program = infoProgram,
-                nowMillis = guideClockMillis,
-                timeRange = "${formatClock(infoProgram.startUtcMillis)} - ${formatClock(infoProgram.endUtcMillis)}",
-                reminded = reminded,
-                canRemind = infoProgram.startUtcMillis > guideClockMillis,
-                onToggleReminder = {
-                    val reminder = programmeReminder(listOf(infoChannel.id), infoProgram)
-                    if (reminder != null) {
-                        coroutineScope.launch {
-                            viewModel.sportsPreferences.updateReminders { it.withProgrammeReminder(reminder, !reminded) }
+                    },
+                    dismissButton = {
+                        androidx.compose.material3.TextButton(
+                            onClick = { showMissingProfilePinDialog = false },
+                        ) {
+                            androidx.tv.material3.Text(
+                                text = stringResource(R.string.cancel),
+                                color = TextSecondary,
+                            )
                         }
-                    }
-                    programmeInfo = null
-                },
-                onWatchChannel = {
-                    programmeInfo = null
-                    playLiveFullscreen(infoChannel)
-                },
-                onDismiss = { programmeInfo = null },
-            )
+                    },
+                    containerColor = BackgroundElevated,
+                )
+                }
         }
-
-        val lockedAction = pendingLockedGroupAction
-        if (lockedAction != null) {
-            PinEntryDialog(
-                title = stringResource(R.string.live_group_enter_pin),
-                onPinConfirmed = { enteredPin ->
-                    if (PinUtil.verifyPin(enteredPin, currentProfile?.pin)) {
-                        pendingLockedGroupAction = null
-                        lockedGroupPinError = ""
-                        when (lockedAction) {
-                            is LockedGroupPinAction.OpenCategory -> {
-                                unlockedGroupKeys = unlockedGroupKeys + lockedAction.groupKey
-                                enterSelectedCategory(lockedAction.categoryId)
-                            }
-                            is LockedGroupPinAction.ToggleLock -> {
-                                val key = PlaylistGroupKey.build(lockedAction.playlistId, lockedAction.groupName)
-                                unlockedGroupKeys = unlockedGroupKeys - key
-                                viewModel.toggleLockedGroup(lockedAction.playlistId, lockedAction.groupName)
-                            }
-                        }
-                    } else {
-                        lockedGroupPinError = context.getString(R.string.live_group_pin_incorrect)
-                    }
-                },
-                onDismiss = {
-                    pendingLockedGroupAction = null
-                    lockedGroupPinError = ""
-                },
-                pinError = lockedGroupPinError,
-            )
-        }
-
-            if (showMissingProfilePinDialog) {
-            androidx.compose.material3.AlertDialog(
-                onDismissRequest = { showMissingProfilePinDialog = false },
-                title = {
-                    androidx.tv.material3.Text(
-                        text = stringResource(R.string.live_group_pin_required_title),
-                        color = Color.White,
-                    )
-                },
-                text = {
-                    androidx.tv.material3.Text(
-                        text = stringResource(R.string.live_group_pin_required_message),
-                        color = TextSecondary,
-                    )
-                },
-                confirmButton = {
-                    androidx.compose.material3.TextButton(
-                        onClick = {
-                            showMissingProfilePinDialog = false
-                            onNavigateToSettings()
-                        },
-                    ) {
-                        androidx.tv.material3.Text(
-                            text = stringResource(R.string.settings),
-                            color = Pink,
-                        )
-                    }
-                },
-                dismissButton = {
-                    androidx.compose.material3.TextButton(
-                        onClick = { showMissingProfilePinDialog = false },
-                    ) {
-                        androidx.tv.material3.Text(
-                            text = stringResource(R.string.cancel),
-                            color = TextSecondary,
-                        )
-                    }
-                },
-                containerColor = BackgroundElevated,
-            )
-            }
         }
     }
 }
