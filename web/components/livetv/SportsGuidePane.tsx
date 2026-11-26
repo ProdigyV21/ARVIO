@@ -339,7 +339,10 @@ export function SportsGuidePane({ channels, guide, onPlay, onEnter, onOpenCatego
       <header>{selected && !failedArtwork.has(selected.id) && (selected.artwork || selected.teamArtwork) && <div className="tv-event-picker-art"><EventArtwork event={selected} /></div>}<div><p>{selected ? `${stamp(selected)} · ${guideSports.find(s => s.id === selected.sportId)!.title}` : translateUi("This event is no longer in the available guide.")}</p><h2>{selected?.title ?? translateUi("Schedule changed")}</h2></div><button type="button" onClick={close} aria-label={translateUi("Close")}><X /></button></header>
       {selected?.fixture && <div className="tv-event-details"><span>{[selected.competition, selected.fixture.venue, selected.fixture.round ? `Round ${selected.fixture.round}` : undefined].filter(Boolean).join(" · ")}</span>
         {selected.fixture.homeScore !== undefined && selected.fixture.awayScore !== undefined && (isConfirmedLive(selected, now) || isFinished(selected)) && <button type="button" className="secondary" onClick={() => setShowScore(value => !value)}>{showScore ? `${selected.fixture.homeScore} : ${selected.fixture.awayScore}` : translateUi("Show score")}</button>}
-        <button type="button" className="secondary" aria-pressed={showDetails} onClick={() => setShowDetails(value => !value)}>{showDetails ? translateUi("Channels") : translateUi("Game info")}</button></div>}
+        <span className="tv-event-tabs" role="group">
+          <button type="button" className={`secondary${showDetails ? "" : " is-on"}`} aria-pressed={!showDetails} onClick={() => setShowDetails(false)}>{translateUi("Channels")}</button>
+          <button type="button" className={`secondary${showDetails ? " is-on" : ""}`} aria-pressed={showDetails} onClick={() => setShowDetails(true)}>{translateUi("Game info")}</button>
+        </span></div>}
       {selected && !isNetworkEvent(selected) && <SportsEventActions event={selected} now={now} reminded={isReminded(reminders, selected.id)} followed={new Set(follows.map(followKey))}
         onToggleReminder={on => updateReminders(current => withReminder(current, selected, on))} onToggleFollow={onToggleFollow}
         canAlert={!isFinished(selected) && followsTeam(selected, follows)} scoreAlerts={scoreAlerts} onToggleScoreAlerts={setScoreAlerts} />}

@@ -21,6 +21,9 @@ import androidx.compose.material.icons.filled.NotificationsNone
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material.icons.filled.EmojiEvents
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SportsSoccer
 import androidx.compose.material.icons.filled.Tv
@@ -707,14 +710,20 @@ internal fun SportsGuidePane(
                     color = LiveColors.FgDim, fontSize = 11.sp, maxLines = 2, overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.padding(top = 10.dp))
                 val hasScore = fixture.homeScore != null && fixture.awayScore != null && (event.isConfirmedLive(now) || event.isFinished())
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(18.dp)) {
-                    if (hasScore) {
-                        Text(if (showScore) "${fixture.homeScore} : ${fixture.awayScore}" else stringResource(R.string.live_sports_show_score), color = LiveColors.Fg,
-                            fontSize = 12.sp, modifier = Modifier.clickable { showScore = !showScore }.padding(vertical = 10.dp))
+                // Chips, not plain text: on a TV each needs a visible focus state.
+                Row(Modifier.padding(top = 10.dp).horizontalScroll(androidx.compose.foundation.rememberScrollState()),
+                    verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (hasScore) SportsActionChip(
+                        label = if (showScore) "${fixture.homeScore} : ${fixture.awayScore}" else stringResource(R.string.live_sports_show_score),
+                        icon = if (showScore) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                        active = showScore,
+                    ) { showScore = !showScore }
+                    if (!event.isNetwork) {
+                        SportsActionChip(stringResource(R.string.sports_channels_tab), Icons.Default.Tv, active = !showDetails,
+                            modifier = Modifier.testTag("sports-channels-tab")) { showDetails = false }
+                        SportsActionChip(stringResource(R.string.sports_game_info), Icons.Default.Info, active = showDetails,
+                            modifier = Modifier.testTag("sports-game-info")) { showDetails = true }
                     }
-                    if (!event.isNetwork) Text(stringResource(if (showDetails) R.string.sports_channels_tab else R.string.sports_game_info), color = LiveColors.Fg,
-                        fontSize = 12.sp, fontWeight = FontWeight.Medium,
-                        modifier = Modifier.testTag("sports-game-info").clickable { showDetails = !showDetails }.padding(vertical = 10.dp))
                 }
             }
             val actionEvent = event ?: selection
@@ -1158,9 +1167,10 @@ private fun SportsEventActions(
 }
 
 @Composable
-private fun SportsActionChip(label: String, icon: androidx.compose.ui.graphics.vector.ImageVector, active: Boolean, onClick: () -> Unit) {
+private fun SportsActionChip(label: String, icon: androidx.compose.ui.graphics.vector.ImageVector, active: Boolean,
+    modifier: Modifier = Modifier, onClick: () -> Unit) {
     var focused by remember { mutableStateOf(false) }
-    Row(Modifier.clip(RoundedCornerShape(18.dp))
+    Row(modifier.clip(RoundedCornerShape(18.dp))
         .background(if (focused) LiveColors.FocusBg else if (active) Color.White.copy(alpha = 0.16f) else Color.White.copy(alpha = 0.06f))
         .border(1.dp, if (focused) Color.White else LiveColors.DividerStrong, RoundedCornerShape(18.dp))
         .onFocusChanged { focused = it.isFocused }

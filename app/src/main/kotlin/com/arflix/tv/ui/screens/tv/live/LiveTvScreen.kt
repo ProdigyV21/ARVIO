@@ -2281,21 +2281,39 @@ fun LiveTvScreen(
     val sportsChannelMemory by viewModel.sportsPreferences.channelMemory.collectAsStateWithLifecycle(initialValue = emptyMap())
     val sportsScoreAlerts by viewModel.sportsPreferences.scoreAlerts.collectAsStateWithLifecycle(initialValue = true)
     // League networks (NBA TV, Sky Sports F1, ...) found by name in this playlist, once per playlist.
+    // A name search per network brand, so it does not depend on the broadcaster index being ready.
     var sportsNetworkChannels by remember(broadcasterIndexKey) { mutableStateOf<Map<String, List<IptvChannel>>?>(null) }
-    LaunchedEffect(broadcasterIndexKey, sportsSelected) {
-        if (!sportsSelected || sportsNetworkChannels != null || state.snapshot.loadedAt.toEpochMilli() <= 0L) return@LaunchedEffect
-        sportsNetworkChannels = runCatching {
-            val index = viewModel.sportsBroadcasterIndex(broadcasterIndexKey)
-            withContext(Dispatchers.IO) {
-                val grouped = index.groupedIds { name -> sportsNetworkFor(name)?.id }
-                    .mapValues { (_, ids) -> ids.take(SPORTS_NETWORK_CHANNELS * 2) }
-                val channels = viewModel.iptvRepository.pagedChannelsByIds(grouped.values.flatten())
-                    .filter { !it.enrichForFastStartup(0).isAdult }.associateBy { it.id }
-                grouped.mapValues { (_, ids) -> ids.mapNotNull { channels[it] } }
+    LaunchedEffect(broadcasterIndexKey, sportsSelected, sportsRefresh) {
+        if (!sportsSelected || !sportsNetworkChannels.isNullOrEmpty()) return@LaunchedEffect
+        val provider = broadcasterIndexKey.providerId.takeUnless { it == "all" }
+        val excluded = broadcasterIndexKey.excludedGroups
+        // The playlist may still be loading when Sports opens; try again a few times.
+        repeat(4) { attempt ->
+            if (state.snapshot.loadedAt.toEpochMilli() > 0L) {
+                val found = runCatching {
+                    withContext(Dispatchers.IO) {
+                        SPORTS_NETWORKS.flatMap { it.prefixes }.distinct().flatMap { prefix ->
+                            viewModel.iptvRepository.pagedSearchChannels(prefix, 60)
+                        }.asSequence().distinctBy { it.id }
+                            .filter { provider == null || channelPlaylistId(it.id) == provider }
+                            .filter { channel ->
+                                val group = channel.group.trim()
+                                group !in excluded && com.arflix.tv.data.model.PlaylistGroupKey.build(channelPlaylistId(channel.id), group) !in excluded
+                            }
+                            .filter { !it.enrichForFastStartup(0).isAdult }
+                            .mapNotNull { channel -> sportsNetworkFor(sportsChannelKey(channel.name))?.let { it.id to channel } }
+                            .groupBy({ it.first }, { it.second })
+                    }
+                }.getOrElse { error ->
+                    if (error is kotlinx.coroutines.CancellationException) throw error
+                    System.err.println("[Sports-Networks] search failed: ${error.message}")
+                    emptyMap()
+                }
+                System.err.println("[Sports-Networks] attempt=$attempt networks=${found.size} channels=${found.values.sumOf { it.size }}")
+                sportsNetworkChannels = found
+                if (found.isNotEmpty()) return@LaunchedEffect
             }
-        }.getOrElse { error ->
-            if (error is kotlinx.coroutines.CancellationException) throw error
-            emptyMap()
+            delay(15_000L * (attempt + 1))
         }
     }
     val sportsNetworkRow = remember(sportsNetworkChannels, sportsFollows, guideClockMillis / 3_600_000L) {

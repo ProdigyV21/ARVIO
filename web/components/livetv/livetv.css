@@ -1163,3 +1163,5 @@ html.is-tv .livetv-search:focus-within { box-shadow: 0 0 0 3px var(--accent, #ff
 .tv-game-h2h small { color: #8f98a5; flex: 0 0 auto; font-variant-numeric: tabular-nums; }
 .tv-game-h2h span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tv-game-info-note { color: #b9c0cb; padding: 12px 0; margin: 0; }
+.tv-event-tabs { display: inline-flex; gap: 6px; flex-shrink: 0; }
+.tv-event-tabs button.is-on { background: #ffffff29; color: #fff; }
