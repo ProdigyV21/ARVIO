@@ -1978,6 +1978,7 @@ fun SettingsScreen(
                 openSubtitlePicker = openSubtitlePicker,
                 openSecondarySubtitlePicker = openSecondarySubtitlePicker,
                 openAudioLanguagePicker = openAudioLanguagePicker,
+                openSecondaryAudioPicker = openSecondaryAudioPicker,
                 openDnsProviderPicker = openDnsProviderPicker,
                 openUiModeWarningDialog = openUiModeWarningDialog,
                 openQualityFiltersModal = { showQualityFiltersModal = true },
@@ -4789,6 +4790,7 @@ private fun MobileSettingsLayout(
     openSubtitlePicker: () -> Unit,
     openSecondarySubtitlePicker: () -> Unit = {},
     openAudioLanguagePicker: () -> Unit,
+    openSecondaryAudioPicker: () -> Unit,
     openDnsProviderPicker: () -> Unit,
     openUiModeWarningDialog: () -> Unit,
     openQualityFiltersModal: () -> Unit,
@@ -4967,6 +4969,7 @@ private fun MobileSettingsLayout(
                 openSubtitlePicker = openSubtitlePicker,
                 openSecondarySubtitlePicker = openSecondarySubtitlePicker,
                 openAudioLanguagePicker = openAudioLanguagePicker,
+                openSecondaryAudioPicker = openSecondaryAudioPicker,
                 onSwitchProfile = onSwitchProfile,
                 onNavigateToTelegram = onNavigateToTelegram
             )
@@ -5114,6 +5117,7 @@ private fun MobileSettingsMainPage(
     openSubtitlePicker: () -> Unit,
     openSecondarySubtitlePicker: () -> Unit = {},
     openAudioLanguagePicker: () -> Unit,
+    openSecondaryAudioPicker: () -> Unit,
     onSwitchProfile: () -> Unit,
     onNavigateToTelegram: () -> Unit = {}
 ) {
