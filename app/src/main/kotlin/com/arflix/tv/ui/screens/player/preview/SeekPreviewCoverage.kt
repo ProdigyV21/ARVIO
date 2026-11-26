@@ -1,9 +1,22 @@
 package com.arflix.tv.ui.screens.player.preview
 
-internal const val PREVIEW_APPROXIMATION_MS = 20_000L
+/** A cached frame this close to the target is shown at once while the exact one is made. */
+internal const val PREVIEW_APPROXIMATION_MS = 60_000L
 internal const val PREVIEW_SPECULATIVE_BYTES = 128L * 1024 * 1024
+private const val PREVIEW_SPECULATIVE_MAX_BYTES = 512L * 1024 * 1024
 
-/** One bounded job at a time: local detail, five-minute coverage, then sparse title coverage. */
+/**
+ * Network allowance for preparing far-away previews. A big remux has bigger keyframes, so it gets
+ * proportionally more (about 1/64 of the file), between 128 and 512 MiB.
+ */
+internal fun previewSpeculativeBudget(sizeBytes: Long?): Long =
+    sizeBytes?.takeIf { it > 0 }?.let { (it / 64).coerceIn(PREVIEW_SPECULATIVE_BYTES, PREVIEW_SPECULATIVE_MAX_BYTES) }
+        ?: PREVIEW_SPECULATIVE_BYTES
+
+/**
+ * One bounded job at a time: local detail, five-minute coverage and whole-title coverage
+ * (coarse first, so every part of the seek bar soon has a nearby picture).
+ */
 internal class SeekPreviewCoverage {
     private var turn = 0
     private var attempts = 0
@@ -44,7 +57,7 @@ internal class SeekPreviewCoverage {
     @Synchronized fun next(positionMs: Long, durationMs: Long, sizeBytes: Long?, nowMs: Long,
         networkBytes: Long, preferWindow: Boolean = false, cached: (Long) -> Boolean): Long? {
         if (durationMs <= 0) return null
-        val wideBudgetAvailable = networkBytes < PREVIEW_SPECULATIVE_BYTES && attempts < 512
+        val wideBudgetAvailable = networkBytes < previewSpeculativeBudget(sizeBytes) && attempts < 512
         val anchor = positionMs.coerceIn(0, durationMs - 1) / 10_000 * 10_000
         // Keep distant points fixed while the playhead advances. Moving every point
         // on each turn repeatedly decodes almost the same scene and never fills gaps.
@@ -60,8 +73,9 @@ internal class SeekPreviewCoverage {
             for (step in 0..9) yield(anchor + 30_000L + step * 30_000L)
         }
         val whole = sequence {
-            // Unknown sizes and large remuxes keep speculative reads near playback.
-            if (sizeBytes != null && sizeBytes in 1 until 20L * 1024 * 1024 * 1024) {
+            // Unknown sizes keep speculative reads near playback. Known sizes, including big
+            // remuxes, cover the whole title within the size-scaled network budget.
+            if (sizeBytes != null && sizeBytes > 0) {
                 // First pass every two minutes, then one minute, then thirty seconds.
                 for (stride in listOf(120_000L, 60_000L, 30_000L)) {
                     var target = stride
@@ -103,6 +117,9 @@ internal class SeekPreviewCoverage {
             !preferWindow -> broad
             !wideBudgetAvailable -> local.asSequence()
             cycle < 5 || cycle % 2 == 0 -> window.asSequence() + prediction + distant + broad
+            // Once the likely jumps are prepared, every fourth turn fills the whole bar, so a
+            // jump anywhere has a nearby picture.
+            cycle >= 15 && cycle % 4 == 1 -> prediction + whole + distant + broad
             else -> prediction + distant + broad
         }
         val target = ordered.filter { it in 0 until durationMs }
