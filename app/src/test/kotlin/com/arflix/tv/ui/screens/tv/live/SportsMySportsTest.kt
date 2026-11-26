@@ -131,6 +131,8 @@ class SportsMySportsTest {
         assertEquals(now + 9 * 60_000L, list.nextReminderAt(now, emptySet()))
         assertEquals("g", list.dueReminder(now + 9 * 60_000L, emptySet())?.eventId)
         assertNull(list.dueReminder(now + 9 * 60_000L, setOf("g")))
+        assertNull(list.nextReminderAt(now, setOf("g")))
+        assertNull(listOf(reminder.copy(dismissed = true)).nextReminderAt(now, emptySet()))
         assertNull(listOf(reminder.copy(dismissed = true)).dueReminder(now + 9 * 60_000L, emptySet()))
         // Still fires shortly after kick-off when the app was closed, but not an hour later.
         assertEquals("g", list.dueReminder(now + 12 * 60_000L, emptySet())?.eventId)
