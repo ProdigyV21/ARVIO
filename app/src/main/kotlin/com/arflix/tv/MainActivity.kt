@@ -917,6 +917,20 @@ fun ArflixApp(
         navigationInsetDp = navigationInset.value,
     )
     val barInset = barClearance.scrollInsetDp.dp
+    // Phones: the floating tab bar slides away while you scroll down and returns on the way
+    // back up, so content gets the whole screen. A new page always starts with it visible.
+    var barHiddenByScroll by remember(currentRoute) { mutableStateOf(false) }
+    val barScrollConnection = remember(isLandscapeRail) {
+        object : NestedScrollConnection {
+            override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {
+                if (!isLandscapeRail && source == NestedScrollSource.UserInput) {
+                    if (consumed.y < -6f) barHiddenByScroll = true
+                    else if (consumed.y > 6f || available.y > 6f) barHiddenByScroll = false
+                }
+                return Offset.Zero
+            }
+        }
+    }
     val fullBarHeight = barClearance.fullHeightDp.dp
 
 
@@ -961,6 +975,7 @@ fun ArflixApp(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
+                    .then(if (isMobile) Modifier.nestedScroll(barScrollConnection) else Modifier)
             ) {
                 AppNavigation(
                     navController = navController,
@@ -994,7 +1009,7 @@ fun ArflixApp(
         }
 
         androidx.compose.animation.AnimatedVisibility(
-            visible = showBottomBar,
+            visible = showBottomBar && !(barHiddenByScroll && !isLandscapeRail),
             // The rail slides in from its own edge; the bottom bar rises. Both fade so it feels soft.
             enter = (if (isLandscapeRail) androidx.compose.animation.slideInHorizontally(
                 animationSpec = androidx.compose.animation.core.tween(260, easing = androidx.compose.animation.core.FastOutSlowInEasing)
