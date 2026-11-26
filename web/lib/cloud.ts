@@ -2509,6 +2509,16 @@ export async function saveWatchedState(
         .filter((candidate) => !isWatchedRow(candidate));
       root.localContinueWatchingByProfile = byProfile;
     }
+
+    // Android TraktRepository.markContinueWatchingEntryWatched: stamp the exact entry (the movie,
+    // or this one episode) so paused tracker playback or another device's older progress cannot
+    // bring it back. Newer progress (a rewatch) still shows; the next episode's Up Next is untouched.
+    if (item.mediaType === "movie" || (item.seasonNumber != null && item.episodeNumber != null)) {
+      const { exactKey } = continueWatchingDismissalKeys(item);
+      updateProfileDismissals(root, targetProfileId, (values) => {
+        if (watched) values.set(exactKey, Date.now()); else values.delete(exactKey);
+      });
+    }
   });
 }
 

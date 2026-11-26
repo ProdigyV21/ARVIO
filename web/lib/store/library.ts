@@ -6,7 +6,7 @@ import { activeSyncProvider, syncClient } from "../sync";
 import type { MediaItem } from "../types";
 import { isMediaWatched, mediaWatchKey } from "./watchHistory";
 import { authClient } from "./clients";
-import { cwCacheKeyFor, saveCachedList, slimCacheItem, watchlistCacheKeyFor } from "./listCache";
+import { cwCacheKeyFor, readCachedList, saveCachedList, slimCacheItem, watchlistCacheKeyFor } from "./listCache";
 import type { StoreCore } from "./core";
 
 export function useWatchState(store: StoreCore) {
@@ -94,6 +94,14 @@ export function useLibraryActions(store: StoreCore & Pick<ReturnType<typeof useW
   const toggleWatched = useCallback(async (item: MediaItem, seasonNumber?: number | null, episodeNumber?: number | null, skipSync?: boolean) => {
     const currentlyWatched = isWatched(item, seasonNumber, episodeNumber);
     markWatchedLocally({ mediaType: item.mediaType, id: item.id, season: seasonNumber, episode: episodeNumber }, !currentlyWatched);
+    if (!currentlyWatched) {
+      // The cached rail paints first on the next visit; keep the watched entry out of it too.
+      const cacheKey = cwCacheKeyFor(activeProfileId);
+      const key = mediaWatchKey(item, seasonNumber, episodeNumber);
+      const cached = readCachedList(cacheKey);
+      const kept = cached.filter((entry) => mediaWatchKey(entry) !== key);
+      if (kept.length !== cached.length) saveCachedList(cacheKey, kept, 30);
+    }
     setToast(!currentlyWatched ? "Marked as watched." : "Marked as unwatched.");
 
     if (authClient.session) {

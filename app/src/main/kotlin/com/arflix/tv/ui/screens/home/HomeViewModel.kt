@@ -2611,10 +2611,12 @@ class HomeViewModel @Inject constructor(
         // resolveContinueWatchingItems call (which saves Trakt-only data to the cache).
         viewModelScope.launch(Dispatchers.IO) {
             try {
+                // Read after the preload: its dismissal pass drops stamps that newer progress beat.
+                val preloaded = preloadStartupContinueWatchingItems()
                 val dismissedKeys = runCatching {
                     traktRepository.getDismissedContinueWatchingShowKeys()
                 }.getOrDefault(emptySet())
-                val cached = preloadStartupContinueWatchingItems().filterNot { item ->
+                val cached = preloaded.filterNot { item ->
                     dismissedKeys.contains("${item.mediaType.name}:${item.id}")
                 }
                 if (cached.isNotEmpty()) {
@@ -5816,6 +5818,22 @@ class HomeViewModel @Inject constructor(
         )
     }
 
+    /** A title just marked watched leaves the row at once, like an episode does. */
+    private fun removeFromContinueWatchingRow(item: MediaItem) {
+        val updated = _uiState.updateAndGet { state ->
+            state.copy(
+                categories = state.categories.map { category ->
+                    if (category.id == "continue_watching") {
+                        category.copy(items = category.items.filterNot { it.id == item.id && it.mediaType == item.mediaType })
+                    } else {
+                        category
+                    }
+                }.filter { category -> category.id != "continue_watching" || category.items.isNotEmpty() }
+            )
+        }
+        lastContinueWatchingItems = updated.categories.firstOrNull { it.id == "continue_watching" }?.items.orEmpty()
+    }
+
     fun toggleWatched(item: MediaItem) {
         viewModelScope.launch {
             try {
@@ -5828,6 +5846,7 @@ class HomeViewModel @Inject constructor(
                             toastType = ToastType.SUCCESS
                         )
                     } else {
+                        removeFromContinueWatchingRow(item)
                         traktRepository.markMovieWatched(item.id)
                         refreshWatchedBadgesAfterMark()
                         watchHistoryRepository.removeFromHistory(item.id, null, null)
@@ -5908,6 +5927,7 @@ class HomeViewModel @Inject constructor(
             try {
                 if (item.mediaType == MediaType.MOVIE) {
                     if (!item.isWatched) {
+                        removeFromContinueWatchingRow(item)
                         traktRepository.markMovieWatched(item.id)
                         watchHistoryRepository.removeFromHistory(item.id, null, null)
                         _uiState.value = _uiState.value.copy(
