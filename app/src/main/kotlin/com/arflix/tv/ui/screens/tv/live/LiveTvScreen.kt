@@ -4598,7 +4598,7 @@ fun LiveTvScreen(
                     }
                     if (!sportsSelected) Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp),
                         horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                        Text(stringResource(R.string.live_channels_count, selectedCategoryTotalCount), color = TextSecondary, fontSize = 13.sp)
+                        Text(liveChannelsLabel(selectedCategoryTotalCount), color = TextSecondary, fontSize = 13.sp)
                         androidx.compose.material3.TextButton(onClick = { mobileChannelGuide = !mobileChannelGuide }) {
                             androidx.compose.material3.Text(stringResource(if (mobileChannelGuide) R.string.live_quick_all_channels else R.string.channel_guide), color = Color.White)
                         }

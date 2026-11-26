@@ -20,3 +20,13 @@ class MobileWordingTest {
         assertThat("Pulsa para buscar en YouTube".touchTapWording(true)).isEqualTo("Pulsa para buscar en YouTube")
     }
 }
+
+class LiveWordingTest {
+    @org.junit.Test
+    fun groupsAndCountsReadNaturally() {
+        com.google.common.truth.Truth.assertThat(com.arflix.tv.ui.screens.tv.live.tidyPlaylistGroupName("Entertainment;Music")).isEqualTo("Entertainment · Music")
+        com.google.common.truth.Truth.assertThat(com.arflix.tv.ui.screens.tv.live.tidyPlaylistGroupName("News")).isEqualTo("News")
+        com.google.common.truth.Truth.assertThat(com.arflix.tv.ui.screens.tv.live.singularChannelLabel("1 channels", 1)).isEqualTo("1 channel")
+        com.google.common.truth.Truth.assertThat(com.arflix.tv.ui.screens.tv.live.singularChannelLabel("4 channels", 4)).isEqualTo("4 channels")
+    }
+}

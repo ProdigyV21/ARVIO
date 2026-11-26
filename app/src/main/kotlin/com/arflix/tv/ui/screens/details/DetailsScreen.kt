@@ -1396,7 +1396,8 @@ internal fun DetailsContent(
         ).dp
         // With a logo on top, use artwork that doesn't already print the title.
         val artwork = mobileDetailsArtworkSource(
-            (if (logoUrl != null) textlessPosterUrl else null) ?: item.image,
+            if (logoUrl == null) item.image
+            else textlessPosterUrl ?: if (textlessBackdropUrl != null) null else item.image,
             (if (logoUrl != null) textlessBackdropUrl else null) ?: item.backdrop,
             maxWidth <= maxHeight,
         )

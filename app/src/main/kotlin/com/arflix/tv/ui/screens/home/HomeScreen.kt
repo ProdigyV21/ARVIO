@@ -2714,8 +2714,11 @@ internal fun MobileHeroCarousel(
             // clear logo on top showed the title twice.
             val textlessPoster = heroTextlessArt["${item.mediaType}_${item.id}:poster"]
             val textlessBackdrop = heroTextlessArt["${item.mediaType}_${item.id}:backdrop"]
-            val heroArtwork = remember(item.backdrop, item.image, heroLayout.compactContent, textlessPoster, textlessBackdrop) {
-                mobileDetailsArtworkSource(textlessPoster ?: item.image, textlessBackdrop ?: item.backdrop, portrait = !heroLayout.compactContent)
+            val heroArtwork = remember(item.backdrop, item.image, heroLayout.compactContent, textlessPoster, textlessBackdrop, logoUrl) {
+                // No clean poster but a clean backdrop: crop the backdrop rather than show the
+                // printed title under the logo.
+                val poster = textlessPoster ?: if (logoUrl != null && textlessBackdrop != null) null else item.image
+                mobileDetailsArtworkSource(poster, textlessBackdrop ?: item.backdrop, portrait = !heroLayout.compactContent)
             }
 
             // Scale down cards that aren't in the center; animate smoothly as they scroll in/out

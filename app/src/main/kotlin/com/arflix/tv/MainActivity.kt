@@ -919,11 +919,14 @@ fun ArflixApp(
     val barInset = barClearance.scrollInsetDp.dp
     // Phones: the floating tab bar slides away while you scroll down and returns on the way
     // back up, so content gets the whole screen. A new page always starts with it visible.
-    var barHiddenByScroll by remember(currentRoute) { mutableStateOf(false) }
+    // One state for the whole session: the scroll connection below is remembered once and must
+    // keep writing to the same state, so a route change resets it rather than replacing it.
+    var barHiddenByScroll by remember { mutableStateOf(false) }
+    LaunchedEffect(currentRoute) { barHiddenByScroll = false }
     val barScrollConnection = remember(isLandscapeRail) {
         object : NestedScrollConnection {
             override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {
-                if (!isLandscapeRail && source == NestedScrollSource.UserInput) {
+                if (!isLandscapeRail) {
                     if (consumed.y < -6f) barHiddenByScroll = true
                     else if (consumed.y > 6f || available.y > 6f) barHiddenByScroll = false
                 }

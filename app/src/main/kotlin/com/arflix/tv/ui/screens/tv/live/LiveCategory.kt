@@ -410,8 +410,27 @@ fun liveCategoryLabel(raw: String): String = when (raw) {
     "Kids · Global" -> stringResource(R.string.live_cat_global_kids)
     "Documentary" -> stringResource(R.string.live_cat_documentary)
     "Music" -> stringResource(R.string.live_cat_music)
-    else -> raw
+    // Playlists often say "Undefined" for channels without a group; that is our "Ungrouped".
+    "Undefined", "undefined" -> stringResource(R.string.live_cat_ungrouped)
+    else -> tidyPlaylistGroupName(raw)
 }
+
+/** "Entertainment;Music" (a channel in two groups) reads as "Entertainment · Music". */
+internal fun tidyPlaylistGroupName(raw: String): String =
+    if (';' !in raw) raw else raw.split(';').map(String::trim).filter(String::isNotEmpty).joinToString(" · ")
+
+/** "%d channels" with a singular for one channel, in the languages whose wording we know. */
+@Composable
+fun liveChannelsLabel(count: Int): String =
+    singularChannelLabel(stringResource(R.string.live_channels_count, count), count)
+
+internal fun singularChannelLabel(label: String, count: Int): String =
+    if (count != 1) label else when (label) {
+        "1 channels" -> "1 channel"
+        "1 kanalen" -> "1 kanaal"
+        "1 canales" -> "1 canal"
+        else -> label
+    }
 
 /**
  * Category display names set in ARVIO Web Settings (iptvByProfile.groupNames:

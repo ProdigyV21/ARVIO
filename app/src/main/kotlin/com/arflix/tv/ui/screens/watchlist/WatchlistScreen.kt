@@ -509,7 +509,8 @@ fun WatchlistScreen(
                     }
                     val spotlightItem = previewItem
                     val compactSpotlight = compact || maxHeight < 440.dp
-                    val showSpotlight = !collections && items.isNotEmpty()
+                    // Landscape phones are too short for the spotlight; the grid gets the room.
+                    val showSpotlight = !collections && items.isNotEmpty() && !landscapeTouch
                     val backdropHeight = collectionSpotlightHeight(touch, compactSpotlight) + 150.dp
                     val backdropHeightPx = with(LocalDensity.current) { backdropHeight.toPx() }
                     // On phones the spotlight scrolls with the grid, so its artwork fades out with it
