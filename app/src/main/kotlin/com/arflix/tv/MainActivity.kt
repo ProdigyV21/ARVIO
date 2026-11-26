@@ -925,7 +925,10 @@ fun ArflixApp(
             .fillMaxSize()
             // Background fills edge-to-edge (including behind transparent bars).
             .background(
-                brush = if (oledBlackBackground) {
+                // Library and Live TV paint pure black; the status-bar strip above them matches,
+                // so there is no grey seam on phones.
+                brush = if (oledBlackBackground || (isMobile &&
+                        currentRoute?.substringBefore('?') in setOf(Screen.Watchlist.route, "tv"))) {
                     Brush.linearGradient(colors = listOf(Color.Black, Color.Black))
                 } else {
                     Brush.linearGradient(

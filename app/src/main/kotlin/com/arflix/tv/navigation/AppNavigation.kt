@@ -252,7 +252,9 @@ fun AppNavigation(
         navController.navigate(route) {
             popUpTo(Screen.Home.route) { saveState = true }
             launchSingleTop = true
-            restoreState = true
+            // A link to one settings section (e.g. "Open settings" on an empty Live TV page) must
+            // open that section, not restore wherever Settings was left last time.
+            restoreState = !route.contains("initialSection=")
         }
     }
 
