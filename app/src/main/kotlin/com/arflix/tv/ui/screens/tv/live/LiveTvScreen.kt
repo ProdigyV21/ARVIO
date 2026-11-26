@@ -1671,6 +1671,22 @@ fun LiveTvScreen(
             }
         }
     }
+    // Timing marks (logcat LiveTvPerf): opening Live TV until the guide is drawn, and each zap.
+    LaunchedEffect(Unit) { LiveTvPerf.screenEntered() }
+    val perfHasChannels = filteredChannels.isNotEmpty()
+    LaunchedEffect(perfHasChannels) {
+        if (!perfHasChannels) return@LaunchedEffect
+        LiveTvPerf.channelsReady(filteredChannels.size)
+        withFrameNanos { }
+        LiveTvPerf.guidePainted()
+    }
+    val perfHasEpg = perfHasChannels && effectiveGuideNowNext.isNotEmpty()
+    LaunchedEffect(perfHasEpg) {
+        if (!perfHasEpg) return@LaunchedEffect
+        withFrameNanos { }
+        LiveTvPerf.epgPainted()
+    }
+    LaunchedEffect(playingChannelId) { if (playingChannelId != null) LiveTvPerf.zapStarted(playingChannelId) }
     val currentNowNext = remember(playingChannelId, playingCatchupProgram, effectiveGuideNowNext, guideClockMillis) {
         playingCatchupProgram?.let { IptvNowNext(now = it) }
             ?: effectiveGuideNowNext[playingChannelId]?.atTime(guideClockMillis)
@@ -3737,6 +3753,7 @@ fun LiveTvScreen(
         if (initialPositionMs > 0L) exoPlayer.setMediaSource(source, initialPositionMs)
         else exoPlayer.setMediaSource(source)
         exoPlayer.prepare()
+        LiveTvPerf.prepared()
         exoPlayer.playWhenReady = true
         exoPlayer.play()
         lastPreparedStreamUrl = stream
@@ -3994,6 +4011,7 @@ fun LiveTvScreen(
             override fun onPlaybackStateChanged(playbackState: Int) {
                 playerIsBuffering = (playbackState == Player.STATE_BUFFERING)
                 if (playbackState == Player.STATE_READY) {
+                    LiveTvPerf.ready()
                     playbackDiagnostic = null
                     playerIsBuffering = false
                     if (liveReadySinceMs == null) liveReadySinceMs = android.os.SystemClock.elapsedRealtime()
@@ -4008,6 +4026,10 @@ fun LiveTvScreen(
                         )
                     )
                 }
+            }
+
+            override fun onRenderedFirstFrame() {
+                LiveTvPerf.firstFrame()
             }
 
             override fun onIsLoadingChanged(isLoading: Boolean) {
