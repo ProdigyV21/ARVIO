@@ -219,6 +219,13 @@ data class PlayerUiState(
     val expectedDurationMs: Long = 0,
     val isLoadingPlaybackMetadata: Boolean = false,
     val preferredAudioLanguage: String = "en",
+    // Second-choice audio language (ISO code), blank when off. Used only when the
+    // preferred language is not on the stream.
+    val secondaryAudioLanguage: String = "",
+    // Settings > Playback "Switch source automatically": off keeps a hand-picked source.
+    val autoSourceFailover: Boolean = true,
+    // Settings > Playback "External player": hand resolved streams to another video app.
+    val externalPlayer: Boolean = false,
     // The language a source's badge puts first: the chosen audio language, or null (the device
     // language) under "Auto"/"None", the same as the details screen's source list.
     val sourceBadgeLanguage: String? = null,
@@ -931,6 +938,9 @@ class PlayerViewModel @Inject constructor(
             translationManager.removeSubtitleHearingImpaired = removeHi
             val autoPlayNext = prefs[autoPlayNextKey()] ?: true
             val seekThumbnailsEnabled = prefs[seekThumbnailsKey()] ?: true
+            val autoSourceFailover = prefs[profileManager.profileBooleanKey(AUTO_SOURCE_FAILOVER_PREF)] ?: true
+            val externalPlayer = prefs[profileManager.profileBooleanKey(EXTERNAL_PLAYER_PREF)] ?: false
+            val secondaryAudioLanguage = resolveSecondaryAudioLanguage(prefs[profileManager.profileStringKey(SECONDARY_AUDIO_LANGUAGE_PREF)])
             val showLoadingStats = prefs[showLoadingStatsKey()] ?: true
             val volumeBoostDb = prefs[profileManager.profileStringKey("volume_boost_db")]
                 ?.toIntOrNull()?.coerceIn(0, 15) ?: 0
@@ -1009,6 +1019,9 @@ class PlayerViewModel @Inject constructor(
                 subtitleRemoveHearingImpaired = removeHi,
                 autoPlayNext = autoPlayNext,
                 seekThumbnailsEnabled = seekThumbnailsEnabled,
+                autoSourceFailover = autoSourceFailover,
+                externalPlayer = externalPlayer,
+                secondaryAudioLanguage = secondaryAudioLanguage,
                 autoSkipIntro = autoSkipIntro,
                 autoSkipOutro = autoSkipOutro,
                 audioDelayMs = audioDelayMs,
@@ -2833,6 +2846,13 @@ class PlayerViewModel @Inject constructor(
         ?.trim()
         ?.takeUnless { it.isBlank() || it.startsWith("Auto", ignoreCase = true) || it.equals("None", ignoreCase = true) }
         ?.let(::normalizeLanguageCode)
+
+    private fun resolveSecondaryAudioLanguage(setting: String?): String {
+        val value = setting?.trim().orEmpty()
+        if (value.isBlank() || value.equals("Off", ignoreCase = true) || value.equals("None", ignoreCase = true) ||
+            value.startsWith("Auto", ignoreCase = true)) return ""
+        return normalizeLanguage(value).takeIf { it in knownLanguageCodes }.orEmpty()
+    }
 
     private suspend fun resolvePreferredAudioLanguage(): String {
         val setting = runCatching {

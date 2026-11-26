@@ -395,6 +395,12 @@ class CloudSyncRepository @Inject constructor(
         val showAddonStreamDetails: Boolean? = null,
         /** Seek-bar thumbnails (default on). Null from older clients keeps the local choice. */
         val seekThumbnailsEnabled: Boolean? = null,
+        /** Second-choice audio language ("Off" = none). Null from older clients keeps the local choice. */
+        val secondaryAudioLanguage: String? = null,
+        /** Switch to the next source when one fails (default on). Null from older clients keeps the local choice. */
+        val autoSourceFailover: Boolean? = null,
+        /** Open streams in another video app (default off). Null from older clients keeps the local choice. */
+        val externalPlayer: Boolean? = null,
         val spoilerBlurEnabled: Boolean = false,
         val volumeBoostDb: Int = 0,
         val includeSpecials: Boolean = false,
@@ -459,6 +465,12 @@ class CloudSyncRepository @Inject constructor(
         profileManager.profileBooleanKeyFor(profileId, "spoiler_blur")
     private fun seekThumbnailsKeyFor(profileId: String) =
         profileManager.profileBooleanKeyFor(profileId, com.arflix.tv.ui.screens.player.preview.SEEK_THUMBNAILS_PREF)
+    private fun secondaryAudioLanguageKeyFor(profileId: String) =
+        profileManager.profileStringKeyFor(profileId, com.arflix.tv.ui.screens.player.SECONDARY_AUDIO_LANGUAGE_PREF)
+    private fun autoSourceFailoverKeyFor(profileId: String) =
+        profileManager.profileBooleanKeyFor(profileId, com.arflix.tv.ui.screens.player.AUTO_SOURCE_FAILOVER_PREF)
+    private fun externalPlayerKeyFor(profileId: String) =
+        profileManager.profileBooleanKeyFor(profileId, com.arflix.tv.ui.screens.player.EXTERNAL_PLAYER_PREF)
     private fun volumeBoostDbKeyFor(profileId: String) =
         profileManager.profileStringKeyFor(profileId, "volume_boost_db")
     private fun dnsProviderKeyFor(profileId: String) =
@@ -810,6 +822,9 @@ class CloudSyncRepository @Inject constructor(
                         showLoadingStats = prefs[showLoadingStatsKeyFor(profile.id)] ?: true,
                         showAddonStreamDetails = prefs[com.arflix.tv.util.addonStreamDetailsKey(profile.id)] ?: false,
                         seekThumbnailsEnabled = prefs[seekThumbnailsKeyFor(profile.id)] ?: true,
+                        secondaryAudioLanguage = prefs[secondaryAudioLanguageKeyFor(profile.id)] ?: "Off",
+                        autoSourceFailover = prefs[autoSourceFailoverKeyFor(profile.id)] ?: true,
+                        externalPlayer = prefs[externalPlayerKeyFor(profile.id)] ?: false,
                         spoilerBlurEnabled = prefs[spoilerBlurKeyFor(profile.id)] ?: false,
                         volumeBoostDb = prefs[volumeBoostDbKeyFor(profile.id)]?.toIntOrNull()?.coerceIn(0, 15) ?: 0,
                         dnsProvider = prefs[dnsProviderKeyFor(profile.id)] ?: globalDnsProvider,
@@ -1819,6 +1834,9 @@ class CloudSyncRepository @Inject constructor(
                         state.showLoadingStats?.let { prefs[showLoadingStatsKeyFor(profileId)] = it }
                         state.showAddonStreamDetails?.let { prefs[com.arflix.tv.util.addonStreamDetailsKey(profileId)] = it }
                         state.seekThumbnailsEnabled?.let { prefs[seekThumbnailsKeyFor(profileId)] = it }
+                        state.secondaryAudioLanguage?.let { prefs[secondaryAudioLanguageKeyFor(profileId)] = it.ifBlank { "Off" } }
+                        state.autoSourceFailover?.let { prefs[autoSourceFailoverKeyFor(profileId)] = it }
+                        state.externalPlayer?.let { prefs[externalPlayerKeyFor(profileId)] = it }
                         prefs[spoilerBlurKeyFor(profileId)] = state.spoilerBlurEnabled
                         prefs[volumeBoostDbKeyFor(profileId)] = state.volumeBoostDb.coerceIn(0, 15).toString()
                         prefs[dnsProviderKeyFor(profileId)] = state.dnsProvider.ifBlank { "system" }

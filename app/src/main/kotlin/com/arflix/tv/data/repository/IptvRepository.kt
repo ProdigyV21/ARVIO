@@ -11667,6 +11667,9 @@ class IptvRepository @Inject constructor(
                 drmProps["license_key"] = value.substringAfter('=').trim()
             value.startsWith("inputstream.adaptive.license_data=", ignoreCase = true) ->
                 drmProps["license_data"] = value.substringAfter('=').trim()
+            // Newer inputstream.adaptive notation: drm_legacy=<scheme>|<license> and drm={json}.
+            value.startsWith("inputstream.adaptive.drm", ignoreCase = true) ->
+                com.arflix.tv.util.KodiDrmProps.parse(value)?.let(drmProps::putAll)
 
             // ── HTTP headers ────────────────────────────────────────────
             value.startsWith("http-user-agent=", ignoreCase = true) ->

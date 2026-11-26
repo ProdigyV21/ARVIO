@@ -2229,4 +2229,11 @@
     <string name="news_no_topic_sources_desc">Pick more topics or other sources in Settings, News.</string>
     <string name="seek_thumbnails">Seek thumbnails</string>
     <string name="seek_thumbnails_desc">Show small pictures of the video while you seek. Made on this device in the background during playback; pauses when playback needs the network or memory.</string>
+    <string name="secondary_audio">Secondary audio</string>
+    <string name="secondary_audio_desc">Used when your preferred audio language is not on the stream.</string>
+    <string name="external_player">External player</string>
+    <string name="external_player_desc">Open films and episodes in another video app, such as VLC or MX Player. ARVIO then cannot save your progress or scrobble to Trakt. Live TV keeps ARVIO\'s player.</string>
+    <string name="external_player_missing">No video app found to open this stream. Playing it here.</string>
+    <string name="auto_source_failover">Switch source automatically</string>
+    <string name="auto_source_failover_desc">When a source fails to start or stops, try the next one. Off: stay on the source and show the error, so you can retry or pick another.</string>
 </resources>

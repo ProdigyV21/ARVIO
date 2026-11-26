@@ -331,7 +331,7 @@ export function VideoPlayer({
           probeUrl = resolved.url;
         }
         if (controller.signal.aborted) return;
-        const prepared = await probeAndPrepareRemux(probeUrl, current.behaviorHints?.proxyHeaders?.request, settings.audioLanguage, { signal: controller.signal });
+        const prepared = await probeAndPrepareRemux(probeUrl, current.behaviorHints?.proxyHeaders?.request, settings.secondaryAudioLanguage ? `${settings.audioLanguage || ""},${settings.secondaryAudioLanguage}` : settings.audioLanguage, { signal: controller.signal });
         if (!prepared) throw new Error("Could not read audio tracks");
         if (!controller.signal.aborted) {
           setRemuxTracks(prepared.probe.audioTracks);
@@ -343,7 +343,7 @@ export function VideoPlayer({
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [liveTv, settings.audioLanguage]);
+  }, [liveTv, settings.audioLanguage, settings.secondaryAudioLanguage]);
 
   // Startup time runs from opening a title (or the next episode) to its first
   // frame; source hops, URL refreshes and restarts in between count as part of

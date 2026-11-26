@@ -168,6 +168,7 @@ export function LanguageSection() {
   const subtitle = subtitleValue(settings.defaultSubtitle);
   const secondary = subtitleValue(settings.secondarySubtitle);
   const audio = audioValue(settings.audioLanguage);
+  const secondaryAudio = settings.secondaryAudioLanguage ? (trackLanguageName(settings.secondaryAudioLanguage) || settings.secondaryAudioLanguage) : "Off";
   const content = settings.language;
   const contentOptions = CONTENT_LANGUAGE_OPTIONS.some(([value]) => value === content) ? CONTENT_LANGUAGE_OPTIONS : [[content, content] as [string, string], ...CONTENT_LANGUAGE_OPTIONS];
   return (
@@ -180,6 +181,10 @@ export function LanguageSection() {
         <Row id="audio-language" label="Audio language" hint="Preferred audio track. Original keeps the film's own language." scope="all">
           <Select label="Audio language" value={audio} onChange={(v) => set({ audioLanguage: v === "Auto (Original)" ? "" : v })}
             options={languageOptions([["Auto (Original)", "Original"], ["None", "No preference"]], audio)} />
+        </Row>
+        <Row id="secondary-audio-language" label="Second audio language" hint="Used when your audio language isn't on the stream." scope="all">
+          <Select label="Second audio language" value={secondaryAudio} onChange={(v) => set({ secondaryAudioLanguage: v === "Off" ? "" : v })}
+            options={languageOptions([["Off", "Off"]], secondaryAudio)} />
         </Row>
         <Row id="subtitle-language" label="Subtitle language" hint="Turned on automatically when available. Also the language AI subtitles translate into." scope="all">
           <Select label="Subtitle language" value={subtitle} onChange={(v) => set({ defaultSubtitle: v === "Off" ? "" : v })}

@@ -174,6 +174,17 @@ test('longer language names win, and audio preferences match Android names', () 
   assert.equal(remux.preferredAudioIndex(tracks, ''), 0);
 });
 
+test('second audio language is used only when the first is missing', () => {
+  const remux = load('lib/remuxProtocol.ts');
+  const track = (index, language) => ({ index, codec: 'aac', label: language, language, browserPlayable: true, passthrough: true });
+  const tracks = [track(0, 'deu'), track(1, 'eng'), track(2, 'dan')];
+  assert.equal(remux.preferredAudioIndex(tracks, 'Danish,English'), 2);
+  assert.equal(remux.preferredAudioIndex(tracks, 'Finnish,English'), 1);
+  assert.equal(remux.preferredAudioIndex(tracks, 'Finnish,Swedish'), 0);
+  assert.equal(remux.preferredAudioIndex(tracks, ',English'), 0);
+  assert.equal(remux.preferredAudioIndex(tracks, 'None,English'), 0);
+});
+
 test('values older web builds wrote are rewritten for Android on the next save', async () => {
   const h = cloudHarness({ subtitleAiModel: 'gemini', accentColor: 'purple', profileSettingsById: { p1: {} } });
   const base = { ...webDefaults(), aiSubtitleModel: 'gemini', accentColor: 'purple' };

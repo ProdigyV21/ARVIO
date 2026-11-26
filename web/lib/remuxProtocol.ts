@@ -25,7 +25,24 @@ export type RemuxEvent =
   | { type: "subtitle-tracks"; tracks: MkvSubtitleTrack[] }
   | { type: "subtitle-cues"; cues: MkvSubtitleCue[] };
 
+/**
+ * [language] is the audio language, optionally followed by the second one ("Danish,English").
+ * The second choice only counts when the first is a real language: under Original / no
+ * preference the stream's own default stays.
+ */
 export function preferredAudioIndex(tracks: RemuxAudioTrack[], language = "") {
+  const [first = "", ...rest] = language.split(",").map((value) => value.trim());
+  const firstIsLanguage = first !== "" && !first.toLowerCase().startsWith("auto") && first.toLowerCase() !== "none";
+  if (firstIsLanguage) {
+    for (const choice of [first, ...rest].filter(Boolean)) {
+      const index = preferredAudioIndexFor(tracks, choice, true);
+      if (index >= 0) return index;
+    }
+  }
+  return preferredAudioIndexFor(tracks, first, false);
+}
+
+function preferredAudioIndexFor(tracks: RemuxAudioTrack[], language: string, matchOnly: boolean) {
   const languages: Record<string, string[]> = {
     english: ["en", "eng"], dutch: ["nl", "nld", "dut"], german: ["de", "deu", "ger"],
     french: ["fr", "fra", "fre"], spanish: ["es", "spa"], portuguese: ["pt", "por"],
@@ -38,6 +55,7 @@ export function preferredAudioIndex(tracks: RemuxAudioTrack[], language = "") {
   const wanted = languageCode(language);
   const matching = playable.filter((track) => codes.includes((track.language ?? "").toLowerCase()) || (wanted !== "" && sameLanguage(track.language, wanted)));
   // Keep provider/default order; a compatible stereo track beats unnecessary conversion.
+  if (matchOnly && !matching.length) return -1;
   const pool = matching.length ? matching : playable;
   return (pool.find((track) => track.passthrough) ?? pool[0])?.index ?? -1;
 }

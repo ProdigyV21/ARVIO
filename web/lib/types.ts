@@ -535,6 +535,8 @@ export interface AppSettings {
   defaultSubtitle: string;
   secondarySubtitle: string;
   audioLanguage: string;
+  /** Used when the preferred audio language is not on the stream; "" = off. */
+  secondaryAudioLanguage: string;
   // Subtitles
   subtitleSize: number;
   subtitleColor: string;
