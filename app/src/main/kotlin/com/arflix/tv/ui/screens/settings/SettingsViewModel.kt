@@ -1,4 +1,5 @@
 package com.arflix.tv.ui.screens.settings
+import com.arflix.tv.ui.screens.player.preview.SEEK_THUMBNAILS_PREF
 import com.arflix.tv.data.model.AnimeStructuringStyle
 import com.arflix.tv.data.model.AutoplayLimits
 
@@ -225,6 +226,7 @@ data class SettingsUiState(
     val cardLayoutMode: String = CARD_LAYOUT_MODE_LANDSCAPE,
     val frameRateMatchingMode: String = "Off",
     val autoPlayNext: Boolean = true,
+    val seekThumbnailsEnabled: Boolean = true,
     val autoPlaySingleSource: Boolean = true,
     val autoPlayMinQuality: String = "Any",
     val autoPlayMaxQuality: String = "Unlimited",
@@ -586,6 +588,7 @@ class SettingsViewModel @Inject constructor(
     private fun frameRateMatchingModeKey() = profileManager.profileStringKey("frame_rate_matching_mode")
     private fun frameRateMatchingModeKeyFor(profileId: String) = profileManager.profileStringKeyFor(profileId, "frame_rate_matching_mode")
     private fun autoPlayNextKey() = profileManager.profileBooleanKey("auto_play_next")
+    private fun seekThumbnailsKey() = profileManager.profileBooleanKey(SEEK_THUMBNAILS_PREF)
     private fun autoPlayNextKeyFor(profileId: String) = profileManager.profileBooleanKeyFor(profileId, "auto_play_next")
     private fun autoPlaySingleSourceKey() = profileManager.profileBooleanKey("auto_play_single_source")
     private fun autoPlaySingleSourceKeyFor(profileId: String) = profileManager.profileBooleanKeyFor(profileId, "auto_play_single_source")
@@ -885,6 +888,7 @@ class SettingsViewModel @Inject constructor(
             // Apply content language to MediaRepository immediately
             mediaRepository.contentLanguage = contentLang
             var autoPlay = prefs[autoPlayNextKey()] ?: true
+            val seekThumbnailsEnabled = prefs[seekThumbnailsKey()] ?: true
             var autoPlaySingleSource = prefs[autoPlaySingleSourceKey()] ?: true
             // Ensure defaults are persisted on first launch so they're never ambiguous
             if (prefs[autoPlaySingleSourceKey()] == null) {
@@ -1019,6 +1023,7 @@ class SettingsViewModel @Inject constructor(
                 cardLayoutMode = cardLayoutMode,
                 frameRateMatchingMode = frameRateMode,
                 autoPlayNext = autoPlay,
+                seekThumbnailsEnabled = seekThumbnailsEnabled,
                 autoPlaySingleSource = autoPlaySingleSource,
                 autoPlayMinQuality = autoPlayMinQuality,
                 autoPlayMaxQuality = autoPlayMaxQuality,
@@ -1933,6 +1938,12 @@ class SettingsViewModel @Inject constructor(
             syncLocalStateToCloud(silent = true)
             authRepository.saveAutoPlayNextToProfile(enabled)
         }
+    }
+
+    fun setSeekThumbnailsEnabled(enabled: Boolean) {
+        if (!canManage("playback")) return
+        preferenceWriter.save(seekThumbnailsKey(), enabled, { it.seekThumbnailsEnabled },
+            { state, value -> state.copy(seekThumbnailsEnabled = value) })
     }
 
     fun setAutoPlaySingleSource(enabled: Boolean) {

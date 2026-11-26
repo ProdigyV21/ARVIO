@@ -2177,4 +2177,6 @@
     <string name="service_home_top_rated_movies">Películas mejor valoradas</string>
     <string name="service_home_filter_all">Todo</string>
     <string name="service_home_filter_grid">Filtrar</string>
+    <string name="seek_thumbnails">Miniaturas al avanzar</string>
+    <string name="seek_thumbnails_desc">Muestra pequeñas imágenes del vídeo mientras avanzas o retrocedes. Se crean en este dispositivo en segundo plano durante la reproducción y se pausan cuando la reproducción necesita red o memoria.</string>
 </resources>

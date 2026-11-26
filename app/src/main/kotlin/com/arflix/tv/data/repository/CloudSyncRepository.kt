@@ -368,6 +368,8 @@ class CloudSyncRepository @Inject constructor(
         val showLoadingStats: Boolean? = null,
         // Older clients omit this field; do not reset an opted-in TV on restore.
         val showAddonStreamDetails: Boolean? = null,
+        /** Seek-bar thumbnails (default on). Null from older clients keeps the local choice. */
+        val seekThumbnailsEnabled: Boolean? = null,
         val spoilerBlurEnabled: Boolean = false,
         val volumeBoostDb: Int = 0,
         val includeSpecials: Boolean = false,
@@ -430,6 +432,8 @@ class CloudSyncRepository @Inject constructor(
         profileManager.profileBooleanKeyFor(profileId, "show_loading_stats")
     private fun spoilerBlurKeyFor(profileId: String) =
         profileManager.profileBooleanKeyFor(profileId, "spoiler_blur")
+    private fun seekThumbnailsKeyFor(profileId: String) =
+        profileManager.profileBooleanKeyFor(profileId, com.arflix.tv.ui.screens.player.preview.SEEK_THUMBNAILS_PREF)
     private fun volumeBoostDbKeyFor(profileId: String) =
         profileManager.profileStringKeyFor(profileId, "volume_boost_db")
     private fun dnsProviderKeyFor(profileId: String) =
@@ -780,6 +784,7 @@ class CloudSyncRepository @Inject constructor(
                         iptvFavoritesOnHome = prefs[iptvFavoritesOnHomeKeyFor(profile.id)] ?: true,
                         showLoadingStats = prefs[showLoadingStatsKeyFor(profile.id)] ?: true,
                         showAddonStreamDetails = prefs[com.arflix.tv.util.addonStreamDetailsKey(profile.id)] ?: false,
+                        seekThumbnailsEnabled = prefs[seekThumbnailsKeyFor(profile.id)] ?: true,
                         spoilerBlurEnabled = prefs[spoilerBlurKeyFor(profile.id)] ?: false,
                         volumeBoostDb = prefs[volumeBoostDbKeyFor(profile.id)]?.toIntOrNull()?.coerceIn(0, 15) ?: 0,
                         dnsProvider = prefs[dnsProviderKeyFor(profile.id)] ?: globalDnsProvider,
@@ -1783,6 +1788,7 @@ class CloudSyncRepository @Inject constructor(
                         prefs[iptvFavoritesOnHomeKeyFor(profileId)] = state.iptvFavoritesOnHome
                         state.showLoadingStats?.let { prefs[showLoadingStatsKeyFor(profileId)] = it }
                         state.showAddonStreamDetails?.let { prefs[com.arflix.tv.util.addonStreamDetailsKey(profileId)] = it }
+                        state.seekThumbnailsEnabled?.let { prefs[seekThumbnailsKeyFor(profileId)] = it }
                         prefs[spoilerBlurKeyFor(profileId)] = state.spoilerBlurEnabled
                         prefs[volumeBoostDbKeyFor(profileId)] = state.volumeBoostDb.coerceIn(0, 15).toString()
                         prefs[dnsProviderKeyFor(profileId)] = state.dnsProvider.ifBlank { "system" }

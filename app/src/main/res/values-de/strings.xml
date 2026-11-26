@@ -1952,4 +1952,6 @@
     <string name="phone_input_page_sent">Gesendet ✓ — drücke OK auf dem Fernseher.</string>
     <string name="phone_input_page_not_sent">Nicht gesendet</string>
     <string name="phone_input_page_expired">Dieser Code ist abgelaufen — scanne den QR-Code auf dem Fernseher erneut.</string>
+    <string name="seek_thumbnails">Vorschaubilder beim Spulen</string>
+    <string name="seek_thumbnails_desc">Zeigt beim Spulen kleine Bilder aus dem Video. Sie werden während der Wiedergabe im Hintergrund auf diesem Gerät erstellt und pausieren, wenn die Wiedergabe Netzwerk oder Speicher braucht.</string>
 </resources>

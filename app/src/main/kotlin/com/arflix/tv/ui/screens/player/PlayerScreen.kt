@@ -1967,7 +1967,7 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
 
     // Previews are made off the main player: a separate low-priority process decodes one keyframe
     // at a time, and background preparation pauses on a thin buffer or dropped frames.
-    val seekThumbnailsEnabled = true
+    val seekThumbnailsEnabled = uiState.seekThumbnailsEnabled
     val useNativeSeekKeyframes = seekThumbnailsEnabled && uiState.selectedStreamUrl?.let {
         it.startsWith("https://", ignoreCase = true) || it.startsWith("http://", ignoreCase = true)
     } == true &&
@@ -2033,7 +2033,11 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
     }
 
     val controlsPreviewPosition = if (isControlScrubbing || seekInteraction.phase == SeekPhase.Exiting) scrubPreviewPosition else currentPosition
-    val previewTarget = if (seekInteraction.phase != SeekPhase.Idle) seekInteraction.targetMs else currentPosition
+    // Touch drags move by the pixel; previews use the 10-second cache bucket so a drag reuses
+    // frames instead of restarting a lookup on every move. The seek itself stays exact.
+    val previewTarget = if (seekInteraction.phase == SeekPhase.Idle) currentPosition
+        else if (seekInteraction.surface == SeekSurface.Touch) quantizeSeekPreviewPosition(seekInteraction.targetMs, duration)
+        else seekInteraction.targetMs
     val previewRequested = seekThumbnailsEnabled && !isCasting && !args.isLiveStream && hasPlaybackStarted && duration > 0L &&
         seekInteraction.browsing
     val previewFrameForTarget = seekPreviewFrame?.takeIf {
@@ -2089,8 +2093,14 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
             seekPreviewProvider.warmWindow(previewTarget)
             return@LaunchedEffect
         }
-        seekPreviewProvider.cachedDisplayFrameAt(previewTarget)?.let { nearby ->
+        // Memory first (no I/O), so every scrub step shows a nearby picture at once.
+        seekPreviewProvider.memoryNearbyFrameAt(previewTarget)?.let { nearby ->
             if (seekPreviewProvider.matchesDisplayTarget(nearby, previewTarget)) seekPreviewFrame = nearby
+        }
+        if (!seekPreviewProvider.matchesDisplayTarget(seekPreviewFrame, previewTarget)) {
+            seekPreviewProvider.cachedDisplayFrameAt(previewTarget)?.let { nearby ->
+                if (seekPreviewProvider.matchesDisplayTarget(nearby, previewTarget)) seekPreviewFrame = nearby
+            }
         }
         if (previewStatus.capability == SeekPreviewCapability.UNAVAILABLE) return@LaunchedEffect
         delay(SEEK_PREVIEW_DEBOUNCE_MS)
