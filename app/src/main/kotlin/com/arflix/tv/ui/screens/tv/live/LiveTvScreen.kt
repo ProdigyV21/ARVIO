@@ -4092,6 +4092,13 @@ fun LiveTvScreen(
                 "[IPTV] Failed to resolve playable stream catchup=${playingCatchupProgram != null} " +
                     "channel=${sourceChannel?.id.orEmpty()} reason=${error.message}"
             )
+            // A replay the provider cannot serve falls back to live with the notice up,
+            // instead of leaving the last frame frozen on screen.
+            if (playingCatchupProgram != null) {
+                playingCatchupProgram = null
+                catchupPlaybackOffsetMs = 0L
+                hudPokeSignal++
+            }
             return@LaunchedEffect
         }
         val headers = sourceChannel?.requestHeaders.orEmpty()
@@ -5450,6 +5457,13 @@ fun LiveTvScreen(
                         sleepLabel = if (liveSleepMinutes == 0) stringResource(R.string.live_sleep_off)
                             else stringResource(R.string.live_sleep_minutes, liveSleepMinutes),
                         sleepActive = liveSleepMinutes != 0,
+                        // Forward only means something inside a recording or a seekable live window.
+                        forwardEnabled = playingCatchupProgram != null || livePlayerSeekable(
+                            catchup = false,
+                            canReplayNow = false,
+                            playerSeekable = exoPlayer.isCurrentMediaItemSeekable,
+                            playerDurationMs = exoPlayer.duration,
+                        ),
                         seekable = livePlayerSeekable(
                             catchup = playingCatchupProgram != null,
                             canReplayNow = currentNowNext?.now?.let {

@@ -60,9 +60,13 @@ internal fun FullscreenSourcesDialog(
         var targetPlaced by remember(targetKey) { mutableStateOf(false) }
         LaunchedEffect(firstFocus, targetPlaced, touchDevice) {
             if (!touchDevice && targetPlaced) {
-                withFrameNanos { }
-                // The dialog may close or replace its lazy items before this frame.
-                runCatching { firstFocus.requestFocus() }
+                // The dialog window may not hold focus on its first frames; ask until it lands.
+                repeat(10) {
+                    withFrameNanos { }
+                    // The dialog may close or replace its lazy items before this frame.
+                    if (runCatching { firstFocus.requestFocus() }.isSuccess) return@LaunchedEffect
+                    kotlinx.coroutines.delay(50)
+                }
             }
         }
         val initialFocus = Modifier.focusRequester(firstFocus)
@@ -111,7 +115,8 @@ internal fun FullscreenSourcesDialog(
                 icon = Icons.Filled.Close,
                 label = stringResource(android.R.string.cancel),
                 onClick = onDismiss,
-                modifier = if (!hasAlternatives) initialFocus else Modifier,
+                focusRequester = if (!hasAlternatives) firstFocus else null,
+                modifier = if (!hasAlternatives) Modifier.onGloballyPositioned { if (it.isAttached) targetPlaced = true } else Modifier,
             )
         }
     }

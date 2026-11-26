@@ -144,6 +144,8 @@ fun FullscreenHud(
     showControls: Boolean = true,
     /** False when the stream cannot be seeked (no catch-up, no live window): rewind/forward are left out. */
     seekable: Boolean = true,
+    /** Forward 10 s: only in a recording or a seekable live window, never at the live edge. */
+    forwardEnabled: Boolean = seekable,
     /** The sleep timer is running: its button carries a dot. */
     sleepActive: Boolean = false,
     /** Bumped when a list opened from the controls (subtitles, audio) closes: focus returns to its button. */
@@ -168,13 +170,15 @@ fun FullscreenHud(
         }
     }
 
-    LaunchedEffect(pokeSignal, scrubbing) {
+    LaunchedEffect(pokeSignal, scrubbing, showControls) {
         visible = true
         onVisibilityChanged?.invoke(true)
         lastPoke = System.currentTimeMillis()
         if (scrubbing) return@LaunchedEffect
-        delay(5_000)
-        if (System.currentTimeMillis() - lastPoke >= 5_000) {
+        // The info bar alone goes after 5 s; with the controls up the remote user gets longer.
+        val hideAfter = if (showControls && !touchControls) HudControlsTimeoutMs else HudInfoTimeoutMs
+        delay(hideAfter)
+        if (System.currentTimeMillis() - lastPoke >= hideAfter) {
             visible = false
             onVisibilityChanged?.invoke(false)
         }
@@ -249,6 +253,16 @@ fun FullscreenHud(
         }
     }
 
+    // Back to live removes the button that had focus: put focus on play/pause instead of nowhere.
+    LaunchedEffect(isCatchupMode) {
+        if (!isCatchupMode && visible && showControls && !touchControls) {
+            repeat(ControlFocusAttempts) {
+                delay(ControlFocusRetryMs)
+                if (runCatching { playPauseFocusRequester.requestFocus() }.isSuccess) return@LaunchedEffect
+            }
+        }
+    }
+
     // Loading ring: delayed so a quick zap never flashes it, worded once the wait gets long.
     PlayerBufferingIndicator(
         buffering = isBuffering,
@@ -270,9 +284,10 @@ fun FullscreenHud(
                     .background(
                         Brush.verticalGradient(
                             0f to Color.Black.copy(alpha = 0.7f),
-                            0.25f to Color.Transparent,
-                            0.45f to Color.Transparent,
-                            1f to Color.Black.copy(alpha = 0.95f),
+                            0.22f to Color.Transparent,
+                            0.40f to Color.Transparent,
+                            0.62f to Color.Black.copy(alpha = 0.72f),
+                            1f to Color.Black.copy(alpha = 0.96f),
                         )
                     )
                     .clickable(
@@ -608,7 +623,7 @@ fun FullscreenHud(
                                         onPlayPauseClick?.invoke()
                                     },
                                 )
-                                if (seekable) {
+                                if (forwardEnabled) {
                                     PlayerActionButton(
                                         icon = Icons.Filled.Forward10,
                                         label = stringResource(R.string.live_player_forward_10),
@@ -1012,3 +1027,6 @@ private fun PlayerProgressLine(progress: Float) {
         )
     }
 }
+
+private const val HudInfoTimeoutMs = 5_000L
+private const val HudControlsTimeoutMs = 8_000L
