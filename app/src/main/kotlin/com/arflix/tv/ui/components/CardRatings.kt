@@ -53,17 +53,20 @@ object CardRatings {
     }
 }
 
+/** A card's score and whether it is IMDb's (shown with the IMDb badge) or a TMDB vote (a star). */
+internal data class CardScore(val value: String, val isImdb: Boolean)
+
 /**
  * The score a phone card shows: IMDb once known. A TMDB vote only appears when the title has no
  * IMDb score at all, and nothing shows while the lookup runs, so the number never jumps.
  */
 @Composable
-internal fun rememberMobileCardRating(item: MediaItem, enabled: Boolean): String? {
+internal fun rememberMobileCardRating(item: MediaItem, enabled: Boolean): CardScore? {
     if (!enabled) return null
-    val own = mobileCardRating(item.imdbRating)
-    if (own != null) return own
-    if (item.id <= 0) return mobileCardRating(item.tmdbRating, item.rating)
+    mobileCardRating(item.imdbRating)?.let { return CardScore(it, isImdb = true) }
+    if (item.id <= 0) return mobileCardRating(item.tmdbRating, item.rating)?.let { CardScore(it, isImdb = false) }
     LaunchedEffect(item.mediaType, item.id) { CardRatings.request(item.mediaType, item.id) }
     val shared = CardRatings.imdb[CardRatings.key(item.mediaType, item.id)] ?: return null
-    return mobileCardRating(shared) ?: mobileCardRating(item.tmdbRating, item.rating)
+    mobileCardRating(shared)?.let { return CardScore(it, isImdb = true) }
+    return mobileCardRating(item.tmdbRating, item.rating)?.let { CardScore(it, isImdb = false) }
 }

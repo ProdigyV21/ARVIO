@@ -24,7 +24,6 @@ import com.arflix.tv.network.IptvAccountUsage
 import com.arflix.tv.network.IptvProviderAccount
 import com.arflix.tv.network.withIptvAccountCheckGuard
 import com.arflix.tv.network.withIptvProviderRequestGuard
-import com.arflix.tv.network.iptvProviderCooldownMs
 import com.arflix.tv.util.IPTV_VOD_SEARCH_ENABLED_KEY
 import com.arflix.tv.util.AppLogger
 import com.arflix.tv.util.settingsDataStore
@@ -33,6 +32,9 @@ import com.google.gson.JsonArray
 import com.google.gson.JsonElement
 import com.google.gson.JsonObject
 import com.google.gson.annotations.SerializedName
+import com.google.gson.annotations.JsonAdapter
+import com.arflix.tv.data.api.LenientIntAdapter
+import com.arflix.tv.data.api.LenientStringAdapter
 import com.google.gson.reflect.TypeToken
 import com.google.gson.stream.JsonReader
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -41,6 +43,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
@@ -215,7 +218,6 @@ internal object IptvTitleNormalizer {
         """\b(2160p|1080p|720p|480p|4k|uhd|fhd|hdr|dv|dovi|hevc|x265|x264|h264|remux|bluray|bdrip|webrip|web[- ]?dl|proper|repack|multi|dubbed|dual[- ]?audio)\b""",
         RegexOption.IGNORE_CASE
     )
-    private val NON_ALPHA_NUM_REGEX = Regex("[^a-z0-9]+")
     private val DIACRITICS_REGEX = Regex("\\p{Mn}+")
 
     /** Box-drawing bar some IPTV panels use in place of a pipe: "\u2503DE\u2503 Title". */
@@ -245,7 +247,34 @@ internal object IptvTitleNormalizer {
 
     fun normalize(value: String): String {
         if (value.isBlank()) return ""
-        val stripped = value
+        // Latin letters fold to a-z; letters of other scripts (Greek, Cyrillic,
+        // Arabic, ...) are kept. Dropping them made such titles blank, so a
+        // provider named in those languages never matched any title.
+        return foldLetters(stripTags(value))
+            .lowercase(Locale.US)
+            .replace(NON_LETTER_DIGIT_REGEX, " ")
+            .trim()
+            .replace(MULTI_SPACE_REGEX, " ")
+    }
+
+    private val NON_LETTER_DIGIT_REGEX = Regex("[^\\p{L}\\p{N}]+")
+
+    /**
+     * A title search query that keeps every script. [normalize] folds to a-z,
+     * which turns Greek, Cyrillic, Arabic, Hebrew or Thai titles into nothing,
+     * so a provider whose library is named in such a language matched no title
+     * at all. TMDB searches localized titles, so the original letters are kept.
+     */
+    fun searchQuery(value: String): String {
+        if (value.isBlank()) return ""
+        return stripTags(value)
+            .replace(NON_LETTER_DIGIT_REGEX, " ")
+            .trim()
+            .replace(MULTI_SPACE_REGEX, " ")
+    }
+
+    private fun stripTags(value: String): String {
+        return value
             .replace(BOX_DRAWING_BAR, '|')
             .replace(LEADING_PIPE_TAG_REGEX, " ")
             .trimStart()
@@ -256,11 +285,6 @@ internal object IptvTitleNormalizer {
             .replace(SEASON_TOKEN_REGEX, " ")
             .replace(EPISODE_TOKEN_REGEX, " ")
             .replace(RELEASE_TAG_REGEX, " ")
-        return foldLetters(stripped)
-            .lowercase(Locale.US)
-            .replace(NON_ALPHA_NUM_REGEX, " ")
-            .trim()
-            .replace(MULTI_SPACE_REGEX, " ")
     }
 
     /**
@@ -1096,7 +1120,7 @@ class IptvRepository @Inject constructor(
     private val cacheRecentProgramLimit = 1
     private val cacheCatchupRecentProgramLimit = 96
     private val catchupRecentProgramLimit = IptvGuideHistory.MAX_PROGRAMS
-    private val catchupProbeCandidateLimit = 3
+    private val catchupProbeCandidateLimit = 4
     private val xtreamVodCacheMs = 6 * 60 * 60_000L
     private val iptvHttpClient: OkHttpClient by lazy {
         // Used for full playlist/EPG loading – generous timeouts for large
@@ -1130,6 +1154,21 @@ class IptvRepository @Inject constructor(
             .callTimeout(12, TimeUnit.SECONDS)
             .build()
     }
+    /**
+     * Catch-up probes are single user-started requests for a stream, not
+     * metadata. Kept off the metadata guard: a 403 or 5xx answer to one wrong
+     * timeshift guess used to pause the whole provider for up to 15 minutes,
+     * and every catch-up tried in that time failed at once with "no stream".
+     */
+    private val catchupProbeHttpClient: OkHttpClient by lazy {
+        okHttpClient.newBuilder()
+            .connectTimeout(5, TimeUnit.SECONDS)
+            .readTimeout(8, TimeUnit.SECONDS)
+            .writeTimeout(5, TimeUnit.SECONDS)
+            .callTimeout(10, TimeUnit.SECONDS)
+            .build()
+    }
+
     private val xtreamGuideHttpClient: OkHttpClient by lazy {
         okHttpClient.newBuilder()
             .withIptvProviderRequestGuard()
@@ -1212,7 +1251,9 @@ class IptvRepository @Inject constructor(
                 stalkerPortals = readStalkerPortals(prefs),
                 sortOrder = normalizeIptvSortOrder(prefs[sortOrderKey()])
             )
-        }
+        // Decrypting the stored URLs runs on every settings write (zapping saves the last
+        // channel); keep it off the main thread, where it showed up during channel changes.
+        }.flowOn(Dispatchers.Default)
 
     fun observeFavoriteGroups(): Flow<List<String>> =
         profileManager.activeProfileId.combine(context.settingsDataStore.data) { _, prefs ->
@@ -2295,6 +2336,9 @@ class IptvRepository @Inject constructor(
         if (program.catchupAvailable == false) {
             throw IOException(context.getString(R.string.iptv_no_catchup))
         }
+        // The timeshift start is the panel's wall-clock time; learn its zone
+        // once so the first candidate is the one the panel expects.
+        resolveXtreamCredentials(channel.streamUrl)?.let { ensureXtreamServerZone(it) }
         val candidates = getCatchupUrlCandidates(channel, program)
         if (candidates.isEmpty()) throw IOException(context.getString(R.string.iptv_no_catchup))
         val safeAttempt = startAttempt.coerceAtLeast(0)
@@ -2303,7 +2347,14 @@ class IptvRepository @Inject constructor(
         return withContext(Dispatchers.IO) {
             for (candidate in ordered.take(catchupProbeCandidateLimit)) {
                 val probe = probePlaybackUrl(candidate, channel.requestHeaders)
-                if (probe != null && probe.isPlayable) {
+                if (probe == null) {
+                    // No answer in time is not a refusal: archives can take a
+                    // while to start. Let the player try it, as other players do,
+                    // instead of reporting "no catch-up" straight away.
+                    System.err.println("[IPTV-Catchup] unverified, handing to player url=${redactIptvUrl(candidate)}")
+                    return@withContext candidate
+                }
+                if (probe.isPlayable) {
                     System.err.println(
                         "[IPTV-Catchup] selected " +
                             "${if (candidate == ordered.firstOrNull()) "primary" else "fallback"} " +
@@ -2311,16 +2362,15 @@ class IptvRepository @Inject constructor(
                     )
                     return@withContext candidate
                 }
-                if (probe != null) {
-                    System.err.println(
-                        "[IPTV-Catchup] rejected status=${probe.statusCode} reason=${probe.reason} " +
-                            "url=${redactIptvUrl(candidate)}"
-                    )
-                    if (iptvProviderCooldownMs(probe.statusCode, null, System.currentTimeMillis()) > 0L) {
-                        throw IOException("Catch-up stopped: provider returned HTTP ${probe.statusCode}. Please wait before retrying.")
-                    }
+                System.err.println(
+                    "[IPTV-Catchup] rejected status=${probe.statusCode} reason=${probe.reason} " +
+                        "url=${redactIptvUrl(candidate)}"
+                )
+                // A wrong start time or URL shape is often answered with 401/403/404/5xx;
+                // that only rules out this candidate. Only rate limiting stops the scan.
+                if (probe.statusCode in CATCHUP_RATE_LIMIT_STATUSES) {
+                    throw IOException("Catch-up stopped: provider returned HTTP ${probe.statusCode}. Please wait before retrying.")
                 }
-                if (probe == null) break
             }
             throw IOException(context.getString(R.string.iptv_no_catchup))
         }
@@ -2411,49 +2461,18 @@ class IptvRepository @Inject constructor(
         streamId: Int,
         program: IptvProgram,
         durationMin: Long
-    ): List<String> {
-        val serverStartMs = program.startUtcMillis + getServerOffset(creds)
-        val minutePattern = IptvRepoDateRegexes.MINUTE_PATTERN
-        val secondPattern = IptvRepoDateRegexes.SECOND_PATTERN
-        val spaceSecondPattern = IptvRepoDateRegexes.SPACE_SECOND_PATTERN
-        val spaceMinutePattern = IptvRepoDateRegexes.SPACE_MINUTE_PATTERN
-        val hasSecondOffset = serverStartMs % 60_000L != 0L || program.startUtcMillis % 60_000L != 0L
-        val starts = if (hasSecondOffset) {
-            listOf(
-                formatUtcDateTime(serverStartMs, secondPattern),
-                formatUtcDateTime(program.startUtcMillis, secondPattern),
-                formatUtcDateTime(serverStartMs, spaceSecondPattern),
-                formatUtcDateTime(program.startUtcMillis, spaceSecondPattern),
-                formatUtcDateTime(serverStartMs, minutePattern),
-                formatUtcDateTime(program.startUtcMillis, minutePattern),
-                formatUtcDateTime(serverStartMs, spaceMinutePattern),
-                formatUtcDateTime(program.startUtcMillis, spaceMinutePattern)
-            )
-        } else {
-            listOf(
-                formatUtcDateTime(serverStartMs, minutePattern),
-                formatUtcDateTime(program.startUtcMillis, minutePattern),
-                formatUtcDateTime(serverStartMs, secondPattern),
-                formatUtcDateTime(program.startUtcMillis, secondPattern),
-                formatUtcDateTime(serverStartMs, spaceSecondPattern),
-                formatUtcDateTime(program.startUtcMillis, spaceSecondPattern),
-                formatUtcDateTime(serverStartMs, spaceMinutePattern),
-                formatUtcDateTime(program.startUtcMillis, spaceMinutePattern)
-            )
-        }.distinct()
-
-        return buildList {
-            starts.forEach { startStr ->
-                add(buildXtreamTimeshiftPathUrl(creds, streamId, startStr, durationMin, extension = "ts"))
-                add(buildXtreamTimeshiftPathUrl(creds, streamId, startStr, durationMin, extension = null))
-                add(buildXtreamTimeshiftQueryUrl(creds, streamId, startStr, durationMin, includeStreamingPrefix = true))
-                add(buildXtreamTimeshiftQueryUrl(creds, streamId, startStr, durationMin, includeStreamingPrefix = false))
-                add(buildXtreamTimeshiftQueryUrl(creds, streamId, startStr, durationMin, includeStreamingPrefix = true, streamParameter = "stream_id"))
-                add(buildXtreamTimeshiftQueryUrl(creds, streamId, startStr, durationMin, includeStreamingPrefix = false, streamParameter = "stream_id"))
-                add(buildXtreamTimeshiftPathUrl(creds, streamId, startStr, durationMin, extension = "m3u8"))
-            }
-        }.distinct()
-    }
+    ): List<String> = xtreamCatchupUrlCandidates(
+        starts = xtreamCatchupStartTimes(
+            startUtcMillis = program.startUtcMillis,
+            serverZone = cachedXtreamServerZone(creds),
+            epgOffsetMs = getServerOffset(creds),
+            deviceZone = ZoneId.systemDefault(),
+        ),
+        pathUrl = { start, ext -> buildXtreamTimeshiftPathUrl(creds, streamId, start, durationMin, ext) },
+        queryUrl = { start, prefix, param ->
+            buildXtreamTimeshiftQueryUrl(creds, streamId, start, durationMin, prefix, param)
+        },
+    )
 
     private fun formatUtcDateTime(epochMs: Long, formatter: DateTimeFormatter): String {
         return LocalDateTime.ofInstant(Instant.ofEpochMilli(epochMs), ZoneId.of("UTC")).format(formatter)
@@ -2648,7 +2667,7 @@ class IptvRepository @Inject constructor(
                     builder.header(name, value)
                 }
             }
-            xtreamGuideHttpClient.newCall(builder.build()).execute().use { response ->
+            catchupProbeHttpClient.newCall(builder.build()).execute().use { response ->
                 val statusCode = response.code
                 if (statusCode !in 200..399) {
                     return@use PlaybackProbeResult(statusCode, isPlayable = false, reason = "http")
@@ -5511,15 +5530,15 @@ class IptvRepository @Inject constructor(
     )
 
     private data class XtreamLiveStream(
-        @SerializedName("stream_id") val streamId: Int? = null,
+        @SerializedName("stream_id") @JsonAdapter(LenientIntAdapter::class) val streamId: Int? = null,
         @SerializedName("num") val providerNumber: String? = null,
         val name: String? = null,
         @SerializedName("stream_icon") val streamIcon: String? = null,
         @SerializedName("epg_channel_id") val epgChannelId: String? = null,
         @SerializedName("category_id") val categoryId: String? = null,
         @SerializedName("container_extension") val containerExtension: String? = null,
-        @SerializedName("tv_archive") val tvArchive: Int? = null,
-        @SerializedName("tv_archive_duration") val tvArchiveDuration: Int? = null
+        @SerializedName("tv_archive") @JsonAdapter(LenientIntAdapter::class) val tvArchive: Int? = null,
+        @SerializedName("tv_archive_duration") @JsonAdapter(LenientIntAdapter::class) val tvArchiveDuration: Int? = null
     )
 
     data class VodCatalogSeed(
@@ -5532,25 +5551,26 @@ class IptvRepository @Inject constructor(
         val addedEpochSec: Long
     )
 
+    // Lenient field adapters: one oddly typed entry must not empty a provider's whole library.
     private data class XtreamVodStream(
-        @SerializedName("stream_id") val streamId: Int? = null,
-        val name: String? = null,
-        val year: String? = null,
-        @SerializedName("container_extension") val containerExtension: String? = null,
-        @SerializedName(value = "imdb", alternate = ["imdb_id", "imdbid"]) val imdb: String? = null,
-        @SerializedName(value = "tmdb", alternate = ["tmdb_id", "tmdbid"]) val tmdb: String? = null,
-        @SerializedName("category_id") val categoryId: String? = null,
-        @SerializedName("added") val added: String? = null
+        @SerializedName("stream_id") @JsonAdapter(LenientIntAdapter::class) val streamId: Int? = null,
+        @SerializedName("name") @JsonAdapter(LenientStringAdapter::class) val name: String? = null,
+        @SerializedName("year") @JsonAdapter(LenientStringAdapter::class) val year: String? = null,
+        @SerializedName("container_extension") @JsonAdapter(LenientStringAdapter::class) val containerExtension: String? = null,
+        @SerializedName(value = "imdb", alternate = ["imdb_id", "imdbid"]) @JsonAdapter(LenientStringAdapter::class) val imdb: String? = null,
+        @SerializedName(value = "tmdb", alternate = ["tmdb_id", "tmdbid"]) @JsonAdapter(LenientStringAdapter::class) val tmdb: String? = null,
+        @SerializedName("category_id") @JsonAdapter(LenientStringAdapter::class) val categoryId: String? = null,
+        @SerializedName("added") @JsonAdapter(LenientStringAdapter::class) val added: String? = null
     )
 
     private data class XtreamSeriesItem(
-        @SerializedName(value = "series_id", alternate = ["seriesid", "id"]) val seriesId: Int? = null,
-        val name: String? = null,
-        val year: String? = null,
-        @SerializedName(value = "imdb", alternate = ["imdb_id", "imdbid"]) val imdb: String? = null,
-        @SerializedName(value = "tmdb", alternate = ["tmdb_id", "tmdbid"]) val tmdb: String? = null,
-        @SerializedName("category_id") val categoryId: String? = null,
-        @SerializedName("last_modified") val lastModified: String? = null
+        @SerializedName(value = "series_id", alternate = ["seriesid", "id"]) @JsonAdapter(LenientIntAdapter::class) val seriesId: Int? = null,
+        @SerializedName("name") @JsonAdapter(LenientStringAdapter::class) val name: String? = null,
+        @SerializedName("year") @JsonAdapter(LenientStringAdapter::class) val year: String? = null,
+        @SerializedName(value = "imdb", alternate = ["imdb_id", "imdbid"]) @JsonAdapter(LenientStringAdapter::class) val imdb: String? = null,
+        @SerializedName(value = "tmdb", alternate = ["tmdb_id", "tmdbid"]) @JsonAdapter(LenientStringAdapter::class) val tmdb: String? = null,
+        @SerializedName("category_id") @JsonAdapter(LenientStringAdapter::class) val categoryId: String? = null,
+        @SerializedName("last_modified") @JsonAdapter(LenientStringAdapter::class) val lastModified: String? = null
     )
 
     private data class XtreamSeriesEpisode(
@@ -8303,20 +8323,20 @@ class IptvRepository @Inject constructor(
             val downloadStart = System.currentTimeMillis()
             val url = "${creds.baseUrl}/player_api.php?username=${creds.username}&password=${creds.password}&action=get_vod_streams"
             val vod: List<XtreamVodStream> =
-                requestJson(
-                    url,
-                    TypeToken.getParameterized(List::class.java, XtreamVodStream::class.java).type,
-                    client = iptvHttpClient
-                ) ?: emptyList()
+                requestXtreamList(url, XtreamVodStream::class.java, client = iptvHttpClient) ?: emptyList()
             val elapsed = System.currentTimeMillis() - downloadStart
             System.err.println("[VOD-Cache] Downloaded ${vod.size} VOD streams in ${elapsed}ms")
 
             // 4. Swap into memory cache
             if (vod.isNotEmpty()) {
                 val writeTime = System.currentTimeMillis()
-                cachedXtreamVodStreams = vod
-                xtreamVodLoadedAtMs = writeTime
-                cachedVodIdIndex = buildVodIdIndex(vod)
+                // Another provider may have taken the single memory slot during
+                // the download; never file this provider's list under its key.
+                if (xtreamVodCacheKey == xtreamCacheKey(creds)) {
+                    cachedXtreamVodStreams = vod
+                    xtreamVodLoadedAtMs = writeTime
+                    cachedVodIdIndex = buildVodIdIndex(vod)
+                }
                 // 5. Persist to disk in background
                 runCatching { writeDiskCache(diskFile, writeTime, vod) }
                 System.err.println("[VOD-Cache] Saved VOD streams to disk cache")
@@ -8383,19 +8403,17 @@ class IptvRepository @Inject constructor(
             val downloadStart = System.currentTimeMillis()
             val url = "${creds.baseUrl}/player_api.php?username=${creds.username}&password=${creds.password}&action=get_series"
             val series: List<XtreamSeriesItem> =
-                requestJson(
-                    url,
-                    TypeToken.getParameterized(List::class.java, XtreamSeriesItem::class.java).type,
-                    client = iptvHttpClient
-                ) ?: emptyList()
+                requestXtreamList(url, XtreamSeriesItem::class.java, client = iptvHttpClient) ?: emptyList()
             val elapsed = System.currentTimeMillis() - downloadStart
             System.err.println("[VOD-Cache] Downloaded ${series.size} series in ${elapsed}ms")
 
             // 4. Swap into memory cache
             if (series.isNotEmpty()) {
                 val writeTime = System.currentTimeMillis()
-                cachedXtreamSeries = series
-                xtreamSeriesLoadedAtMs = writeTime
+                if (xtreamVodCacheKey == xtreamCacheKey(creds)) {
+                    cachedXtreamSeries = series
+                    xtreamSeriesLoadedAtMs = writeTime
+                }
                 // 5. Persist to disk
                 runCatching { writeDiskCache(diskFile, writeTime, series) }
                 System.err.println("[VOD-Cache] Saved series list to disk cache")
@@ -9186,18 +9204,36 @@ class IptvRepository @Inject constructor(
     private suspend fun <T> requestJson(
         url: String,
         type: Type,
-        client: OkHttpClient = iptvHttpClient
+        client: OkHttpClient = iptvHttpClient,
+        parser: ((java.io.Reader) -> T)? = null,
     ): T? = if (client === xtreamGuideHttpClient || client === xtreamCatchupGuideHttpClient) {
-        guideRequestBudget.request(url) { requestJsonUnbudgeted<T>(url, type, client, guideRequest = true) }
+        guideRequestBudget.request(url) { requestJsonUnbudgeted<T>(url, type, client, guideRequest = true, parser = parser) }
     } else {
-        requestJsonUnbudgeted(url, type, client)
+        requestJsonUnbudgeted(url, type, client, parser = parser)
     }
+
+    /**
+     * An Xtream catalog list (VOD, series, categories). Panels send a JSON array,
+     * but some send an object keyed by index (`{"0": {...}, "1": {...}}`), and one
+     * malformed entry must only drop that entry, not the provider's whole library.
+     */
+    private suspend fun <T> requestXtreamList(
+        url: String,
+        itemClass: Class<T>,
+        client: OkHttpClient = iptvHttpClient,
+    ): List<T>? = requestJson(
+        url,
+        TypeToken.getParameterized(List::class.java, itemClass).type,
+        client,
+        parser = { reader -> readLenientXtreamList(gson, reader, itemClass) },
+    )
 
     private suspend fun <T> requestJsonUnbudgeted(
         url: String,
         type: Type,
         client: OkHttpClient,
         guideRequest: Boolean = false,
+        parser: ((java.io.Reader) -> T)? = null,
     ): T? = suspendCancellableCoroutine { continuation ->
         val request = Request.Builder()
             .url(url)
@@ -9237,7 +9273,7 @@ class IptvRepository @Inject constructor(
                     }
                     try {
                         responseBody.charStream().use { reader ->
-                            val result = gson.fromJson<T>(reader, type)
+                            val result = if (parser != null) parser(reader) else gson.fromJson<T>(reader, type)
                             if (continuation.isActive) continuation.resume(result)
                         }
                     } catch (error: Throwable) {
@@ -9454,7 +9490,7 @@ class IptvRepository @Inject constructor(
         @SerializedName("start_timestamp") val startTimestamp: String? = null,
         @SerializedName("stop_timestamp") val stopTimestamp: String? = null,
         @SerializedName("stream_id") val streamId: String? = null,
-        @SerializedName("has_archive") val hasArchive: Int? = null,
+        @SerializedName("has_archive") @JsonAdapter(LenientIntAdapter::class) val hasArchive: Int? = null,
         // Memoized window millis. @Transient so Gson ignores them; data class
         // copy() still carries them, so trim-then-build resolves timestamps
         // once per listing instead of twice (250k+ listings per full fetch).
@@ -10502,6 +10538,58 @@ class IptvRepository @Inject constructor(
             context.getSharedPreferences("arvio_iptv_prefs", android.content.Context.MODE_PRIVATE)
                 .getLong(xtreamServerOffsetKey(creds), 0L)
         }.getOrDefault(0L)
+    }
+
+    private val xtreamServerZones = ConcurrentHashMap<String, ZoneId>()
+    private val xtreamServerZoneChecked = ConcurrentHashMap<String, Long>()
+
+    private fun xtreamServerZoneKey(creds: XtreamCredentials): String =
+        "xtream_server_zone_${xtreamDiskCacheHash(creds)}"
+
+    private fun cachedXtreamServerZone(creds: XtreamCredentials): ZoneId? {
+        val key = xtreamServerZoneKey(creds)
+        xtreamServerZones[key]?.let { return it }
+        val stored = runCatching {
+            context.getSharedPreferences("arvio_iptv_prefs", android.content.Context.MODE_PRIVATE)
+                .getString(key, null)
+        }.getOrNull() ?: return null
+        return runCatching { ZoneId.of(stored) }.getOrNull()?.also { xtreamServerZones[key] = it }
+    }
+
+    /**
+     * Reads the panel's time zone from its account answer, at most once per
+     * provider every 12 hours. Failures are quiet: the candidates then fall
+     * back to the guide offset, the device zone and UTC.
+     */
+    private suspend fun ensureXtreamServerZone(creds: XtreamCredentials) {
+        val key = xtreamServerZoneKey(creds)
+        val now = System.currentTimeMillis()
+        val checkedAt = xtreamServerZoneChecked[key] ?: 0L
+        if (now - checkedAt < 12 * 60 * 60_000L) return
+        xtreamServerZoneChecked[key] = now
+        val zone = withContext(Dispatchers.IO) {
+            runCatching {
+                val url = "${creds.baseUrl}/player_api.php?username=${urlEncodeQuery(creds.username)}" +
+                    "&password=${urlEncodeQuery(creds.password)}"
+                val request = Request.Builder()
+                    .url(url)
+                    .header("User-Agent", OkHttpProvider.userAgentOr(IPTV_USER_AGENT))
+                    .header("Accept", "application/json,*/*")
+                    .get()
+                    .build()
+                catchupProbeHttpClient.newCall(request).execute().use { response ->
+                    if (!response.isSuccessful) null else parseXtreamServerZone(response.body?.string())
+                }
+            }.getOrNull()
+        } ?: return
+        xtreamServerZones[key] = zone
+        System.err.println("[IPTV-Catchup] panel time zone ${zone.id}")
+        runCatching {
+            context.getSharedPreferences("arvio_iptv_prefs", android.content.Context.MODE_PRIVATE)
+                .edit()
+                .putString(key, zone.id)
+                .apply()
+        }
     }
 
     private fun xtreamServerOffsetKey(creds: XtreamCredentials): String =
@@ -12621,13 +12709,13 @@ class IptvRepository @Inject constructor(
     // ── Private wire models for categories ──────────────────────────────────
 
     private data class XtreamVodCategoryWire(
-        @SerializedName("category_id") val categoryId: String? = null,
-        @SerializedName("category_name") val categoryName: String? = null
+        @SerializedName("category_id") @JsonAdapter(LenientStringAdapter::class) val categoryId: String? = null,
+        @SerializedName("category_name") @JsonAdapter(LenientStringAdapter::class) val categoryName: String? = null
     )
 
     private data class XtreamSeriesCategoryWire(
-        @SerializedName("category_id") val categoryId: String? = null,
-        @SerializedName("category_name") val categoryName: String? = null
+        @SerializedName("category_id") @JsonAdapter(LenientStringAdapter::class) val categoryId: String? = null,
+        @SerializedName("category_name") @JsonAdapter(LenientStringAdapter::class) val categoryName: String? = null
     )
 
     @Volatile
@@ -12637,7 +12725,11 @@ class IptvRepository @Inject constructor(
     @Volatile
     private var xtreamVodCategoriesLoadedAtMs: Long = 0L
     @Volatile
+    private var xtreamVodCategoriesOwner: String? = null
+    @Volatile
     private var xtreamSeriesCategoriesLoadedAtMs: Long = 0L
+    @Volatile
+    private var xtreamSeriesCategoriesOwner: String? = null
 
     private val vodCategoriesDiskCacheType: Type by lazy {
         TypeToken.getParameterized(XtreamDiskCache::class.java, XtreamVodCategoryWire::class.java).type
@@ -12657,6 +12749,14 @@ class IptvRepository @Inject constructor(
         allowNetwork: Boolean
     ): List<XtreamVodCategoryWire> = withContext(Dispatchers.IO) {
         val now = System.currentTimeMillis()
+        // The in-memory slot holds one provider. With several playlists, the
+        // second one used to get the first one's categories back.
+        val owner = xtreamDiskCacheHash(creds)
+        if (xtreamVodCategoriesOwner != owner) {
+            cachedXtreamVodCategories = emptyList()
+            xtreamVodCategoriesLoadedAtMs = 0L
+            xtreamVodCategoriesOwner = owner
+        }
         if (cachedXtreamVodCategories.isNotEmpty() && now - xtreamVodCategoriesLoadedAtMs < xtreamVodCacheMs) {
             return@withContext cachedXtreamVodCategories
         }
@@ -12679,11 +12779,7 @@ class IptvRepository @Inject constructor(
             return@withContext items
         }
         val url = "${creds.baseUrl}/player_api.php?username=${creds.username}&password=${creds.password}&action=get_vod_categories"
-        val list: List<XtreamVodCategoryWire> = requestJson(
-            url,
-            TypeToken.getParameterized(List::class.java, XtreamVodCategoryWire::class.java).type,
-            client = xtreamLookupHttpClient
-        ) ?: emptyList()
+        val list: List<XtreamVodCategoryWire> = requestXtreamList(url, XtreamVodCategoryWire::class.java, client = xtreamLookupHttpClient) ?: emptyList()
         if (list.isNotEmpty()) {
             val ts = System.currentTimeMillis()
             cachedXtreamVodCategories = list
@@ -12698,6 +12794,14 @@ class IptvRepository @Inject constructor(
         allowNetwork: Boolean
     ): List<XtreamSeriesCategoryWire> = withContext(Dispatchers.IO) {
         val now = System.currentTimeMillis()
+        // The in-memory slot holds one provider. With several playlists, the
+        // second one used to get the first one's categories back.
+        val owner = xtreamDiskCacheHash(creds)
+        if (xtreamSeriesCategoriesOwner != owner) {
+            cachedXtreamSeriesCategories = emptyList()
+            xtreamSeriesCategoriesLoadedAtMs = 0L
+            xtreamSeriesCategoriesOwner = owner
+        }
         if (cachedXtreamSeriesCategories.isNotEmpty() && now - xtreamSeriesCategoriesLoadedAtMs < xtreamVodCacheMs) {
             return@withContext cachedXtreamSeriesCategories
         }
@@ -12720,11 +12824,7 @@ class IptvRepository @Inject constructor(
             return@withContext items
         }
         val url = "${creds.baseUrl}/player_api.php?username=${creds.username}&password=${creds.password}&action=get_series_categories"
-        val list: List<XtreamSeriesCategoryWire> = requestJson(
-            url,
-            TypeToken.getParameterized(List::class.java, XtreamSeriesCategoryWire::class.java).type,
-            client = xtreamLookupHttpClient
-        ) ?: emptyList()
+        val list: List<XtreamSeriesCategoryWire> = requestXtreamList(url, XtreamSeriesCategoryWire::class.java, client = xtreamLookupHttpClient) ?: emptyList()
         if (list.isNotEmpty()) {
             val ts = System.currentTimeMillis()
             cachedXtreamSeriesCategories = list

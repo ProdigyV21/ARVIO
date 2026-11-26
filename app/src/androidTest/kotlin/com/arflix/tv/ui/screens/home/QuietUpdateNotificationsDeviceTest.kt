@@ -84,20 +84,16 @@ class QuietUpdateNotificationsDeviceTest {
         capture("quiet-mobile")
     }
 
-    @Test fun settingsHeaderRetainsBothUpdateAndOptimizationNotices() {
+    @Test fun settingsHeaderShowsUpdateNotice() {
         compose.setContent {
             Column(Modifier.width(204.dp).background(Color.Black).padding(10.dp)) {
-                SettingsSidebarHeader("v2.4", awaitingCompilation = true)
+                SettingsSidebarHeader("v2.4")
             }
         }
-        val update = compose.onNodeWithText(
+        compose.onNodeWithText(
             compose.activity.getString(R.string.settings_sidebar_update_available, "v2.4")
-        ).assertIsDisplayed().fetchSemanticsNode().boundsInRoot
-        val optimization = compose.onNodeWithText(
-            compose.activity.getString(R.string.settings_optimizing_notice)
-        ).assertIsDisplayed().fetchSemanticsNode().boundsInRoot
-        assertTrue("Both header notices occupy separate lines", update.bottom <= optimization.top)
-        capture("settings-both-notices")
+        ).assertIsDisplayed()
+        capture("settings-update-notice")
     }
 
     private fun fixture(mobile: Boolean = false) {

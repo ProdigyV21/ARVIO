@@ -1,5 +1,6 @@
 package com.arflix.tv.ui.screens.collections
 
+import com.arflix.tv.data.model.cleanCatalogTitle
 import com.arflix.tv.data.model.CatalogConfig
 import com.arflix.tv.data.model.CatalogKind
 import com.arflix.tv.data.model.CatalogSourceType
@@ -171,7 +172,7 @@ internal object ServiceHome {
     private fun folderRows(folder: CatalogConfig): List<Row> =
         folder.collectionSources.mapIndexed { index, source ->
             val id = CATALOG_ROW_PREFIX + index
-            val title = source.title?.takeIf { it.isNotBlank() }
+            val title = cleanCatalogTitle(source.title)
             Row(
                 id = id,
                 kind = RowKind.CATALOG,

@@ -1,3 +1,5 @@
+@file:OptIn(kotlinx.coroutines.FlowPreview::class)
+
 @file:Suppress("UnsafeOptInUsageError")
 
 package com.arflix.tv.ui.screens.tv.live
@@ -172,6 +174,8 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.conflate
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.collect
 import androidx.compose.runtime.snapshotFlow
 import kotlinx.coroutines.launch
@@ -224,6 +228,7 @@ private const val SportsGuideScanBatchSize = 8_192
 // requests. One step per this interval is still far faster than anyone zaps.
 private const val MinZapIntervalMs = 150L
 private const val CatchupUrlAnchorGranularityMs = 60_000L
+private const val CatchupSeekReopenAfterMs = 6_000L
 private const val IptvPlaybackUserAgent = "VLC/3.0.20 LibVLC/3.0.20"
 private const val VisibleGuidePastWindowMs = 48L * 60L * 60_000L
 /** How far ahead one channel's schedule (the Guide panel) reads from the local guide index. */
@@ -613,13 +618,8 @@ fun LiveTvScreen(
         mutableStateOf(state.tvSession.lastGroupName.takeIf { it.isNotBlank() } ?: "all")
     }
     var currentMode by rememberSaveable {
-        mutableStateOf(
-            if (isTouchDevice && initialChannelId == null && initialStreamUrl == null) {
-                LiveTvStartup.LiveTvMode.GroupHome
-            } else {
-                LiveTvStartup.LiveTvMode.Guide
-            }
-        )
+        mutableStateOf(LiveSportsMemory.startupMode(isTouchDevice, initialChannelId, initialStreamUrl,
+            LiveSportsMemory.reopen(context, currentProfile?.id, initialChannelId, initialStreamUrl)))
     }
     var startupCategoryApplied by rememberSaveable { mutableStateOf(false) }
     var selectedProviderId by rememberSaveable { mutableStateOf("all") }
@@ -1413,6 +1413,10 @@ fun LiveTvScreen(
     var playingCatchupProgram by remember { mutableStateOf<IptvProgram?>(null) }
     var catchupPlaybackOffsetMs by remember { mutableLongStateOf(0L) }
     var catchupReloadSignal by remember { mutableIntStateOf(0) }
+    // Target of an in-stream catch-up seek into a later URL minute. Some timeshift servers
+    // answer byte-range seeks past the part they have generated with 404s or HTML pages,
+    // so when that seek fails or stalls we reopen the archive at the target minute instead.
+    var pendingCatchupSeekReopenMs by remember { mutableStateOf<Long?>(null) }
     val rememberedChannelByCategory = remember { mutableMapOf<String, String>() }
     val focusCommitScope = rememberCoroutineScope()
     val mobileScrollCommitJob = remember { arrayOf<Job?>(null) }
@@ -1688,6 +1692,7 @@ fun LiveTvScreen(
             }
         }
     }
+    LiveTvPerfMarks(filteredChannels.size, effectiveGuideNowNext.isNotEmpty(), playingChannelId)
     val currentNowNext = remember(playingChannelId, playingCatchupProgram, effectiveGuideNowNext, guideClockMillis) {
         playingCatchupProgram?.let { IptvNowNext(now = it) }
             ?: effectiveGuideNowNext[playingChannelId]?.atTime(guideClockMillis)
@@ -1972,7 +1977,18 @@ fun LiveTvScreen(
     }
 
     var categoryDrawerOpen by rememberSaveable { mutableStateOf(true) }
-    var sportsSelected by rememberSaveable(currentProfile?.id) { mutableStateOf(false) }
+    var sportsSelected by rememberSaveable(currentProfile?.id) {
+        mutableStateOf(LiveSportsMemory.reopen(context, currentProfile?.id, initialChannelId, initialStreamUrl))
+    }
+    val latestSportsSelected by rememberUpdatedState(sportsSelected)
+    // Background sports enrichment waits until the guide and player have settled, or
+    // until Sports is opened, whichever comes first (see LiveSportsWorkPolicy).
+    suspend fun awaitSportsWorkSlot() {
+        if (latestSportsSelected) return
+        kotlinx.coroutines.withTimeoutOrNull(LiveSportsWorkPolicy.BACKGROUND_SETTLE_MS) {
+            snapshotFlow { latestSportsSelected }.first { it }
+        }
+    }
     LaunchedEffect(sportsAddonInstallations, state.isConfigured) {
         if (!state.isConfigured && sportsAddonInstallations.isNotEmpty()) {
             sportsSelected = true
@@ -2009,6 +2025,9 @@ fun LiveTvScreen(
     var sportsRetryOnOpen by remember(sportsScope) { mutableIntStateOf(0) }
     LaunchedEffect(sportsSelected) {
         if (sportsSelected && sportsError && !sportsLoading) sportsRetryOnOpen++
+        // Leaving Live TV on Sports opens Sports again next time (see LiveSportsMemory).
+        LiveSportsMemory.save(context, currentProfile?.id, sportsSelected)
+        if (sportsSelected && isTouchDevice) currentMode = LiveTvStartup.LiveTvMode.Guide
     }
     var addonEvents by remember(currentProfile?.id, sportsAddonInstallations) { mutableStateOf(emptyList<com.arflix.tv.data.model.SportsAddonEvent>()) }
     var addonLoading by remember { mutableStateOf(false) }
@@ -2031,6 +2050,7 @@ fun LiveTvScreen(
     val metadataRequest = remember(currentProfile?.id, state.snapshot.loadedAt, sportsRefresh) { Any() }
     var completedMetadataRequest by remember { mutableStateOf<Any?>(null) }
     LaunchedEffect(metadataRequest) {
+        awaitSportsWorkSlot()
         if (state.snapshot.loadedAt.toEpochMilli() > 0L) {
             sportsMetadataLoading = true
             try {
@@ -2050,10 +2070,11 @@ fun LiveTvScreen(
     val broadcastRequest = remember(sportsScope, sportsArtwork) { Any() }
     var completedBroadcastRequest by remember(sportsScope) { mutableStateOf<Any?>(null) }
     LaunchedEffect(broadcastRequest) {
+        awaitSportsWorkSlot()
         sportsBroadcastLoading = true
         val matchingStarted = android.os.SystemClock.elapsedRealtime()
         try {
-            val broadcasterKeys = withContext(Dispatchers.Default) {
+            val broadcasterKeys = withContext(LiveSportsWorkPolicy.dispatcher) {
                 sportsArtwork.asSequence().flatMap { it.fixture?.broadcasters.orEmpty().asSequence() }
                     .distinctBy { it.name to it.country }.flatMap { sportsBroadcasterKeys(it.name, it.country).asSequence() }.toSet()
             }
@@ -2092,9 +2113,10 @@ fun LiveTvScreen(
     var fixtureResult by remember(sportsScope) { mutableStateOf<Pair<Any, List<SportsGuideEvent>>?>(null) }
     var fixtureLoading by remember(sportsScope) { mutableStateOf(false) }
     LaunchedEffect(fixtureRequest) {
+        awaitSportsWorkSlot()
         fixtureLoading = true
         try {
-            val catalogue = withContext(Dispatchers.Default) {
+            val catalogue = withContext(LiveSportsWorkPolicy.dispatcher) {
                 buildSportsCatalogue(sportsEvents, fixtureArtwork, fixtureChannels, guideClockMillis)
             }
             fixtureResult = fixtureRequest to catalogue
@@ -2107,9 +2129,10 @@ fun LiveTvScreen(
     val decoratedRequest = remember(sportsScope, fixtureResult?.first, baseForDecoration, addonSnapshot, fixtureArtwork) { Any() }
     var decoratedResult by remember(sportsScope) { mutableStateOf<Pair<Any, List<SportsGuideEvent>>?>(null) }
     LaunchedEffect(decoratedRequest) {
+        awaitSportsWorkSlot()
         sportsCatalogueLoading = true
         try {
-            val decorated = withContext(Dispatchers.Default) {
+            val decorated = withContext(LiveSportsWorkPolicy.dispatcher) {
                 attachSportsAddonSources(baseForDecoration, addonSnapshot, guideClockMillis, fixtureArtwork)
             }
             decoratedResult = decoratedRequest to decorated
@@ -2138,7 +2161,12 @@ fun LiveTvScreen(
         if (state.snapshot.loadedAt.toEpochMilli() <= 0L) return@LaunchedEffect
         // Opening Sports or receiving another guide page must not restart a full scan.
         // Drain the newest request once the current pass has published its results.
-        snapshotFlow { latestSportsScanRequest }.conflate().collect { request ->
+        // While Sports is off screen, wait until zapping/opening has settled (see
+        // LiveSportsWorkPolicy); opening Sports releases the newest request at once.
+        snapshotFlow { latestSportsScanRequest to latestSportsSelected }
+            .debounce { (_, onScreen) -> LiveSportsWorkPolicy.settleMs(onScreen) }
+            .map { it.first }
+            .conflate().collect { request ->
             if (sportsScan?.request == request) return@collect
             val scanNow = latestSportsScanClock
             val scanChannels = latestSportsDisplayChannels
@@ -3091,6 +3119,81 @@ fun LiveTvScreen(
         playLiveFullscreen(channel.enrich(0))
     }
 
+    // -- Multiview and recordings (Sports) ------------------------------------------------------
+    // Multiview runs on the Sports page, where the Live TV player is already suspended, so its
+    // tiles get the connections the player gave back. Recordings run in their own service.
+    val multiviewCapacity = remember(context) { deviceMultiviewCapacity(context) }
+    var multiviewTiles by remember { mutableStateOf<List<MultiviewTile>>(emptyList()) }
+    var multiviewOpen by remember { mutableStateOf(false) }
+    var recordingsOpen by remember { mutableStateOf(false) }
+    val liveRecordings by remember(context) { com.arflix.tv.recording.LiveRecordingStore.recordings(context.applicationContext) }.collectAsState()
+    val recordedEventIds = remember(liveRecordings) { liveRecordings.filter { !it.isFinal }.mapNotNullTo(hashSetOf()) { it.eventId } }
+    LaunchedEffect(Unit) { com.arflix.tv.recording.LiveRecordingScheduler.kick(context.applicationContext) }
+    // Android 13+: without this the recording runs but shows no notification and no Stop button.
+    val notificationPermission = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        if (!granted) android.widget.Toast.makeText(context, context.getString(R.string.recording_notification_permission), android.widget.Toast.LENGTH_LONG).show()
+    }
+    fun askNotificationPermission() {
+        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.TIRAMISU) return
+        val granted = androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.POST_NOTIFICATIONS) ==
+            android.content.pm.PackageManager.PERMISSION_GRANTED
+        if (!granted) runCatching { notificationPermission.launch(android.Manifest.permission.POST_NOTIFICATIONS) }
+    }
+    // A game opened full screen from multiview comes back to the board on Back.
+    var multiviewReturnPending by remember { mutableStateOf(false) }
+
+    fun multiviewTileFor(event: SportsGuideEvent, channels: List<IptvChannel>): MultiviewTile? {
+        val ordered = channels.distinctBy { it.id }
+        val first = ordered.firstOrNull() ?: return null
+        return MultiviewTile(key = "game:${event.id}", title = event.title, channel = first, alternates = ordered.drop(1).take(4))
+    }
+
+    fun addToMultiview(event: SportsGuideEvent, channels: List<IptvChannel>) {
+        val tile = multiviewTileFor(event, channels) ?: return
+        when (val result = multiviewTiles.adding(tile, multiviewCapacity)) {
+            is MultiviewAddResult.Added -> multiviewTiles = result.tiles
+            is MultiviewAddResult.AlreadyThere -> Unit
+            MultiviewAddResult.Full -> android.widget.Toast.makeText(
+                context, context.getString(R.string.multiview_full, multiviewCapacity), android.widget.Toast.LENGTH_LONG,
+            ).show()
+        }
+        multiviewOpen = true
+    }
+
+    fun toggleRecording(event: SportsGuideEvent, channels: List<IptvChannel>) {
+        val app = context.applicationContext
+        val existing = liveRecordings.firstOrNull { it.eventId == event.id && !it.isFinal }
+        if (existing != null) {
+            com.arflix.tv.recording.LiveRecordingScheduler.cancel(app, existing.id)
+            android.widget.Toast.makeText(context, context.getString(R.string.recording_cancelled_toast), android.widget.Toast.LENGTH_SHORT).show()
+            return
+        }
+        val recordable = channels.distinctBy { it.id }.filter { it.drmInfo == null && !it.id.startsWith("sports-addon:") }
+        if (recordable.isEmpty()) {
+            android.widget.Toast.makeText(context, context.getString(R.string.recording_error_protected), android.widget.Toast.LENGTH_LONG).show()
+            return
+        }
+        com.arflix.tv.recording.LiveRecordingScheduler.add(app, com.arflix.tv.recording.LiveRecording(
+            id = com.arflix.tv.recording.LiveRecordingScheduler.newId(),
+            title = event.title,
+            channels = recordable.take(5),
+            programmeStart = event.programme.startUtcMillis,
+            programmeEnd = event.programme.endUtcMillis,
+            createdAt = System.currentTimeMillis(),
+            eventId = event.id,
+            sport = event.sport.name,
+        ))
+        askNotificationPermission()
+        val live = event.programme.startUtcMillis <= System.currentTimeMillis()
+        android.widget.Toast.makeText(
+            context,
+            context.getString(if (live) R.string.recording_started_toast else R.string.recording_scheduled_toast, event.title),
+            android.widget.Toast.LENGTH_LONG,
+        ).show()
+    }
+
     fun playAddonSource(event: com.arflix.tv.data.model.SportsAddonEvent, stream: com.arflix.tv.data.repository.SportsAddonStream) {
         if (sportsAddonInstallations.none { com.arflix.tv.data.model.sportsAddonInstallation(it) == event.installation }) return
         if (stream.external) {
@@ -3280,80 +3383,16 @@ fun LiveTvScreen(
     }
 
     val playbackConnections = remember { com.arflix.tv.network.IptvPlaybackConnections() }
-    val iptvHttpClient = remember {
-        OkHttpClient.Builder()
-            .addInterceptor(playbackConnections)
-            .connectionPool(ConnectionPool(5, 5, TimeUnit.MINUTES))
-            .followRedirects(true)
-            .followSslRedirects(true)
-            .retryOnConnectionFailure(true)
-            .addInterceptor(IptvProviderRequestGuard.shared.preflightInterceptor(playback = true))
-            .addNetworkInterceptor(IptvProviderRequestGuard.shared.playbackInterceptor())
-            .dns(OkHttpProvider.dns)
-            .connectTimeout(8, TimeUnit.SECONDS)
-            // An idle live socket should fail, not freeze startup for five minutes.
-            // No total call timeout: healthy continuous streams may run indefinitely.
-            .readTimeout(15, TimeUnit.SECONDS)
-            .build()
-    }
-    val baseRequestHeaders = remember {
-        mapOf(
-            "Accept" to "*/*",
-            "Accept-Encoding" to "identity",
-            "User-Agent" to OkHttpProvider.userAgentOr(IptvPlaybackUserAgent),
-            "Connection" to "keep-alive"
-        )
-    }
+    // Builders live outside this composable to keep LiveTvScreen() under the JVM 64 KB method limit.
+    val iptvHttpClient = remember { buildLiveIptvHttpClient(playbackConnections) }
+    val baseRequestHeaders = remember { liveBaseRequestHeaders() }
     val iptvDataSourceFactory = remember(iptvHttpClient, baseRequestHeaders) {
-        OkHttpDataSource.Factory(iptvHttpClient)
-            .setUserAgent(OkHttpProvider.userAgentOr(IptvPlaybackUserAgent))
-            .setDefaultRequestProperties(baseRequestHeaders)
+        buildLiveDataSourceFactory(iptvHttpClient, baseRequestHeaders)
     }
-    val mediaSourceFactory = remember(iptvDataSourceFactory) {
-        DefaultMediaSourceFactory(context, iptvExtractorsFactory())
-            .setDataSourceFactory(iptvDataSourceFactory)
-            .setLoadErrorHandlingPolicy(IptvLoadErrorHandlingPolicy())
-    }
-    val livePlaybackBufferProfile = remember(context) {
-        val activityManager = context.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager
-        buildLiveTvBufferProfile(
-            memoryClassMb = activityManager?.memoryClass ?: 384,
-            isLowRamDevice = activityManager?.isLowRamDevice == true
-        )
-    }
-    val liveLoadControl = remember(livePlaybackBufferProfile) {
-        val loadControl = DefaultLoadControl.Builder()
-            .setBufferDurationsMs(
-                livePlaybackBufferProfile.minBufferMs,
-                livePlaybackBufferProfile.maxBufferMs,
-                livePlaybackBufferProfile.bufferForPlaybackMs,
-                livePlaybackBufferProfile.bufferForPlaybackAfterRebufferMs
-            )
-            .setTargetBufferBytes(livePlaybackBufferProfile.targetBufferBytes)
-            // MUST be false: with time-prioritised thresholds ExoPlayer keeps buffering
-            // toward maxBufferMs even past targetBufferBytes. Buffer chunks live on the
-            // Java heap, so a 4K live stream could allocate hundreds of MB — pinning the
-            // 384MB-capped heap at 0% free. That caused OOM crashes while navigating the
-            // Live TV page AND the heavy initial buffering (bandwidth burned prefetching
-            // minutes of stream while GC stalls starved the player).
-            .setPrioritizeTimeOverSizeThresholds(false)
-            .setBackBuffer(livePlaybackBufferProfile.backBufferMs, true)
-            .build()
-        // Holds playback back so AI subtitles get audio ahead of time; a no-op until asked to.
-        SubtitleLookaheadLoadControl(loadControl)
-    }
-    val exoPlayer = remember(liveLoadControl) {
-        ExoPlayer.Builder(context)
-            .setMediaSourceFactory(mediaSourceFactory)
-            .setLoadControl(liveLoadControl)
-            // A live stream whose buffer stops moving while buffering raises an error after
-            // this long, which the retry below recovers, instead of a spinner for ten minutes.
-            .setStuckBufferingDetectionTimeoutMs(LIVE_STUCK_BUFFERING_TIMEOUT_MS)
-            .build().apply {
-                playWhenReady = true
-                videoScalingMode = C.VIDEO_SCALING_MODE_SCALE_TO_FIT
-            }
-    }
+    val mediaSourceFactory = remember(iptvDataSourceFactory) { buildLiveMediaSourceFactory(context, iptvDataSourceFactory) }
+    val livePlaybackBufferProfile = remember(context) { liveBufferProfileFor(context) }
+    val liveLoadControl = remember(livePlaybackBufferProfile) { buildLiveLoadControl(livePlaybackBufferProfile) }
+    val exoPlayer = remember(liveLoadControl) { buildLiveExoPlayer(context, mediaSourceFactory, liveLoadControl) }
 
     val liveNetwork = rememberIptvNetworkWatch()
     val liveStreamGate = remember(exoPlayer) {
@@ -3824,6 +3863,7 @@ fun LiveTvScreen(
         if (initialPositionMs > 0L) exoPlayer.setMediaSource(source, initialPositionMs)
         else exoPlayer.setMediaSource(source)
         exoPlayer.prepare()
+        LiveTvPerf.prepared()
         exoPlayer.playWhenReady = true
         exoPlayer.play()
         lastPreparedStreamUrl = stream
@@ -3900,8 +3940,10 @@ fun LiveTvScreen(
         playerPositionMs = target
         exoPlayer.playWhenReady = true
         if (seekInStream) {
+            pendingCatchupSeekReopenMs = target.takeIf { targetAnchor != catchupUrlAnchorOffsetMs }
             exoPlayer.seekTo(target - catchupUrlAnchorOffsetMs)
         } else {
+            pendingCatchupSeekReopenMs = null
             catchupPlaybackOffsetMs = target
             lastPreparedStreamUrl = null
             catchupReloadSignal++
@@ -3915,6 +3957,26 @@ fun LiveTvScreen(
                 "inSegment=$targetInSegment seekInStream=$seekInStream exo=${exoPlayer.currentPosition}"
         )
         hudPokeSignal++
+    }
+
+    fun reopenCatchupAtPendingSeek(reason: String): Boolean {
+        val target = pendingCatchupSeekReopenMs ?: return false
+        pendingCatchupSeekReopenMs = null
+        if (playingCatchupProgram == null) return false
+        System.err.println("[IPTV-Catchup] in-stream seek failed ($reason); reopening at target=$target")
+        catchupPlaybackOffsetMs = target
+        playerPositionMs = target
+        lastPreparedStreamUrl = null
+        playerIsBuffering = true
+        catchupReloadSignal++
+        return true
+    }
+
+    // An in-stream seek that is still loading after a few seconds is treated like a failed one.
+    LaunchedEffect(pendingCatchupSeekReopenMs) {
+        if (pendingCatchupSeekReopenMs == null) return@LaunchedEffect
+        delay(CatchupSeekReopenAfterMs)
+        if (exoPlayer.playbackState != Player.STATE_READY) reopenCatchupAtPendingSeek("stalled")
     }
 
     fun seekToPosition(targetMs: Long) {
@@ -4081,8 +4143,10 @@ fun LiveTvScreen(
             override fun onPlaybackStateChanged(playbackState: Int) {
                 playerIsBuffering = (playbackState == Player.STATE_BUFFERING)
                 if (playbackState == Player.STATE_READY) {
+                    LiveTvPerf.ready()
                     playbackDiagnostic = null
                     playerIsBuffering = false
+                    pendingCatchupSeekReopenMs = null
                     if (liveReadySinceMs == null) liveReadySinceMs = android.os.SystemClock.elapsedRealtime()
                 }
                 if (isLiveDropEnd(playbackState, exoPlayer.duration, playingCatchupProgram != null, liveStreamGate.isLimited,
@@ -4095,6 +4159,10 @@ fun LiveTvScreen(
                         )
                     )
                 }
+            }
+
+            override fun onRenderedFirstFrame() {
+                LiveTvPerf.firstFrame()
             }
 
             override fun onIsLoadingChanged(isLoading: Boolean) {
@@ -4110,6 +4178,7 @@ fun LiveTvScreen(
                 // This device closed that session on purpose, so it says nothing about the source.
                 if (com.arflix.tv.network.isIptvStreamSessionClosed(error)) return
                 if (!playbackForeground || sportsHiddenPlayback) return
+                if (reopenCatchupAtPendingSeek("error=${error.errorCodeName}")) return
                 val prepared = lastPreparedStreamUrl ?: return
                 val detectedHls = error.iptvHlsFormatDetected()
                 if (detectedHls?.sourceUrl == prepared && !lastPreparedIsHls &&
@@ -4432,6 +4501,8 @@ fun LiveTvScreen(
                         // row still receives keys. Handle it here at the outermost preview
                         // node and swallow everything — including KeyUp — while it is open,
                         // otherwise the row underneath navigates or opens the channel.
+                        // Multiview owns every key while it is on screen.
+                        if (multiviewOpen && sportsSelected && !isFullScreen) return@onPreviewKeyEvent false
                         val isSelectKey = event.key == Key.DirectionCenter || event.key == Key.Enter
                         if (isSelectKey) {
                             if (selectKeyGuard.consume(
@@ -4632,6 +4703,10 @@ fun LiveTvScreen(
         } else {
             if (isTouchDevice) {
                 val groupHomeListState = androidx.compose.foundation.lazy.rememberLazyListState()
+                // Animate page changes only, never the first paint of Live TV.
+                val lastTouchMode = remember { arrayOf<LiveTvStartup.LiveTvMode?>(null) }
+                val touchModeChanged = lastTouchMode[0] != null && lastTouchMode[0] != currentMode
+                SideEffect { lastTouchMode[0] = currentMode }
                 if (currentMode == LiveTvStartup.LiveTvMode.GroupHome) {
                 val mobileAllChannelsCount = remember(
                     visibleEnrichedState.value.tree,
@@ -4738,6 +4813,7 @@ fun LiveTvScreen(
                     listState = groupHomeListState,
                     modifier = Modifier
                         .fillMaxSize()
+                        .livePageEnter(animate = touchModeChanged, forward = false)
                         .padding(top = contentTopPadding),
                 )
             } else {
@@ -4745,6 +4821,7 @@ fun LiveTvScreen(
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
+                        .livePageEnter(animate = touchModeChanged, forward = true)
                         .padding(top = contentTopPadding),
                 ) {
                     Row(
@@ -4851,6 +4928,11 @@ fun LiveTvScreen(
                         },
                         onPlay = { channel -> playLiveFullscreen(channel.enrich(0)) },
                         onPlayFromEvent = ::playSportsChannel,
+                        onMultiview = ::addToMultiview,
+                        onRecord = ::toggleRecording,
+                        recordedEventIds = recordedEventIds,
+                        onOpenMultiview = { multiviewOpen = true },
+                        onOpenRecordings = { recordingsOpen = true },
                         networkEvents = sportsNetworkRow,
                         channelMemory = sportsChannelMemory,
                         loadGameDetails = viewModel::loadSportsGameDetails,
@@ -5030,6 +5112,11 @@ fun LiveTvScreen(
                         onOpenCategories = { openCategoryDrawer() },
                         onPlay = { channel -> playLiveFullscreen(channel.enrich(0)) },
                         onPlayFromEvent = ::playSportsChannel,
+                        onMultiview = ::addToMultiview,
+                        onRecord = ::toggleRecording,
+                        recordedEventIds = recordedEventIds,
+                        onOpenMultiview = { multiviewOpen = true },
+                        onOpenRecordings = { recordingsOpen = true },
                         networkEvents = sportsNetworkRow,
                         channelMemory = sportsChannelMemory,
                         loadGameDetails = viewModel::loadSportsGameDetails,
@@ -5639,132 +5726,135 @@ fun LiveTvScreen(
             )
         }
 
-        if (!searchOpen && isFullScreen && subtitlePickerOpen) {
-            LiveTrackPickerOverlay(
-                title = stringResource(R.string.live_subtitles),
-                icon = Icons.Filled.Subtitles,
-                channelName = playingChannel?.name.orEmpty(),
-                options = withAiSubtitlesOption(
-                    liveSubtitleOptions(liveTracks, stringResource(R.string.live_subtitles_off)),
-                    offLabel = stringResource(R.string.live_subtitles_off),
-                    aiLabel = stringResource(R.string.live_ai_subtitles),
-                    aiAvailable = liveAiSubsSettings.enabled,
-                    aiSelected = liveAiSubsOn,
-                ),
-                onDismiss = {
-                    subtitlePickerOpen = false
-                    returnToHudControls()
-                },
-                onPick = { key ->
-                    if (key == LIVE_SUBTITLES_AI) {
-                        // AI subtitles replace the stream's own (which keep feeding them, hidden);
-                        // remembered per channel.
-                        playingChannelId?.let {
-                            liveAiSubsChoices[it] = true
-                            liveSubtitleChoices.remove(it)
+        // Own composable lambda: keeps LiveTvScreen() under the JVM 64 KB method limit.
+        LiveTvRenderBoundary(liveGroupNames) {
+            if (!searchOpen && isFullScreen && subtitlePickerOpen) {
+                LiveTrackPickerOverlay(
+                    title = stringResource(R.string.live_subtitles),
+                    icon = Icons.Filled.Subtitles,
+                    channelName = playingChannel?.name.orEmpty(),
+                    options = withAiSubtitlesOption(
+                        liveSubtitleOptions(liveTracks, stringResource(R.string.live_subtitles_off)),
+                        offLabel = stringResource(R.string.live_subtitles_off),
+                        aiLabel = stringResource(R.string.live_ai_subtitles),
+                        aiAvailable = liveAiSubsSettings.enabled,
+                        aiSelected = liveAiSubsOn,
+                    ),
+                    onDismiss = {
+                        subtitlePickerOpen = false
+                        returnToHudControls()
+                    },
+                    onPick = { key ->
+                        if (key == LIVE_SUBTITLES_AI) {
+                            // AI subtitles replace the stream's own (which keep feeding them, hidden);
+                            // remembered per channel.
+                            playingChannelId?.let {
+                                liveAiSubsChoices[it] = true
+                                liveSubtitleChoices.remove(it)
+                            }
+                        } else {
+                            playingChannelId?.let {
+                                liveAiSubsChoices[it] = false
+                                liveSubtitleChoices[it] = key
+                            }
+                            applyLiveSubtitleChoice(exoPlayer, key)
                         }
-                    } else {
-                        playingChannelId?.let {
-                            liveAiSubsChoices[it] = false
-                            liveSubtitleChoices[it] = key
+                    },
+                )
+            }
+
+            if (!searchOpen && isFullScreen && audioPickerOpen) {
+                LiveTrackPickerOverlay(
+                    title = stringResource(R.string.live_audio),
+                    icon = Icons.Filled.Audiotrack,
+                    channelName = playingChannel?.name.orEmpty(),
+                    options = liveAudioOptions(liveTracks),
+                    onDismiss = {
+                        audioPickerOpen = false
+                        returnToHudControls()
+                    },
+                    onPick = { key ->
+                        playingChannelId?.let { liveAudioChoices[it] = key }
+                        LivePlayerPrefs.saveAudioChoices(context, liveAudioChoices.toMap())
+                        applyLiveAudioChoice(exoPlayer, key)
+                    },
+                )
+            }
+
+            if (!searchOpen) {
+                FullscreenSourcesOverlay(
+                    visible = isFullScreen && sourcesChannel != null,
+                    isLoading = sourcesLoading,
+                    failed = sourcesFailed,
+                    currentChannel = sourcesChannel,
+                    variants = sourcesVariants,
+                    onPick = { variant ->
+                        sourcesChannel = null
+                        if (variant.id != playingChannelId) {
+                            retainedPlayingChannel = variant
+                            playingChannelId = variant.id
+                            epgPrefetchAnchorId = variant.id
+                            playingCatchupProgram = null
+                            catchupPlaybackOffsetMs = 0L
                         }
-                        applyLiveSubtitleChoice(exoPlayer, key)
+                        hudPokeSignal++
+                    },
+                    onDismiss = {
+                        sourcesChannel = null
+                        hudPokeSignal++
                     }
-                },
-            )
-        }
+                )
+                val pickerChannel = variantPickerChannel
+                VariantPickerOverlay(
+                    channel = pickerChannel,
+                    variants = pickerChannel?.let { variantGroups[variantGroupKey(it)] }.orEmpty(),
+                    onDismiss = { variantPickerChannel = null },
+                    onPick = { playVariant(it) },
+                )
+            }
 
-        if (!searchOpen && isFullScreen && audioPickerOpen) {
-            LiveTrackPickerOverlay(
-                title = stringResource(R.string.live_audio),
-                icon = Icons.Filled.Audiotrack,
-                channelName = playingChannel?.name.orEmpty(),
-                options = liveAudioOptions(liveTracks),
-                onDismiss = {
-                    audioPickerOpen = false
-                    returnToHudControls()
-                },
-                onPick = { key ->
-                    playingChannelId?.let { liveAudioChoices[it] = key }
-                    LivePlayerPrefs.saveAudioChoices(context, liveAudioChoices.toMap())
-                    applyLiveAudioChoice(exoPlayer, key)
-                },
-            )
-        }
-
-        if (!searchOpen) {
-            FullscreenSourcesOverlay(
-                visible = isFullScreen && sourcesChannel != null,
-                isLoading = sourcesLoading,
-                failed = sourcesFailed,
-                currentChannel = sourcesChannel,
-                variants = sourcesVariants,
-                onPick = { variant ->
-                    sourcesChannel = null
-                    if (variant.id != playingChannelId) {
-                        retainedPlayingChannel = variant
-                        playingChannelId = variant.id
-                        epgPrefetchAnchorId = variant.id
-                        playingCatchupProgram = null
-                        catchupPlaybackOffsetMs = 0L
-                    }
-                    hudPokeSignal++
-                },
-                onDismiss = {
-                    sourcesChannel = null
-                    hudPokeSignal++
+            guideFixChannel?.let { channel ->
+                val allChannels = visibleEnrichedState.value.all
+                val sourceNames = remember(state.config) {
+                    state.config.playlists.associate { it.id to it.name } +
+                        state.config.stalkerPortals.associate { it.id to it.name.ifBlank { it.id } }
                 }
-            )
-            val pickerChannel = variantPickerChannel
-            VariantPickerOverlay(
-                channel = pickerChannel,
-                variants = pickerChannel?.let { variantGroups[variantGroupKey(it)] }.orEmpty(),
-                onDismiss = { variantPickerChannel = null },
-                onPick = { playVariant(it) },
-            )
-        }
-
-        guideFixChannel?.let { channel ->
-            val allChannels = visibleEnrichedState.value.all
-            val sourceNames = remember(state.config) {
-                state.config.playlists.associate { it.id to it.name } +
-                    state.config.stalkerPortals.associate { it.id to it.name.ifBlank { it.id } }
+                // Read once per opening: what is on now is a hint, and following every guide
+                // update would re-rank a list the user is moving through.
+                val candidates = remember(channel.id, allChannels) {
+                    val nowMs = System.currentTimeMillis()
+                    allChannels.asSequence()
+                        .filter { it.id != channel.id }
+                        .map { candidate ->
+                            GuideSourceOption(
+                                channelId = candidate.id,
+                                name = candidate.name,
+                                playlistName = sourceNames[com.arflix.tv.data.repository.guidePlaylistIdOf(candidate.id)],
+                                nowTitle = actionGuideNowNext[candidate.id]?.atTime(nowMs)?.now?.title,
+                            )
+                        }
+                        .toList()
+                }
+                val currentSource = guideFixes.sources[channel.id]
+                val guideChannelId = guideFixes.guideChannelOf(channel.id)
+                val offsetPlaylistId = com.arflix.tv.data.repository.guidePlaylistIdOf(guideChannelId ?: channel.id)
+                GuideFixDialog(
+                    channelName = channel.name,
+                    currentSourceId = currentSource,
+                    currentSourceName = currentSource?.let { id -> allChannels.firstOrNull { it.id == id }?.name },
+                    offsetPlaylistName = sourceNames[offsetPlaylistId]?.takeIf { guideChannelId != null },
+                    offsetMinutes = guideFixes.offsetMinutes[offsetPlaylistId] ?: 0,
+                    candidates = candidates,
+                    onPickSource = { sourceId ->
+                        guideFixChannel = null
+                        viewModel.setGuideSource(channel.id, sourceId)
+                    },
+                    onOffsetChange = { minutes ->
+                        viewModel.setGuideOffset(offsetPlaylistId, minutes)
+                    },
+                    onDismiss = { guideFixChannel = null },
+                )
             }
-            // Read once per opening: what is on now is a hint, and following every guide
-            // update would re-rank a list the user is moving through.
-            val candidates = remember(channel.id, allChannels) {
-                val nowMs = System.currentTimeMillis()
-                allChannels.asSequence()
-                    .filter { it.id != channel.id }
-                    .map { candidate ->
-                        GuideSourceOption(
-                            channelId = candidate.id,
-                            name = candidate.name,
-                            playlistName = sourceNames[com.arflix.tv.data.repository.guidePlaylistIdOf(candidate.id)],
-                            nowTitle = actionGuideNowNext[candidate.id]?.atTime(nowMs)?.now?.title,
-                        )
-                    }
-                    .toList()
-            }
-            val currentSource = guideFixes.sources[channel.id]
-            val guideChannelId = guideFixes.guideChannelOf(channel.id)
-            val offsetPlaylistId = com.arflix.tv.data.repository.guidePlaylistIdOf(guideChannelId ?: channel.id)
-            GuideFixDialog(
-                channelName = channel.name,
-                currentSourceId = currentSource,
-                currentSourceName = currentSource?.let { id -> allChannels.firstOrNull { it.id == id }?.name },
-                offsetPlaylistName = sourceNames[offsetPlaylistId]?.takeIf { guideChannelId != null },
-                offsetMinutes = guideFixes.offsetMinutes[offsetPlaylistId] ?: 0,
-                candidates = candidates,
-                onPickSource = { sourceId ->
-                    guideFixChannel = null
-                    viewModel.setGuideSource(channel.id, sourceId)
-                },
-                onOffsetChange = { minutes ->
-                    viewModel.setGuideOffset(offsetPlaylistId, minutes)
-                },
-                onDismiss = { guideFixChannel = null },
-            )
         }
 
         channelMenu?.let { menu ->
@@ -5803,6 +5893,44 @@ fun LiveTvScreen(
             )
         }
 
+        LaunchedEffect(isFullScreen) {
+            if (!isFullScreen && multiviewReturnPending) {
+                multiviewReturnPending = false
+                if (sportsSelected && multiviewTiles.isNotEmpty()) multiviewOpen = true
+            }
+        }
+        if (multiviewOpen && sportsSelected && !isFullScreen) {
+            val multiviewCandidates = remember(sportsDisplayEvents, sportsChannelMemory, guideClockMillis) {
+                sportsDisplayEvents.filter { it.isOnAir(guideClockMillis) }.mapNotNull { event ->
+                    val channels = (event.availableChannels(guideClockMillis) + event.possibleChannels)
+                        .distinctBy { it.id }.withRememberedFirst(sportsChannelMemory, event.channelMemoryKeys())
+                    multiviewTileFor(event, channels)
+                }
+            }
+            MultiviewOverlay(
+                tiles = multiviewTiles,
+                capacity = multiviewCapacity,
+                candidates = multiviewCandidates,
+                resolve = { channel -> viewModel.resolvePlayableStreamUrl(channel) },
+                policyFor = viewModel.iptvRepository::streamPolicyFor,
+                onAdd = { tile -> (multiviewTiles.adding(tile, multiviewCapacity) as? MultiviewAddResult.Added)?.let { multiviewTiles = it.tiles } },
+                onReplace = { index, tile ->
+                    multiviewTiles = multiviewTiles.mapIndexed { i, old -> if (i == index) tile else old }.distinctBy { it.key }
+                },
+                onRemove = { index ->
+                    multiviewTiles = multiviewTiles.filterIndexed { i, _ -> i != index }
+                    if (multiviewTiles.isEmpty()) multiviewOpen = false
+                },
+                onFullscreen = { tile ->
+                    multiviewOpen = false
+                    multiviewReturnPending = true
+                    playLiveFullscreen(tile.channel.enrich(0))
+                },
+                onClose = { multiviewOpen = false },
+            )
+        }
+        if (recordingsOpen) RecordingsDialog(onDismiss = { recordingsOpen = false })
+
         PlaybackDiagnosticBanner(
             diagnostic = playbackDiagnostic,
             modifier = Modifier
@@ -5832,180 +5960,183 @@ fun LiveTvScreen(
             }
         }
 
-        val actionData = programActionDialog
-        if (actionData != null) {
-            val program = actionData.program
-            val channel = actionData.channel
-            val isNow = program.isLive(guideClockMillis)
-            androidx.compose.material3.AlertDialog(
-                onDismissRequest = { programActionDialog = null },
-                title = {
-                    androidx.tv.material3.Text(
-                        text = program.title,
-                        style = ArflixTypography.cardTitle,
-                        color = Color.White,
-                        maxLines = 2,
-                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                    )
-                },
-                text = {
-                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        // Own composable lambda: keeps LiveTvScreen() under the JVM 64 KB method limit.
+        LiveTvRenderBoundary(liveGroupNames) {
+            val actionData = programActionDialog
+            if (actionData != null) {
+                val program = actionData.program
+                val channel = actionData.channel
+                val isNow = program.isLive(guideClockMillis)
+                androidx.compose.material3.AlertDialog(
+                    onDismissRequest = { programActionDialog = null },
+                    title = {
                         androidx.tv.material3.Text(
-                            text = channel.name,
-                            style = ArflixTypography.caption,
-                            color = TextSecondary,
+                            text = program.title,
+                            style = ArflixTypography.cardTitle,
+                            color = Color.White,
+                            maxLines = 2,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                         )
-                        androidx.tv.material3.Text(
-                            text = "${formatClock(program.startUtcMillis)} - ${formatClock(program.endUtcMillis)}",
-                            style = ArflixTypography.body,
-                            color = TextSecondary,
-                        )
-                        if (isNow) {
-                            Badge(stringResource(R.string.live_badge_live), Color.White, LiveColors.LiveRed)
+                    },
+                    text = {
+                        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                            androidx.tv.material3.Text(
+                                text = channel.name,
+                                style = ArflixTypography.caption,
+                                color = TextSecondary,
+                            )
+                            androidx.tv.material3.Text(
+                                text = "${formatClock(program.startUtcMillis)} - ${formatClock(program.endUtcMillis)}",
+                                style = ArflixTypography.body,
+                                color = TextSecondary,
+                            )
+                            if (isNow) {
+                                Badge(stringResource(R.string.live_badge_live), Color.White, LiveColors.LiveRed)
+                            }
                         }
-                    }
-                },
-                confirmButton = {
-                    val vodMatch = programActionVodMatch
-                    if (vodMatch != null) {
+                    },
+                    confirmButton = {
+                        val vodMatch = programActionVodMatch
+                        if (vodMatch != null) {
+                            androidx.compose.material3.TextButton(
+                                onClick = {
+                                    invalidateProgramActionLookup()
+                                    onNavigateToDetails(vodMatch.mediaType, vodMatch.id)
+                                },
+                            ) {
+                                androidx.tv.material3.Text(
+                                    text = stringResource(R.string.epg_search_sources),
+                                    style = ArflixTypography.button,
+                                    color = Pink,
+                                )
+                            }
+                        }
+                    },
+                    dismissButton = {
                         androidx.compose.material3.TextButton(
                             onClick = {
-                                invalidateProgramActionLookup()
-                                onNavigateToDetails(vodMatch.mediaType, vodMatch.id)
+                                programActionDialog = null
+                                when (epgDialogWatchLiveAction()) {
+                                    EpgInteractionAction.PlayLiveFullscreen -> playLiveFullscreen(channel)
+                                    else -> Unit
+                                }
                             },
                         ) {
                             androidx.tv.material3.Text(
-                                text = stringResource(R.string.epg_search_sources),
+                                text = stringResource(R.string.epg_watch_live),
                                 style = ArflixTypography.button,
+                                color = Color.White,
+                            )
+                        }
+                    },
+                    containerColor = BackgroundElevated,
+                    tonalElevation = 8.dp,
+                )
+            }
+
+            val infoData = programmeInfo
+            if (infoData != null) {
+                val infoProgram = infoData.program
+                val infoChannel = infoData.channel
+                val reminderId = programmeReminderId(infoChannel.id, infoProgram)
+                val reminded = sportsReminders.any { it.eventId == reminderId && !it.dismissed }
+                ProgrammeInfoDialog(
+                    channelName = infoChannel.name,
+                    program = infoProgram,
+                    nowMillis = guideClockMillis,
+                    timeRange = "${formatClock(infoProgram.startUtcMillis)} - ${formatClock(infoProgram.endUtcMillis)}",
+                    reminded = reminded,
+                    canRemind = infoProgram.startUtcMillis > guideClockMillis,
+                    onToggleReminder = {
+                        val reminder = programmeReminder(listOf(infoChannel.id), infoProgram)
+                        if (reminder != null) {
+                            coroutineScope.launch {
+                                viewModel.sportsPreferences.updateReminders { it.withProgrammeReminder(reminder, !reminded) }
+                            }
+                        }
+                        programmeInfo = null
+                    },
+                    onWatchChannel = {
+                        programmeInfo = null
+                        playLiveFullscreen(infoChannel)
+                    },
+                    onDismiss = { programmeInfo = null },
+                )
+            }
+
+            val lockedAction = pendingLockedGroupAction
+            if (lockedAction != null) {
+                PinEntryDialog(
+                    title = stringResource(R.string.live_group_enter_pin),
+                    onPinConfirmed = { enteredPin ->
+                        if (PinUtil.verifyPin(enteredPin, currentProfile?.pin)) {
+                            pendingLockedGroupAction = null
+                            lockedGroupPinError = ""
+                            when (lockedAction) {
+                                is LockedGroupPinAction.OpenCategory -> {
+                                    unlockedGroupKeys = unlockedGroupKeys + lockedAction.groupKey
+                                    enterSelectedCategory(lockedAction.categoryId)
+                                }
+                                is LockedGroupPinAction.ToggleLock -> {
+                                    val key = PlaylistGroupKey.build(lockedAction.playlistId, lockedAction.groupName)
+                                    unlockedGroupKeys = unlockedGroupKeys - key
+                                    viewModel.toggleLockedGroup(lockedAction.playlistId, lockedAction.groupName)
+                                }
+                            }
+                        } else {
+                            lockedGroupPinError = context.getString(R.string.live_group_pin_incorrect)
+                        }
+                    },
+                    onDismiss = {
+                        pendingLockedGroupAction = null
+                        lockedGroupPinError = ""
+                    },
+                    pinError = lockedGroupPinError,
+                )
+            }
+
+                if (showMissingProfilePinDialog) {
+                androidx.compose.material3.AlertDialog(
+                    onDismissRequest = { showMissingProfilePinDialog = false },
+                    title = {
+                        androidx.tv.material3.Text(
+                            text = stringResource(R.string.live_group_pin_required_title),
+                            color = Color.White,
+                        )
+                    },
+                    text = {
+                        androidx.tv.material3.Text(
+                            text = stringResource(R.string.live_group_pin_required_message),
+                            color = TextSecondary,
+                        )
+                    },
+                    confirmButton = {
+                        androidx.compose.material3.TextButton(
+                            onClick = {
+                                showMissingProfilePinDialog = false
+                                onNavigateToSettings()
+                            },
+                        ) {
+                            androidx.tv.material3.Text(
+                                text = stringResource(R.string.settings),
                                 color = Pink,
                             )
                         }
-                    }
-                },
-                dismissButton = {
-                    androidx.compose.material3.TextButton(
-                        onClick = {
-                            programActionDialog = null
-                            when (epgDialogWatchLiveAction()) {
-                                EpgInteractionAction.PlayLiveFullscreen -> playLiveFullscreen(channel)
-                                else -> Unit
-                            }
-                        },
-                    ) {
-                        androidx.tv.material3.Text(
-                            text = stringResource(R.string.epg_watch_live),
-                            style = ArflixTypography.button,
-                            color = Color.White,
-                        )
-                    }
-                },
-                containerColor = BackgroundElevated,
-                tonalElevation = 8.dp,
-            )
-        }
-
-        val infoData = programmeInfo
-        if (infoData != null) {
-            val infoProgram = infoData.program
-            val infoChannel = infoData.channel
-            val reminderId = programmeReminderId(infoChannel.id, infoProgram)
-            val reminded = sportsReminders.any { it.eventId == reminderId && !it.dismissed }
-            ProgrammeInfoDialog(
-                channelName = infoChannel.name,
-                program = infoProgram,
-                nowMillis = guideClockMillis,
-                timeRange = "${formatClock(infoProgram.startUtcMillis)} - ${formatClock(infoProgram.endUtcMillis)}",
-                reminded = reminded,
-                canRemind = infoProgram.startUtcMillis > guideClockMillis,
-                onToggleReminder = {
-                    val reminder = programmeReminder(listOf(infoChannel.id), infoProgram)
-                    if (reminder != null) {
-                        coroutineScope.launch {
-                            viewModel.sportsPreferences.updateReminders { it.withProgrammeReminder(reminder, !reminded) }
+                    },
+                    dismissButton = {
+                        androidx.compose.material3.TextButton(
+                            onClick = { showMissingProfilePinDialog = false },
+                        ) {
+                            androidx.tv.material3.Text(
+                                text = stringResource(R.string.cancel),
+                                color = TextSecondary,
+                            )
                         }
-                    }
-                    programmeInfo = null
-                },
-                onWatchChannel = {
-                    programmeInfo = null
-                    playLiveFullscreen(infoChannel)
-                },
-                onDismiss = { programmeInfo = null },
-            )
+                    },
+                    containerColor = BackgroundElevated,
+                )
+                }
         }
-
-        val lockedAction = pendingLockedGroupAction
-        if (lockedAction != null) {
-            PinEntryDialog(
-                title = stringResource(R.string.live_group_enter_pin),
-                onPinConfirmed = { enteredPin ->
-                    if (PinUtil.verifyPin(enteredPin, currentProfile?.pin)) {
-                        pendingLockedGroupAction = null
-                        lockedGroupPinError = ""
-                        when (lockedAction) {
-                            is LockedGroupPinAction.OpenCategory -> {
-                                unlockedGroupKeys = unlockedGroupKeys + lockedAction.groupKey
-                                enterSelectedCategory(lockedAction.categoryId)
-                            }
-                            is LockedGroupPinAction.ToggleLock -> {
-                                val key = PlaylistGroupKey.build(lockedAction.playlistId, lockedAction.groupName)
-                                unlockedGroupKeys = unlockedGroupKeys - key
-                                viewModel.toggleLockedGroup(lockedAction.playlistId, lockedAction.groupName)
-                            }
-                        }
-                    } else {
-                        lockedGroupPinError = context.getString(R.string.live_group_pin_incorrect)
-                    }
-                },
-                onDismiss = {
-                    pendingLockedGroupAction = null
-                    lockedGroupPinError = ""
-                },
-                pinError = lockedGroupPinError,
-            )
-        }
-
-            if (showMissingProfilePinDialog) {
-            androidx.compose.material3.AlertDialog(
-                onDismissRequest = { showMissingProfilePinDialog = false },
-                title = {
-                    androidx.tv.material3.Text(
-                        text = stringResource(R.string.live_group_pin_required_title),
-                        color = Color.White,
-                    )
-                },
-                text = {
-                    androidx.tv.material3.Text(
-                        text = stringResource(R.string.live_group_pin_required_message),
-                        color = TextSecondary,
-                    )
-                },
-                confirmButton = {
-                    androidx.compose.material3.TextButton(
-                        onClick = {
-                            showMissingProfilePinDialog = false
-                            onNavigateToSettings()
-                        },
-                    ) {
-                        androidx.tv.material3.Text(
-                            text = stringResource(R.string.settings),
-                            color = Pink,
-                        )
-                    }
-                },
-                dismissButton = {
-                    androidx.compose.material3.TextButton(
-                        onClick = { showMissingProfilePinDialog = false },
-                    ) {
-                        androidx.tv.material3.Text(
-                            text = stringResource(R.string.cancel),
-                            color = TextSecondary,
-                        )
-                    }
-                },
-                containerColor = BackgroundElevated,
-            )
-            }
         }
     }
 }
@@ -6332,4 +6463,102 @@ fun FullscreenSourcesOverlay(
             }
         }
     }
+}
+
+private fun buildLiveIptvHttpClient(playbackConnections: com.arflix.tv.network.IptvPlaybackConnections): OkHttpClient =
+    OkHttpClient.Builder()
+        .addInterceptor(playbackConnections)
+        .connectionPool(ConnectionPool(5, 5, TimeUnit.MINUTES))
+        .followRedirects(true)
+        .followSslRedirects(true)
+        .retryOnConnectionFailure(true)
+        .addInterceptor(IptvProviderRequestGuard.shared.preflightInterceptor(playback = true))
+        .addNetworkInterceptor(IptvProviderRequestGuard.shared.playbackInterceptor())
+        .dns(OkHttpProvider.dns)
+        .connectTimeout(8, TimeUnit.SECONDS)
+        // An idle live socket should fail, not freeze startup for five minutes.
+        // No total call timeout: healthy continuous streams may run indefinitely.
+        .readTimeout(15, TimeUnit.SECONDS)
+        .build()
+
+private fun liveBaseRequestHeaders(): Map<String, String> = mapOf(
+    "Accept" to "*/*",
+    "Accept-Encoding" to "identity",
+    "User-Agent" to OkHttpProvider.userAgentOr(IptvPlaybackUserAgent),
+    "Connection" to "keep-alive"
+)
+
+private fun buildLiveDataSourceFactory(client: OkHttpClient, headers: Map<String, String>): OkHttpDataSource.Factory =
+    OkHttpDataSource.Factory(client)
+        .setUserAgent(OkHttpProvider.userAgentOr(IptvPlaybackUserAgent))
+        .setDefaultRequestProperties(headers)
+
+private fun buildLiveMediaSourceFactory(context: Context, dataSourceFactory: OkHttpDataSource.Factory): DefaultMediaSourceFactory =
+    DefaultMediaSourceFactory(context, iptvExtractorsFactory())
+        .setDataSourceFactory(dataSourceFactory)
+        .setLoadErrorHandlingPolicy(IptvLoadErrorHandlingPolicy())
+
+private fun liveBufferProfileFor(context: Context) = run {
+    val activityManager = context.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager
+    buildLiveTvBufferProfile(
+        memoryClassMb = activityManager?.memoryClass ?: 384,
+        isLowRamDevice = activityManager?.isLowRamDevice == true
+    )
+}
+
+private fun buildLiveLoadControl(profile: LiveTvBufferProfile): SubtitleLookaheadLoadControl {
+    val loadControl = DefaultLoadControl.Builder()
+        .setBufferDurationsMs(
+            profile.minBufferMs,
+            profile.maxBufferMs,
+            profile.bufferForPlaybackMs,
+            profile.bufferForPlaybackAfterRebufferMs
+        )
+        .setTargetBufferBytes(profile.targetBufferBytes)
+        // MUST be false: with time-prioritised thresholds ExoPlayer keeps buffering
+        // toward maxBufferMs even past targetBufferBytes. Buffer chunks live on the
+        // Java heap, so a 4K live stream could allocate hundreds of MB — pinning the
+        // 384MB-capped heap at 0% free. That caused OOM crashes while navigating the
+        // Live TV page AND the heavy initial buffering (bandwidth burned prefetching
+        // minutes of stream while GC stalls starved the player).
+        .setPrioritizeTimeOverSizeThresholds(false)
+        .setBackBuffer(profile.backBufferMs, true)
+        .build()
+    // Holds playback back so AI subtitles get audio ahead of time; a no-op until asked to.
+    return SubtitleLookaheadLoadControl(loadControl)
+}
+
+private fun buildLiveExoPlayer(
+    context: Context,
+    mediaSourceFactory: DefaultMediaSourceFactory,
+    loadControl: androidx.media3.exoplayer.LoadControl,
+): ExoPlayer = ExoPlayer.Builder(context)
+    .setMediaSourceFactory(mediaSourceFactory)
+    .setLoadControl(loadControl)
+    // A live stream whose buffer stops moving while buffering raises an error after
+    // this long, which the retry below recovers, instead of a spinner for ten minutes.
+    .setStuckBufferingDetectionTimeoutMs(LIVE_STUCK_BUFFERING_TIMEOUT_MS)
+    .build().apply {
+        playWhenReady = true
+        videoScalingMode = C.VIDEO_SCALING_MODE_SCALE_TO_FIT
+    }
+
+/** Timing marks (logcat LiveTvPerf): opening Live TV until the guide is drawn, and each zap. */
+@Composable
+private fun LiveTvPerfMarks(channelCount: Int, hasEpg: Boolean, playingChannelId: String?) {
+    LaunchedEffect(Unit) { LiveTvPerf.screenEntered() }
+    val hasChannels = channelCount > 0
+    LaunchedEffect(hasChannels) {
+        if (!hasChannels) return@LaunchedEffect
+        LiveTvPerf.channelsReady(channelCount)
+        withFrameNanos { }
+        LiveTvPerf.guidePainted()
+    }
+    val epgReady = hasChannels && hasEpg
+    LaunchedEffect(epgReady) {
+        if (!epgReady) return@LaunchedEffect
+        withFrameNanos { }
+        LiveTvPerf.epgPainted()
+    }
+    LaunchedEffect(playingChannelId) { if (playingChannelId != null) LiveTvPerf.zapStarted(playingChannelId) }
 }

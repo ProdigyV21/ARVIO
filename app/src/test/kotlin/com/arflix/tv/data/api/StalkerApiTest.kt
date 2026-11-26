@@ -205,6 +205,35 @@ class StalkerApiTest {
     }
 
     @Test
+    fun `censored genres left out of the full list are fetched per genre`() = runTest {
+        val requests = mutableListOf<String>()
+        val api = stubApi(requests = requests) { url ->
+            when {
+                url.contains("action=get_genres") ->
+                    """{ "js": [
+                        { "id": "1", "title": "News", "censored": 0 },
+                        { "id": "9", "title": "Adult", "censored": "1" },
+                        { "id": "10", "title": "Night", "censored": true }
+                    ] }"""
+                url.contains("action=get_all_channels") ->
+                    """{ "js": { "data": [{ "id": 1, "name": "One", "cmd": "ffmpeg http://one", "tv_genre_id": "1" }],
+                        "total_items": 1, "max_page_items": 20 } }"""
+                url.contains("action=get_ordered_list") && url.contains("genre=9") ->
+                    """{ "js": { "data": [{ "id": 90, "name": "A", "cmd": "ffmpeg http://a", "tv_genre_id": "9" }],
+                        "total_items": 1, "max_page_items": 20 } }"""
+                url.contains("action=get_ordered_list") && url.contains("genre=10") -> error("portal refused")
+                else -> null
+            }
+        }
+
+        val channels = api.getChannels()
+
+        assertEquals(listOf("1", "90"), channels.map { it.id })
+        assertEquals("Adult", channels.last().group)
+        assertFalse(requests.any { it.contains("get_ordered_list") && it.contains("genre=1&") })
+    }
+
+    @Test
     fun `channel pagination stops and deduplicates when a portal repeats the first page`() = runTest {
         val requests = mutableListOf<String>()
         val repeatedPage = """{

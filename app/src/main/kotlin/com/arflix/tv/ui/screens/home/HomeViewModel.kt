@@ -228,6 +228,35 @@ internal fun dropCategoriesMissingFromSavedCatalogs(
 }
 
 /**
+ * Brings Home's Favorite TV row in line with the stored favourites without needing the channel
+ * list: a card whose channel is no longer a favourite is dropped and the rest follow the stored
+ * order. Returns [categories] unchanged when there is no such row, and without the row when none
+ * of its channels is a favourite any more.
+ *
+ * The row is cached on disk and kept on screen whenever the channel list is still loading, so
+ * without this a removed favourite stayed on Home, across restarts, until the list was warm.
+ */
+internal fun pruneFavoriteTvRow(categories: List<Category>, favoriteIds: List<String>): List<Category> {
+    val index = categories.indexOfFirst { it.id == HomeViewModel.FAVORITE_TV_CATEGORY_ID }
+    if (index < 0) return categories
+    val row = categories[index]
+    val rank = HashMap<String, Int>(favoriteIds.size)
+    favoriteIds.forEachIndexed { i, id -> if (id.isNotBlank()) rank.putIfAbsent(id, i) }
+    fun channelIdOf(item: MediaItem): String? = item.status
+        ?.takeIf { it.startsWith(HomeViewModel.IPTV_STATUS_PREFIX) }
+        ?.removePrefix(HomeViewModel.IPTV_STATUS_PREFIX)
+    val kept = row.items
+        .filter { item -> channelIdOf(item)?.let(rank::containsKey) == true }
+        .sortedBy { item -> rank[channelIdOf(item)] ?: Int.MAX_VALUE }
+    if (kept == row.items) return categories
+    return if (kept.isEmpty()) {
+        categories.filterIndexed { i, _ -> i != index }
+    } else {
+        categories.toMutableList().also { it[index] = row.copy(items = kept) }
+    }
+}
+
+/**
  * Applies the "Show IPTV favorites on home" preference to the Favorite TV row.
  *
  * Preserves the user's custom catalog ordering configured in Settings > Catalogs. The preference,
@@ -1481,6 +1510,46 @@ class HomeViewModel @Inject constructor(
         _uiState.value = _uiState.value.copy(categories = categories.filterNot { it.id == FAVORITE_TV_CATEGORY_ID })
     }
 
+    /** The active profile's favourite channel ids, straight from settings; null if unreadable. */
+    private suspend fun readStoredFavoriteChannelIds(): List<String>? = runCatching {
+        iptvRepository.observeFavoriteChannels().first().filter { it.isNotBlank() }
+    }.onFailure { if (it is CancellationException) throw it }.getOrNull()
+
+    /**
+     * A channel was starred or unstarred (in Live TV, on another device, or by a cloud restore).
+     * Removals show at once from the stored list alone; the row is then rebuilt when the
+     * channels can be read, so a new favourite appears too. The disk cache is rewritten so a
+     * restart does not bring back the old row.
+     */
+    private suspend fun onFavoriteChannelsChanged(favoriteIds: List<String>) {
+        val ids = favoriteIds.filter { it.isNotBlank() }
+        val before = _uiState.value.categories
+        val pruned = pruneFavoriteTvRow(before, ids)
+        if (pruned !== before) {
+            _uiState.value = _uiState.value.copy(categories = pruned)
+        }
+        val outcome = withContext(Dispatchers.IO) {
+            runCatching { buildFavoriteTvOutcome() }.getOrDefault(FavoriteTvOutcome.Unavailable)
+        }
+        when (outcome) {
+            is FavoriteTvOutcome.Available -> {
+                val cfg = savedCatalogById[FAVORITE_TV_CATEGORY_ID]
+                val titled = if (cfg != null && cfg.title.isNotBlank()) {
+                    outcome.category.copy(title = cfg.title)
+                } else {
+                    outcome.category
+                }
+                updateMobileCategoryRow(FAVORITE_TV_CATEGORY_ID, titled)
+            }
+            FavoriteTvOutcome.Empty -> removeFavoriteTvRow()
+            FavoriteTvOutcome.Unavailable -> Unit
+        }
+        if (_uiState.value.categories !== before) {
+            val snapshot = _uiState.value.categories
+            withContext(Dispatchers.IO) { runCatching { persistCategoriesCache(snapshot) } }
+        }
+    }
+
     /**
      * The Favorite TV row's now/next only shows on a focused card, so it is brought up to date
      * when focus reaches the row, not on a timer. A Home screen left open used to download the
@@ -2256,6 +2325,14 @@ class HomeViewModel @Inject constructor(
                 .collectLatest { rebuildFavoriteTvAfterSourceChange() }
         }
 
+        // Starring or unstarring a channel must update the Favorite TV row (and its disk cache).
+        viewModelScope.launch {
+            iptvRepository.observeFavoriteChannels()
+                .distinctUntilChanged()
+                .drop(1)
+                .collectLatest { onFavoriteChannelsChanged(it) }
+        }
+
         // Keep Home preferences bound to the active profile. Cloud restore and profile
         // switching can update DataStore after this ViewModel has already been created.
         viewModelScope.launch {
@@ -2471,6 +2548,14 @@ class HomeViewModel @Inject constructor(
                         cached,
                         runCatching { catalogRepository.getCatalogs() }.getOrNull()
                     )
+                }.let { cached ->
+                    // A favourite removed after the cache was written must not come back from it.
+                    val favoriteIds = if (cached.any { it.id == FAVORITE_TV_CATEGORY_ID }) {
+                        readStoredFavoriteChannelIds()
+                    } else {
+                        null
+                    }
+                    if (favoriteIds == null) cached else pruneFavoriteTvRow(cached, favoriteIds)
                 }
                 // Gate on "no real BASE rows yet", not "no categories at all": Continue Watching
                 // is restored from its own cache by a coroutine launched alongside this one, and
@@ -3178,6 +3263,11 @@ class HomeViewModel @Inject constructor(
                     runCatching { buildFavoriteTvOutcome() }
                         .getOrDefault(FavoriteTvOutcome.Unavailable)
                 }
+                val storedFavoriteIds = if (favoriteTvOutcome == FavoriteTvOutcome.Unavailable) {
+                    withContext(Dispatchers.IO) { readStoredFavoriteChannelIds() }
+                } else {
+                    null
+                }
 
                 var loadedFreshCatalogRows = false
                 var categories = withContext(networkDispatcher) {
@@ -3223,7 +3313,14 @@ class HomeViewModel @Inject constructor(
                             is FavoriteTvOutcome.Available ->
                                 put(FAVORITE_TV_CATEGORY_ID, favoriteTvOutcome.category)
                             FavoriteTvOutcome.Empty -> remove(FAVORITE_TV_CATEGORY_ID)
-                            FavoriteTvOutcome.Unavailable -> Unit
+                            // The channels can't be read yet, but the favourites can: a kept
+                            // row still loses the cards that are no longer favourites.
+                            FavoriteTvOutcome.Unavailable -> get(FAVORITE_TV_CATEGORY_ID)?.let { row ->
+                                if (storedFavoriteIds == null) return@let
+                                val pruned = pruneFavoriteTvRow(listOf(row), storedFavoriteIds).firstOrNull()
+                                if (pruned == null) remove(FAVORITE_TV_CATEGORY_ID)
+                                else put(FAVORITE_TV_CATEGORY_ID, pruned)
+                            }
                         }
                     }
 
