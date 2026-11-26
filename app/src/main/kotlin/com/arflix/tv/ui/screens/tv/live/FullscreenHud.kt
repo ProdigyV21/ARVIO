@@ -113,6 +113,12 @@ fun FullscreenHud(
     playbackDurationMs: Long = 0L,
     onBackClick: (() -> Unit)? = null,
     onGuideClick: (() -> Unit)? = null,
+    /** Picture shape (Fit / Fill / Stretch): the label shows the current one, a press moves on. */
+    pictureLabel: String? = null,
+    onPictureClick: (() -> Unit)? = null,
+    /** Sleep timer: the label shows the current step, a press moves on (Off, 30, 60, 90, 120 min). */
+    sleepLabel: String? = null,
+    onSleepClick: (() -> Unit)? = null,
     onOpenVariants: (() -> Unit)? = null,
     onSubtitlesClick: (() -> Unit)? = null,
     onAudioClick: (() -> Unit)? = null,
@@ -648,6 +654,20 @@ fun FullscreenHud(
                                             focusReturnTarget = subtitlesFocusRequester
                                             onSubtitlesClick()
                                         },
+                                    )
+                                }
+                                if (onPictureClick != null && pictureLabel != null) {
+                                    HudActionButton(
+                                        modifier = Modifier.align(Alignment.CenterVertically),
+                                        label = pictureLabel,
+                                        onClick = onPictureClick,
+                                    )
+                                }
+                                if (onSleepClick != null && sleepLabel != null) {
+                                    HudActionButton(
+                                        modifier = Modifier.align(Alignment.CenterVertically),
+                                        label = sleepLabel,
+                                        onClick = onSleepClick,
                                     )
                                 }
                                 // Guide button at far right

@@ -2,4 +2,9 @@
 <resources>
     <string name="live_menu_watch_from_start">Von Anfang an ansehen</string>
     <string name="live_menu_next_show">Nächste Sendung · Erinnern</string>
+    <string name="live_picture_fit">Bild: Einpassen</string>
+    <string name="live_picture_fill">Bild: Füllen</string>
+    <string name="live_picture_stretch">Bild: Strecken</string>
+    <string name="live_sleep_off">Schlaftimer</string>
+    <string name="live_sleep_minutes">Schlaf: %1$d Min.</string>
 </resources>
