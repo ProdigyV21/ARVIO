@@ -15,6 +15,8 @@ playlist with EPG http://10.0.2.2:8765/guide.xml.gz.
 import argparse
 import gzip
 import os
+import struct
+import zlib
 from datetime import datetime, timedelta, timezone
 from xml.sax.saxutils import escape
 
@@ -35,15 +37,43 @@ def xmltv_time(t):
     return t.strftime("%Y%m%d%H%M%S +0000")
 
 
+def write_png(path, w, h, rgb):
+    """Tiny solid-colour PNG with a lighter band, no third-party deps."""
+    r, g, b = rgb
+    rows = []
+    for y in range(h):
+        light = h // 3 <= y < 2 * h // 3
+        px = bytes((min(255, r + 80), min(255, g + 80), min(255, b + 80))) if light else bytes((r, g, b))
+        rows.append(b"\x00" + px * w)
+    raw = zlib.compress(b"".join(rows), 9)
+
+    def chunk(tag, data):
+        c = struct.pack(">I", len(data)) + tag + data
+        return c + struct.pack(">I", zlib.crc32(tag + data) & 0xFFFFFFFF)
+
+    with open(path, "wb") as f:
+        f.write(b"\x89PNG\r\n\x1a\n")
+        f.write(chunk(b"IHDR", struct.pack(">IIBBBBB", w, h, 8, 2, 0, 0, 0)))
+        f.write(chunk(b"IDAT", raw))
+        f.write(chunk(b"IEND", b""))
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", default="fixture")
     ap.add_argument("--channels", type=int, default=2000)
     ap.add_argument("--base", default="http://10.0.2.2:8765")
     ap.add_argument("--stream", action="append", help="stream URL (repeatable); defaults to public test streams")
+    ap.add_argument("--logos", type=int, default=0,
+                    help="write N distinct 400x225 PNG logos and give every channel a unique logo URL")
     args = ap.parse_args()
     streams = args.stream or DEFAULT_STREAMS
     os.makedirs(args.out, exist_ok=True)
+    if args.logos:
+        os.makedirs(os.path.join(args.out, "logos"), exist_ok=True)
+        for n in range(args.logos):
+            write_png(os.path.join(args.out, "logos", f"{n}.png"), 400, 225,
+                      ((n * 37) % 200, (n * 73) % 200, (n * 131) % 200))
 
     with open(os.path.join(args.out, "playlist.m3u"), "w", encoding="utf-8") as m3u:
         m3u.write(f'#EXTM3U url-tvg="{args.base}/guide.xml.gz"\n')
@@ -52,7 +82,9 @@ def main():
             cid = f"bench{i}.test"
             url = streams[(i - 1) % len(streams)]
             sep = "&" if "?" in url else "?"
-            m3u.write(f'#EXTINF:-1 tvg-id="{cid}" tvg-chno="{i}" group-title="{group}",Bench {group} {i}\n')
+            # Unique query per channel so image caches treat every logo as a separate download.
+            logo = f' tvg-logo="{args.base}/logos/{(i - 1) % args.logos}.png?ch={i}"' if args.logos else ""
+            m3u.write(f'#EXTINF:-1 tvg-id="{cid}" tvg-chno="{i}"{logo} group-title="{group}",Bench {group} {i}\n')
             m3u.write(f"{url}{sep}bench={i}\n")
 
     start = datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0) - timedelta(hours=6)
