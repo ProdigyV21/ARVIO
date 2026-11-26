@@ -149,57 +149,39 @@ open class StalkerApi(
             // Get genres first for group names
             val genreUrl = "$apiBase/server/load.php?type=itv&action=get_genres&JsHttpRequest=1-xml"
             val genreResponse = doGet(genreUrl)
-            val genres = gson.fromJson(genreResponse, StalkerGenreResponse::class.java)
-            val genreMap = genres?.js?.mapNotNull { g -> g.id?.let { it to (g.title ?: "Unknown") } }?.toMap() ?: emptyMap()
+            val genres = gson.fromJson(genreResponse, StalkerGenreResponse::class.java)?.js.orEmpty()
+            val genreMap = genres.mapNotNull { g -> g.id?.let { it to (g.title ?: "Unknown") } }.toMap()
 
-            // Get all channels page by page
-            var page = 1
-            var hasMore = true
-            while (hasMore) {
-                val url = "$apiBase/server/load.php?type=itv&action=get_all_channels&p=$page&JsHttpRequest=1-xml"
-                val response = doGet(url)
-                val parsed = gson.fromJson(response, StalkerChannelResponse::class.java)
-                val data = parsed?.js?.data ?: break
+            fetchChannelPages(
+                pageUrl = { page -> "$apiBase/server/load.php?type=itv&action=get_all_channels&p=$page&JsHttpRequest=1-xml" },
+                genreMap = genreMap,
+                seenChannelIds = seenChannelIds,
+                into = channels,
+            )
 
-                var newChannelIdCount = 0
-                for (ch in data) {
-                    val channelId = ch.id?.toString() ?: continue
-                    if (!seenChannelIds.add(channelId)) continue
-                    newChannelIdCount++
-                    val streamCmd = ch.cmd ?: continue
-                    val groupName = ch.tvGenreId?.let { genreMap[it] } ?: "Uncategorized"
-                    // Portals that announce no temporary link publish the finished
-                    // address here. Preserve that decision separately: even bare URLs
-                    // can require create_link when the portal says so or omits the flags.
-                    val directUrl = StalkerPortalSupport.directLiveStreamUrl(
-                        cmd = streamCmd,
-                        useHttpTmpLink = ch.useHttpTmpLink,
-                        wowzaTmpLink = ch.wowzaTmpLink,
-                        flussonicTmpLink = ch.flussonicTmpLink,
-                    )
-                    channels.add(
-                        IptvChannel(
-                            id = channelId,
-                            name = ch.name ?: "Unknown",
-                            logo = ch.logo,
-                            group = groupName,
-                            streamUrl = directUrl ?: streamCmd,
-                            stalkerDirectStream = directUrl != null,
+            // Many portals leave censored (adult) channels out of get_all_channels and
+            // only list them per genre, so those categories would never appear.
+            val coveredGenres = channels.mapTo(HashSet()) { it.group }
+            genres.filter { it.isCensoredGenre() && it.id != null && genreMap[it.id] !in coveredGenres }
+                .forEach { genre ->
+                    coroutineContext.ensureActive()
+                    val genreId = java.net.URLEncoder.encode(genre.id, "UTF-8")
+                    runCatching {
+                        fetchChannelPages(
+                            pageUrl = { page ->
+                                "$apiBase/server/load.php?type=itv&action=get_ordered_list&genre=$genreId&fav=0&sortby=number&p=$page&JsHttpRequest=1-xml"
+                            },
+                            genreMap = genreMap,
+                            seenChannelIds = seenChannelIds,
+                            into = channels,
+                            fallbackGroup = genre.title,
                         )
-                    )
+                    }.onFailure { e ->
+                        if (e is kotlinx.coroutines.CancellationException) throw e
+                        // A missing censored genre must not cost the user the rest of the list.
+                        System.err.println("[Stalker] censored genre ${genre.id} failed: ${e.message}")
+                    }
                 }
-
-                val totalItems = parsed.js?.totalItems ?: 0
-                val maxPageItems = (parsed.js?.maxPageItems ?: 20).coerceAtLeast(1)
-                // Some portals ignore pagination and return all channels in every response.
-                // Stop when a page contains no new IDs as well as when one response
-                // already contains the complete channel list.
-                hasMore = newChannelIdCount > 0 &&
-                    page * maxPageItems < totalItems &&
-                    data.size < totalItems
-                page++
-            }
-
         } catch (e: Exception) {
             if (e is kotlinx.coroutines.CancellationException) throw e
 
@@ -208,6 +190,61 @@ open class StalkerApi(
             throw e
         }
         return channels
+    }
+
+    private suspend fun fetchChannelPages(
+        pageUrl: (Int) -> String,
+        genreMap: Map<String, String>,
+        seenChannelIds: MutableSet<String>,
+        into: MutableList<IptvChannel>,
+        fallbackGroup: String? = null,
+    ) {
+        var page = 1
+        var hasMore = true
+        while (hasMore) {
+            coroutineContext.ensureActive()
+            val response = doGet(pageUrl(page))
+            val parsed = gson.fromJson(response, StalkerChannelResponse::class.java)
+            val data = parsed?.js?.data ?: break
+
+            var newChannelIdCount = 0
+            for (ch in data) {
+                val channelId = ch.id?.toString() ?: continue
+                if (!seenChannelIds.add(channelId)) continue
+                newChannelIdCount++
+                val streamCmd = ch.cmd ?: continue
+                val groupName = ch.tvGenreId?.let { genreMap[it] } ?: fallbackGroup ?: "Uncategorized"
+                // Portals that announce no temporary link publish the finished
+                // address here. Preserve that decision separately: even bare URLs
+                // can require create_link when the portal says so or omits the flags.
+                val directUrl = StalkerPortalSupport.directLiveStreamUrl(
+                    cmd = streamCmd,
+                    useHttpTmpLink = ch.useHttpTmpLink,
+                    wowzaTmpLink = ch.wowzaTmpLink,
+                    flussonicTmpLink = ch.flussonicTmpLink,
+                )
+                into.add(
+                    IptvChannel(
+                        id = channelId,
+                        name = ch.name ?: "Unknown",
+                        logo = ch.logo,
+                        group = groupName,
+                        streamUrl = directUrl ?: streamCmd,
+                        stalkerDirectStream = directUrl != null,
+                    )
+                )
+            }
+
+            val totalItems = parsed.js?.totalItems ?: 0
+            val maxPageItems = (parsed.js?.maxPageItems ?: 20).coerceAtLeast(1)
+            // Some portals ignore pagination and return all channels in every response.
+            // Stop when a page contains no new IDs as well as when one response
+            // already contains the complete channel list.
+            hasMore = newChannelIdCount > 0 &&
+                page * maxPageItems < totalItems &&
+                data.size < totalItems
+            page++
+        }
     }
 
     /**
@@ -776,7 +813,21 @@ open class StalkerApi(
     data class StalkerToken(val token: String?)
 
     data class StalkerGenreResponse(val js: List<StalkerGenre>?)
-    data class StalkerGenre(val id: String?, val title: String?)
+    data class StalkerGenre(
+        val id: String?,
+        val title: String?,
+        // 0/1, "0"/"1" or true/false depending on the portal build.
+        val censored: com.google.gson.JsonElement? = null,
+    ) {
+        fun isCensoredGenre(): Boolean {
+            val flag = censored?.takeIf { it.isJsonPrimitive }?.asJsonPrimitive
+            return when {
+                flag == null -> false
+                flag.isBoolean -> flag.asBoolean
+                else -> flag.asString.trim() == "1" || flag.asString.trim().equals("true", ignoreCase = true)
+            }
+        }
+    }
 
     /**
      * One VOD or series category of a portal, as [getVodCategories] and

@@ -57,7 +57,9 @@ internal class IptvProviderRequestGuard(
     /** Reject known deferrals before OkHttp opens a TCP/TLS connection. */
     fun preflightInterceptor(playback: Boolean = false) = Interceptor { chain ->
         val provider = provider(chain.request().url)
-        val paginatedCatalog = chain.request().url.queryParameter("action") == "get_all_channels"
+        val paginatedCatalog = chain.request().url.queryParameter("action").let {
+            it == "get_all_channels" || (it == "get_ordered_list" && chain.request().url.queryParameter("type") == "itv")
+        }
         val queuedAt = clock()
         while (true) {
             if (chain.call().isCanceled()) throw IOException("IPTV request cancelled")
