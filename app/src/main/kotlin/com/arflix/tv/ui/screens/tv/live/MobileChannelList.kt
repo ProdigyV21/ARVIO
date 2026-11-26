@@ -26,7 +26,9 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 internal fun MobileChannelList(channels: List<EnrichedChannel>, guide: Map<String, IptvNowNext>,
     playingId: String?, favorites: Set<String>, onSelect: (EnrichedChannel) -> Unit,
     onToggleFavorite: (String) -> Unit, onLongPress: (EnrichedChannel) -> Unit,
-    onVisibleRange: (Int, Int) -> Unit, modifier: Modifier = Modifier) {
+    onVisibleRange: (Int, Int) -> Unit, modifier: Modifier = Modifier,
+    /** Channels whose guide rows were read from the index (an empty result means no match). */
+    guideLoadedIds: Set<String> = emptySet(), hasGuideSource: Boolean = false) {
     val scroll = rememberLazyListState()
     val report by rememberUpdatedState(onVisibleRange)
     LaunchedEffect(scroll) {
@@ -48,7 +50,10 @@ internal fun MobileChannelList(channels: List<EnrichedChannel>, guide: Map<Strin
                         Text(channel.name, color = foreground, fontSize = 15.sp, fontWeight = FontWeight.SemiBold,
                             maxLines = 2, overflow = TextOverflow.Ellipsis)
                         val slice = guide[channel.id]
-                        Text("${stringResource(R.string.now)}  ${slice?.now?.title ?: stringResource(R.string.live_placeholder_no_guide_matched)}",
+                        // Rows outside the loaded guide window are still loading, not unmatched.
+                        val missing = if (hasGuideSource && channel.id !in guideLoadedIds) R.string.live_placeholder_guide_pending
+                            else R.string.live_placeholder_no_guide_matched
+                        Text("${stringResource(R.string.now)}  ${slice?.now?.title ?: stringResource(missing)}",
                             color = foreground, fontSize = 13.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
                         slice?.next?.title?.let { Text("${stringResource(R.string.next)}  $it", color = secondary,
                             fontSize = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis) }
