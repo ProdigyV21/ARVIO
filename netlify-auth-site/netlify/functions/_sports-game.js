@@ -42,7 +42,16 @@ function emptyDetails(now, id) {
 
 /** A team's last results, from that team's side, never including this game. */
 function formFrom(rows, teamId, excludeId) {
-  return (rows || []).filter(row => row && String(row.idEvent) !== excludeId).flatMap(row => {
+  // A feed can repeat a game; count each game once, newest first.
+  const seen = new Set();
+  const games = (rows || []).filter(row => {
+    if (!row || String(row.idEvent) === excludeId) return false;
+    const id = String(row.idEvent || `${row.dateEvent}|${row.idHomeTeam}|${row.idAwayTeam}`);
+    if (seen.has(id)) return false;
+    seen.add(id);
+    return true;
+  }).sort((a, b) => String(b.dateEvent || '').localeCompare(String(a.dateEvent || '')));
+  return games.flatMap(row => {
     const home = number(row.intHomeScore), away = number(row.intAwayScore);
     if (home === null || away === null) return [];
     const isHome = String(row.idHomeTeam) === String(teamId);
