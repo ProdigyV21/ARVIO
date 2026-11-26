@@ -10,6 +10,8 @@ import {
   ChartsSource, CHARTS_KEY, CompositeMusicSource, EclipseAddonSource, ECLIPSE, JellyfinMusicSource, MusicAddonSource,
   SERVER_KEY, SubsonicSource, blockedOnThisPage, installMusicAddon, jellyfinSignIn, normalizeServerUrl, subsonicCredentials
 } from "./sources";
+import { browserCountry } from "./chartCatalog";
+import { emptyTaste, parseTaste, recordPlay, recordSearch, type MusicTaste } from "./taste";
 import {
   emptyCollections, MusicError,
   type MusicAddon, type MusicAlbum, type MusicCollections, type MusicPlaylist, type MusicServerConfig, type MusicServerType, type MusicSource, type MusicTrack
@@ -20,6 +22,8 @@ export interface MusicLibraryState {
   server: MusicServerConfig | null;
   addons: MusicAddon[];
   collections: MusicCollections;
+  /** Artists listened to and searches, for the Music home's personal rows (synced). */
+  taste: MusicTaste;
   /** The synced home server (Jellyfin/Emby) used for music when no music login is saved here. */
   homeServer: MusicServerConfig | null;
   language: string;
@@ -27,7 +31,7 @@ export interface MusicLibraryState {
   synced: boolean;
 }
 
-let state: MusicLibraryState = { profileKey: null, server: null, addons: [], collections: emptyCollections(), homeServer: null, language: "en-US", synced: false };
+let state: MusicLibraryState = { profileKey: null, server: null, addons: [], collections: emptyCollections(), taste: emptyTaste(), homeServer: null, language: "en-US", synced: false };
 const listeners = new Set<() => void>();
 function set(patch: Partial<MusicLibraryState>) {
   state = { ...state, ...patch };
@@ -102,6 +106,7 @@ export function syncMusicProfile(accountId: string | undefined, profileId: strin
     server: loadStored<MusicServerConfig | null>(storageKey("server"), null),
     addons: parseAddons(loadStored<string | null>(storageKey("addons"), null)),
     collections: parseCollections(loadStored<string | null>(storageKey("collections"), null)),
+    taste: parseTaste(loadStored<string | null>(storageKey("taste"), null)),
     homeServer, language, synced: !authClient.session
   });
   if (!profileId || !authClient.session) return;
@@ -117,6 +122,10 @@ export function syncMusicProfile(accountId: string | undefined, profileId: strin
       patch.collections = parseCollections(cloud.musicCollectionsJson);
       saveStored(storageKey("collections"), cloud.musicCollectionsJson);
     }
+    if (cloud.musicTasteJson && !pending.has("musicTasteJson")) {
+      patch.taste = parseTaste(cloud.musicTasteJson);
+      saveStored(storageKey("taste"), cloud.musicTasteJson);
+    }
     set(patch);
   }).catch(() => { if (generation === loadGeneration) set({ synced: true }); });
 }
@@ -124,7 +133,7 @@ export function syncMusicProfile(accountId: string | undefined, profileId: strin
 const pending = new Map<CloudMusicField, number>();
 
 function persist(field: CloudMusicField, json: string) {
-  saveStored(storageKey(field === "musicAddonsJson" ? "addons" : "collections"), json);
+  saveStored(storageKey(field === "musicAddonsJson" ? "addons" : field === "musicTasteJson" ? "taste" : "collections"), json);
   const profileId = state.profileKey?.split(":").slice(1).join(":");
   if (!profileId || !authClient.session) return;
   window.clearTimeout(pending.get(field));
@@ -139,6 +148,33 @@ export function updateCollections(transform: (c: MusicCollections) => MusicColle
   const collections = transform(state.collections);
   set({ collections });
   persist("musicCollectionsJson", JSON.stringify(collections));
+}
+
+function updateTaste(transform: (t: MusicTaste) => MusicTaste) {
+  const taste = transform(state.taste);
+  if (taste === state.taste) return;
+  set({ taste });
+  persist("musicTasteJson", JSON.stringify(taste));
+}
+
+/** A song was listened to (half of it, or four minutes): feeds "Because you listened to". */
+export function recordMusicPlay(artist: string) {
+  if (artist.trim()) updateTaste((t) => recordPlay(t, artist, Date.now()));
+}
+
+/** A music search the user stayed on: feeds "Based on your searches". */
+export function recordMusicSearch(query: string) {
+  updateTaste((t) => recordSearch(t, query, Date.now()));
+}
+
+/** The country for the charts, from the browser's time zone and languages (no permission, no request). */
+function detectCountry(): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    return browserCountry(Intl.DateTimeFormat().resolvedOptions().timeZone, navigator.languages?.length ? navigator.languages : [navigator.language]);
+  } catch {
+    return null;
+  }
 }
 
 function setAddons(addons: MusicAddon[]) {
@@ -214,7 +250,8 @@ export function musicSource(s: MusicLibraryState = state) {
   }
   // The charts come last, so the user's own sources keep their place in ids and search.
   keys.push(CHARTS_KEY);
-  sources.push(new ChartsSource(s.language));
+  // The taste is read when the home loads, so a new play does not rebuild the sources.
+  sources.push(new ChartsSource(s.language, detectCountry(), () => state.taste));
   cached = { signature, source: new CompositeMusicSource(sources, keys), server: serverSource };
   return cached;
 }

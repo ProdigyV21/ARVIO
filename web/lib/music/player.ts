@@ -3,7 +3,7 @@
 // resolved when they start; a song no source has is skipped, as on Android.
 import { useSyncExternalStore } from "react";
 import { premiumAllows } from "../premiumGate";
-import { musicLibrary, musicSource } from "./library";
+import { musicLibrary, musicSource, recordMusicPlay } from "./library";
 import { ADDON_STREAM_SCHEME, MATCH_SCHEME, placeholderParams } from "./text";
 import { blockedOnThisPage, resolveAddonStream, SERVER_KEY, SEPARATOR } from "./sources";
 import type { MusicTrack } from "./types";
@@ -58,6 +58,7 @@ function element() {
     if (track && reported !== track.id && a.duration > 0 && (a.currentTime > a.duration / 2 || a.currentTime > 240)) {
       reported = track.id;
       void musicSource()?.source.reportPlayed(track.id).catch(() => undefined);
+      recordMusicPlay(track.artist);
     }
     if ("mediaSession" in navigator && Number.isFinite(a.duration) && a.duration > 0) {
       try { navigator.mediaSession.setPositionState({ duration: a.duration, position: Math.min(a.currentTime, a.duration), playbackRate: a.playbackRate }); } catch { /* not supported */ }

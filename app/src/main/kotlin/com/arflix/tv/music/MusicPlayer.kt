@@ -163,7 +163,12 @@ class MusicPlayer @Inject constructor(
         val duration = player.duration.takeIf { it > 0 } ?: return
         if (positionMs < minOf(duration / 2, 240_000L)) return
         reportedFor = playKey
-        scope.launch(Dispatchers.IO) { runCatching { repository.currentSource()?.reportPlayed(id) } }
+        val artist = player.currentMediaItem?.mediaMetadata?.artist?.toString().orEmpty()
+        scope.launch(Dispatchers.IO) {
+            runCatching { repository.currentSource()?.reportPlayed(id) }
+            // The listening history behind the Music home's "Because you listened to" rows.
+            if (artist.isNotBlank()) runCatching { repository.recordPlay(artist) }
+        }
     }
 
     private fun MusicTrack.toMediaItem(): MediaItem {

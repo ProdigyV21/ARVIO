@@ -21,6 +21,15 @@ class MusicCloudSyncTest {
         assertEquals(addons, gson.fromJson(received.musicAddonsJson, Array<MusicAddon>::class.java).toList())
     }
 
+    @Test fun tasteTravelsWithTheProfileSettings() {
+        val taste = MusicTaste().recordPlay("Band", 5L).recordSearch("top gym hits", 6L)
+        val sent = CloudProfileSettings(musicTasteJson = gson.toJson(taste))
+        val received = gson.fromJson(gson.toJson(sent), CloudProfileSettings::class.java)
+        assertEquals(taste, gson.fromJson(received.musicTasteJson, MusicTaste::class.java).sanitized())
+        assertNull(gson.fromJson("""{"showBudget":true}""", CloudProfileSettings::class.java).musicTasteJson)
+        assertEquals("profile_a_music_taste_v1", MusicCloudKeys.taste("a").name)
+    }
+
     @Test fun olderClientsWithoutMusicDoNotClearIt() {
         val old = gson.fromJson("""{"showBudget":true}""", CloudProfileSettings::class.java)
         assertNull(old.musicAddonsJson)
