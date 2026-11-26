@@ -1367,6 +1367,8 @@
     <string name="player_match_none_keeping_ai">No well-synced subtitle found — keeping AI translation</string>
     <string name="player_match_none_score_keeping_ai">No well-synced subtitle found (best %1$d%%) — keeping AI translation</string>
     <string name="player_match_none_using_ai">No well-synced subtitle found — using AI translation</string>
+    <string name="player_english_ai_syncing">No built-in subtitles — syncing an English subtitle to the audio for AI translation</string>
+    <string name="player_english_ai_ready">English subtitle synced to the audio — using AI translation</string>
     <string name="player_match_none_language">No well-synced %1$s subtitle found</string>
     <string name="player_match_none_language_score">No well-synced %1$s subtitle found (best %2$d%%)</string>
 

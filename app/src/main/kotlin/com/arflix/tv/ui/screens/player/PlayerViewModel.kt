@@ -2576,7 +2576,124 @@ class PlayerViewModel @Inject constructor(
             targetSubtitleLangCode.ifBlank { _uiState.value.aiTargetLanguageName },
             untranslatableSourceKeys,
             ::normalizeLanguage
+        ) ?: englishAiSource?.takeIf { SubtitleSelectionPolicy.key(it) !in untranslatableSourceKeys }
+
+    // ---- AI source for a file with no text track (see EnglishAiSourceFallback) ----
+
+    /** The audio-confirmed, re-timed copy of an English addon subtitle, when it is the AI source. */
+    @Volatile private var englishAiSource: Subtitle? = null
+    /** The English candidate the audio is syncing right now. */
+    private var englishAiTarget: Subtitle? = null
+    private var englishAiQueue: List<Subtitle> = emptyList()
+    private var englishAiWatch: Job? = null
+
+    private fun resetEnglishAiSource() {
+        englishAiWatch?.cancel()
+        englishAiWatch = null
+        englishAiTarget = null
+        englishAiSource = null
+        englishAiQueue = emptyList()
+    }
+
+    /**
+     * Starts the fallback after a scan found nothing usable and there is no embedded text source.
+     * False when it cannot run here (no English addon subtitle, no audio sync, target English).
+     */
+    private fun tryEnglishAiSource(): Boolean {
+        if (englishAiTarget != null || englishAiSource != null) return false
+        val streamSource = _uiState.value.selectedStream?.source.orEmpty()
+        englishAiQueue = EnglishAiSourceFallback.candidates(
+            _uiState.value.subtitles,
+            targetSubtitleLangCode.ifBlank { _uiState.value.aiTargetLanguageName },
+            ::normalizeLanguage,
+        ) { weightedSubtitleScore(streamSource, it.id) }
+        if (englishAiQueue.isEmpty() || !startEnglishAiCandidate(0)) {
+            englishAiQueue = emptyList()
+            return false
+        }
+        showMatchToast(PlayerMessage.Res(R.string.player_english_ai_syncing))
+        return true
+    }
+
+    /** Audio-syncs English candidate [index]; the next one when the audio can't confirm it or it moves. */
+    private fun startEnglishAiCandidate(index: Int): Boolean {
+        val pick = englishAiQueue.getOrNull(index) ?: return false
+        englishAiTarget = pick
+        if (!startHearingFallback(pick) { onEnglishAiCandidateFailed(index) }) {
+            englishAiTarget = null
+            return false
+        }
+        Log.i(
+            "SubMatch",
+            "no text track for AI — syncing English #${index + 1}/${englishAiQueue.size} \"${pick.label}\" by the audio as the AI source"
         )
+        matchStep("4· no built-in text track — syncing English #${index + 1} \"${pick.label}\" by the audio for AI")
+        val generation = audioSyncGeneration
+        val check = SteadyConfirmation()
+        englishAiWatch?.cancel()
+        englishAiWatch = viewModelScope.launch {
+            while (true) {
+                delay(2_000L)
+                if (generation != audioSyncGeneration || englishAiTarget !== pick || userPickedSubtitle) return@launch
+                val sync = audioSync ?: return@launch
+                if (sync.currentSessionKey != pick.url) return@launch
+                val model = sync.confirmedModel
+                when (check.observe(model, audioSyncPositionMs())) {
+                    SteadyConfirmation.Verdict.Waiting -> continue
+                    SteadyConfirmation.Verdict.Moved -> {
+                        Log.i("SubMatch", "English #${index + 1} \"${pick.label}\" moved after the audio confirmed it — next")
+                        stopAudioSync()
+                        englishAiTarget = null
+                        if (!startEnglishAiCandidate(index + 1)) englishAiNoneConfirmed()
+                        return@launch
+                    }
+                    SteadyConfirmation.Verdict.Holds -> {
+                        val raw = audioSyncRaw ?: return@launch
+                        useEnglishAiSource(pick, model ?: return@launch, raw, index)
+                        return@launch
+                    }
+                }
+            }
+        }
+        return true
+    }
+
+    private fun onEnglishAiCandidateFailed(index: Int) {
+        val pick = englishAiTarget ?: return
+        englishAiWatch?.cancel()
+        englishAiTarget = null
+        Log.i("SubMatch", "the audio could not confirm English #${index + 1} \"${pick.label}\"")
+        if (!startEnglishAiCandidate(index + 1)) englishAiNoneConfirmed()
+    }
+
+    /** No candidate was confirmed and held steady: nothing changes, as before this fallback. */
+    private fun englishAiNoneConfirmed() {
+        englishAiQueue = emptyList()
+        Log.i("SubMatch", "no English subtitle confirmed by the audio — no AI source")
+        matchStep("4· no English subtitle confirmed by the audio — no AI")
+    }
+
+    private fun useEnglishAiSource(
+        pick: Subtitle,
+        model: com.arflix.tv.ui.screens.player.audiosync.SubtitleSyncModel,
+        raw: String,
+        index: Int,
+    ) {
+        val rewritten = com.arflix.tv.ui.screens.player.audiosync.ArvioAudioSync.retime(raw, model)
+        val served = localizeSubtitle(pick.copy(id = pick.id + RETIMED_SUBTITLE_ID_SUFFIX), rewritten)
+        Log.i("SubMatch", "audio confirmed English #${index + 1} \"${pick.label}\" and it held — AI translation from it")
+        // Stop the audio first (its target is cleared inside), so its last mapping does not take
+        // the screen back from AI.
+        stopAudioSync()
+        applyAutoSync(pick, null)
+        englishAiSource = served
+        englishAiTarget = null
+        englishAiQueue = emptyList()
+        selectSubtitle(served, isUserAction = false)
+        activateAiTranslation(isUserAction = false)
+        matchStep("4· English #${index + 1} \"${pick.label}\" confirmed by the audio — AI translation from it")
+        showMatchToast(PlayerMessage.Res(R.string.player_english_ai_ready))
+    }
 
     private fun languageCodeToName(code: String): String {
         return when (code.lowercase().trim()) {
@@ -3327,6 +3444,7 @@ class PlayerViewModel @Inject constructor(
             userLockedSubtitleKey = null
             autoMatchAttempted = false
             aiSourceSubtitle = null
+            resetEnglishAiSource()
             untranslatableSourceKeys.clear()
             translationManager.isEnabled = false
 
@@ -4061,7 +4179,7 @@ class PlayerViewModel @Inject constructor(
      */
     private fun tryAiFallbackAfterScan(): Boolean {
         if (userLockedSubtitleKey != null || !aiSubtitleEnabled || !translationService.isConfigured()) return false
-        if (findAiSourceSubtitle(_uiState.value.subtitles) == null) return false
+        if (findAiSourceSubtitle(_uiState.value.subtitles) == null) return tryEnglishAiSource()
         activateAiTranslation(isUserAction = false)
         showMatchToast(PlayerMessage.Res(R.string.player_match_none_using_ai))
         return true
