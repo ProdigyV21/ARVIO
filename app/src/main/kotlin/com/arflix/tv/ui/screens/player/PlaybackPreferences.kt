@@ -38,3 +38,9 @@ internal fun preferredAudioLanguageList(preferred: String, secondary: String): A
         .filter { it.isNotBlank() && !it.equals("none", ignoreCase = true) }
         .distinctBy { it.lowercase() }
         .toTypedArray()
+
+/**
+ * Profile preference (boolean, default off): open resolved streams in another video app
+ * instead of ARVIO's own player. Synced to the cloud.
+ */
+const val EXTERNAL_PLAYER_PREF = "external_player"

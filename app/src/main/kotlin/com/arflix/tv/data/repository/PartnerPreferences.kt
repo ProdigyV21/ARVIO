@@ -58,7 +58,7 @@ internal object PartnerPreferencePolicy {
         listOf("auto_play", "trailer_", "subtitle_size", "subtitle_color", "subtitle_style", "subtitle_font",
             "subtitle_offset", "subtitle_ai_", "dolby_vision", "frame_rate_matching", "volume_boost",
             "include_specials", "quality_filters", "stream_search_mode", "show_addon_stream_details",
-            "seek_thumbnails", "auto_source_failover", "secondary_audio_language").any { key.contains(it) } -> permissions.editPlayback
+            "seek_thumbnails", "auto_source_failover", "secondary_audio_language", "external_player").any { key.contains(it) } -> permissions.editPlayback
         else -> true
     }
 }

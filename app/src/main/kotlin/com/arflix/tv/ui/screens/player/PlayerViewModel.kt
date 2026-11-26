@@ -224,6 +224,8 @@ data class PlayerUiState(
     val secondaryAudioLanguage: String = "",
     // Settings > Playback "Switch source automatically": off keeps a hand-picked source.
     val autoSourceFailover: Boolean = true,
+    // Settings > Playback "External player": hand resolved streams to another video app.
+    val externalPlayer: Boolean = false,
     // The language a source's badge puts first: the chosen audio language, or null (the device
     // language) under "Auto"/"None", the same as the details screen's source list.
     val sourceBadgeLanguage: String? = null,
@@ -937,6 +939,7 @@ class PlayerViewModel @Inject constructor(
             val autoPlayNext = prefs[autoPlayNextKey()] ?: true
             val seekThumbnailsEnabled = prefs[seekThumbnailsKey()] ?: true
             val autoSourceFailover = prefs[profileManager.profileBooleanKey(AUTO_SOURCE_FAILOVER_PREF)] ?: true
+            val externalPlayer = prefs[profileManager.profileBooleanKey(EXTERNAL_PLAYER_PREF)] ?: false
             val secondaryAudioLanguage = resolveSecondaryAudioLanguage(prefs[profileManager.profileStringKey(SECONDARY_AUDIO_LANGUAGE_PREF)])
             val showLoadingStats = prefs[showLoadingStatsKey()] ?: true
             val volumeBoostDb = prefs[profileManager.profileStringKey("volume_boost_db")]
@@ -1017,6 +1020,7 @@ class PlayerViewModel @Inject constructor(
                 autoPlayNext = autoPlayNext,
                 seekThumbnailsEnabled = seekThumbnailsEnabled,
                 autoSourceFailover = autoSourceFailover,
+                externalPlayer = externalPlayer,
                 secondaryAudioLanguage = secondaryAudioLanguage,
                 autoSkipIntro = autoSkipIntro,
                 autoSkipOutro = autoSkipOutro,

@@ -781,6 +781,8 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
     var bufferingStartTime by remember { mutableStateOf<Long?>(null) }
     val bufferingTimeoutMs = 25_000L // Mid-playback timeout for stuck buffering
     var userSelectedSourceManually by remember { mutableStateOf(false) }
+    // One hand-off per player screen: coming back from the external app must not reopen it.
+    var externalPlayerHandled by remember { mutableStateOf(false) }
     val allowStartupSourceFallback = true
     val allowMidPlaybackSourceFallback = false
     val initialBufferingTimeoutMs = remember(uiState.selectedStream, userSelectedSourceManually) {
@@ -2794,6 +2796,18 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
         if (playerReleased || exitTransition.isExiting) return@LaunchedEffect
         val url = uiState.selectedStreamUrl
         if (BuildConfig.DEBUG) {
+        }
+        if (url != null && uiState.externalPlayer && !args.isLiveStream && !externalPlayerHandled) {
+            externalPlayerHandled = true
+            val headers = uiState.selectedStream?.behaviorHints?.proxyHeaders?.request.orEmpty().safePlaybackHeaders()
+            val title = listOfNotNull(uiState.title.takeIf { it.isNotBlank() }, uiState.episodeTitle?.takeIf { it.isNotBlank() })
+                .joinToString(" · ")
+            if (ExternalPlayerLauncher.launch(context, url, title, headers, args.startPositionMs ?: 0L)) {
+                exoPlayer.stop()
+                args.onBack()
+                return@LaunchedEffect
+            }
+            android.widget.Toast.makeText(context, R.string.external_player_missing, android.widget.Toast.LENGTH_LONG).show()
         }
         if (url != null) {
             startupTrace.begin()

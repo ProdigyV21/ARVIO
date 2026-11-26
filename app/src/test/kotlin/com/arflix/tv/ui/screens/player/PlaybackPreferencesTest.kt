@@ -54,4 +54,12 @@ class PlaybackPreferencesTest {
         assertEquals(false, restored.autoSourceFailover)
         assertEquals("Danish", restored.secondaryAudioLanguage)
     }
+
+    @Test fun `external player is off by default and headers go as key value pairs`() {
+        assertFalse(SettingsUiState().externalPlayer)
+        assertFalse(PlayerUiState().externalPlayer)
+        assertNull(Gson().fromJson("{}", CloudSyncRepository.CloudProfileSettings::class.java).externalPlayer)
+        assertArrayEquals(arrayOf("User-Agent", "VLC", "Referer", "https://a.example/"),
+            ExternalPlayerLauncher.headerExtras(linkedMapOf("User-Agent" to "VLC", "Referer" to "https://a.example/")))
+    }
 }

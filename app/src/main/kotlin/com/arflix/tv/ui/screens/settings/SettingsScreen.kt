@@ -1,5 +1,6 @@
 package com.arflix.tv.ui.screens.settings
 import androidx.compose.material.icons.filled.Storage
+import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.filled.TableRows
 import androidx.compose.ui.text.font.FontWeight
@@ -356,6 +357,8 @@ internal const val SEEK_THUMBNAILS_ROW = 64
 internal const val SECONDARY_AUDIO_ROW = 65
 /** Settings > Playback: switch to the next source when one fails. */
 internal const val AUTO_SOURCE_FAILOVER_ROW = 66
+/** Settings > Playback: open streams in another video app. */
+internal const val EXTERNAL_PLAYER_ROW = 67
 
 /** The optional tab a navigation switch row controls. */
 internal fun navigationSectionForRow(rowId: Int): String =
@@ -369,7 +372,7 @@ internal fun tvGeneralRowsForSection(section: String): List<Int> {
             (if (BuildConfig.AUDIO_SYNC_AVAILABLE) listOf(48) else emptyList()) +
             listOf(39, 9, 45)
         "ai_subtitles" -> listOf(28, 29, 30, 31, 32, 33) + LIVE_AI_SUBS_ROWS
-        "playback" -> listOf(10, 11, AUTO_SOURCE_FAILOVER_ROW, 12, 43, 44, 55, SEEK_THUMBNAILS_ROW, 13, 14, 34, 37, 16, 15, 40, 27, 53, 54, 60)
+        "playback" -> listOf(10, 11, AUTO_SOURCE_FAILOVER_ROW, EXTERNAL_PLAYER_ROW, 12, 43, 44, 55, SEEK_THUMBNAILS_ROW, 13, 14, 34, 37, 16, 15, 40, 27, 53, 54, 60)
         "appearance" -> listOf(17, 49, 50, 18, 20, 21, 24, 23, 22, 41, 46, 36, 47, 56, 57) +
             (if (com.arflix.tv.ui.components.KidsNavigation.hideLiveTv) emptyList() else listOf(58)) + 59
         // News: the tab switch, then what the tab shows. Kids profiles never get the section.
@@ -1515,6 +1518,7 @@ fun SettingsScreen(
                                                 3 -> openAudioLanguagePicker()
                                                 SECONDARY_AUDIO_ROW -> openSecondaryAudioPicker()
                                                 AUTO_SOURCE_FAILOVER_ROW -> viewModel.setAutoSourceFailover(!uiState.autoSourceFailover)
+                                                EXTERNAL_PLAYER_ROW -> viewModel.setExternalPlayer(!uiState.externalPlayer)
                                                 4 -> viewModel.cycleSubtitleSize()
                                                 5 -> viewModel.cycleSubtitleColor()
                                                 6 -> viewModel.cycleSubtitleOffset()
@@ -2281,6 +2285,8 @@ fun SettingsScreen(
                             onSecondaryAudioClick = openSecondaryAudioPicker,
                             autoSourceFailover = uiState.autoSourceFailover,
                             onAutoSourceFailoverToggle = { viewModel.setAutoSourceFailover(it) },
+                            externalPlayer = uiState.externalPlayer,
+                            onExternalPlayerToggle = { viewModel.setExternalPlayer(it) },
                             hiddenNavigationSections = uiState.hiddenNavigationSections,
                             onNavigationSectionVisibleChange = viewModel::setNavigationSectionVisible,
                             newsTopicsSummary = com.arflix.tv.ui.screens.news.newsTopicsSummary(newsSelection),
@@ -5468,6 +5474,15 @@ private fun MobileSettingsSubPage(
                         onClick = { viewModel.setAutoSourceFailover(!uiState.autoSourceFailover) }
                     )
                     MobileSettingsRow(
+                        icon = Icons.Default.OpenInNew,
+                        title = stringResource(R.string.external_player),
+                        subtitle = stringResource(R.string.external_player_desc),
+                        value = stringResource(if (uiState.externalPlayer) R.string.on else R.string.off),
+                        toggleChecked = uiState.externalPlayer,
+                        isFocused = false,
+                        onClick = { viewModel.setExternalPlayer(!uiState.externalPlayer) }
+                    )
+                    MobileSettingsRow(
                         icon = Icons.Default.Image,
                         title = stringResource(R.string.seek_thumbnails),
                         subtitle = stringResource(R.string.seek_thumbnails_desc),
@@ -7002,6 +7017,7 @@ private fun tvSettingsFocusedHelp(section: String, focusedIndex: Int): TvSetting
             13, 14, 34, 37 -> TvSettingsHelp(stringResource(R.string.settings_help_trailers), stringResource(R.string.settings_help_trailers_desc))
             SEEK_THUMBNAILS_ROW -> TvSettingsHelp(stringResource(R.string.seek_thumbnails), stringResource(R.string.seek_thumbnails_desc))
             AUTO_SOURCE_FAILOVER_ROW -> TvSettingsHelp(stringResource(R.string.auto_source_failover), stringResource(R.string.auto_source_failover_desc))
+            EXTERNAL_PLAYER_ROW -> TvSettingsHelp(stringResource(R.string.external_player), stringResource(R.string.external_player_desc))
             27 -> TvSettingsHelp(stringResource(R.string.volume_boost), stringResource(R.string.settings_help_volume_boost_desc))
             53, 54 -> TvSettingsHelp(stringResource(R.string.playback_cache_size), stringResource(R.string.settings_help_playback_cache_desc))
             else -> TvSettingsHelp(stringResource(R.string.playback), stringResource(R.string.settings_help_playback_desc))
@@ -7207,6 +7223,8 @@ private fun TvGeneralSettingsRows(
     onSecondaryAudioClick: () -> Unit = {},
     autoSourceFailover: Boolean = true,
     onAutoSourceFailoverToggle: (Boolean) -> Unit = {},
+    externalPlayer: Boolean = false,
+    onExternalPlayerToggle: (Boolean) -> Unit = {},
     hiddenNavigationSections: Set<String> = emptySet(),
     onNavigationSectionVisibleChange: (String, Boolean) -> Unit = { _, _ -> },
     newsTopicsSummary: String = "",
@@ -7236,6 +7254,9 @@ private fun TvGeneralSettingsRows(
                 AUTO_SOURCE_FAILOVER_ROW -> SettingsToggleRow(stringResource(R.string.auto_source_failover),
                     stringResource(R.string.auto_source_failover_desc), autoSourceFailover,
                     focusedIndex == localIndex, onAutoSourceFailoverToggle, Modifier.settingsFocusSlot(localIndex))
+                EXTERNAL_PLAYER_ROW -> SettingsToggleRow(stringResource(R.string.external_player),
+                    stringResource(R.string.external_player_desc), externalPlayer,
+                    focusedIndex == localIndex, onExternalPlayerToggle, Modifier.settingsFocusSlot(localIndex))
                 SECONDARY_AUDIO_ROW -> SettingsRow(
                     icon = Icons.Default.VolumeUp,
                     title = stringResource(R.string.secondary_audio),

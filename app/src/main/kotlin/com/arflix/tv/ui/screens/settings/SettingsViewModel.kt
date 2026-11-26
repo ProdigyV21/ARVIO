@@ -231,6 +231,7 @@ data class SettingsUiState(
     val autoPlayNext: Boolean = true,
     val seekThumbnailsEnabled: Boolean = true,
     val autoSourceFailover: Boolean = true,
+    val externalPlayer: Boolean = false,
     val autoPlaySingleSource: Boolean = true,
     val autoPlayMinQuality: String = "Any",
     val autoPlayMaxQuality: String = "Unlimited",
@@ -597,6 +598,7 @@ class SettingsViewModel @Inject constructor(
     private fun seekThumbnailsKey() = profileManager.profileBooleanKey(SEEK_THUMBNAILS_PREF)
     private fun secondaryAudioLanguageKey() = profileManager.profileStringKey(SECONDARY_AUDIO_LANGUAGE_PREF)
     private fun autoSourceFailoverKey() = profileManager.profileBooleanKey(AUTO_SOURCE_FAILOVER_PREF)
+    private fun externalPlayerKey() = profileManager.profileBooleanKey(com.arflix.tv.ui.screens.player.EXTERNAL_PLAYER_PREF)
     private fun autoPlayNextKeyFor(profileId: String) = profileManager.profileBooleanKeyFor(profileId, "auto_play_next")
     private fun autoPlaySingleSourceKey() = profileManager.profileBooleanKey("auto_play_single_source")
     private fun autoPlaySingleSourceKeyFor(profileId: String) = profileManager.profileBooleanKeyFor(profileId, "auto_play_single_source")
@@ -904,6 +906,7 @@ class SettingsViewModel @Inject constructor(
             val seekThumbnailsEnabled = prefs[seekThumbnailsKey()] ?: true
             val secondaryAudio = prefs[secondaryAudioLanguageKey()]?.trim()?.takeIf { it.isNotBlank() } ?: "Off"
             val autoSourceFailover = prefs[autoSourceFailoverKey()] ?: true
+            val externalPlayer = prefs[externalPlayerKey()] ?: false
             var autoPlaySingleSource = prefs[autoPlaySingleSourceKey()] ?: true
             // Ensure defaults are persisted on first launch so they're never ambiguous
             if (prefs[autoPlaySingleSourceKey()] == null) {
@@ -1041,6 +1044,7 @@ class SettingsViewModel @Inject constructor(
                 seekThumbnailsEnabled = seekThumbnailsEnabled,
                 secondaryAudioLanguage = secondaryAudio,
                 autoSourceFailover = autoSourceFailover,
+                externalPlayer = externalPlayer,
                 autoPlaySingleSource = autoPlaySingleSource,
                 autoPlayMinQuality = autoPlayMinQuality,
                 autoPlayMaxQuality = autoPlayMaxQuality,
@@ -1961,6 +1965,12 @@ class SettingsViewModel @Inject constructor(
         if (!canManage("playback")) return
         preferenceWriter.save(autoSourceFailoverKey(), enabled, { it.autoSourceFailover },
             { state, value -> state.copy(autoSourceFailover = value) })
+    }
+
+    fun setExternalPlayer(enabled: Boolean) {
+        if (!canManage("playback")) return
+        preferenceWriter.save(externalPlayerKey(), enabled, { it.externalPlayer },
+            { state, value -> state.copy(externalPlayer = value) })
     }
 
     fun setSecondaryAudioLanguage(language: String) {
