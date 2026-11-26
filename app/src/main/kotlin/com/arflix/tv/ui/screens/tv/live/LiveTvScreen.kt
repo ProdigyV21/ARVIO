@@ -1697,22 +1697,7 @@ fun LiveTvScreen(
             }
         }
     }
-    // Timing marks (logcat LiveTvPerf): opening Live TV until the guide is drawn, and each zap.
-    LaunchedEffect(Unit) { LiveTvPerf.screenEntered() }
-    val perfHasChannels = filteredChannels.isNotEmpty()
-    LaunchedEffect(perfHasChannels) {
-        if (!perfHasChannels) return@LaunchedEffect
-        LiveTvPerf.channelsReady(filteredChannels.size)
-        withFrameNanos { }
-        LiveTvPerf.guidePainted()
-    }
-    val perfHasEpg = perfHasChannels && effectiveGuideNowNext.isNotEmpty()
-    LaunchedEffect(perfHasEpg) {
-        if (!perfHasEpg) return@LaunchedEffect
-        withFrameNanos { }
-        LiveTvPerf.epgPainted()
-    }
-    LaunchedEffect(playingChannelId) { if (playingChannelId != null) LiveTvPerf.zapStarted(playingChannelId) }
+    LiveTvPerfMarks(filteredChannels.size, effectiveGuideNowNext.isNotEmpty(), playingChannelId)
     val currentNowNext = remember(playingChannelId, playingCatchupProgram, effectiveGuideNowNext, guideClockMillis) {
         playingCatchupProgram?.let { IptvNowNext(now = it) }
             ?: effectiveGuideNowNext[playingChannelId]?.atTime(guideClockMillis)
@@ -3398,80 +3383,16 @@ fun LiveTvScreen(
     }
 
     val playbackConnections = remember { com.arflix.tv.network.IptvPlaybackConnections() }
-    val iptvHttpClient = remember {
-        OkHttpClient.Builder()
-            .addInterceptor(playbackConnections)
-            .connectionPool(ConnectionPool(5, 5, TimeUnit.MINUTES))
-            .followRedirects(true)
-            .followSslRedirects(true)
-            .retryOnConnectionFailure(true)
-            .addInterceptor(IptvProviderRequestGuard.shared.preflightInterceptor(playback = true))
-            .addNetworkInterceptor(IptvProviderRequestGuard.shared.playbackInterceptor())
-            .dns(OkHttpProvider.dns)
-            .connectTimeout(8, TimeUnit.SECONDS)
-            // An idle live socket should fail, not freeze startup for five minutes.
-            // No total call timeout: healthy continuous streams may run indefinitely.
-            .readTimeout(15, TimeUnit.SECONDS)
-            .build()
-    }
-    val baseRequestHeaders = remember {
-        mapOf(
-            "Accept" to "*/*",
-            "Accept-Encoding" to "identity",
-            "User-Agent" to OkHttpProvider.userAgentOr(IptvPlaybackUserAgent),
-            "Connection" to "keep-alive"
-        )
-    }
+    // Builders live outside this composable to keep LiveTvScreen() under the JVM 64 KB method limit.
+    val iptvHttpClient = remember { buildLiveIptvHttpClient(playbackConnections) }
+    val baseRequestHeaders = remember { liveBaseRequestHeaders() }
     val iptvDataSourceFactory = remember(iptvHttpClient, baseRequestHeaders) {
-        OkHttpDataSource.Factory(iptvHttpClient)
-            .setUserAgent(OkHttpProvider.userAgentOr(IptvPlaybackUserAgent))
-            .setDefaultRequestProperties(baseRequestHeaders)
+        buildLiveDataSourceFactory(iptvHttpClient, baseRequestHeaders)
     }
-    val mediaSourceFactory = remember(iptvDataSourceFactory) {
-        DefaultMediaSourceFactory(context, iptvExtractorsFactory())
-            .setDataSourceFactory(iptvDataSourceFactory)
-            .setLoadErrorHandlingPolicy(IptvLoadErrorHandlingPolicy())
-    }
-    val livePlaybackBufferProfile = remember(context) {
-        val activityManager = context.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager
-        buildLiveTvBufferProfile(
-            memoryClassMb = activityManager?.memoryClass ?: 384,
-            isLowRamDevice = activityManager?.isLowRamDevice == true
-        )
-    }
-    val liveLoadControl = remember(livePlaybackBufferProfile) {
-        val loadControl = DefaultLoadControl.Builder()
-            .setBufferDurationsMs(
-                livePlaybackBufferProfile.minBufferMs,
-                livePlaybackBufferProfile.maxBufferMs,
-                livePlaybackBufferProfile.bufferForPlaybackMs,
-                livePlaybackBufferProfile.bufferForPlaybackAfterRebufferMs
-            )
-            .setTargetBufferBytes(livePlaybackBufferProfile.targetBufferBytes)
-            // MUST be false: with time-prioritised thresholds ExoPlayer keeps buffering
-            // toward maxBufferMs even past targetBufferBytes. Buffer chunks live on the
-            // Java heap, so a 4K live stream could allocate hundreds of MB — pinning the
-            // 384MB-capped heap at 0% free. That caused OOM crashes while navigating the
-            // Live TV page AND the heavy initial buffering (bandwidth burned prefetching
-            // minutes of stream while GC stalls starved the player).
-            .setPrioritizeTimeOverSizeThresholds(false)
-            .setBackBuffer(livePlaybackBufferProfile.backBufferMs, true)
-            .build()
-        // Holds playback back so AI subtitles get audio ahead of time; a no-op until asked to.
-        SubtitleLookaheadLoadControl(loadControl)
-    }
-    val exoPlayer = remember(liveLoadControl) {
-        ExoPlayer.Builder(context)
-            .setMediaSourceFactory(mediaSourceFactory)
-            .setLoadControl(liveLoadControl)
-            // A live stream whose buffer stops moving while buffering raises an error after
-            // this long, which the retry below recovers, instead of a spinner for ten minutes.
-            .setStuckBufferingDetectionTimeoutMs(LIVE_STUCK_BUFFERING_TIMEOUT_MS)
-            .build().apply {
-                playWhenReady = true
-                videoScalingMode = C.VIDEO_SCALING_MODE_SCALE_TO_FIT
-            }
-    }
+    val mediaSourceFactory = remember(iptvDataSourceFactory) { buildLiveMediaSourceFactory(context, iptvDataSourceFactory) }
+    val livePlaybackBufferProfile = remember(context) { liveBufferProfileFor(context) }
+    val liveLoadControl = remember(livePlaybackBufferProfile) { buildLiveLoadControl(livePlaybackBufferProfile) }
+    val exoPlayer = remember(liveLoadControl) { buildLiveExoPlayer(context, mediaSourceFactory, liveLoadControl) }
 
     val liveNetwork = rememberIptvNetworkWatch()
     val liveStreamGate = remember(exoPlayer) {
@@ -6542,4 +6463,102 @@ fun FullscreenSourcesOverlay(
             }
         }
     }
+}
+
+private fun buildLiveIptvHttpClient(playbackConnections: com.arflix.tv.network.IptvPlaybackConnections): OkHttpClient =
+    OkHttpClient.Builder()
+        .addInterceptor(playbackConnections)
+        .connectionPool(ConnectionPool(5, 5, TimeUnit.MINUTES))
+        .followRedirects(true)
+        .followSslRedirects(true)
+        .retryOnConnectionFailure(true)
+        .addInterceptor(IptvProviderRequestGuard.shared.preflightInterceptor(playback = true))
+        .addNetworkInterceptor(IptvProviderRequestGuard.shared.playbackInterceptor())
+        .dns(OkHttpProvider.dns)
+        .connectTimeout(8, TimeUnit.SECONDS)
+        // An idle live socket should fail, not freeze startup for five minutes.
+        // No total call timeout: healthy continuous streams may run indefinitely.
+        .readTimeout(15, TimeUnit.SECONDS)
+        .build()
+
+private fun liveBaseRequestHeaders(): Map<String, String> = mapOf(
+    "Accept" to "*/*",
+    "Accept-Encoding" to "identity",
+    "User-Agent" to OkHttpProvider.userAgentOr(IptvPlaybackUserAgent),
+    "Connection" to "keep-alive"
+)
+
+private fun buildLiveDataSourceFactory(client: OkHttpClient, headers: Map<String, String>): OkHttpDataSource.Factory =
+    OkHttpDataSource.Factory(client)
+        .setUserAgent(OkHttpProvider.userAgentOr(IptvPlaybackUserAgent))
+        .setDefaultRequestProperties(headers)
+
+private fun buildLiveMediaSourceFactory(context: Context, dataSourceFactory: OkHttpDataSource.Factory): DefaultMediaSourceFactory =
+    DefaultMediaSourceFactory(context, iptvExtractorsFactory())
+        .setDataSourceFactory(dataSourceFactory)
+        .setLoadErrorHandlingPolicy(IptvLoadErrorHandlingPolicy())
+
+private fun liveBufferProfileFor(context: Context) = run {
+    val activityManager = context.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager
+    buildLiveTvBufferProfile(
+        memoryClassMb = activityManager?.memoryClass ?: 384,
+        isLowRamDevice = activityManager?.isLowRamDevice == true
+    )
+}
+
+private fun buildLiveLoadControl(profile: LiveTvBufferProfile): SubtitleLookaheadLoadControl {
+    val loadControl = DefaultLoadControl.Builder()
+        .setBufferDurationsMs(
+            profile.minBufferMs,
+            profile.maxBufferMs,
+            profile.bufferForPlaybackMs,
+            profile.bufferForPlaybackAfterRebufferMs
+        )
+        .setTargetBufferBytes(profile.targetBufferBytes)
+        // MUST be false: with time-prioritised thresholds ExoPlayer keeps buffering
+        // toward maxBufferMs even past targetBufferBytes. Buffer chunks live on the
+        // Java heap, so a 4K live stream could allocate hundreds of MB — pinning the
+        // 384MB-capped heap at 0% free. That caused OOM crashes while navigating the
+        // Live TV page AND the heavy initial buffering (bandwidth burned prefetching
+        // minutes of stream while GC stalls starved the player).
+        .setPrioritizeTimeOverSizeThresholds(false)
+        .setBackBuffer(profile.backBufferMs, true)
+        .build()
+    // Holds playback back so AI subtitles get audio ahead of time; a no-op until asked to.
+    return SubtitleLookaheadLoadControl(loadControl)
+}
+
+private fun buildLiveExoPlayer(
+    context: Context,
+    mediaSourceFactory: DefaultMediaSourceFactory,
+    loadControl: androidx.media3.exoplayer.LoadControl,
+): ExoPlayer = ExoPlayer.Builder(context)
+    .setMediaSourceFactory(mediaSourceFactory)
+    .setLoadControl(loadControl)
+    // A live stream whose buffer stops moving while buffering raises an error after
+    // this long, which the retry below recovers, instead of a spinner for ten minutes.
+    .setStuckBufferingDetectionTimeoutMs(LIVE_STUCK_BUFFERING_TIMEOUT_MS)
+    .build().apply {
+        playWhenReady = true
+        videoScalingMode = C.VIDEO_SCALING_MODE_SCALE_TO_FIT
+    }
+
+/** Timing marks (logcat LiveTvPerf): opening Live TV until the guide is drawn, and each zap. */
+@Composable
+private fun LiveTvPerfMarks(channelCount: Int, hasEpg: Boolean, playingChannelId: String?) {
+    LaunchedEffect(Unit) { LiveTvPerf.screenEntered() }
+    val hasChannels = channelCount > 0
+    LaunchedEffect(hasChannels) {
+        if (!hasChannels) return@LaunchedEffect
+        LiveTvPerf.channelsReady(channelCount)
+        withFrameNanos { }
+        LiveTvPerf.guidePainted()
+    }
+    val epgReady = hasChannels && hasEpg
+    LaunchedEffect(epgReady) {
+        if (!epgReady) return@LaunchedEffect
+        withFrameNanos { }
+        LiveTvPerf.epgPainted()
+    }
+    LaunchedEffect(playingChannelId) { if (playingChannelId != null) LiveTvPerf.zapStarted(playingChannelId) }
 }
