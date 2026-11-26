@@ -19,6 +19,7 @@ import { browserAutoplayCandidates } from "@/lib/browserAutoplay";
 import { chooseAutoplaySource, loadAutoplayPreference } from "@/lib/autoplaySelection";
 import { verifyAutoplayCandidates } from "@/lib/autoplayVerify";
 import { playbackPlan } from "@/lib/streamCompatibility";
+import { browserPlaybackTier } from "@/lib/sourceRank";
 import { claimEscape, isTopmostLayer } from "@/lib/playerKeys";
 import { collectResumePoints, episodeKey, episodeProgressMap, firstUnwatchedEpisode, planPrimaryAction, type ResumePoint } from "@/lib/playerResume";
 import { authClient, getPriorityConfig, useAppPick } from "@/lib/store";
@@ -133,7 +134,7 @@ function DetailsView({ item }: { item: MediaItem }) {
       searching: () => Boolean(autoplayLive.current.busy),
       preference: loadAutoplayPreference(),
       isDebrid: (stream) => Boolean(parseDebridStream(stream.originalUrl ?? stream.url)),
-      methodOf: (stream) => playbackPlan(stream).method,
+      methodOf: (stream) => String(browserPlaybackTier(stream)),
       verify: verifyAutoplayCandidates,
       signal: controller.signal
     }).then(({ stream: source }) => {

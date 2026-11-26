@@ -90,6 +90,14 @@ export function sourcePickerScore(stream: StreamSource, target: PlaybackTarget =
   // External players decode all of this themselves, so they keep the pure
   // quality order and none of these penalties apply.
   if (target === "browser") {
+    // What we know about the AUDIO decides whether a "direct" file is heard.
+    // Chromium plays the picture of a UHD Blu-ray rip and silently drops its
+    // AC-3/DTS/TrueHD track; release names often omit the codec entirely, so
+    // those files used to rank first, start, go silent and hop (#audio).
+    const audio = browserAudioClass(stream);
+    if (audio === "ok") score += 300;
+    else if (audio === "unknown-disc") score -= 450;
+    else if (audio === "unknown") score -= 120;
     if (!videoDecodableForDevice(stream)) score -= 1000;
     // The missing half: undecodable AUDIO was scored normally, so DDP/Atmos
     // releases (nearly every modern streaming rip) ranked top and then failed.
@@ -162,18 +170,57 @@ function parseSizeBytes(value: string) {
   return amount * 1_000_000;
 }
 
+/**
+ * What the release says about its audio, for in-browser playback:
+ * - "ok": AAC / Opus / MP3 / FLAC (YTS/YIFY always ship AAC), nothing else named
+ * - "dolby": AC-3, E-AC-3, DTS, TrueHD or Atmos named (the playback plan
+ *   decides whether this browser decodes it or it needs conversion)
+ * - "unknown-disc": no codec named on a Blu-ray / UHD / remux release, which
+ *   almost always carries AC-3, DTS or TrueHD: silent in Chromium
+ * - "unknown": no codec named on anything else (WEB releases, bare names)
+ */
+export type BrowserAudioClass = "ok" | "dolby" | "unknown-disc" | "unknown";
+const DOLBY_AUDIO = /\b(?:e-?)?ac-?3\b|\bec-?3\b|\bddp|\bdd\+|\bdd[257]\.?[01]|digital[. ]plus|\bdts|true-?hd|\batmos\b|\bmlp\b|\blpcm\b|\bpcm\b/;
+const BROWSER_AUDIO = /\baac|\bmp4a|\bopus\b|\bmp3\b|\bflac\b|\byts\b|\byts\.|\byify\b/;
+const DISC_RELEASE = /blu-?ray|\bbd-?rip|\bbd-?remux|\bbdmv\b|\bbr-?rip|\buhd\b|remux|\bbd(?:25|50|66|100)?\b/;
+export function browserAudioClass(stream: Pick<StreamSource, "quality" | "source" | "description" | "behaviorHints" | "media">): BrowserAudioClass {
+  const codec = stream.media?.audioCodec?.toLowerCase();
+  if (codec) return BROWSER_AUDIO.test(codec) || /^(?:aac|opus|mp3|flac|vorbis)/.test(codec) ? "ok" : "dolby";
+  const text = `${stream.behaviorHints?.filename ?? ""} ${stream.quality ?? ""} ${stream.source ?? ""} ${stream.description ?? ""}`.toLowerCase();
+  if (DOLBY_AUDIO.test(text)) return "dolby";
+  if (BROWSER_AUDIO.test(text)) return "ok";
+  return DISC_RELEASE.test(text) ? "unknown-disc" : "unknown";
+}
+
 type PlanOf = (stream: StreamSource) => Pick<PlaybackPlan, "route" | "method">;
-const METHOD_RANK: Record<PlaybackPlan["method"], number> = { direct: 0, remux: 1, transcode: 2 };
 
 /**
- * Best-first order for playing in THIS browser: sources that play as they are,
- * then those that need repackaging, then provider conversion; quality and
+ * Coarse playback-risk tier, lowest first. Direct files whose audio is known
+ * to play here start instantly; direct files with unnamed audio may turn out
+ * silent; a Blu-ray/UHD file with unnamed audio is nearly always silent in
+ * Chromium, so even in-browser audio conversion of a known codec is the safer
+ * bet. Shared by the ranking and the autoplay preference reordering.
+ */
+export function browserPlaybackTier(stream: StreamSource, planOf: PlanOf = playbackPlan): number {
+  const method = planOf(stream).method;
+  if (method === "transcode") return 4;
+  if (method === "remux") return 2;
+  const audio = browserAudioClass(stream);
+  if (audio === "ok" || audio === "dolby") return 0;
+  return audio === "unknown" ? 1 : 3;
+}
+
+/**
+ * Best-first order for playing in THIS browser: sources that play as they are
+ * with audio this browser is known to decode, then direct files with unnamed
+ * audio, then in-browser conversion, then disc releases with unnamed audio,
+ * then provider conversion (see browserPlaybackTier); quality and
  * debrid preference decide within each method. Autoplay, the details source
  * picker and the in-player source list all use this one comparator, so "the
  * next source" means the same thing everywhere.
  */
 export function compareForBrowser(a: StreamSource, b: StreamSource, planOf: PlanOf = playbackPlan) {
-  return METHOD_RANK[planOf(a).method] - METHOD_RANK[planOf(b).method]
+  return browserPlaybackTier(a, planOf) - browserPlaybackTier(b, planOf)
     || sourcePickerScore(b, "browser") - sourcePickerScore(a, "browser");
 }
 

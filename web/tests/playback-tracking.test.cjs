@@ -232,7 +232,8 @@ for (const status of [400, 404, 409, 422, 429]) {
     client.refreshIfNeeded = async () => ({ access_token: 'test-token' });
     client.directTrakt = async () => { throw Object.assign(new Error(`HTTP ${status}`), { status }); };
     const request = client.scrobble('stop', { mediaType: 'movie', tmdbId: 99, progress: 100 });
-    if (status === 409) await request;
+    // 409 (duplicate) and 422 (progress_too_low) are not connection failures.
+    if (status === 409 || status === 422) await request;
     else await assert.rejects(request, new RegExp(`HTTP ${status}`));
     assert.equal(proxyCalls.length, 0);
   });
