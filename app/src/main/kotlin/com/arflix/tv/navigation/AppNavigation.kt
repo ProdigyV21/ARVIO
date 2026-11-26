@@ -280,6 +280,7 @@ fun AppNavigation(
         }
     }
 
+    val touchNav = com.arflix.tv.util.LocalDeviceType.current.isTouchDevice()
     NavHost(
         navController = navController,
         startDestination = startDestination,
@@ -287,10 +288,28 @@ fun AppNavigation(
         // Netflix TV uses ~250ms fade; this is tuned for Android TV's 60fps.
         // Pure crossfade — no horizontal slides (those feel mobile, not TV).
         // Netflix TV uses ~250ms crossfade for all screen transitions.
-        enterTransition = { fadeIn(androidx.compose.animation.core.tween(180, easing = androidx.compose.animation.core.FastOutSlowInEasing)) },
-        exitTransition = { fadeOut(androidx.compose.animation.core.tween(140, easing = androidx.compose.animation.core.FastOutSlowInEasing)) },
-        popEnterTransition = { fadeIn(androidx.compose.animation.core.tween(180, easing = androidx.compose.animation.core.FastOutSlowInEasing)) },
-        popExitTransition = { fadeOut(androidx.compose.animation.core.tween(140, easing = androidx.compose.animation.core.FastOutSlowInEasing)) }
+        // TV: plain crossfade. Phones: tabs crossfade, while opening a page (details, a list,
+        // a settings section) gently grows in from 96% and returning settles it back.
+        enterTransition = {
+            if (touchNav && !isTopLevelRoute(targetState.destination.route)) {
+                fadeIn(navTween(260)) + androidx.compose.animation.scaleIn(navTween(320), initialScale = 0.96f)
+            } else fadeIn(navTween(if (touchNav) 220 else 180))
+        },
+        exitTransition = {
+            if (touchNav && !isTopLevelRoute(targetState.destination.route)) {
+                fadeOut(navTween(200)) + androidx.compose.animation.scaleOut(navTween(320), targetScale = 1.02f)
+            } else fadeOut(navTween(140))
+        },
+        popEnterTransition = {
+            if (touchNav && !isTopLevelRoute(initialState.destination.route)) {
+                fadeIn(navTween(240)) + androidx.compose.animation.scaleIn(navTween(300), initialScale = 1.02f)
+            } else fadeIn(navTween(if (touchNav) 220 else 180))
+        },
+        popExitTransition = {
+            if (touchNav && !isTopLevelRoute(initialState.destination.route)) {
+                fadeOut(navTween(180)) + androidx.compose.animation.scaleOut(navTween(260), targetScale = 0.96f)
+            } else fadeOut(navTween(140))
+        }
     ) {
         // Login screen
         composable(Screen.Login.route) {
@@ -848,6 +867,7 @@ fun AppNavigation(
                 isLiveStream = isLiveStream,
                 iptvSourceId = iptvSourceId,
                 onBack = { navController.popBackStack() },
+                onOpenAddonSettings = { navigateTopLevel(Screen.Settings.createRoute(initialSection = "stremio")) },
                 onPlayNext = { nextIdentity, nextPreferredAddonId, nextPreferredSourceName, nextPreferredBingeGroup ->
                     // Navigate to next episode
                     navController.navigate(
@@ -872,3 +892,12 @@ fun AppNavigation(
         }
     }
 }
+
+private fun <T> navTween(ms: Int) =
+    androidx.compose.animation.core.tween<T>(ms, easing = androidx.compose.animation.core.FastOutSlowInEasing)
+
+/** The tab destinations; moving between them is a crossfade, never a zoom. */
+private val TopLevelRoutes = setOf("home", "search", "watchlist", "tv", "music", "news", "settings", "profile_selection", "player", "login")
+
+internal fun isTopLevelRoute(route: String?): Boolean =
+    route == null || route.substringBefore('?').substringBefore('/') in TopLevelRoutes

@@ -36,6 +36,17 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.material.icons.outlined.CloudOff
+import androidx.compose.material.icons.outlined.Dns
+import com.arflix.tv.ui.components.mobilePressScale
+import com.arflix.tv.ui.components.SkeletonBox
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -275,6 +286,20 @@ fun WatchlistScreen(
     }
     BoxWithConstraints(Modifier.fillMaxSize().background(Color.Black).testTag("oled-library")) {
         val compact = touch && (maxWidth < 700.dp || maxHeight < 500.dp)
+        // Phone in landscape: the side rail already carries the profile, so drop the big header.
+        val landscapeTouch = touch && maxHeight < 500.dp && maxWidth > maxHeight
+        // Soft fade + rise whenever the Library switches tab or opens a list.
+        val sectionEnter = remember { Animatable(1f) }
+        LaunchedEffect(section, openedList) {
+            if (touch) {
+                sectionEnter.snapTo(0f)
+                sectionEnter.animateTo(1f, tween(280, easing = FastOutSlowInEasing))
+            }
+        }
+        val sectionMotion = Modifier.graphicsLayer {
+            alpha = sectionEnter.value
+            translationY = (1f - sectionEnter.value) * 14.dp.toPx()
+        }
         val queryChipMaxWidth = (maxWidth * 0.32f).coerceAtMost(160.dp)
         val sideWidth = if (touch) 160.dp else 126.dp
             if (!touch) {
@@ -305,7 +330,7 @@ fun WatchlistScreen(
             .then(if (compact && search) Modifier.imePadding() else Modifier)
             .padding(top = if (touch) 0.dp else LibraryTabsTopInset)
             .padding(horizontal = if (compact) 16.dp else 26.dp)) {
-            if (touch) Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+            if (touch && !landscapeTouch) Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text(stringResource(R.string.nav_library), color = Color.White, fontSize = 28.sp,
                     fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
                 com.arflix.tv.ui.components.MobileAccountButton(
@@ -339,9 +364,9 @@ fun WatchlistScreen(
                     state = calendarStateOverride, onSelectDate = onCalendarSelectDate,
                     onChangeMonth = onCalendarChangeMonth, onSelectSource = onCalendarSelectSource,
                     onRefresh = onCalendarRefresh, onOpenDetails = onNavigateToDetails, onOpenRelease = onCalendarOpenRelease,
-                    modifier = Modifier.weight(1f), onExitUp = { calendarTab.requestFocus() })
+                    modifier = Modifier.weight(1f).then(sectionMotion), onExitUp = { calendarTab.requestFocus() })
                 else LibraryCalendarRoute(onOpenDetails = onNavigateToDetails, onOpenRelease = onCalendarOpenRelease,
-                    modifier = Modifier.weight(1f), onExitUp = { calendarTab.requestFocus() },
+                    modifier = Modifier.weight(1f).then(sectionMotion), onExitUp = { calendarTab.requestFocus() },
                     viewModel = calendarViewModel ?: hiltViewModel())
             } else {
             if (compact) {
@@ -416,7 +441,7 @@ fun WatchlistScreen(
                             )
                         }
                     }
-                } else {
+                } else if (!(collections && scopeSources.isEmpty() && query.isEmpty()) && !(serverMode && scopeSources.isEmpty())) {
                     Row(
                         Modifier
                             .fillMaxWidth()
@@ -469,7 +494,7 @@ fun WatchlistScreen(
                 OledControl("‹ ${tr("My lists")}", onClick = { openedList = null })
                 Text(state.selectedSource.title, color = Color.White, fontSize = 15.sp, modifier = Modifier.padding(start = 12.dp))
             }
-            Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(18.dp)) {
+            Row(Modifier.weight(1f).then(sectionMotion), horizontalArrangement = Arrangement.spacedBy(18.dp)) {
                 if (!compact && !collections && openedList == null) {
                     OledSources(scopeSources, selectedId, Modifier.width(sideWidth), ::selectSource, onNavigateToSettings)
                 }
@@ -484,9 +509,21 @@ fun WatchlistScreen(
                     val spotlightItem = previewItem
                     val compactSpotlight = compact || maxHeight < 440.dp
                     val showSpotlight = !collections && items.isNotEmpty()
-                    if (showSpotlight) CollectionBackdrop(previewCatalog, spotlightItem, touch,
-                        collectionSpotlightHeight(touch, compactSpotlight) + 150.dp,
-                        background = Color.Black)
+                    val backdropHeight = collectionSpotlightHeight(touch, compactSpotlight) + 150.dp
+                    val backdropHeightPx = with(LocalDensity.current) { backdropHeight.toPx() }
+                    // On phones the spotlight scrolls with the grid, so its artwork fades out with it
+                    // instead of staying pinned behind the cards.
+                    val backdropAlpha by remember(grid, touch, backdropHeightPx) { derivedStateOf {
+                        if (!touch) 1f
+                        else if (grid.firstVisibleItemIndex > 0) 0f
+                        else (1f - grid.firstVisibleItemScrollOffset / (backdropHeightPx * 0.75f)).coerceIn(0f, 1f)
+                    } }
+                    if (showSpotlight) Box(Modifier.graphicsLayer {
+                        alpha = backdropAlpha
+                        translationY = if (touch) -grid.firstVisibleItemScrollOffset * 0.35f * (if (grid.firstVisibleItemIndex == 0) 1f else 0f) else 0f
+                    }) {
+                        CollectionBackdrop(previewCatalog, spotlightItem, touch, backdropHeight, background = Color.Black)
+                    }
                     Column(Modifier.fillMaxSize()) {
                     if (showSpotlight && !touch) {
                         Box(
@@ -517,7 +554,18 @@ fun WatchlistScreen(
                         if (touch || collections) LocalBringIntoViewSpec.current else LibraryTvBringIntoViewSpec) {
                     if (collections) {
                         val lists = scopeSources.filter { it.title.contains(query, true) }
-                        if (lists.isEmpty()) {
+                        if (lists.isEmpty() && touch) {
+                            Box(Modifier.fillMaxSize().padding(bottom = LocalBottomBarInset.current), contentAlignment = Alignment.Center) {
+                                com.arflix.tv.ui.components.MobileEmptyState(
+                                    icon = if (query.isNotEmpty()) Icons.Outlined.Search else Icons.Default.BookmarkBorder,
+                                    title = if (query.isNotEmpty()) tr("No matching lists") else tr("No lists yet"),
+                                    message = if (query.isNotEmpty()) tr("No lists found matching \"%s\"").format(query)
+                                        else tr("Your custom catalogs and personal lists appear here."),
+                                    actionLabel = if (query.isNotEmpty()) tr("Clear search") else tr("New list"),
+                                    onAction = if (query.isNotEmpty()) ({ query = "" }) else ({ onNavigateToSettings("catalogs") }),
+                                )
+                            }
+                        } else if (lists.isEmpty()) {
                             Box(
                                 modifier = Modifier
                                     .fillMaxSize()
@@ -589,7 +637,46 @@ fun WatchlistScreen(
                             }
                         }
                     } else if (loading && items.isEmpty()) {
-                        CircularProgressIndicator(Modifier.align(Alignment.Center), color = resolveAccentColor(Color.White))
+                        if (touch) LibraryLoadingSkeleton(columns, width, poster)
+                        else CircularProgressIndicator(Modifier.align(Alignment.Center), color = resolveAccentColor(Color.White))
+                    } else if (items.isEmpty() && touch) {
+                        val disconnected = serverMode && scopeSources.isEmpty() && error == null
+                        Box(Modifier.fillMaxSize().padding(bottom = LocalBottomBarInset.current), contentAlignment = Alignment.Center) {
+                            com.arflix.tv.ui.components.MobileEmptyState(
+                                icon = when {
+                                    disconnected -> Icons.Outlined.Dns
+                                    error != null -> Icons.Outlined.CloudOff
+                                    query.isNotEmpty() || mediaFilter != null -> Icons.Outlined.Search
+                                    else -> Icons.Default.BookmarkBorder
+                                },
+                                title = when {
+                                    disconnected -> stringResource(R.string.mobile_server_disconnected)
+                                    error != null -> tr("Library unavailable")
+                                    serverMode || query.isNotEmpty() || mediaFilter != null -> tr("No titles found")
+                                    else -> stringResource(R.string.mobile_library_empty_title)
+                                },
+                                message = when {
+                                    disconnected -> stringResource(R.string.mobile_server_disconnected_hint)
+                                    error != null -> error
+                                    serverMode || query.isNotEmpty() || mediaFilter != null -> null
+                                    else -> stringResource(R.string.mobile_library_empty_hint)
+                                },
+                                actionLabel = when {
+                                    disconnected -> stringResource(R.string.mobile_connect_server)
+                                    error != null -> tr("Retry")
+                                    query.isNotEmpty() || mediaFilter != null -> tr("Reset")
+                                    !serverMode -> stringResource(R.string.mobile_library_empty_action)
+                                    else -> null
+                                },
+                                onAction = when {
+                                    disconnected -> ({ onNavigateToSettings("home_server") })
+                                    error != null -> ({ if (serverMode) viewModel.refreshLibrary() else viewModel.refresh() })
+                                    query.isNotEmpty() || mediaFilter != null -> ({ query = ""; mediaFilter = null })
+                                    !serverMode -> onNavigateToSearch
+                                    else -> null
+                                },
+                            )
+                        }
                     } else if (items.isEmpty()) {
                         Column(Modifier.align(Alignment.Center), horizontalAlignment = Alignment.CenterHorizontally) {
                             val disconnected = touch && serverMode && scopeSources.isEmpty() && error == null
@@ -600,7 +687,9 @@ fun WatchlistScreen(
                         }
                     } else LazyVerticalGrid(GridCells.Fixed(columns), state = grid,
                         modifier = Modifier.fillMaxSize().arvioDpadFocusGroup(enableFocusRestorer = false)
-                            .clipToBounds().testTag("library-grid"),
+                            .clipToBounds()
+                            .then(if (touch) Modifier.mobileTopFadeEdge(grid) else Modifier)
+                            .testTag("library-grid"),
                         horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(18.dp),
                         contentPadding = PaddingValues(top = 8.dp, bottom = bottomPadding)) {
                         if (touch && showSpotlight) item("mobile-spotlight", span = { GridItemSpan(maxLineSpan) }, contentType = "WatchlistScreen.mobile_spotlight") {
@@ -728,14 +817,15 @@ internal fun OledControl(
     val isPhoneSelected = selected && compact
     val foreground = if(focused) { if(accent.luminance() > .4f) Color.Black else Color.White } else if(isPhoneSelected) Color.Black else Color.White
     val haptic = LocalHapticFeedback.current
-    val background by animateColorAsState(if(focused) accent else if(isPhoneSelected) Color.White else if(selected) BackgroundElevated else Color.Transparent, tween(120), label = "library-control")
+    val background by animateColorAsState(if(focused) accent else if(isPhoneSelected) Color.White else if(selected) BackgroundElevated else Color.Transparent, tween(if (touch) 220 else 120), label = "library-control")
+    val pressSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
     Box(
         modifier
-            .then(if (touch) Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp) else Modifier)
+            .then(if (touch) Modifier.mobilePressScale(pressSource, 0.95f).sizeIn(minWidth = 48.dp, minHeight = 48.dp) else Modifier)
             .onFocusChanged { focused = it.isFocused }
             .clip(if(compact) CircleShape else RoundedCornerShape(8.dp))
             .background(background)
-            .clickable {
+            .clickable(interactionSource = pressSource, indication = androidx.compose.foundation.LocalIndication.current) {
                 if (compact && !selected) {
                     haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                 }
@@ -881,6 +971,11 @@ private fun OledCollection(source: WatchlistSourceItem, cover: String?, width: D
 private fun OledDrawer(title: String, close: () -> Unit, content: @Composable ColumnScope.() -> Unit) {
     val initial = remember { FocusRequester() }
     val touch = LocalDeviceType.current.isTouchDevice()
+    // Phones: the sheet springs up from the bottom while the scrim fades in.
+    val enter = remember { Animatable(if (touch) 0f else 1f) }
+    LaunchedEffect(touch) {
+        if (touch) enter.animateTo(1f, androidx.compose.animation.core.spring(dampingRatio = 0.86f, stiffness = 380f))
+    }
     Dialog(
         onDismissRequest = close,
         properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)
@@ -893,6 +988,7 @@ private fun OledDrawer(title: String, close: () -> Unit, content: @Composable Co
             Box(
                 Modifier
                     .fillMaxSize()
+                    .graphicsLayer { alpha = enter.value.coerceIn(0f, 1f) }
                     .background(Color.Black.copy(alpha = 0.65f))
                     .pointerInput(close) {
                         detectTapGestures { close() }
@@ -906,6 +1002,7 @@ private fun OledDrawer(title: String, close: () -> Unit, content: @Composable Co
                                 .align(Alignment.BottomCenter)
                                 .fillMaxWidth()
                                 .heightIn(max = 560.dp)
+                                .graphicsLayer { translationY = (1f - enter.value) * size.height }
                                 .clip(RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp))
                                 .background(BackgroundDark)
                                 .pointerInput(Unit) {
@@ -985,5 +1082,43 @@ private fun OledDrawer(title: String, close: () -> Unit, content: @Composable Co
             }
         }
         LaunchedEffect(Unit) { if (!touch) initial.requestFocus() }
+    }
+}
+
+/** Fades the first few dp of a scrolled grid into the black page so cards don't cut off hard. */
+private fun Modifier.mobileTopFadeEdge(grid: LazyGridState, fade: Dp = 18.dp): Modifier =
+    graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
+        .drawWithContent {
+            drawContent()
+            val scrolled = grid.firstVisibleItemIndex > 0 || grid.firstVisibleItemScrollOffset > 0
+            if (scrolled) {
+                drawRect(
+                    brush = Brush.verticalGradient(
+                        0f to Color.Transparent,
+                        1f to Color.Black,
+                        startY = 0f,
+                        endY = fade.toPx(),
+                    ),
+                    size = androidx.compose.ui.geometry.Size(size.width, fade.toPx()),
+                    blendMode = BlendMode.DstIn,
+                )
+            }
+        }
+
+/** Shimmering card placeholders while a phone Library source loads, instead of a lone spinner. */
+@Composable
+private fun LibraryLoadingSkeleton(columns: Int, width: Dp, poster: Boolean) {
+    Column(Modifier.fillMaxSize().padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
+        repeat(if (poster) 3 else 5) {
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                repeat(columns) {
+                    Column(Modifier.padding(6.dp).width(width - 12.dp)) {
+                        SkeletonBox(Modifier.fillMaxWidth().aspectRatio(if (poster) 2f / 3f else 16f / 9f), RoundedCornerShape(10.dp))
+                        Spacer(Modifier.height(8.dp))
+                        SkeletonBox(Modifier.fillMaxWidth(0.7f).height(12.dp), RoundedCornerShape(6.dp))
+                    }
+                }
+            }
+        }
     }
 }

@@ -76,11 +76,18 @@ fun MobileAccountButton(
 ) {
     var open by rememberSaveable { mutableStateOf(false) }
     val label = stringResource(R.string.settings)
+    val press = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
     Box(
         modifier
             .size(48.dp)
+            .mobilePressScale(press, 0.9f)
             .clip(CircleShape)
-            .clickable(role = Role.Button, onClickLabel = label) { open = true }
+            .clickable(
+                interactionSource = press,
+                indication = androidx.compose.foundation.LocalIndication.current,
+                role = Role.Button,
+                onClickLabel = label,
+            ) { open = true }
             .semantics { contentDescription = label }
             .testTag("mobile_account_button"),
         contentAlignment = Alignment.Center,

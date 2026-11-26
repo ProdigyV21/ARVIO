@@ -260,17 +260,20 @@ fun AppBottomBar(
     val barHeight = maxOf((spec.itemHeightDp ?: 64).toFloat(), 34f + 28f * androidx.compose.ui.platform.LocalDensity.current.fontScale).dp
     val surfaceShape = RectangleShape
 
-    // A single dark fade stays readable over artwork without live backdrop blur.
-    val baseModifier = modifier.background(
-        Brush.verticalGradient(0f to Color.Transparent, 0.28f to Color.Black.copy(alpha = 0.9f), 1f to Color.Black)
-    )
-
     val items = bottomBarItems.filter {
         com.arflix.tv.util.isNavigationSectionVisible(it.route, NavigationVisibility.hiddenSections, KidsNavigation.hideLiveTv)
     }
     if (isRail) {
+        // Solid black like the pages beside it, so the rail and the cutout strip read as one edge;
+        // a hairline separates it from content.
         Column(
-            modifier = baseModifier
+            modifier = modifier
+                .background(Color.Black)
+                .drawBehind {
+                    val x = size.width - 1.dp.toPx()
+                    drawLine(Color.White.copy(alpha = 0.07f), androidx.compose.ui.geometry.Offset(x, 0f),
+                        androidx.compose.ui.geometry.Offset(x, size.height), 1.dp.toPx())
+                }
                 .width(LANDSCAPE_RAIL_WIDTH_DP.dp)
                 .fillMaxHeight()
                 .navigationBarsPadding()

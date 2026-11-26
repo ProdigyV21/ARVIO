@@ -1122,7 +1122,7 @@ fun DetailsScreen(
         // every other reader of uiState.streams never see it.
         val telegramRowLabel = when (uiState.telegramSearchRow) {
             TelegramSearchRow.HIDDEN -> null
-            TelegramSearchRow.IDLE -> stringResource(R.string.telegram_search_row_idle)
+            TelegramSearchRow.IDLE -> stringResource(R.string.telegram_search_row_idle).touchTapWording(LocalDeviceType.current.isTouchDevice())
                 .takeIf { uiState.streams.none { it.addonId == TELEGRAM_SEARCH_ROW.addonId } }
             TelegramSearchRow.SEARCHING -> stringResource(R.string.telegram_search_row_searching)
             TelegramSearchRow.NONE -> stringResource(R.string.telegram_search_row_none)
@@ -1130,7 +1130,7 @@ fun DetailsScreen(
         // Likewise the "Search YouTube" row (Settings > Sources > YouTube): searched on press only.
         val youTubeRowLabel = when (uiState.youTubeSourceRow) {
             YouTubeSourceRow.HIDDEN -> null
-            YouTubeSourceRow.IDLE -> stringResource(R.string.youtube_source_row_idle)
+            YouTubeSourceRow.IDLE -> stringResource(R.string.youtube_source_row_idle).touchTapWording(LocalDeviceType.current.isTouchDevice())
             YouTubeSourceRow.SEARCHING -> stringResource(R.string.youtube_source_row_searching)
             YouTubeSourceRow.NONE -> stringResource(R.string.youtube_source_row_none)
             YouTubeSourceRow.FAILED -> stringResource(R.string.youtube_source_row_failed)
@@ -4965,3 +4965,7 @@ private fun bookmarkIcon(saved: Boolean, isYouTubeVideo: Boolean) = when {
     saved -> Icons.Default.Bookmark
     else -> Icons.Default.BookmarkBorder
 }
+
+/** Phones are tapped, not clicked: reword the English "Click to ..." source rows on touch. */
+internal fun String.touchTapWording(touch: Boolean): String =
+    if (touch && startsWith("Click to ")) "Tap to " + removePrefix("Click to ") else this

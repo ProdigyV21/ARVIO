@@ -170,7 +170,7 @@ fun LibraryCalendarPane(
                         textAlign = androidx.compose.ui.text.style.TextAlign.Center, maxLines = 1)
                 }
             }
-            val gridHeight = if (touch) (dates.size / 7 * 48).dp else if (compact) (dates.size / 7 * 64).dp else (dates.size / 7 * 52).dp
+            val gridHeight = if (touch) (dates.size / 7 * 56).dp else if (compact) (dates.size / 7 * 64).dp else (dates.size / 7 * 52).dp
             Column(Modifier.fillMaxWidth().then(if (scrollable) Modifier.height(gridHeight) else Modifier.weight(1f))
                 .testTag("calendar-month-grid"), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 dates.chunked(7).forEach { week ->
@@ -258,7 +258,9 @@ fun LibraryCalendarPane(
                     }
                 }
             }
-            Spacer(Modifier.height(if (touch) 16.dp + LocalBottomBarInset.current else 8.dp))
+            val navBarBottom = androidx.compose.foundation.layout.WindowInsets.navigationBars
+                .asPaddingValues().calculateBottomPadding()
+            Spacer(Modifier.height(if (touch) 16.dp + maxOf(LocalBottomBarInset.current, navBarBottom) else 8.dp))
         }
     }
     if (showSources) Dialog(
@@ -457,7 +459,7 @@ private fun CalendarDay(date: LocalDate, month: YearMonth, releases: List<Calend
     val selected by remember(date, selectedDate) { derivedStateOf { selectedDate.value == date } }
     val titleColor = if (selected) Color.Black else Color.White
     val secondary = if (selected) Color(0xFF24313A) else CalendarSecondary
-    val background by animateColorAsState(if (selected) Color.White else Color.Transparent, tween(100), label = "calendar-day")
+    val background by animateColorAsState(if (selected) Color.White else Color.Transparent, tween(if (LocalDeviceType.current.isTouchDevice()) 180 else 100), label = "calendar-day")
     val first = releases.firstOrNull()
     val previewTitles = remember(releases) { calendarPreviewTitles(releases) }
     val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
@@ -469,10 +471,14 @@ private fun CalendarDay(date: LocalDate, month: YearMonth, releases: List<Calend
             .clip(RoundedCornerShape(6.dp)).background(background).clickable(onClick = onClick), contentAlignment = Alignment.Center) {
             Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(date.dayOfMonth.toString(), color = if (YearMonth.from(date) == month || selected) titleColor else CalendarSecondary,
-                    fontSize = 14.sp, fontWeight = if (selected || today) FontWeight.SemiBold else FontWeight.Normal)
-                if (today) Box(Modifier.width(12.dp).height(1.dp).background(titleColor).testTag("calendar-today-marker-$date"))
-                if (releases.isNotEmpty()) Text(releases.size.toString(), fontSize = 9.sp, color = titleColor,
-                    modifier = Modifier.testTag("calendar-day-count-$date"))
+                    fontSize = 16.sp, fontWeight = if (selected || today) FontWeight.SemiBold else FontWeight.Normal)
+                if (today) Box(Modifier.width(14.dp).height(2.dp).clip(RoundedCornerShape(1.dp)).background(titleColor).testTag("calendar-today-marker-$date"))
+                if (releases.isNotEmpty()) Text(releases.size.toString(), fontSize = 11.sp, fontWeight = FontWeight.SemiBold,
+                    color = titleColor,
+                    modifier = Modifier.clip(RoundedCornerShape(8.dp))
+                        .background(if (selected) Color.Black.copy(alpha = .10f) else Color.White.copy(alpha = .16f))
+                        .padding(horizontal = 6.dp)
+                        .testTag("calendar-day-count-$date"))
             }
         }
         return

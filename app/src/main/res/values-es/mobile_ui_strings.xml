@@ -10,4 +10,11 @@
     <string name="mobile_expand_preview">Ampliar vista previa</string>
     <string name="mobile_collapse_preview">Contraer vista previa</string>
     <string name="search_top_results">Mejores resultados</string>
+    <string name="mobile_live_empty_title">La TV en directo aún no está configurada</string>
+    <string name="mobile_live_empty_hint">Añade una lista M3U o un acceso Xtream para ver canales en directo y la guía de TV.</string>
+    <string name="mobile_live_empty_action">Añadir lista</string>
+    <string name="mplayer_open_addons">Gestionar complementos</string>
+    <string name="mobile_library_empty_title">Tu lista está vacía</string>
+    <string name="mobile_library_empty_hint">Guarda películas y series para encontrarlas aquí, en cualquier dispositivo.</string>
+    <string name="mobile_library_empty_action">Busca algo para ver</string>
 </resources>

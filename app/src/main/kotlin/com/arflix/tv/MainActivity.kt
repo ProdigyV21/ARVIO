@@ -995,12 +995,17 @@ fun ArflixApp(
 
         androidx.compose.animation.AnimatedVisibility(
             visible = showBottomBar,
-            enter = androidx.compose.animation.slideInVertically(
-                animationSpec = androidx.compose.animation.core.tween(220, easing = androidx.compose.animation.core.FastOutSlowInEasing)
-            ) { it },
-            exit = androidx.compose.animation.slideOutVertically(
-                animationSpec = androidx.compose.animation.core.tween(220, easing = androidx.compose.animation.core.FastOutSlowInEasing)
-            ) { it },
+            // The rail slides in from its own edge; the bottom bar rises. Both fade so it feels soft.
+            enter = (if (isLandscapeRail) androidx.compose.animation.slideInHorizontally(
+                animationSpec = androidx.compose.animation.core.tween(260, easing = androidx.compose.animation.core.FastOutSlowInEasing)
+            ) { -it } else androidx.compose.animation.slideInVertically(
+                animationSpec = androidx.compose.animation.core.tween(260, easing = androidx.compose.animation.core.FastOutSlowInEasing)
+            ) { it }) + androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(200)),
+            exit = (if (isLandscapeRail) androidx.compose.animation.slideOutHorizontally(
+                animationSpec = androidx.compose.animation.core.tween(200, easing = androidx.compose.animation.core.FastOutSlowInEasing)
+            ) { -it } else androidx.compose.animation.slideOutVertically(
+                animationSpec = androidx.compose.animation.core.tween(200, easing = androidx.compose.animation.core.FastOutSlowInEasing)
+            ) { it }) + androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(160)),
             modifier = Modifier
                 .align(if (isLandscapeRail) Alignment.CenterStart else Alignment.BottomCenter)
                 .then(if (isLandscapeRail) Modifier.padding(start = railCutoutInset) else Modifier)

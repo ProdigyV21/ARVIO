@@ -345,13 +345,14 @@ fun PlayerScreen(
     iptvSourceId: String? = null,
     viewModel: PlayerViewModel = hiltViewModel(),
     onBack: () -> Unit = {},
-    onPlayNext: (EpisodeIdentity, String?, String?, String?) -> Unit = { _, _, _, _ -> }
+    onPlayNext: (EpisodeIdentity, String?, String?, String?) -> Unit = { _, _, _, _ -> },
+    onOpenAddonSettings: (() -> Unit)? = null,
 ) {
     PlayerScreenContent(
         args = PlayerScreenArgs(
             mediaType, mediaId, seasonNumber, episodeNumber, tmdbSeasonNumber, tmdbEpisodeNumber,
             kitsuId, kitsuEpisodeNumber, imdbId, streamUrl, preferredAddonId, preferredSourceName,
-            preferredBingeGroup, startPositionMs, isLiveStream, iptvSourceId, onBack, onPlayNext
+            preferredBingeGroup, startPositionMs, isLiveStream, iptvSourceId, onBack, onPlayNext, onOpenAddonSettings
         ),
         viewModel = viewModel
     )
@@ -386,7 +387,8 @@ private data class PlayerScreenArgs(
     val isLiveStream: Boolean,
     val iptvSourceId: String?,
     val onBack: () -> Unit,
-    val onPlayNext: (EpisodeIdentity, String?, String?, String?) -> Unit
+    val onPlayNext: (EpisodeIdentity, String?, String?, String?) -> Unit,
+    val onOpenAddonSettings: (() -> Unit)? = null,
 )
 
 @OptIn(ExperimentalTvMaterial3Api::class)
@@ -4704,6 +4706,7 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
                 onReloadStreams = {
                     viewModel.reloadStreams()
                 },
+                onOpenAddons = args.onOpenAddonSettings,
                 onUpdateAutoplay = { enabled ->
                     viewModel.setAutoPlayNext(enabled)
                 },
