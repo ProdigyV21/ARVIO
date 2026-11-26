@@ -175,6 +175,7 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.collect
 import androidx.compose.runtime.snapshotFlow
 import kotlinx.coroutines.launch
@@ -1992,6 +1993,15 @@ fun LiveTvScreen(
 
     var categoryDrawerOpen by rememberSaveable { mutableStateOf(true) }
     var sportsSelected by rememberSaveable(currentProfile?.id) { mutableStateOf(false) }
+    val latestSportsSelected by rememberUpdatedState(sportsSelected)
+    // Background sports enrichment waits until the guide and player have settled, or
+    // until Sports is opened, whichever comes first (see LiveSportsWorkPolicy).
+    suspend fun awaitSportsWorkSlot() {
+        if (latestSportsSelected) return
+        kotlinx.coroutines.withTimeoutOrNull(LiveSportsWorkPolicy.BACKGROUND_SETTLE_MS) {
+            snapshotFlow { latestSportsSelected }.first { it }
+        }
+    }
     LaunchedEffect(sportsAddonInstallations, state.isConfigured) {
         if (!state.isConfigured && sportsAddonInstallations.isNotEmpty()) {
             sportsSelected = true
@@ -2050,6 +2060,7 @@ fun LiveTvScreen(
     val metadataRequest = remember(currentProfile?.id, state.snapshot.loadedAt, sportsRefresh) { Any() }
     var completedMetadataRequest by remember { mutableStateOf<Any?>(null) }
     LaunchedEffect(metadataRequest) {
+        awaitSportsWorkSlot()
         if (state.snapshot.loadedAt.toEpochMilli() > 0L) {
             sportsMetadataLoading = true
             try {
@@ -2069,6 +2080,7 @@ fun LiveTvScreen(
     val broadcastRequest = remember(sportsScope, sportsArtwork) { Any() }
     var completedBroadcastRequest by remember(sportsScope) { mutableStateOf<Any?>(null) }
     LaunchedEffect(broadcastRequest) {
+        awaitSportsWorkSlot()
         sportsBroadcastLoading = true
         val matchingStarted = android.os.SystemClock.elapsedRealtime()
         try {
@@ -2111,6 +2123,7 @@ fun LiveTvScreen(
     var fixtureResult by remember(sportsScope) { mutableStateOf<Pair<Any, List<SportsGuideEvent>>?>(null) }
     var fixtureLoading by remember(sportsScope) { mutableStateOf(false) }
     LaunchedEffect(fixtureRequest) {
+        awaitSportsWorkSlot()
         fixtureLoading = true
         try {
             val catalogue = withContext(LiveSportsWorkPolicy.dispatcher) {
@@ -2126,6 +2139,7 @@ fun LiveTvScreen(
     val decoratedRequest = remember(sportsScope, fixtureResult?.first, baseForDecoration, addonSnapshot, fixtureArtwork) { Any() }
     var decoratedResult by remember(sportsScope) { mutableStateOf<Pair<Any, List<SportsGuideEvent>>?>(null) }
     LaunchedEffect(decoratedRequest) {
+        awaitSportsWorkSlot()
         sportsCatalogueLoading = true
         try {
             val decorated = withContext(LiveSportsWorkPolicy.dispatcher) {
@@ -2152,7 +2166,6 @@ fun LiveTvScreen(
     val latestSportsScanClock by rememberUpdatedState(guideClockMillis)
     val latestSportsDisplayChannels by rememberUpdatedState(allDisplayChannels)
     val latestSportsProviderMatcher by rememberUpdatedState(providerMatcher(selectedProviderId, state.config))
-    val latestSportsSelected by rememberUpdatedState(sportsSelected)
     val latestSportsChannelCount by rememberUpdatedState(maxOf(state.snapshot.totalChannelCount, state.snapshot.channels.size))
     LaunchedEffect(sportsScope) {
         if (state.snapshot.loadedAt.toEpochMilli() <= 0L) return@LaunchedEffect
