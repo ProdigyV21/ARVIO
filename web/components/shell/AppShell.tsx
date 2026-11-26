@@ -28,6 +28,7 @@ import { notifySectionNavigation } from "./UpdateWatcher";
 import { XboxControllerTip } from "./XboxControllerTip";
 import { OfflineNotice } from "./OfflineNotice";
 import { PremiumPurchaseIntent } from "./PremiumPurchaseIntent";
+import { SportsReminderHost } from "./SportsReminderHost";
 
 // The shell re-renders whenever the view, section, details or player change.
 // Its always-mounted children subscribe to the store fields they show
@@ -247,6 +248,7 @@ export function AppShell() {
         <HomeScreenTip playerOpen={false} />
       )}
       <ExternalPlaybackPrompt />
+      {!kidsProfile && <SportsReminderHost />}
       <MediaContextMenu />
       <PremiumUsage />
       <BackHandler />
