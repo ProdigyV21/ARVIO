@@ -165,6 +165,8 @@ fun EpgGrid(
     sidebarOpen: Boolean = false,
     onBackToGroups: (() -> Unit)? = null,
     onOpenSearch: (() -> Unit)? = null,
+    /** Guide shows with a reminder (see [programmeReminderId]); marked with a small dot. */
+    remindedProgrammeIds: Set<String> = emptySet(),
     modifier: Modifier = Modifier,
 ) {
     val density = LocalDensity.current
@@ -928,6 +930,7 @@ fun EpgGrid(
                                     else -> stringResource(R.string.live_placeholder_no_guide_source)
                                 }
                                 ProgramsRow(
+                                    remindedProgrammeIds = remindedProgrammeIds,
                                     channel = ch,
                                     programs = rowPrograms,
                                     placeholderTitle = placeholderTitle,
@@ -1045,6 +1048,7 @@ private fun ProgramsRow(
     rowIdx: Int,
     focusRequesters: MutableMap<String, List<FocusRequester>>,
     focusTargets: MutableMap<String, List<ProgramFocusTarget>>,
+    remindedProgrammeIds: Set<String> = emptySet(),
 ) {
     val nowMillis = clockTickMillis
     val density = LocalDensity.current
@@ -1139,6 +1143,8 @@ private fun ProgramsRow(
                         focusable = isFocusable && epgMode,
                         renderContent = renderWindow.intersects(placement.startMin, placement.endMin),
                         isCatchupSupported = isCatchupSupported,
+                        isReminded = remindedProgrammeIds.isNotEmpty() &&
+                            programmeReminderId(channel.id, placement.program) in remindedProgrammeIds,
                         contentStartOffsetPx = {
                             (hScrollOffsetPx() - cellOffsetPx).coerceIn(0f, maxShiftPx).toInt()
                         },
@@ -1148,6 +1154,7 @@ private fun ProgramsRow(
                                 isPast = placementIsPast,
                                 isLive = placementIsNow,
                                 isCatchupSupported = isCatchupSupported,
+                                isPlaceholder = placement.isPlaceholder,
                             )?.let(onClick)
                         },
                         onFocused = { onFocused(placement.program) },
@@ -1279,10 +1286,12 @@ internal fun epgProgramActionTarget(
     isPast: Boolean,
     isLive: Boolean,
     isCatchupSupported: Boolean,
+    isPlaceholder: Boolean = false,
 ): IptvProgram? = when {
-    isPast && isCatchupSupported -> program
-    isLive -> program
-    else -> null
+    // A "Programming" filler has nothing to show or remind about.
+    isPlaceholder -> null
+    // Live and catch-up play; later shows and ones aired without catch-up open their details.
+    else -> program
 }
 
 private fun ProgramPlacement.isCatchupSupported(channel: EnrichedChannel, nowMillis: Long): Boolean {

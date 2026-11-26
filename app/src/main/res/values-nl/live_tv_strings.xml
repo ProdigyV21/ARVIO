@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="live_menu_watch_from_start">Vanaf het begin kijken</string>
+    <string name="live_menu_next_show">Volgend programma · Herinner me</string>
+</resources>

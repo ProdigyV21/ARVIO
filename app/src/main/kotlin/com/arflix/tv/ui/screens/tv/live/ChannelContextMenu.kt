@@ -17,7 +17,10 @@ import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
+import androidx.compose.material.icons.filled.NotificationsNone
+import androidx.compose.material.icons.filled.Replay
 import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -50,6 +53,12 @@ internal data class ChannelMenuState(
     val isFavorite: Boolean,
     val hasVariants: Boolean,
     val focusedIndex: Int = 0,
+    /** Catch-up can restart the show on now. */
+    val canRestart: Boolean = false,
+    /** The channel's next show, for its details and Remind me. */
+    val hasNextShow: Boolean = false,
+    /** The channel's group, offered to hide. */
+    val groupName: String? = null,
 )
 
 /**
@@ -67,7 +76,19 @@ internal fun buildChannelMenuActions(
     onMoveUp: () -> Unit,
     onMoveDown: () -> Unit,
     onOpenVariants: () -> Unit,
+    canRestart: Boolean = false,
+    onRestart: () -> Unit = {},
+    hasNextShow: Boolean = false,
+    onNextShow: () -> Unit = {},
+    canHideGroup: Boolean = false,
+    onHideGroup: () -> Unit = {},
 ): List<ChannelMenuAction> = buildList {
+    if (canRestart) {
+        add(ChannelMenuAction(R.string.live_menu_watch_from_start, Icons.Filled.Replay, onRestart))
+    }
+    if (hasNextShow) {
+        add(ChannelMenuAction(R.string.live_menu_next_show, Icons.Filled.NotificationsNone, onNextShow))
+    }
     if (isFavorite) {
         add(ChannelMenuAction(R.string.live_menu_favorite_move_up, Icons.Filled.KeyboardArrowUp, onMoveUp))
         add(ChannelMenuAction(R.string.live_menu_favorite_move_down, Icons.Filled.KeyboardArrowDown, onMoveDown))
@@ -77,6 +98,9 @@ internal fun buildChannelMenuActions(
     }
     if (hasVariants) {
         add(ChannelMenuAction(R.string.live_menu_channel_variants, Icons.Filled.Tune, onOpenVariants))
+    }
+    if (canHideGroup) {
+        add(ChannelMenuAction(R.string.live_menu_hide_category, Icons.Filled.VisibilityOff, onHideGroup))
     }
 }
 

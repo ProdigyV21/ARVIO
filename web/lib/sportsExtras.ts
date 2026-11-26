@@ -130,6 +130,23 @@ export function withRememberedFirst<T extends { id: string }>(channels: T[], mem
 export interface SportsFailover { eventId: string; title: string; channels: IptvChannel[]; tried: string[] }
 export const failoverCovers = (failover: SportsFailover | null, channelId?: string) => Boolean(failover && channelId && failover.channels.some(ch => ch.id === channelId));
 /** The next channel after the one that failed, or undefined once every channel was tried. */
+const QUALITY_TAGS = /\b(?:uhd|fhd|hd|sd|4k|hevc|h265|1080p?|720p?|50fps|60fps)\b/g;
+const copyName = (name: string) => name.toLowerCase().replace(/[[\]()|:._-]+/g, " ").replace(QUALITY_TAGS, " ").replace(/\s+/g, " ").trim();
+
+/**
+ * Any channel's failover: its other copies (same guide id, or the same name
+ * without HD/FHD/SD tags) from every playlist, the failed one first. Mirrors
+ * Android's channelCopyFailover. Undefined when there is no other copy.
+ */
+export function channelCopyFailover(failed: IptvChannel, all: readonly IptvChannel[]): SportsFailover | undefined {
+  const tvg = failed.tvgId?.trim().toLowerCase();
+  const name = copyName(failed.name);
+  if (!tvg && !name) return undefined;
+  const copies = all.filter(ch => ch.id !== failed.id && ((tvg && ch.tvgId?.trim().toLowerCase() === tvg) || (name && copyName(ch.name) === name)));
+  const channels = [failed, ...copies].slice(0, 8);
+  return channels.length > 1 ? { eventId: `channel:${failed.id}`, title: failed.name, channels, tried: [] } : undefined;
+}
+
 export function nextFailover(failover: SportsFailover, failedId: string): { channel: IptvChannel; failover: SportsFailover } | undefined {
   const tried = [...new Set([...failover.tried, failedId])];
   const start = Math.max(0, failover.channels.findIndex(ch => ch.id === failedId));
