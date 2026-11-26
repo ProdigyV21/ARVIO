@@ -7,7 +7,7 @@ import { useTranslation } from "@/lib/i18n";
 import {
   activeServer, addMusicAddon, addToPlaylist, connectMusicServer, createPlaylist, deletePlaylist, disconnectMusicServer,
   hasMusicSources, isFavoriteAlbum, isFavoriteTrack, moveInPlaylist, musicSource, removeFromPlaylist, removeMusicAddon,
-  renamePlaylist, toggleFavoriteAlbum, toggleFavoriteTrack, useMusicLibrary
+  recordMusicSearch, renamePlaylist, toggleFavoriteAlbum, toggleFavoriteTrack, useMusicLibrary
 } from "@/lib/music/library";
 import { addToQueue, currentTrack, playNext, playTracks, useMusicPlayer } from "@/lib/music/player";
 import { arrangeHome, formatDuration, rankTracks, searchOrder, type SearchSection } from "@/lib/music/text";
@@ -480,6 +480,12 @@ function SearchView({ query, onOpen, onArtist, onOpenAlbum }: { query: string; o
   const tracks = useMemo(() => rankTracks(debounced, value.tracks), [debounced, value.tracks]);
   const order: SearchSection[] = searchOrder(debounced, value);
   const empty = !value.tracks.length && !value.albums.length && !value.artists.length && !value.playlists.length;
+  // A search the user stays on (not one they are still typing) feeds the recommendations.
+  useEffect(() => {
+    if (empty || result.loading || !debounced) return;
+    const timer = window.setTimeout(() => recordMusicSearch(debounced), 2500);
+    return () => window.clearTimeout(timer);
+  }, [debounced, empty, result.loading]);
   if (result.loading && empty) return <Loading />;
   if (empty) return <p className="music-empty">{translateUi("Nothing found for \"{value0}\"", { value0: debounced })}</p>;
   return (

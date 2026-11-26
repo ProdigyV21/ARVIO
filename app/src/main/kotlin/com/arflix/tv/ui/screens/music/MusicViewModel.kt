@@ -150,6 +150,11 @@ class MusicViewModel @Inject constructor(
 
     private var searchJob: Job? = null
 
+    private companion object {
+        /** How long a search's results stay on screen before it counts as one the user meant. */
+        const val SEARCH_SETTLED_MS = 2_500L
+    }
+
     init {
         viewModelScope.launch {
             repository.library.collect { library ->
@@ -317,6 +322,11 @@ class MusicViewModel @Inject constructor(
             val result = runCatching { source.search(query.trim()) }.getOrDefault(MusicSearchResult())
                 .let { it.copy(tracks = MusicSearchRanking.rankTracks(query, it.tracks)) }
             _state.update { it.copy(searching = false, results = result) }
+            // A search the user stays on (not one they are still typing) feeds the recommendations.
+            if (!result.isEmpty) {
+                delay(SEARCH_SETTLED_MS)
+                runCatching { repository.recordSearch(query) }
+            }
         }
     }
 

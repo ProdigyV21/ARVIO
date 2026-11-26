@@ -107,11 +107,17 @@ export function searchOrder(query: string, result: MusicSearchResult): SearchSec
 export const CHART_SHELF_PREFIX = "charts:";
 export const isChartShelf = (key: string) => key.slice(key.indexOf("/") + 1).startsWith(CHART_SHELF_PREFIX);
 
-/** The home rows: the country's charts lead, then the user's own sources' rows, then the rest of the charts. */
+export const isPersonalShelf = (key: string) => key.slice(key.indexOf("/") + 1).startsWith(`${CHART_SHELF_PREFIX}you:`);
+
+/**
+ * The home rows: the country's charts and the rows made from the profile's taste lead, then the
+ * user's own sources' rows, then the rest of the charts.
+ */
 export function arrangeHome(shelves: MusicShelf[], lead = 4): MusicShelf[] {
   const charts = shelves.filter((shelf) => isChartShelf(shelf.key));
   const own = shelves.filter((shelf) => !isChartShelf(shelf.key));
-  return [...charts.slice(0, lead), ...own, ...charts.slice(lead)];
+  const leading = lead + charts.filter((shelf) => isPersonalShelf(shelf.key)).length;
+  return [...charts.slice(0, leading), ...own, ...charts.slice(leading)];
 }
 
 export function formatDuration(seconds: number) {

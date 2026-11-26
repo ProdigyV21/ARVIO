@@ -2,7 +2,7 @@
 // track lists only). Songs never stream from here: each one carries a match placeholder that the
 // player resolves in the user's own sources when it starts. Used by app/api/music/deezer.
 import { chartRows } from "./chartCatalog";
-import { CHART_SHELF_PREFIX, matchUri } from "./text";
+import { CHART_SHELF_PREFIX, matchUri, normalizeMusicText } from "./text";
 import type { MusicAlbum, MusicShelf, MusicTrack } from "./types";
 
 export const DEEZER_API = "https://api.deezer.com";
@@ -82,8 +82,8 @@ export async function searchPlaylists(query: string, revalidate = 3600): Promise
   return list(body.data).filter((p) => (num(p.nb_tracks) ?? 0) >= MIN_TRACKS).map(parsePlaylist);
 }
 
-export async function homeShelves(language: string, date: string): Promise<MusicShelf[]> {
-  const rows = chartRows(language, date).slice(0, MAX_ROWS);
+export async function homeShelves(language: string, date: string, country?: string | null): Promise<MusicShelf[]> {
+  const rows = chartRows(language, date, country).slice(0, MAX_ROWS);
   const found = await pool(rows, 5, async (row) => {
     try { return { row, playlists: await searchPlaylists(row.query, 21600) }; }
     catch { return null; }
@@ -110,6 +110,33 @@ export async function playlistTracks(id: string): Promise<MusicTrack[]> {
     index += page.length;
     if (!page.length || !str(body.next)) break;
   }
+  const seen = new Set<string>();
+  return tracks.filter((t) => !seen.has(t.id) && seen.add(t.id));
+}
+
+/** A mix card: plays Deezer's radio of that artist (similar songs); the page labels it. */
+function parseMix(o: Json): MusicAlbum {
+  return { id: `mix:${str(o.id) ?? ""}`, name: str(o.name) ?? "", artist: "", artistId: null, coverUrl: str(o.picture_xl) ?? str(o.picture_big) ?? str(o.picture_medium) };
+}
+
+/**
+ * For "Because you listened to ...": the artist's own mix and those of the artists Deezer lists
+ * as related. Null when Deezer has no artist of exactly that name.
+ */
+export async function artistMixes(name: string): Promise<{ name: string; mixes: MusicAlbum[] } | null> {
+  const wanted = normalizeMusicText(name);
+  const found = list((await get("search/artist", { q: name, limit: "5" }, 86400)).data)
+    .find((a) => normalizeMusicText(str(a.name) ?? "") === wanted);
+  const id = found ? str(found.id) : null;
+  if (!found || !id) return null;
+  const related = list((await get(`artist/${id}/related`, { limit: "20" }, 86400)).data);
+  const seen = new Set<string>();
+  const mixes = [found, ...related].map(parseMix).filter((m) => !seen.has(m.id) && seen.add(m.id));
+  return { name: str(found.name) ?? name, mixes };
+}
+
+export async function mixTracks(artistId: string): Promise<MusicTrack[]> {
+  const tracks = list((await get(`artist/${artistId}/radio`, { limit: "50" }, 21600)).data).map(parseTrack);
   const seen = new Set<string>();
   return tracks.filter((t) => !seen.has(t.id) && seen.add(t.id));
 }

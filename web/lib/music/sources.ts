@@ -2,6 +2,8 @@
 // music addons (Stremio-style with music types, or the Eclipse format) and the charts. Written from
 // the public API descriptions, mirroring the Android app's sources so ids and favourites match.
 import { md5Hex } from "./md5";
+import { personalTitles } from "./chartCatalog";
+import { artistsForToday, recentSearches, tasteIsEmpty, type MusicTaste } from "./taste";
 import { addonStreamUri, matchScore, MATCH_SCHEME, MATCH_THRESHOLD, placeholderParams } from "./text";
 import {
   emptySearchResult, MusicError,
@@ -473,9 +475,17 @@ export async function resolveAddonStream(uri: string): Promise<string> {
 
 export const CHARTS_KEY = "charts";
 
+/** Shelf keys of the rows made from the profile's taste ("charts:you:searches"). */
+export const PERSONAL_SHELF = "you:";
+const PERSONAL_AFTER = 2;
+const MIN_ROW = 3;
+const MAX_PER_ROW = 20;
+
 export class ChartsSource implements MusicSource {
   private trackCache = new Map<string, MusicTrack[]>();
-  constructor(private language: string) {}
+  private personalCache: { key: string; shelves: Promise<MusicShelf[]> } | null = null;
+  /** country: the browser's (null falls back to the language); taste: read each time the home loads. */
+  constructor(private language: string, private country: string | null = null, private taste: () => MusicTaste = () => ({ artists: [], searches: [] })) {}
 
   private async api(query: string) {
     const response = await fetch(`/api/music/deezer?${query}`, { headers: { accept: "application/json" } });
@@ -486,17 +496,67 @@ export class ChartsSource implements MusicSource {
   async shelves(): Promise<MusicShelf[]> {
     const d = new Date();
     const day = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-    return list((await this.api(`home=${encodeURIComponent(this.language)}&d=${day}`)).shelves) as unknown as MusicShelf[];
+    const country = this.country ? `&c=${encodeURIComponent(this.country)}` : "";
+    const personal = this.personalShelves(day).catch(() => [] as MusicShelf[]);
+    const charts = list((await this.api(`home=${encodeURIComponent(this.language)}&d=${day}${country}`)).shelves) as unknown as MusicShelf[];
+    const mine = await personal;
+    const shown = new Set(mine.flatMap((shelf) => shelf.albums.map((a) => a.id)));
+    const rest = charts.map((shelf) => ({ ...shelf, albums: shelf.albums.filter((a) => !shown.has(a.id)) })).filter((shelf) => shelf.albums.length >= MIN_ROW);
+    // The country's chart and the charts row lead, then the user's own rows.
+    return [...rest.slice(0, PERSONAL_AFTER), ...mine, ...rest.slice(PERSONAL_AFTER)];
   }
+
+  /**
+   * Rows from the profile's taste: for a favourite artist, a mix of that artist and of the artists
+   * Deezer lists as related (each mix plays a radio of similar songs); and playlists for the last
+   * searches. Kept per day and taste, so going back to the home does not ask again.
+   */
+  private personalShelves(day: string): Promise<MusicShelf[]> {
+    const taste = this.taste();
+    if (tasteIsEmpty(taste)) return Promise.resolve([]);
+    const now = Date.now();
+    const artists = artistsForToday(taste, now, Math.floor(Date.parse(`${day}T00:00:00Z`) / 86_400_000));
+    const searches = recentSearches(taste);
+    const key = JSON.stringify([day, artists, searches]);
+    if (this.personalCache?.key === key) return this.personalCache.shelves;
+    const titles = personalTitles(this.language);
+    const shelves = (async () => {
+      const artistRows = artists.map(async (name): Promise<MusicShelf | null> => {
+        try {
+          const found = obj(await this.api(`artist=${encodeURIComponent(name)}`));
+          const mixes = (list(found.mixes) as unknown as MusicAlbum[]).map((m) => ({ ...m, artist: titles.mix }));
+          if (mixes.length < MIN_ROW) return null;
+          const id = mixes[0].id.replace(/^mix:/, "");
+          return { key: `charts:${PERSONAL_SHELF}artist:${id}`, title: titles.because.replace("%s", str(found.name) ?? name), albums: mixes };
+        } catch { return null; }
+      });
+      const searchRow = (async (): Promise<MusicShelf | null> => {
+        if (!searches.length) return null;
+        const perQuery = await Promise.all(searches.map((q) => this.search(q).then((r) => r.playlists.slice(0, 10)).catch(() => [] as MusicAlbum[])));
+        // Taking turns, so every search shows near the front.
+        const longest = Math.max(0, ...perQuery.map((p) => p.length));
+        const mixed: MusicAlbum[] = [];
+        for (let i = 0; i < longest; i++) for (const p of perQuery) if (p[i]) mixed.push(p[i]);
+        const albums = dedupe(mixed).slice(0, MAX_PER_ROW);
+        return albums.length >= MIN_ROW ? { key: `charts:${PERSONAL_SHELF}searches`, title: titles.searches, albums } : null;
+      })();
+      const rows = await Promise.all([...artistRows, searchRow]);
+      return rows.filter((row): row is MusicShelf => Boolean(row));
+    })();
+    this.personalCache = { key, shelves };
+    return shelves;
+  }
+
   async artists() { return []; }
   async artistAlbums() { return []; }
 
   async albumTracks(albumId: string) {
-    const id = albumId.replace(/^playlist:/, "");
-    const cached = this.trackCache.get(id);
+    const cached = this.trackCache.get(albumId);
     if (cached) return cached;
-    const tracks = list((await this.api(`playlist=${encodeURIComponent(id)}`)).tracks) as unknown as MusicTrack[];
-    this.trackCache.set(id, tracks);
+    // A mix plays Deezer's radio of that artist; anything else is a playlist.
+    const query = albumId.startsWith("mix:") ? `mix=${encodeURIComponent(albumId.slice(4))}` : `playlist=${encodeURIComponent(albumId.replace(/^playlist:/, ""))}`;
+    const tracks = list((await this.api(query)).tracks) as unknown as MusicTrack[];
+    this.trackCache.set(albumId, tracks);
     return tracks;
   }
 
