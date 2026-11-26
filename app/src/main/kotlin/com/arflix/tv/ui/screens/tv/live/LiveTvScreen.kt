@@ -2285,30 +2285,39 @@ fun LiveTvScreen(
     var sportsNetworkChannels by remember(broadcasterIndexKey) { mutableStateOf<Map<String, List<IptvChannel>>?>(null) }
     LaunchedEffect(broadcasterIndexKey, sportsSelected, sportsRefresh) {
         if (!sportsSelected || !sportsNetworkChannels.isNullOrEmpty()) return@LaunchedEffect
-        val provider = broadcasterIndexKey.providerId.takeUnless { it == "all" }
+        // Match the provider the same way the guide does: playlist channel ids are
+        // "<playlistId>:…", which the portal-only id helper does not recognise.
+        val providerMatches = providerMatcher(selectedProviderId, state.config)
         val excluded = broadcasterIndexKey.excludedGroups
         // The playlist may still be loading when Sports opens; try again a few times.
         repeat(4) { attempt ->
             if (state.snapshot.loadedAt.toEpochMilli() > 0L) {
+                var stages = ""
                 val found = runCatching {
                     withContext(Dispatchers.IO) {
-                        SPORTS_NETWORKS.flatMap { it.prefixes }.distinct().flatMap { prefix ->
+                        val raw = SPORTS_NETWORKS.flatMap { it.prefixes }.distinct().flatMap { prefix ->
                             viewModel.iptvRepository.pagedSearchChannels(prefix, 60)
-                        }.asSequence().distinctBy { it.id }
-                            .filter { provider == null || channelPlaylistId(it.id) == provider }
-                            .filter { channel ->
-                                val group = channel.group.trim()
-                                group !in excluded && com.arflix.tv.data.model.PlaylistGroupKey.build(channelPlaylistId(channel.id), group) !in excluded
-                            }
-                            .filter { !it.enrichForFastStartup(0).isAdult }
-                            .mapNotNull { channel -> sportsNetworkFor(sportsChannelKey(channel.name))?.let { it.id to channel } }
-                            .groupBy({ it.first }, { it.second })
+                        }.distinctBy { it.id }
+                        val enriched = raw.map { it.enrichForFastStartup(0) }
+                        val ofProvider = enriched.filter(providerMatches)
+                        val visible = ofProvider.filter { enrichedChannel ->
+                            val channel = enrichedChannel.source
+                            val group = channel.group.trim()
+                            group !in excluded && com.arflix.tv.data.model.PlaylistGroupKey.build(channelPlaylistId(channel.id), group) !in excluded
+                        }.filter { !it.isAdult }
+                        val matched = visible.mapNotNull { enrichedChannel ->
+                            sportsNetworkFor(sportsChannelKey(enrichedChannel.source.name))?.let { it.id to enrichedChannel.source }
+                        }
+                        stages = "raw=${raw.size} provider=${ofProvider.size} visible=${visible.size} matched=${matched.size}" +
+                            raw.take(3).joinToString(prefix = " sample=") { it.name }
+                        matched.groupBy({ it.first }, { it.second })
                     }
                 }.getOrElse { error ->
                     if (error is kotlinx.coroutines.CancellationException) throw error
                     System.err.println("[Sports-Networks] search failed: ${error.message}")
                     emptyMap()
                 }
+                System.err.println("[Sports-Networks] $stages")
                 System.err.println("[Sports-Networks] attempt=$attempt networks=${found.size} channels=${found.values.sumOf { it.size }}")
                 sportsNetworkChannels = found
                 if (found.isNotEmpty()) return@LaunchedEffect
