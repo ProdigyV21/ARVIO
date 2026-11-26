@@ -1,3 +1,5 @@
+@file:OptIn(kotlinx.coroutines.FlowPreview::class)
+
 @file:Suppress("UnsafeOptInUsageError")
 
 package com.arflix.tv.ui.screens.tv.live
@@ -172,6 +174,8 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.conflate
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.collect
 import androidx.compose.runtime.snapshotFlow
 import kotlinx.coroutines.launch
@@ -1693,6 +1697,22 @@ fun LiveTvScreen(
             }
         }
     }
+    // Timing marks (logcat LiveTvPerf): opening Live TV until the guide is drawn, and each zap.
+    LaunchedEffect(Unit) { LiveTvPerf.screenEntered() }
+    val perfHasChannels = filteredChannels.isNotEmpty()
+    LaunchedEffect(perfHasChannels) {
+        if (!perfHasChannels) return@LaunchedEffect
+        LiveTvPerf.channelsReady(filteredChannels.size)
+        withFrameNanos { }
+        LiveTvPerf.guidePainted()
+    }
+    val perfHasEpg = perfHasChannels && effectiveGuideNowNext.isNotEmpty()
+    LaunchedEffect(perfHasEpg) {
+        if (!perfHasEpg) return@LaunchedEffect
+        withFrameNanos { }
+        LiveTvPerf.epgPainted()
+    }
+    LaunchedEffect(playingChannelId) { if (playingChannelId != null) LiveTvPerf.zapStarted(playingChannelId) }
     val currentNowNext = remember(playingChannelId, playingCatchupProgram, effectiveGuideNowNext, guideClockMillis) {
         playingCatchupProgram?.let { IptvNowNext(now = it) }
             ?: effectiveGuideNowNext[playingChannelId]?.atTime(guideClockMillis)
@@ -1978,6 +1998,15 @@ fun LiveTvScreen(
 
     var categoryDrawerOpen by rememberSaveable { mutableStateOf(true) }
     var sportsSelected by rememberSaveable(currentProfile?.id) { mutableStateOf(false) }
+    val latestSportsSelected by rememberUpdatedState(sportsSelected)
+    // Background sports enrichment waits until the guide and player have settled, or
+    // until Sports is opened, whichever comes first (see LiveSportsWorkPolicy).
+    suspend fun awaitSportsWorkSlot() {
+        if (latestSportsSelected) return
+        kotlinx.coroutines.withTimeoutOrNull(LiveSportsWorkPolicy.BACKGROUND_SETTLE_MS) {
+            snapshotFlow { latestSportsSelected }.first { it }
+        }
+    }
     LaunchedEffect(sportsAddonInstallations, state.isConfigured) {
         if (!state.isConfigured && sportsAddonInstallations.isNotEmpty()) {
             sportsSelected = true
@@ -2036,6 +2065,7 @@ fun LiveTvScreen(
     val metadataRequest = remember(currentProfile?.id, state.snapshot.loadedAt, sportsRefresh) { Any() }
     var completedMetadataRequest by remember { mutableStateOf<Any?>(null) }
     LaunchedEffect(metadataRequest) {
+        awaitSportsWorkSlot()
         if (state.snapshot.loadedAt.toEpochMilli() > 0L) {
             sportsMetadataLoading = true
             try {
@@ -2055,10 +2085,11 @@ fun LiveTvScreen(
     val broadcastRequest = remember(sportsScope, sportsArtwork) { Any() }
     var completedBroadcastRequest by remember(sportsScope) { mutableStateOf<Any?>(null) }
     LaunchedEffect(broadcastRequest) {
+        awaitSportsWorkSlot()
         sportsBroadcastLoading = true
         val matchingStarted = android.os.SystemClock.elapsedRealtime()
         try {
-            val broadcasterKeys = withContext(Dispatchers.Default) {
+            val broadcasterKeys = withContext(LiveSportsWorkPolicy.dispatcher) {
                 sportsArtwork.asSequence().flatMap { it.fixture?.broadcasters.orEmpty().asSequence() }
                     .distinctBy { it.name to it.country }.flatMap { sportsBroadcasterKeys(it.name, it.country).asSequence() }.toSet()
             }
@@ -2097,9 +2128,10 @@ fun LiveTvScreen(
     var fixtureResult by remember(sportsScope) { mutableStateOf<Pair<Any, List<SportsGuideEvent>>?>(null) }
     var fixtureLoading by remember(sportsScope) { mutableStateOf(false) }
     LaunchedEffect(fixtureRequest) {
+        awaitSportsWorkSlot()
         fixtureLoading = true
         try {
-            val catalogue = withContext(Dispatchers.Default) {
+            val catalogue = withContext(LiveSportsWorkPolicy.dispatcher) {
                 buildSportsCatalogue(sportsEvents, fixtureArtwork, fixtureChannels, guideClockMillis)
             }
             fixtureResult = fixtureRequest to catalogue
@@ -2112,9 +2144,10 @@ fun LiveTvScreen(
     val decoratedRequest = remember(sportsScope, fixtureResult?.first, baseForDecoration, addonSnapshot, fixtureArtwork) { Any() }
     var decoratedResult by remember(sportsScope) { mutableStateOf<Pair<Any, List<SportsGuideEvent>>?>(null) }
     LaunchedEffect(decoratedRequest) {
+        awaitSportsWorkSlot()
         sportsCatalogueLoading = true
         try {
-            val decorated = withContext(Dispatchers.Default) {
+            val decorated = withContext(LiveSportsWorkPolicy.dispatcher) {
                 attachSportsAddonSources(baseForDecoration, addonSnapshot, guideClockMillis, fixtureArtwork)
             }
             decoratedResult = decoratedRequest to decorated
@@ -2143,7 +2176,12 @@ fun LiveTvScreen(
         if (state.snapshot.loadedAt.toEpochMilli() <= 0L) return@LaunchedEffect
         // Opening Sports or receiving another guide page must not restart a full scan.
         // Drain the newest request once the current pass has published its results.
-        snapshotFlow { latestSportsScanRequest }.conflate().collect { request ->
+        // While Sports is off screen, wait until zapping/opening has settled (see
+        // LiveSportsWorkPolicy); opening Sports releases the newest request at once.
+        snapshotFlow { latestSportsScanRequest to latestSportsSelected }
+            .debounce { (_, onScreen) -> LiveSportsWorkPolicy.settleMs(onScreen) }
+            .map { it.first }
+            .conflate().collect { request ->
             if (sportsScan?.request == request) return@collect
             val scanNow = latestSportsScanClock
             val scanChannels = latestSportsDisplayChannels
@@ -3904,6 +3942,7 @@ fun LiveTvScreen(
         if (initialPositionMs > 0L) exoPlayer.setMediaSource(source, initialPositionMs)
         else exoPlayer.setMediaSource(source)
         exoPlayer.prepare()
+        LiveTvPerf.prepared()
         exoPlayer.playWhenReady = true
         exoPlayer.play()
         lastPreparedStreamUrl = stream
@@ -4183,6 +4222,7 @@ fun LiveTvScreen(
             override fun onPlaybackStateChanged(playbackState: Int) {
                 playerIsBuffering = (playbackState == Player.STATE_BUFFERING)
                 if (playbackState == Player.STATE_READY) {
+                    LiveTvPerf.ready()
                     playbackDiagnostic = null
                     playerIsBuffering = false
                     pendingCatchupSeekReopenMs = null
@@ -4198,6 +4238,10 @@ fun LiveTvScreen(
                         )
                     )
                 }
+            }
+
+            override fun onRenderedFirstFrame() {
+                LiveTvPerf.firstFrame()
             }
 
             override fun onIsLoadingChanged(isLoading: Boolean) {
@@ -4738,6 +4782,10 @@ fun LiveTvScreen(
         } else {
             if (isTouchDevice) {
                 val groupHomeListState = androidx.compose.foundation.lazy.rememberLazyListState()
+                // Animate page changes only, never the first paint of Live TV.
+                val lastTouchMode = remember { arrayOf<LiveTvStartup.LiveTvMode?>(null) }
+                val touchModeChanged = lastTouchMode[0] != null && lastTouchMode[0] != currentMode
+                SideEffect { lastTouchMode[0] = currentMode }
                 if (currentMode == LiveTvStartup.LiveTvMode.GroupHome) {
                 val mobileAllChannelsCount = remember(
                     visibleEnrichedState.value.tree,
@@ -4844,6 +4892,7 @@ fun LiveTvScreen(
                     listState = groupHomeListState,
                     modifier = Modifier
                         .fillMaxSize()
+                        .livePageEnter(animate = touchModeChanged, forward = false)
                         .padding(top = contentTopPadding),
                 )
             } else {
@@ -4851,6 +4900,7 @@ fun LiveTvScreen(
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
+                        .livePageEnter(animate = touchModeChanged, forward = true)
                         .padding(top = contentTopPadding),
                 ) {
                     Row(
