@@ -787,6 +787,26 @@
   "web": "/nl/arvio-web/"
  },
  "standaloneLabels": {
+  "/how-arvio-works/": [
+   "Begin hier · In het Engels",
+   "Hoe ARVIO werkt",
+   "Wat ARVIO wel en niet is, hoe catalogi, bronnen en accounts samenwerken en je eerste 10 minuten."
+  ],
+  "/music-guide/": [
+   "Muziek · In het Engels",
+   "Muziek in ARVIO",
+   "Koppel Navidrome, Jellyfin of een muziekaddon, maak afspeellijsten en importeer je Spotify-lijsten."
+  ],
+  "/live-sports/": [
+   "Sport · In het Engels",
+   "Live sport op je eigen zenders",
+   "Zie welke wedstrijden op jouw zenders te zien zijn, met uitslagen zonder spoilers."
+  ],
+  "/profiles-sync-personalize/": [
+   "Profielen · In het Engels",
+   "Profielen, kindermodus, synchronisatie en kleuren",
+   "Profielen met pincode, kinderprofielen, ARVIO Cloud en accentkleur."
+  ],
   "/arvio-iphone-ipad/": [
    "iPhone en iPad · In het Engels",
    "ARVIO op iPhone en iPad",
