@@ -95,7 +95,8 @@ export function sportsNetworkEvents(channels: IptvChannel[], follows: SportsFoll
     if (!list?.length) return [];
     const programme = { title: network.name, startUtcMillis: start.getTime(), endUtcMillis: start.getTime() + 2 * 86_400_000 };
     return [{ id: `${SPORTS_NETWORK_PREFIX}${network.id}`, title: network.name, sportId: network.sportId ?? "other", programme, channels: list,
-      artwork: list.find(ch => ch.logo)?.logo, channelOnly: true } as SportsGuideEvent];
+      // Playlists often give network channels the wrong logo, so the tile shows the name.
+      artwork: undefined, channelOnly: true } as SportsGuideEvent];
   });
   return [...events.filter(e => followed.has(e.sportId)), ...events.filter(e => !followed.has(e.sportId))];
 }

@@ -35,7 +35,7 @@ test('network tiles: one per network, capped, followed sports first, synced Andr
   const tiles = x.sportsNetworkEvents(channels, [{ kind: 'team', name: 'Boston Celtics', sport: 'BASKETBALL' }], now);
   assert.deepEqual(plain(tiles.map(t => t.id)), ['network:nba-tv', 'network:espn']);
   assert.equal(tiles[0].channels.length, x.SPORTS_NETWORK_CHANNELS);
-  assert.equal(tiles[0].artwork, 'https://example.invalid/logo.png');
+  assert.equal(tiles[0].artwork, undefined);
   assert.ok(tiles.every(t => t.channelOnly && x.isNetworkEvent(t)));
   assert.ok(tiles[0].programme.startUtcMillis <= now && now < tiles[0].programme.endUtcMillis);
 });

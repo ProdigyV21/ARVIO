@@ -96,7 +96,8 @@ internal fun sportsNetworkEvents(
         if (channels.isEmpty()) return@mapNotNull null
         val programme = IptvProgram(title = network.label, startUtcMillis = start, endUtcMillis = start + 2 * 86_400_000L)
         SportsGuideEvent(id = "$SPORTS_NETWORK_PREFIX${network.id}", title = network.label, sport = network.sport ?: GuideSport.OTHER,
-            programme = programme, channels = channels, artwork = channels.firstNotNullOfOrNull { it.logo?.takeIf(String::isNotBlank) },
+            // Playlists often give network channels the wrong logo, so the tile shows the name.
+            programme = programme, channels = channels, artwork = null,
             channelOnly = true)
     }.sortedByDescending { it.sport in followedSports }
 }
