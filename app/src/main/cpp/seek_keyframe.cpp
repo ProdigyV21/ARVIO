@@ -189,8 +189,7 @@ bool openDecoder(bool playbackPaused) {
     if (!codec) return false;
     session.codec = avcodec_alloc_context3(codec);
     if (!session.codec || avcodec_parameters_to_context(session.codec, parameters) < 0) return false;
-    // One thread while video plays: fewer per-thread frame buffers on low-memory TVs.
-    session.codec->thread_count = playbackPaused ? int(std::clamp(sysconf(_SC_NPROCESSORS_ONLN), 1L, 4L)) : 1;
+    session.codec->thread_count = playbackPaused ? int(std::clamp(sysconf(_SC_NPROCESSORS_ONLN), 1L, 4L)) : 2;
     session.codec->max_pixels = 3840LL * 2160LL;
     session.codec->thread_type = FF_THREAD_SLICE;
     // At 320px, deblocking the full 4K image adds latency without useful detail.

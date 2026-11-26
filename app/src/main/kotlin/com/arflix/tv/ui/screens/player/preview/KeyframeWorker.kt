@@ -35,8 +35,9 @@ private const val PREPARED = 5
 
 /**
  * Free device memory the worker needs before decoding. One software keyframe decode at a time
- * (one thread while video plays) stays well under this; 2-3 GB TVs keep ~150-270 MiB free
- * during 4K remux playback, so a higher floor refused almost every preview there.
+ * stays well under this; 2-3 GB TVs keep ~150-270 MiB free during 4K remux playback, so a higher
+ * floor refused almost every preview there. The worker binds with waived priority, so the system
+ * reclaims it before the player.
  */
 private const val WORKER_MIN_FREE_BYTES = 128L * 1024 * 1024
 
