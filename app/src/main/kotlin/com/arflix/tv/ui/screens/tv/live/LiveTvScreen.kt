@@ -2306,7 +2306,7 @@ fun LiveTvScreen(
                             group !in excluded && com.arflix.tv.data.model.PlaylistGroupKey.build(channelPlaylistId(channel.id), group) !in excluded
                         }.filter { !it.isAdult }
                         val matched = visible.mapNotNull { enrichedChannel ->
-                            sportsNetworkFor(sportsChannelKey(enrichedChannel.source.name))?.let { it.id to enrichedChannel.source }
+                            sportsNetworkForChannel(enrichedChannel.source.name)?.let { it.id to enrichedChannel.source }
                         }
                         stages = "raw=${raw.size} provider=${ofProvider.size} visible=${visible.size} matched=${matched.size}" +
                             raw.take(3).joinToString(prefix = " sample=") { it.name }

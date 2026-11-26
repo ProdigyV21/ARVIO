@@ -49,6 +49,10 @@ class SportsBatchTwoTest {
         assertEquals("espn", sportsNetworkFor(sportsChannelKey("ESPN 2"))?.id)
         assertNull(sportsNetworkFor(sportsChannelKey("ESPNews Weekly Magazine")))
         assertNull(sportsNetworkFor(sportsChannelKey("BBC One")))
+        assertEquals("nba-tv", sportsNetworkForChannel("Strong8K \u00b7 CA EN: NBA TV HD")?.id)
+        assertEquals("nba-tv", sportsNetworkForChannel("Strong8K \u00b7 AF: NBA TV \u1d3f\u1d2c\u1d42")?.id)
+        assertEquals("espn", sportsNetworkForChannel("US| ESPN 2")?.id)
+        assertNull(sportsNetworkForChannel("Strong8K \u00b7 UK: BBC One"))
     }
 
     @Test fun networkTilesAreChannelOnlyAndFollowedSportsComeFirst() {

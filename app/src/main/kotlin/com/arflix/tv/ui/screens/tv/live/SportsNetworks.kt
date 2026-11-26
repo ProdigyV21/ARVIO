@@ -57,6 +57,24 @@ internal fun sportsNetworkFor(channelKey: String): SportsNetwork? {
     }
 }
 
+private val leadingLabel = Regex("^[^:|\u00b7]{1,24}[:|\u00b7]\\s*")
+
+/**
+ * The network of a raw channel name. Playlists put labels in front, such as
+ * "Strong8K · CA EN: NBA TV HD" or "US| ESPN", so each leading label is dropped
+ * in turn until the rest names a network.
+ */
+internal fun sportsNetworkForChannel(name: String): SportsNetwork? {
+    var rest = name.trim()
+    repeat(4) {
+        sportsNetworkFor(sportsChannelKey(rest))?.let { return it }
+        val next = rest.replaceFirst(leadingLabel, "")
+        if (next == rest || next.isBlank()) return null
+        rest = next
+    }
+    return sportsNetworkFor(sportsChannelKey(rest))
+}
+
 /**
  * One tile per network that the playlist has, as a channel-only Sports event so
  * the Sports page can show it in a row and open its channel list. Networks of a

@@ -23,6 +23,9 @@ test('league networks are found by channel name, like the Android app', () => {
   assert.equal(x.sportsNetworkFor('US: NBA TV HD')?.id, 'nba-tv');
   assert.equal(x.sportsNetworkFor('UK | Sky Sports Premier League FHD')?.id, 'premier-league');
   assert.equal(x.sportsNetworkFor('ESPN 2')?.id, 'espn');
+  assert.equal(x.sportsNetworkFor('Strong8K \u00b7 CA EN: NBA TV HD')?.id, 'nba-tv');
+  assert.equal(x.sportsNetworkFor('Strong8K \u00b7 AF: NBA TV \u1d3f\u1d2c\u1d42')?.id, 'nba-tv');
+  assert.equal(x.sportsNetworkFor('Strong8K \u00b7 UK: BBC One'), undefined);
   assert.equal(x.sportsNetworkFor('ESPNews Weekly Magazine'), undefined);
   assert.equal(x.sportsNetworkFor('BBC One'), undefined);
 });

@@ -48,9 +48,27 @@ export const isNetworkEvent = (event: SportsGuideEvent) => event.id.startsWith(S
 const countryPrefix = /^(?:uk|gb|us|usa|ca|au|nz|ie|nl|be|de|at|ch|fr|es|it|pt|br|ar|mx|in|za|tr|pl|se|no|dk|fi|ro|ae|sa|en|int) /;
 
 /** The network a channel name belongs to, if any. */
-export function sportsNetworkFor(channelName: string): SportsNetwork | undefined {
+const leadingLabel = /^[^:|\u00b7]{1,24}[:|\u00b7]\s*/;
+
+function networkForKey(channelName: string): SportsNetwork | undefined {
   const name = sportsChannelKey(channelName).replace(countryPrefix, "");
   return SPORTS_NETWORKS.find(network => network.prefixes.some(prefix => name === prefix || name.startsWith(`${prefix} `)));
+}
+
+/**
+ * Playlists put labels in front of the name, such as "Strong8K · CA EN: NBA TV HD"
+ * or "US| ESPN", so each leading label is dropped in turn until the rest names a network.
+ */
+export function sportsNetworkFor(channelName: string): SportsNetwork | undefined {
+  let rest = channelName.trim();
+  for (let i = 0; i < 5; i++) {
+    const found = networkForKey(rest);
+    if (found) return found;
+    const next = rest.replace(leadingLabel, "");
+    if (next === rest || !next.trim()) return undefined;
+    rest = next;
+  }
+  return undefined;
 }
 
 /** Android stores the enum name ("AMERICAN_FOOTBALL"), the web app the id ("american-football"). */
