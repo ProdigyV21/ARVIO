@@ -2,7 +2,7 @@
 import { useTranslation } from "@/lib/i18n";
 
 
-import { BadgeCheck, Bookmark, Home, Search, Settings, Tv } from "lucide-react";
+import { BadgeCheck, Bookmark, Home, Music2, Search, Settings, Tv } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useAppPick } from "@/lib/store";
 import { kidsLevelOf } from "@/lib/kids";
@@ -19,7 +19,8 @@ const nav = [
   { id: "home", label: "Home", icon: Home },
   { id: "search", label: "Search", icon: Search },
   { id: "watchlist", label: "Library", icon: Bookmark },
-  { id: "tv", label: "TV", icon: Tv }
+  { id: "tv", label: "TV", icon: Tv },
+  { id: "music", label: "Music", icon: Music2 }
 ] satisfies Array<{ id: NavSection; label: string; icon: typeof Home }>;
 
 export function TopNav() {
