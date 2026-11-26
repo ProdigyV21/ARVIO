@@ -129,7 +129,7 @@ class MusicChartsTest {
             val arranged = MusicSearchRanking.arrangeHome(
                 listOf(MusicShelf("0/NEWEST", emptyList(), AlbumShelf.NEWEST)) + shelves.map { it.copy(key = "1/" + it.key) },
             )
-            assertEquals("0/NEWEST", arranged[6].key)
+            assertEquals("0/NEWEST", arranged.last().key)
         } finally {
             server.shutdown()
         }
