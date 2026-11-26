@@ -20,6 +20,8 @@ internal object LiveTvPerf {
     private var zapChannel: String? = null
     private var guideLogged = false
     private var epgLogged = false
+    private var readyLogged = false
+    private var frameLogged = false
 
     fun now(): Long = SystemClock.elapsedRealtime()
 
@@ -46,16 +48,25 @@ internal object LiveTvPerf {
 
     fun zapStarted(channelId: String?) {
         zapAt = now()
+        readyLogged = false
+        frameLogged = false
         zapChannel = channelId
         log("zap ch=${channelId.orEmpty().takeLast(24)}")
     }
 
     fun prepared() = sinceZap("prepare")
-    fun ready() = sinceZap("ready")
+    // The first frame often renders before STATE_READY on live streams, so each mark
+    // is logged once per zap independently.
+    fun ready() {
+        if (readyLogged) return
+        readyLogged = true
+        sinceZap("ready")
+    }
 
     fun firstFrame() {
+        if (frameLogged) return
+        frameLogged = true
         sinceZap("frame")
-        zapAt = 0L
     }
 
     private fun sinceEnter(label: String) {

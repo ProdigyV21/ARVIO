@@ -41,6 +41,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
@@ -1202,7 +1203,9 @@ class IptvRepository @Inject constructor(
                 stalkerPortals = readStalkerPortals(prefs),
                 sortOrder = normalizeIptvSortOrder(prefs[sortOrderKey()])
             )
-        }
+        // Decrypting the stored URLs runs on every settings write (zapping saves the last
+        // channel); keep it off the main thread, where it showed up during channel changes.
+        }.flowOn(Dispatchers.Default)
 
     fun observeFavoriteGroups(): Flow<List<String>> =
         profileManager.activeProfileId.combine(context.settingsDataStore.data) { _, prefs ->

@@ -1,3 +1,5 @@
+@file:OptIn(kotlinx.coroutines.FlowPreview::class)
+
 @file:Suppress("UnsafeOptInUsageError")
 
 package com.arflix.tv.ui.screens.tv.live
@@ -172,6 +174,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.conflate
+import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.collect
 import androidx.compose.runtime.snapshotFlow
 import kotlinx.coroutines.launch
@@ -2047,7 +2050,7 @@ fun LiveTvScreen(
         sportsBroadcastLoading = true
         val matchingStarted = android.os.SystemClock.elapsedRealtime()
         try {
-            val broadcasterKeys = withContext(Dispatchers.Default) {
+            val broadcasterKeys = withContext(LiveSportsWorkPolicy.dispatcher) {
                 sportsArtwork.asSequence().flatMap { it.fixture?.broadcasters.orEmpty().asSequence() }
                     .distinctBy { it.name to it.country }.flatMap { sportsBroadcasterKeys(it.name, it.country).asSequence() }.toSet()
             }
@@ -2088,7 +2091,7 @@ fun LiveTvScreen(
     LaunchedEffect(fixtureRequest) {
         fixtureLoading = true
         try {
-            val catalogue = withContext(Dispatchers.Default) {
+            val catalogue = withContext(LiveSportsWorkPolicy.dispatcher) {
                 buildSportsCatalogue(sportsEvents, fixtureArtwork, fixtureChannels, guideClockMillis)
             }
             fixtureResult = fixtureRequest to catalogue
@@ -2103,7 +2106,7 @@ fun LiveTvScreen(
     LaunchedEffect(decoratedRequest) {
         sportsCatalogueLoading = true
         try {
-            val decorated = withContext(Dispatchers.Default) {
+            val decorated = withContext(LiveSportsWorkPolicy.dispatcher) {
                 attachSportsAddonSources(baseForDecoration, addonSnapshot, guideClockMillis, fixtureArtwork)
             }
             decoratedResult = decoratedRequest to decorated
@@ -2127,12 +2130,18 @@ fun LiveTvScreen(
     val latestSportsScanClock by rememberUpdatedState(guideClockMillis)
     val latestSportsDisplayChannels by rememberUpdatedState(allDisplayChannels)
     val latestSportsProviderMatcher by rememberUpdatedState(providerMatcher(selectedProviderId, state.config))
+    val latestSportsSelected by rememberUpdatedState(sportsSelected)
     val latestSportsChannelCount by rememberUpdatedState(maxOf(state.snapshot.totalChannelCount, state.snapshot.channels.size))
     LaunchedEffect(sportsScope) {
         if (state.snapshot.loadedAt.toEpochMilli() <= 0L) return@LaunchedEffect
         // Opening Sports or receiving another guide page must not restart a full scan.
         // Drain the newest request once the current pass has published its results.
-        snapshotFlow { latestSportsScanRequest }.conflate().collect { request ->
+        // While Sports is off screen, wait until zapping/opening has settled (see
+        // LiveSportsWorkPolicy); opening Sports releases the newest request at once.
+        snapshotFlow { latestSportsScanRequest to latestSportsSelected }
+            .debounce { (_, onScreen) -> LiveSportsWorkPolicy.settleMs(onScreen) }
+            .map { it.first }
+            .conflate().collect { request ->
             if (sportsScan?.request == request) return@collect
             val scanNow = latestSportsScanClock
             val scanChannels = latestSportsDisplayChannels
@@ -4537,6 +4546,10 @@ fun LiveTvScreen(
         } else {
             if (isTouchDevice) {
                 val groupHomeListState = androidx.compose.foundation.lazy.rememberLazyListState()
+                // Animate page changes only, never the first paint of Live TV.
+                val lastTouchMode = remember { arrayOf<LiveTvStartup.LiveTvMode?>(null) }
+                val touchModeChanged = lastTouchMode[0] != null && lastTouchMode[0] != currentMode
+                SideEffect { lastTouchMode[0] = currentMode }
                 if (currentMode == LiveTvStartup.LiveTvMode.GroupHome) {
                 val mobileAllChannelsCount = remember(
                     visibleEnrichedState.value.tree,
@@ -4643,6 +4656,7 @@ fun LiveTvScreen(
                     listState = groupHomeListState,
                     modifier = Modifier
                         .fillMaxSize()
+                        .livePageEnter(animate = touchModeChanged, forward = false)
                         .padding(top = contentTopPadding),
                 )
             } else {
@@ -4650,6 +4664,7 @@ fun LiveTvScreen(
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
+                        .livePageEnter(animate = touchModeChanged, forward = true)
                         .padding(top = contentTopPadding),
                 ) {
                     Row(
