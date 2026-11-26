@@ -5449,6 +5449,15 @@ fun LiveTvScreen(
                         },
                         sleepLabel = if (liveSleepMinutes == 0) stringResource(R.string.live_sleep_off)
                             else stringResource(R.string.live_sleep_minutes, liveSleepMinutes),
+                        sleepActive = liveSleepMinutes != 0,
+                        seekable = livePlayerSeekable(
+                            catchup = playingCatchupProgram != null,
+                            canReplayNow = currentNowNext?.now?.let {
+                                IptvGuideHistory.canReplay(playingChannel?.source, it, System.currentTimeMillis())
+                            } == true,
+                            playerSeekable = exoPlayer.isCurrentMediaItemSeekable,
+                            playerDurationMs = exoPlayer.duration,
+                        ),
                         onSleepClick = {
                             liveSleepMinutes = nextSleepStep(liveSleepMinutes)
                             liveSleepAtMs = if (liveSleepMinutes == 0) null
@@ -5496,17 +5505,15 @@ fun LiveTvScreen(
                                 playerPositionMs, currentNowNext?.now, System.currentTimeMillis())
                             seekToPosition(currentElapsed + 10_000L)
                         },
+                        // Same zap as CH-/CH+: stays in fullscreen (selectChannel tuned a
+                        // different channel in the mini player and dropped out of it).
                         onPreviousCatchupClick = {
-                            val curIdx = filteredChannels.indexOfFirst { it.id == playingChannel?.id }
-                            if (curIdx > 0) {
-                                selectChannel(filteredChannels[curIdx - 1])
-                            }
+                            zap(-1)
+                            hudPokeSignal++
                         },
                         onNextCatchupClick = {
-                            val curIdx = filteredChannels.indexOfFirst { it.id == playingChannel?.id }
-                            if (curIdx in 0 until filteredChannels.size - 1) {
-                                selectChannel(filteredChannels[curIdx + 1])
-                            }
+                            zap(1)
+                            hudPokeSignal++
                         },
                         onReplayClick = {
                             val nowProgram = currentNowNext?.now
