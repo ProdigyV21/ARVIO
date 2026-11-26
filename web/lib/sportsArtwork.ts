@@ -131,3 +131,19 @@ export function loadSportsGuideArtwork(addons: InstalledAddon[]): Promise<Sports
   cache.set(key, entry);
   return entry.request;
 }
+
+const dayCache = new Map<string, { until: number; request: Promise<SportsEventArtwork[]> }>();
+/** Fixtures of one UTC day ("2026-11-20") for the Sports day tabs, a week back to a week ahead. */
+export function loadSportsDay(day: string): Promise<SportsEventArtwork[]> {
+  const endpoint = metadataEndpoint();
+  if (!endpoint || !/^\d{4}-\d{2}-\d{2}$/.test(day)) return Promise.resolve([]);
+  const stored = dayCache.get(day);
+  if (stored && stored.until > Date.now()) return stored.request;
+  const entry = { until: Date.now() + 20 * 60_000, request: Promise.resolve([] as SportsEventArtwork[]) };
+  const url = `${endpoint}${endpoint.includes("?") ? "&" : "?"}day=${encodeURIComponent(day)}`;
+  entry.request = jsonRequest<unknown>(url, { signal: AbortSignal.timeout(8_000) }).then(parseSportsMetadata)
+    .catch(() => { entry.until = Date.now() + 60_000; return stored ? stored.request : []; });
+  if (dayCache.size >= 20) dayCache.delete(dayCache.keys().next().value!);
+  dayCache.set(day, entry);
+  return entry.request;
+}

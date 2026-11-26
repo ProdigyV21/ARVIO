@@ -24,6 +24,7 @@ import com.arflix.tv.ui.components.LocalBottomBarInset
 import com.arflix.tv.ui.components.LocalBottomBarHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
+import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
@@ -281,6 +282,7 @@ fun AppNavigation(
     }
 
     val touchNav = com.arflix.tv.util.LocalDeviceType.current.isTouchDevice()
+    Box(Modifier.fillMaxSize()) {
     NavHost(
         navController = navController,
         startDestination = startDestination,
@@ -890,6 +892,15 @@ fun AppNavigation(
                 }
             )
         }
+    }
+    // Kick-off reminders for sports, over whatever screen is open.
+    val currentRoute = navController.currentBackStackEntryAsState().value?.destination?.route
+    com.arflix.tv.ui.screens.tv.live.SportsReminderHost(
+        enabled = !isKidsProfile && currentRoute != null &&
+            currentRoute.substringBefore('?') !in setOf(Screen.Login.route, Screen.ProfileSelection.route),
+        isOnLiveTv = { navController.currentDestination?.route?.substringBefore('?') == "tv" },
+        openLiveTv = { navigateTopLevel(Screen.Tv.createRoute()) },
+    )
     }
 }
 

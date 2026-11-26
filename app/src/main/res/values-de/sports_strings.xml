@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="sports_overview">Übersicht</string>
+    <string name="sports_yesterday">Gestern</string>
+    <string name="sports_filter_all">Alle Sportarten</string>
+    <string name="sports_filter_live">Jetzt live</string>
+    <string name="sports_my_sports">Mein Sport</string>
+    <string name="sports_remind_me">Erinnern</string>
+    <string name="sports_reminder_on">Erinnerung an</string>
+    <string name="sports_follow">%1$s folgen</string>
+    <string name="sports_following">Du folgst %1$s</string>
+    <string name="sports_finished">Beendet</string>
+    <string name="sports_no_games_selection">Keine Spiele für diesen Tag und Filter.</string>
+    <string name="sports_loading_day">Spiele werden geladen…</string>
+    <string name="sports_reminder_kickoff">Beginnt in einer Minute</string>
+    <string name="sports_reminder_started">Hat begonnen</string>
+    <string name="sports_reminder_switching">Wechsel zu %1$s in %2$d s</string>
+    <string name="sports_reminder_no_channel">Noch kein Sender für dieses Spiel gefunden.</string>
+    <string name="sports_reminder_watch_now">Jetzt ansehen</string>
+    <string name="sports_reminder_cancel">Abbrechen</string>
+    <string name="sports_reminder_open">Sport öffnen</string>
+    <string name="sports_reminder_auto_hint">Für Teams, denen du folgst, sind Erinnerungen automatisch an.</string>
+</resources>

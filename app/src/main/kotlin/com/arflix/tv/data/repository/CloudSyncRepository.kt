@@ -394,6 +394,8 @@ class CloudSyncRepository @Inject constructor(
         /** The Music tab's addons and the user's liked songs, favourites and playlists (JSON). Null keeps local. */
         val musicAddonsJson: String? = null,
         val musicCollectionsJson: String? = null,
+        /** Followed sports teams and leagues (JSON). Null from older clients keeps the local list. */
+        val sportsFollowsJson: String? = null,
     )
 
     // ── DataStore key helpers ──
@@ -817,6 +819,7 @@ class CloudSyncRepository @Inject constructor(
                         kidsCatalogApprovals = prefs[KidsTrustedCatalogs.approvalsKey(profile.id)]?.sorted(),
                         musicAddonsJson = prefs[com.arflix.tv.music.MusicCloudKeys.addons(profile.id)],
                         musicCollectionsJson = prefs[com.arflix.tv.music.MusicCloudKeys.collections(profile.id)],
+                        sportsFollowsJson = prefs[SportsCloudKeys.follows(profile.id)],
                     )
                 )
             }
@@ -1829,6 +1832,7 @@ class CloudSyncRepository @Inject constructor(
                         )
                         state.musicAddonsJson?.let { prefs[com.arflix.tv.music.MusicCloudKeys.addons(profileId)] = it }
                         state.musicCollectionsJson?.let { prefs[com.arflix.tv.music.MusicCloudKeys.collections(profileId)] = it }
+                        state.sportsFollowsJson?.let { prefs[SportsCloudKeys.follows(profileId)] = it }
                         state.kidsCatalogApprovals?.let { approvals ->
                             val approved = approvals.toSet()
                             val members = KidsTrustedCatalogs.membersKey(profileId)

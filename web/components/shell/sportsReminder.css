@@ -1,0 +1,8 @@
+.sports-reminder { position: fixed; inset-inline-end: 24px; bottom: 24px; z-index: 2147483000; width: min(420px, calc(100vw - 32px)); background: #161616f2; color: #eee; border: 1px solid #383838; border-radius: 14px; padding: 18px; box-shadow: 0 18px 50px #000a; }
+.sports-reminder p { margin: 0; color: #aaa; font-size: 13px; display: flex; align-items: center; gap: 8px; }
+.sports-reminder p svg { color: var(--accent, #2ec4b6); }
+.sports-reminder strong { display: block; font-size: 18px; margin: 6px 0 4px; }
+.sports-reminder small { display: block; color: #aaa; font-size: 13px; }
+.sports-reminder div { display: flex; gap: 10px; margin-top: 14px; }
+.sports-reminder button { width: auto; min-height: 42px; padding: 8px 16px; border-radius: 8px; }
+@media (max-width: 600px) { .sports-reminder { inset-inline: 16px; bottom: calc(16px + env(safe-area-inset-bottom)); width: auto; } }
