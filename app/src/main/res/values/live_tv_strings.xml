@@ -2,4 +2,9 @@
 <resources>
     <string name="live_menu_watch_from_start">Watch from the start</string>
     <string name="live_menu_next_show">Next show · Remind me</string>
+    <string name="live_picture_fit">Picture: Fit</string>
+    <string name="live_picture_fill">Picture: Fill</string>
+    <string name="live_picture_stretch">Picture: Stretch</string>
+    <string name="live_sleep_off">Sleep timer</string>
+    <string name="live_sleep_minutes">Sleep: %1$d min</string>
 </resources>
