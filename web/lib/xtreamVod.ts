@@ -53,7 +53,12 @@ function normalizeTitle(value: string) {
     .replace(/\bS\d{1,2}\s*E\d{1,3}\b/gi, " ")
     .replace(/\b(1080p|2160p|720p|480p|4k|uhd|hdr|bluray|web-?dl|webrip|x265|x264|hevc|remux|imax|proper|extended|multi|dual)\b/gi, " ")
     .toLowerCase()
-    .replace(/[^a-z0-9]+/g, " ")
+    // Fold accents ("Amélie" = "amelie") but keep letters of every script:
+    // a-z only made Greek, Cyrillic or Arabic titles blank, so they never matched.
+    .normalize("NFD")
+    .replace(/\p{Mn}+/gu, "")
+    .replace(/ß/g, "ss")
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
     .trim()
     .replace(/\s+/g, " ");
 }

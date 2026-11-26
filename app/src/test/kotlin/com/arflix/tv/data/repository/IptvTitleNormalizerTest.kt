@@ -154,4 +154,19 @@ class IptvTitleNormalizerTest {
             IptvTitleNormalizer.normalize("|DE|HD| Dune (2021)")
         )
     }
+
+    @Test
+    fun `titles in non latin scripts keep their letters`() {
+        // These used to normalize to "", so such a provider matched nothing.
+        assertEquals("ο βασιλιας των λιονταριων", IptvTitleNormalizer.normalize("Ο Βασιλιάς των Λιονταριών"))
+        assertEquals("король лев", IptvTitleNormalizer.normalize("Король Лев (1994)"))
+        assertEquals("الأسد الملك".let { IptvTitleNormalizer.normalize(it) }.isNotBlank(), true)
+    }
+
+    @Test
+    fun `search query keeps the original letters and drops tags`() {
+        assertEquals("Ο Βασιλιάς", IptvTitleNormalizer.searchQuery("|GR| Ο Βασιλιάς (2019) [4K]"))
+        assertEquals("Für alle Fälle", IptvTitleNormalizer.searchQuery("DE: Für alle Fälle 1080p"))
+        assertEquals("", IptvTitleNormalizer.searchQuery("  "))
+    }
 }

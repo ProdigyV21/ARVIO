@@ -363,6 +363,7 @@ function xtreamStreamIdFromUrl(url: string) {
 type XtreamEpgListing = {
   title?: string;
   description?: string;
+  start?: string;
   start_timestamp?: string | number;
   stop_timestamp?: string | number;
 };
@@ -433,10 +434,14 @@ export async function loadXtreamCatchup(playlists: IptvPlaylistEntry[], channel:
   target.searchParams.set("password", info.password);
   target.searchParams.set("action", "get_simple_data_table");
   target.searchParams.set("stream_id", streamId);
-  const data = await fetchXtreamJson<{ epg_listings?: Array<XtreamEpgListing & { has_archive?: number | string }> }>(
-    target.toString(),
-    playlistProxyHeaders()
-  ).catch(() => null);
+  const [data] = await Promise.all([
+    fetchXtreamJson<{ epg_listings?: Array<XtreamEpgListing & { has_archive?: number | string }> }>(
+      target.toString(),
+      playlistProxyHeaders()
+    ).catch(() => null),
+    learnXtreamServerZone(info)
+  ]);
+  rememberXtreamGuideOffset(info.baseUrl, data?.epg_listings ?? []);
   const now = Date.now();
   const oldest = now - (channel.catchupDays || 1) * 24 * 60 * 60 * 1000;
   return (data?.epg_listings ?? [])
@@ -458,20 +463,98 @@ export async function loadXtreamCatchup(playlists: IptvPlaylistEntry[], channel:
     .slice(0, 40);
 }
 
+// The panel's wall-clock zone, per panel. Timeshift starts are read in it,
+// so a viewer abroad (or a panel hosted in another zone) used to request the
+// wrong hour and got "no stream".
+const XTREAM_SERVER_ZONES = new Map<string, string>();
+const XTREAM_GUIDE_OFFSETS = new Map<string, number>();
+const XTREAM_ZONE_CHECKED = new Map<string, number>();
+
+function zoneIsValid(zone: string) {
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: zone });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Reads `server_info.timezone` (or the clock offset) from the account answer, at most every 12 h. */
+async function learnXtreamServerZone(info: { baseUrl: string; username: string; password: string }) {
+  const key = info.baseUrl;
+  const checked = XTREAM_ZONE_CHECKED.get(key) ?? 0;
+  if (Date.now() - checked < 12 * 60 * 60 * 1000) return;
+  XTREAM_ZONE_CHECKED.set(key, Date.now());
+  const target = new URL(`${info.baseUrl.replace(/\/+$/, "")}/player_api.php`);
+  target.searchParams.set("username", info.username);
+  target.searchParams.set("password", info.password);
+  const data = await fetchXtreamJson<{ server_info?: { timezone?: string; timestamp_now?: string | number; time_now?: string } }>(
+    target.toString(),
+    playlistProxyHeaders()
+  ).catch(() => null);
+  const server = data?.server_info;
+  if (server?.timezone && zoneIsValid(server.timezone.trim())) {
+    XTREAM_SERVER_ZONES.set(key, server.timezone.trim());
+    return;
+  }
+  const epoch = Number(server?.timestamp_now);
+  const wall = server?.time_now ? Date.parse(`${server.time_now.trim().replace(" ", "T")}Z`) : NaN;
+  if (Number.isFinite(epoch) && Number.isFinite(wall)) {
+    const quarterHours = Math.round((wall / 1000 - epoch) / 900);
+    if (Math.abs(quarterHours) <= 18 * 4) XTREAM_GUIDE_OFFSETS.set(key, quarterHours * 900 * 1000);
+  }
+}
+
+/** The guide's `start` text is panel wall-clock time; its epoch twin gives the offset. */
+function rememberXtreamGuideOffset(baseUrl: string, listings: XtreamEpgListing[]) {
+  if (XTREAM_GUIDE_OFFSETS.has(baseUrl)) return;
+  const sample = listings.find((listing) => listing.start && listing.start_timestamp);
+  if (!sample?.start) return;
+  const wall = Date.parse(`${sample.start.trim().replace(" ", "T")}Z`);
+  const epoch = Number(sample.start_timestamp) * 1000;
+  if (!Number.isFinite(wall) || !Number.isFinite(epoch)) return;
+  const offset = Math.round((wall - epoch) / 900_000) * 900_000;
+  if (Math.abs(offset) <= 18 * 3_600_000) XTREAM_GUIDE_OFFSETS.set(baseUrl, offset);
+}
+
+/** `YYYY-MM-DD:HH-MM` for a timeshift start, in the panel's zone when known. */
+export function xtreamTimeshiftStamp(startUtcMillis: number, serverZone?: string, offsetMs?: number): string {
+  const pad = (value: number) => String(value).padStart(2, "0");
+  if (serverZone) {
+    const parts = Object.fromEntries(
+      new Intl.DateTimeFormat("en-CA", {
+        timeZone: serverZone,
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        hourCycle: "h23"
+      }).formatToParts(new Date(startUtcMillis)).map((part) => [part.type, part.value])
+    );
+    return `${parts.year}-${parts.month}-${parts.day}:${parts.hour}-${parts.minute}`;
+  }
+  if (offsetMs !== undefined) {
+    const shifted = new Date(startUtcMillis + offsetMs);
+    return `${shifted.getUTCFullYear()}-${pad(shifted.getUTCMonth() + 1)}-${pad(shifted.getUTCDate())}:${pad(shifted.getUTCHours())}-${pad(shifted.getUTCMinutes())}`;
+  }
+  // Unknown panel zone: the viewer's zone matches panels sold for a local market.
+  const start = new Date(startUtcMillis);
+  return `${start.getFullYear()}-${pad(start.getMonth() + 1)}-${pad(start.getDate())}:${pad(start.getHours())}-${pad(start.getMinutes())}`;
+}
+
 /**
  * Xtream timeshift URL for a finished programme:
  * {base}/timeshift/{user}/{pass}/{durationMinutes}/{YYYY-MM-DD:HH-MM}/{id}.m3u8
- * The start stamp is in the panel's local timezone; ARVIO formats it in the
- * viewer's timezone, which matches panels hosted for their local market.
+ * The start stamp is in the panel's own time zone (server_info, else the
+ * guide's clock offset, else the viewer's zone).
  */
 export function buildXtreamCatchupUrl(playlists: IptvPlaylistEntry[], channel: IptvChannel, program: IptvProgram): string | null {
   const info = xtreamInfoForChannel(playlists, channel);
   const streamId = info ? xtreamStreamIdFromUrl(channel.streamUrl) : null;
   if (!info || !streamId) return null;
-  const start = new Date(program.startUtcMillis);
-  const pad = (value: number) => String(value).padStart(2, "0");
-  const stamp = `${start.getFullYear()}-${pad(start.getMonth() + 1)}-${pad(start.getDate())}:${pad(start.getHours())}-${pad(start.getMinutes())}`;
-  const durationMinutes = Math.max(1, Math.round((program.endUtcMillis - program.startUtcMillis) / 60000));
+  const stamp = xtreamTimeshiftStamp(program.startUtcMillis, XTREAM_SERVER_ZONES.get(info.baseUrl), XTREAM_GUIDE_OFFSETS.get(info.baseUrl));
+  const durationMinutes = Math.max(1, Math.ceil((program.endUtcMillis - program.startUtcMillis) / 60000));
   const base = info.baseUrl.replace(/\/+$/, "");
   return `${base}/timeshift/${encodeURIComponent(info.username)}/${encodeURIComponent(info.password)}/${durationMinutes}/${stamp}/${streamId}.m3u8`;
 }
