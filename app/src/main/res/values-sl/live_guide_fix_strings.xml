@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="live_menu_fix_guide">Popravi vodnik</string>
+    <string name="live_guide_fix_title">Popravi vodnik</string>
+    <string name="live_guide_fix_source_heading">Uporabi vodnik kanala</string>
+    <string name="live_guide_fix_automatic">Samodejno</string>
+    <string name="live_guide_fix_automatic_desc">Vodnik, ki ga je dodelil ponudnik</string>
+    <string name="live_guide_fix_none">Brez vodnika</string>
+    <string name="live_guide_fix_none_desc">Skrij napačen vodnik</string>
+    <string name="live_guide_fix_search_hint">Poišči kanal</string>
+    <string name="live_guide_fix_no_suggestions">Ni podobnih kanalov. Iščite po imenu.</string>
+    <string name="live_guide_fix_no_results">Ni najdenih kanalov</string>
+    <string name="live_guide_fix_offset_title">Časi v vodniku</string>
+    <string name="live_guide_fix_offset_desc">Premakne vsako oddajo iz %1$s. Uporabite, ko se oddaje začnejo prej ali pozneje, kot je navedeno.</string>
+    <string name="live_guide_fix_earlier">Prej</string>
+    <string name="live_guide_fix_later">Pozneje</string>
+    <string name="settings_iptv_start_last_channel">Začni na zadnjem kanalu</string>
+    <string name="settings_iptv_start_last_channel_desc">Ob odprtju aplikacije se zadnji gledani kanal predvaja čez cel zaslon</string>
+</resources>

@@ -84,6 +84,7 @@ export const SETTINGS_INDEX: SettingsIndexEntry[] = [
   { section: "tv", label: "Import movies and series", keywords: "vod series live channels playlist import", scope: "android" },
   { section: "tv", label: "Sort order", id: "iptv-sort", keywords: "channels iptv", scope: "all" },
   { section: "tv", label: "Favorite channels on Home", id: "iptv-favorites-home", keywords: "iptv", scope: "all" },
+  { section: "tv", label: "Start in last channel", id: "iptv-start-last-channel", keywords: "iptv live tv startup open", scope: "all" },
   { section: "tv", label: "Guide rows", id: "guide-rows", keywords: "epg tv guide", scope: "android" },
   { section: "tv", label: "Stalker portals", id: "stalker-url", keywords: "stalker ministra mac portal address", scope: "all" },
   { section: "homeserver", label: "Home server", keywords: "plex jellyfin emby silo server", scope: "all" },

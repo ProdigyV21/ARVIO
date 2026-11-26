@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="live_menu_fix_guide">番組表を修正</string>
+    <string name="live_guide_fix_title">番組表を修正</string>
+    <string name="live_guide_fix_source_heading">次の番組表を使用</string>
+    <string name="live_guide_fix_automatic">自動</string>
+    <string name="live_guide_fix_automatic_desc">プロバイダーが割り当てた番組表</string>
+    <string name="live_guide_fix_none">番組表なし</string>
+    <string name="live_guide_fix_none_desc">誤った番組表を非表示</string>
+    <string name="live_guide_fix_search_hint">チャンネルを検索</string>
+    <string name="live_guide_fix_no_suggestions">似たチャンネルがありません。名前で検索してください。</string>
+    <string name="live_guide_fix_no_results">チャンネルが見つかりません</string>
+    <string name="live_guide_fix_offset_title">番組表の時刻</string>
+    <string name="live_guide_fix_offset_desc">%1$s のすべての番組をずらします。番組が表示より早く・遅く始まるときに使います。</string>
+    <string name="live_guide_fix_earlier">早く</string>
+    <string name="live_guide_fix_later">後で</string>
+    <string name="settings_iptv_start_last_channel">最後のチャンネルで起動</string>
+    <string name="settings_iptv_start_last_channel_desc">アプリを開くと最後に見たチャンネルを全画面で再生します</string>
+</resources>

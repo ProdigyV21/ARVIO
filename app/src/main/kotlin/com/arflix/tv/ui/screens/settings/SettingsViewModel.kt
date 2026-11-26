@@ -259,6 +259,8 @@ data class SettingsUiState(
     val animeStructuringStyle: AnimeStructuringStyle = AnimeStructuringStyle.BROADCAST,
     /** Pin the IPTV "Favorite TV" row to the top of the home screen. */
     val iptvFavoritesOnHome: Boolean = true,
+    /** Open the app straight into the last watched channel (synced with the profile's Live TV settings). */
+    val iptvStartLastChannel: Boolean = false,
     // Volume boost in decibels (0 = off, up to 15 dB). Applied via system LoudnessEnhancer
     // attached to the ExoPlayer audio session. Issue #88.
     val volumeBoostDb: Int = 0,
@@ -804,6 +806,11 @@ class SettingsViewModel @Inject constructor(
                     iptvHiddenGroups = hidden,
                     iptvGroupOrder = order
                 )
+            }
+        }
+        viewModelScope.launch {
+            iptvRepository.observeStartLastChannel().collect { enabled ->
+                _uiState.value = _uiState.value.copy(iptvStartLastChannel = enabled)
             }
         }
         viewModelScope.launch {
@@ -4258,6 +4265,14 @@ class SettingsViewModel @Inject constructor(
                     }
                 }
             }
+        }
+    }
+
+    fun setIptvStartLastChannel(enabled: Boolean) {
+        _uiState.value = _uiState.value.copy(iptvStartLastChannel = enabled)
+        viewModelScope.launch {
+            iptvRepository.setStartLastChannel(enabled)
+            syncLocalStateToCloud(silent = true)
         }
     }
 

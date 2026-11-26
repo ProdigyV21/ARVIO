@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="live_menu_fix_guide">Opravit průvodce</string>
+    <string name="live_guide_fix_title">Opravit průvodce</string>
+    <string name="live_guide_fix_source_heading">Použít průvodce kanálu</string>
+    <string name="live_guide_fix_automatic">Automaticky</string>
+    <string name="live_guide_fix_automatic_desc">Průvodce přiřazený poskytovatelem</string>
+    <string name="live_guide_fix_none">Bez průvodce</string>
+    <string name="live_guide_fix_none_desc">Skrýt chybného průvodce</string>
+    <string name="live_guide_fix_search_hint">Hledat kanál</string>
+    <string name="live_guide_fix_no_suggestions">Žádné podobné kanály. Vyhledejte kanál podle názvu.</string>
+    <string name="live_guide_fix_no_results">Nenalezeny žádné kanály</string>
+    <string name="live_guide_fix_offset_title">Časy v průvodci</string>
+    <string name="live_guide_fix_offset_desc">Posune každý pořad z %1$s. Použijte, když pořady začínají dříve nebo později, než je uvedeno.</string>
+    <string name="live_guide_fix_earlier">Dříve</string>
+    <string name="live_guide_fix_later">Později</string>
+    <string name="settings_iptv_start_last_channel">Spustit na posledním kanálu</string>
+    <string name="settings_iptv_start_last_channel_desc">Po otevření aplikace se přehraje naposledy sledovaný kanál na celou obrazovku</string>
+</resources>

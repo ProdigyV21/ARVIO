@@ -620,6 +620,12 @@ export interface AppSettings {
   iptvChannelOrder?: Record<string, string[]>;
   /** Category display names: { "<playlistId>|<group>": "<name>" } (iptvByProfile.groupNames). Keys keep the playlist's name. */
   iptvGroupNames?: Record<string, string>;
+  /** Guide fixes per channel: { "<channelId>": "<channel whose guide it shows>" | "none" } (iptvByProfile.guideSources). */
+  iptvGuideSources?: Record<string, string>;
+  /** Guide time correction per playlist/portal, in minutes (iptvByProfile.guideOffsets). */
+  iptvGuideOffsets?: Record<string, number>;
+  /** Open the app straight into the last watched channel (iptvByProfile.startLastChannel). */
+  iptvStartLastChannel?: boolean;
   /** Android/TV source priority (profileSettingsById). Undefined = keep the app's value. */
   streamProvidersCustomOrder?: string;
   streamIntegrationsMacroOrder?: string;

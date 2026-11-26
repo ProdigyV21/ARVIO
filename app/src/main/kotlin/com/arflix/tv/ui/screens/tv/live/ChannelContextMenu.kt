@@ -20,6 +20,7 @@ import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material.icons.filled.NotificationsNone
 import androidx.compose.material.icons.filled.Replay
 import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
@@ -82,6 +83,7 @@ internal fun buildChannelMenuActions(
     onNextShow: () -> Unit = {},
     canHideGroup: Boolean = false,
     onHideGroup: () -> Unit = {},
+    onFixGuide: (() -> Unit)? = null,
 ): List<ChannelMenuAction> = buildList {
     if (canRestart) {
         add(ChannelMenuAction(R.string.live_menu_watch_from_start, Icons.Filled.Replay, onRestart))
@@ -98,6 +100,9 @@ internal fun buildChannelMenuActions(
     }
     if (hasVariants) {
         add(ChannelMenuAction(R.string.live_menu_channel_variants, Icons.Filled.Tune, onOpenVariants))
+    }
+    if (onFixGuide != null) {
+        add(ChannelMenuAction(R.string.live_menu_fix_guide, Icons.Filled.Schedule, onFixGuide))
     }
     if (canHideGroup) {
         add(ChannelMenuAction(R.string.live_menu_hide_category, Icons.Filled.VisibilityOff, onHideGroup))

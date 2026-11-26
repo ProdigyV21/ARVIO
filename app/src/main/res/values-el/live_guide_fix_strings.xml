@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="live_menu_fix_guide">Διόρθωση οδηγού</string>
+    <string name="live_guide_fix_title">Διόρθωση οδηγού</string>
+    <string name="live_guide_fix_source_heading">Χρήση του οδηγού του</string>
+    <string name="live_guide_fix_automatic">Αυτόματα</string>
+    <string name="live_guide_fix_automatic_desc">Ο οδηγός που αντιστοίχισε ο πάροχός σας</string>
+    <string name="live_guide_fix_none">Χωρίς οδηγό</string>
+    <string name="live_guide_fix_none_desc">Απόκρυψη λάθος οδηγού</string>
+    <string name="live_guide_fix_search_hint">Αναζήτηση καναλιού</string>
+    <string name="live_guide_fix_no_suggestions">Δεν υπάρχουν παρόμοια κανάλια. Αναζητήστε με όνομα.</string>
+    <string name="live_guide_fix_no_results">Δεν βρέθηκαν κανάλια</string>
+    <string name="live_guide_fix_offset_title">Ώρες οδηγού</string>
+    <string name="live_guide_fix_offset_desc">Μετακινεί κάθε εκπομπή του %1$s. Χρησιμοποιήστε το όταν οι εκπομπές ξεκινούν νωρίτερα ή αργότερα.</string>
+    <string name="live_guide_fix_earlier">Νωρίτερα</string>
+    <string name="live_guide_fix_later">Αργότερα</string>
+    <string name="settings_iptv_start_last_channel">Έναρξη στο τελευταίο κανάλι</string>
+    <string name="settings_iptv_start_last_channel_desc">Το άνοιγμα της εφαρμογής παίζει το τελευταίο κανάλι που είδατε, σε πλήρη οθόνη</string>
+</resources>

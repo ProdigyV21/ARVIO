@@ -29,7 +29,7 @@ const appearance = new Set(["netflixHomeStyle", "watchlistOnHome", "hiddenNaviga
 const catalogs = new Set(["catalogs", "hiddenCatalogIds", "hiddenAddonCatalogIds", "hiddenHomeServerCatalogIds"]);
 const connections = new Set(["homeServers", "iptvPlaylists", "iptvStalkerUrl", "iptvStalkerMac", "iptvStalkerPortals", "disabledAddonIds", "torrServerBaseUrl", "streamProvidersCustomOrder", "streamIntegrationsMacroOrder", "streamMacroEnabledMap", "streamProviderEnabledMap"]);
 const metadata = new Set(["customTmdbApiKey", "customTvdbApiKey", "customTvdbUserPin", "metadataMovieProviders", "metadataTvProviders", "metadataAnimeProviders", "animeEpisodeStructuring"]);
-const personalOnly = new Set(["language", "defaultSubtitle", "secondarySubtitle", "audioLanguage", "skipProfileSelection", "deviceModeOverride", "favoriteChannelIds", "iptvTvSession", "favoriteGroupIds", "hiddenGroupIds", "lockedIptvGroupIds", "groupOrder", "iptvChannelOrder", "iptvGroupNames", "iptvSortOrder", "dnsProvider", "customUserAgent", "showLoadingStats"]);
+const personalOnly = new Set(["language", "defaultSubtitle", "secondarySubtitle", "audioLanguage", "skipProfileSelection", "deviceModeOverride", "favoriteChannelIds", "iptvTvSession", "favoriteGroupIds", "hiddenGroupIds", "lockedIptvGroupIds", "groupOrder", "iptvChannelOrder", "iptvGroupNames", "iptvGuideSources", "iptvGuideOffsets", "iptvStartLastChannel", "iptvSortOrder", "dnsProvider", "customUserAgent", "showLoadingStats"]);
 export function managedPermissionFor(key: keyof AppSettings): keyof PartnerPermissions | null {
   if (appearance.has(key)) return "editAppearance";
   if (catalogs.has(key)) return "editCatalogs";

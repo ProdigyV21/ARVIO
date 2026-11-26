@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="live_menu_fix_guide">Коригирай програмата</string>
+    <string name="live_guide_fix_title">Коригирай програмата</string>
+    <string name="live_guide_fix_source_heading">Използвай програмата на</string>
+    <string name="live_guide_fix_automatic">Автоматично</string>
+    <string name="live_guide_fix_automatic_desc">Програмата, която доставчикът ти свърза</string>
+    <string name="live_guide_fix_none">Без програма</string>
+    <string name="live_guide_fix_none_desc">Скрий грешна програма</string>
+    <string name="live_guide_fix_search_hint">Търси канал</string>
+    <string name="live_guide_fix_no_suggestions">Няма подобни канали. Потърси по име.</string>
+    <string name="live_guide_fix_no_results">Няма намерени канали</string>
+    <string name="live_guide_fix_offset_title">Часове в програмата</string>
+    <string name="live_guide_fix_offset_desc">Мести всяко предаване на %1$s. Използвай, когато предаванията започват по-рано или по-късно от посоченото.</string>
+    <string name="live_guide_fix_earlier">По-рано</string>
+    <string name="live_guide_fix_later">По-късно</string>
+    <string name="settings_iptv_start_last_channel">Старт в последния канал</string>
+    <string name="settings_iptv_start_last_channel_desc">Приложението пуска последния гледан канал на цял екран</string>
+</resources>

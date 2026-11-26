@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="live_menu_fix_guide">Labot programmu</string>
+    <string name="live_guide_fix_title">Labot programmu</string>
+    <string name="live_guide_fix_source_heading">Izmantot programmu no</string>
+    <string name="live_guide_fix_automatic">Automātiski</string>
+    <string name="live_guide_fix_automatic_desc">Pakalpojuma sniedzēja piesaistītā programma</string>
+    <string name="live_guide_fix_none">Bez programmas</string>
+    <string name="live_guide_fix_none_desc">Paslēpt nepareizu programmu</string>
+    <string name="live_guide_fix_search_hint">Meklēt kanālu</string>
+    <string name="live_guide_fix_no_suggestions">Nav līdzīgu kanālu. Meklējiet pēc nosaukuma.</string>
+    <string name="live_guide_fix_no_results">Kanāli nav atrasti</string>
+    <string name="live_guide_fix_offset_title">Programmas laiki</string>
+    <string name="live_guide_fix_offset_desc">Pārbīda katru %1$s raidījumu. Izmantojiet, ja raidījumi sākas agrāk vai vēlāk nekā norādīts.</string>
+    <string name="live_guide_fix_earlier">Agrāk</string>
+    <string name="live_guide_fix_later">Vēlāk</string>
+    <string name="settings_iptv_start_last_channel">Sākt pēdējā kanālā</string>
+    <string name="settings_iptv_start_last_channel_desc">Atverot lietotni, pilnekrānā tiek atskaņots pēdējais skatītais kanāls</string>
+</resources>

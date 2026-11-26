@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="live_menu_fix_guide">แก้ไขผังรายการ</string>
+    <string name="live_guide_fix_title">แก้ไขผังรายการ</string>
+    <string name="live_guide_fix_source_heading">ใช้ผังรายการของ</string>
+    <string name="live_guide_fix_automatic">อัตโนมัติ</string>
+    <string name="live_guide_fix_automatic_desc">ผังรายการที่ผู้ให้บริการจับคู่ไว้</string>
+    <string name="live_guide_fix_none">ไม่มีผังรายการ</string>
+    <string name="live_guide_fix_none_desc">ซ่อนผังรายการที่ผิด</string>
+    <string name="live_guide_fix_search_hint">ค้นหาช่อง</string>
+    <string name="live_guide_fix_no_suggestions">ไม่มีช่องที่คล้ายกัน ค้นหาด้วยชื่อ</string>
+    <string name="live_guide_fix_no_results">ไม่พบช่อง</string>
+    <string name="live_guide_fix_offset_title">เวลาในผังรายการ</string>
+    <string name="live_guide_fix_offset_desc">เลื่อนทุกรายการของ %1$s ใช้เมื่อรายการเริ่มเร็วหรือช้ากว่าที่ระบุ</string>
+    <string name="live_guide_fix_earlier">เร็วขึ้น</string>
+    <string name="live_guide_fix_later">ภายหลัง</string>
+    <string name="settings_iptv_start_last_channel">เริ่มที่ช่องล่าสุด</string>
+    <string name="settings_iptv_start_last_channel_desc">เปิดแอปแล้วเล่นช่องที่คุณดูล่าสุดแบบเต็มจอ</string>
+</resources>

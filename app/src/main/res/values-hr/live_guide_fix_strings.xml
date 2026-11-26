@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="live_menu_fix_guide">Ispravi vodič</string>
+    <string name="live_guide_fix_title">Ispravi vodič</string>
+    <string name="live_guide_fix_source_heading">Koristi vodič kanala</string>
+    <string name="live_guide_fix_automatic">Automatski</string>
+    <string name="live_guide_fix_automatic_desc">Vodič koji je dodijelio pružatelj</string>
+    <string name="live_guide_fix_none">Bez vodiča</string>
+    <string name="live_guide_fix_none_desc">Sakrij pogrešan vodič</string>
+    <string name="live_guide_fix_search_hint">Traži kanal</string>
+    <string name="live_guide_fix_no_suggestions">Nema sličnih kanala. Potraži po nazivu.</string>
+    <string name="live_guide_fix_no_results">Nema pronađenih kanala</string>
+    <string name="live_guide_fix_offset_title">Vremena u vodiču</string>
+    <string name="live_guide_fix_offset_desc">Pomiče svaku emisiju s %1$s. Koristi kad emisije počinju ranije ili kasnije od navedenog.</string>
+    <string name="live_guide_fix_earlier">Ranije</string>
+    <string name="live_guide_fix_later">Kasnije</string>
+    <string name="settings_iptv_start_last_channel">Pokreni na zadnjem kanalu</string>
+    <string name="settings_iptv_start_last_channel_desc">Otvaranje aplikacije pokreće zadnji gledani kanal preko cijelog zaslona</string>
+</resources>

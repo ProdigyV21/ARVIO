@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="live_menu_fix_guide">Popraw przewodnik</string>
+    <string name="live_guide_fix_title">Popraw przewodnik</string>
+    <string name="live_guide_fix_source_heading">Użyj przewodnika kanału</string>
+    <string name="live_guide_fix_automatic">Automatycznie</string>
+    <string name="live_guide_fix_automatic_desc">Przewodnik dopasowany przez dostawcę</string>
+    <string name="live_guide_fix_none">Brak przewodnika</string>
+    <string name="live_guide_fix_none_desc">Ukryj błędny przewodnik</string>
+    <string name="live_guide_fix_search_hint">Szukaj kanału</string>
+    <string name="live_guide_fix_no_suggestions">Brak podobnych kanałów. Wyszukaj po nazwie.</string>
+    <string name="live_guide_fix_no_results">Nie znaleziono kanałów</string>
+    <string name="live_guide_fix_offset_title">Godziny w przewodniku</string>
+    <string name="live_guide_fix_offset_desc">Przesuwa każdy program z %1$s. Użyj, gdy programy zaczynają się wcześniej lub później niż podano.</string>
+    <string name="live_guide_fix_earlier">Wcześniej</string>
+    <string name="live_guide_fix_later">Później</string>
+    <string name="settings_iptv_start_last_channel">Uruchamiaj na ostatnim kanale</string>
+    <string name="settings_iptv_start_last_channel_desc">Otwarcie aplikacji odtwarza ostatnio oglądany kanał na pełnym ekranie</string>
+</resources>
