@@ -56,6 +56,7 @@ internal class ArvioAudioSync(
     private var ticker: Job? = null
     private var contentKey: String? = null
     @Volatile private var callbackGeneration = 0L
+    @Volatile private var sessionAllowsSwitch = true
 
     /** The next fallback (AI translation, when it can run), until the session stops. */
     private var pendingFailure: (() -> Unit)? = null
@@ -91,7 +92,9 @@ internal class ArvioAudioSync(
             requestSwitch = { url ->
                 val generation = callbackGeneration
                 mainHandler.post {
-                    if (generation == callbackGeneration && sessionKey != null) onSwitch(url)
+                    if (generation == callbackGeneration && sessionKey != null && sessionAllowsSwitch) {
+                        onSwitch(url)
+                    }
                 }
             },
         )
@@ -170,17 +173,20 @@ internal class ArvioAudioSync(
          * setting (the audio switching to a better subtitle).
          */
         holdUntilConfirmed: Boolean? = null,
+        force: Boolean = false,
+        allowSwitch: Boolean = true,
     ): Boolean {
         val keepHold = holdUntilConfirmed ?: hold
         val next = onFailed ?: pendingFailure
         val better = hasBetterFallback ?: betterFallback
         // A switch to another subtitle keeps nothing: the anchor measured the one before.
         val keptAnchor = localAnchor
-        if (!canTakeOver || cues.isEmpty()) {
+        if ((!force && !canTakeOver) || cues.isEmpty()) {
             stop()
             return false
         }
         stop()
+        sessionAllowsSwitch = allowSwitch
         sessionKey = key
         appliedModel = null
         confirmed = false
@@ -205,6 +211,7 @@ internal class ArvioAudioSync(
     /** A verified match, a user pick or a new stream: the subtitle keeps (or gets back) its own timing. */
     fun stop() {
         callbackGeneration++
+        sessionAllowsSwitch = true
         showListening(false)
         hold = false
         pendingFailure = null

@@ -292,6 +292,8 @@ data class PlayerUiState(
     // Full name of the preferred subtitle language (e.g. "Hebrew") — drives the "Find Best Match"
     // menu entry. Independent of AI availability: the timing scan needs no AI/API key.
     val matchLanguageName: String = "",
+    /** True while explicit user-requested "Sync to Audio" is active for the selected subtitle. */
+    val isSubtitleAudioSyncRequested: Boolean = false,
     // Active media metadata fields
     val mediaType: MediaType = MediaType.MOVIE,
     val seasonNumber: Int? = null,
@@ -4144,6 +4146,8 @@ class PlayerViewModel @Inject constructor(
             userLockedSubtitleKey = null
             cancelFindBestMatch("user chose AI translation")
             subtitleSelectionJob?.cancel()
+        } else if (subtitleAudioSyncRequest != null) {
+            stopAudioSync()
         }
         aiSourceSubtitle = source
         cancelSubtitleLocalization()
@@ -4192,6 +4196,7 @@ class PlayerViewModel @Inject constructor(
             hasManualSubtitleSelection = true
             subtitleSelectionJob?.cancel()
             cancelSubtitleLocalization()
+            stopAudioSync()
             translationManager.isEnabled = false
             subtitleBeforeLiveAudio = _uiState.value.selectedSubtitle
             targetSubtitleLangCode.takeIf { it.isNotBlank() }?.let { geminiLiveService.targetLanguageCode = it }
@@ -6394,16 +6399,23 @@ class PlayerViewModel @Inject constructor(
     private var audioSyncSwitching = false
     private var audioSyncWorkJob: Job? = null
     private var audioSyncGeneration = 0L
+    private var subtitleAudioSyncRequest: SubtitleAudioSyncRequest? = null
 
     private fun stopAudioSync() {
         audioSyncGeneration++
         audioSyncWorkJob?.cancel()
         audioSyncWorkJob = null
+        subtitleAudioSyncRequest = null
         // Clear the target before stop(), which can report that its old mapping was removed.
         audioSyncTarget = null
         audioSyncRaw = null
         audioSync?.stop()
-        if (_uiState.value.isHearingSync) _uiState.value = _uiState.value.copy(isHearingSync = false)
+        if (_uiState.value.isHearingSync || _uiState.value.isSubtitleAudioSyncRequested) {
+            _uiState.value = _uiState.value.copy(
+                isHearingSync = false,
+                isSubtitleAudioSyncRequested = false,
+            )
+        }
     }
 
     /** The playhead, the duration and the selected audio format, from the player screen. */
@@ -6431,10 +6443,11 @@ class PlayerViewModel @Inject constructor(
         audioSyncInstance?.onAudioTrackSelected(format)
     }
 
-    /** Created on first use (a scan), and never where sync by hearing can't run. */
-    private fun audioSyncOrNull(): com.arflix.tv.ui.screens.player.audiosync.ArvioAudioSync? {
+    /** Created on first use (a scan or explicit "Sync to Audio"), or never where audio sync is unavailable. */
+    private fun audioSyncOrNull(force: Boolean = false): com.arflix.tv.ui.screens.player.audiosync.ArvioAudioSync? {
         audioSyncInstance?.let { return it }
-        if (!hearingAvailable) return null
+        if (!BuildConfig.AUDIO_SYNC_AVAILABLE) return null
+        if (!force && !hearingAvailable) return null
         return com.arflix.tv.ui.screens.player.audiosync.ArvioAudioSync(
             context = context,
             scope = viewModelScope,
@@ -6489,6 +6502,138 @@ class PlayerViewModel @Inject constructor(
             else -> "series" to "$imdb:${currentSeason ?: 1}:${currentEpisode ?: 1}"
         }
         sync.arm(references, type, videoId)
+    }
+
+    private fun isExplicitAudioSyncCurrent(request: SubtitleAudioSyncRequest? = subtitleAudioSyncRequest): Boolean {
+        val active = request ?: return false
+        val state = _uiState.value
+        return active.isCurrent(
+            generation = audioSyncGeneration,
+            streamUrl = state.selectedStreamUrl,
+            selectedSubtitle = state.selectedSubtitle,
+            lockedSubtitleKey = userLockedSubtitleKey,
+            isAiTranslating = state.isAiTranslating,
+            isLiveAudioTranslating = state.isLiveAudioTranslating,
+        )
+    }
+
+    private fun clearExplicitAudioSyncState(targetGeneration: Long? = null) {
+        if (targetGeneration != null && audioSyncGeneration != targetGeneration) return
+        subtitleAudioSyncRequest = null
+        if (_uiState.value.isSubtitleAudioSyncRequested) {
+            _uiState.value = _uiState.value.copy(isSubtitleAudioSyncRequested = false)
+        }
+    }
+
+    /**
+     * Explicit "Sync to Audio": time the subtitle currently on screen with the audio.
+     *
+     * Unlike the scan's hearing fallback this is an explicit user request, so it runs even when
+     * automatic "Sync by hearing" or fallback is disabled, and it never swaps in a different track:
+     * the subtitle the viewer is looking at keeps its own timing on failure.
+     */
+    fun syncCurrentSubtitleToAudio() {
+        val state = _uiState.value
+        if (!BuildConfig.AUDIO_SYNC_AVAILABLE) {
+            showMatchToast(PlayerMessage.Res(R.string.player_audio_sync_unavailable))
+            return
+        }
+        val pick = state.selectedSubtitle?.takeIf { !it.isEmbedded && !it.isBitmap }
+        if (pick == null) {
+            showMatchToast(PlayerMessage.Res(R.string.player_audio_sync_pick_external))
+            return
+        }
+        val sync = audioSyncOrNull(force = true) ?: run {
+            showMatchToast(PlayerMessage.Res(R.string.player_audio_sync_unavailable))
+            return
+        }
+        stopAudioSync()
+        // Resolve the addon entry (its http url is what candidates are keyed by), not a
+        // localized or retimed file:// copy.
+        val original = _uiState.value.subtitles.firstOrNull {
+            !it.isEmbedded && it.provider == pick.provider &&
+                it.id == pick.id.removeSuffix(RETIMED_SUBTITLE_ID_SUFFIX)
+        } ?: pick
+        val request = SubtitleAudioSyncRequest(
+            generation = audioSyncGeneration,
+            streamUrl = state.selectedStreamUrl,
+            subtitleKey = SubtitleSelectionPolicy.key(original),
+        )
+        subtitleAudioSyncRequest = request
+        _uiState.value = _uiState.value.copy(isSubtitleAudioSyncRequested = true)
+        audioSyncWorkJob = viewModelScope.launch {
+            val raw = (preloadedCopyFor(original)?.url?.let { SubtitleSyncMatcher.loadRaw(it, original.lang) })
+                ?: SubtitleSyncMatcher.loadRaw(original.url, original.lang)
+            if (!isExplicitAudioSyncCurrent(request)) {
+                clearExplicitAudioSyncState(request.generation)
+                return@launch
+            }
+            if (raw == null) {
+                clearExplicitAudioSyncState(request.generation)
+                showMatchToast(PlayerMessage.Res(R.string.player_audio_sync_unavailable))
+                return@launch
+            }
+            val cues = withContext(Dispatchers.Default) { SubtitleSyncMatcher.parseCues(raw) }
+            if (!isExplicitAudioSyncCurrent(request)) {
+                clearExplicitAudioSyncState(request.generation)
+                return@launch
+            }
+            if (cues.isEmpty()) {
+                clearExplicitAudioSyncState(request.generation)
+                showMatchToast(PlayerMessage.Res(R.string.player_audio_sync_no_match))
+                return@launch
+            }
+            audioSyncTarget = original
+            audioSyncRaw = raw
+            val failed = {
+                if (subtitleAudioSyncRequest == request) {
+                    clearExplicitAudioSyncState(request.generation)
+                    audioSyncTarget = null
+                    audioSyncRaw = null
+                    showMatchToast(PlayerMessage.Res(R.string.player_audio_sync_no_match))
+                }
+            }
+            val started = sync.takeOver(
+                key = original.url,
+                cues = cues,
+                onFailed = failed,
+                localAnchor = null,
+                // An explicit request has no better fallback: the subtitle keeps its own timing.
+                hasBetterFallback = { false },
+                holdUntilConfirmed = false,
+                force = true,
+                allowSwitch = false,
+            )
+            if (!started) failed()
+        }
+    }
+
+    /** Stops an explicit "Sync to Audio" and restores the subtitle's own authored timing. */
+    fun stopSubtitleAudioSync() {
+        val activeRequest = subtitleAudioSyncRequest
+        if (!_uiState.value.isSubtitleAudioSyncRequested && activeRequest == null) return
+        val targetSub = audioSyncTarget
+        val targetRaw = audioSyncRaw
+        stopAudioSync()
+        val currentSub = _uiState.value.selectedSubtitle
+        val revertSub = targetSub ?: currentSub?.takeIf {
+            !it.isEmbedded && !it.isBitmap && _uiState.value.autoSync != null
+        }
+        if (revertSub != null &&
+            currentSub != null &&
+            !currentSub.isEmbedded &&
+            !currentSub.isBitmap &&
+            !_uiState.value.isAiTranslating &&
+            !_uiState.value.isLiveAudioTranslating &&
+            SubtitleSelectionPolicy.key(currentSub) == SubtitleSelectionPolicy.key(revertSub)
+        ) {
+            val wasRetimed = currentSub.id.endsWith(RETIMED_SUBTITLE_ID_SUFFIX)
+            applyAutoSync(revertSub, null)
+            if (wasRetimed && targetRaw != null) {
+                selectSubtitle(localizeSubtitle(revertSub, targetRaw), isUserAction = false)
+            }
+        }
+        showMatchToast(PlayerMessage.Res(R.string.player_audio_sync_stopped))
     }
 
     /**
@@ -6573,6 +6718,11 @@ class PlayerViewModel @Inject constructor(
      * the subtitle back on its own timing.
      */
     private fun applyAudioSyncModel(key: String, model: com.arflix.tv.ui.screens.player.audiosync.SubtitleSyncModel?) {
+        val explicit = subtitleAudioSyncRequest
+        if (explicit != null && !isExplicitAudioSyncCurrent(explicit)) {
+            stopAudioSync()
+            return
+        }
         val sub = audioSyncTarget?.takeIf { it.url == key } ?: return
         val raw = audioSyncRaw ?: return
         val single = model?.segments?.singleOrNull()

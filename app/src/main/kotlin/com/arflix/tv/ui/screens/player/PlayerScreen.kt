@@ -4192,12 +4192,21 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
                                     }
                                     else -> {
                                         val group = subtitleGroups.getOrNull(subtitleLangIndex - 1)
-                                        val matchGroup = latestUiState.matchLanguageName.isNotBlank() &&
-                                            group?.first?.equals(latestUiState.matchLanguageName, ignoreCase = true) == true
-                                        val aiGroup = latestUiState.isAiAvailable &&
-                                            latestUiState.aiTargetLanguageName.isNotBlank() &&
-                                            group?.first?.equals(latestUiState.aiTargetLanguageName, ignoreCase = true) == true
-                                        val headerCount = (if (matchGroup) 1 else 0) + (if (aiGroup) 1 else 0)
+                                        val selectedSub = latestUiState.selectedSubtitle
+                                        val selectedSubGroup = selectedSub?.let {
+                                            getFullLanguageName(it.lang).ifBlank { it.lang }
+                                        }.orEmpty()
+                                        val headerCount = group?.first?.let { groupName ->
+                                            tvSubtitleGroupHeaders(
+                                                groupName = groupName,
+                                                matchLanguageName = latestUiState.matchLanguageName,
+                                                aiTargetLanguageName = latestUiState.aiTargetLanguageName,
+                                                isAiAvailable = latestUiState.isAiAvailable,
+                                                selectedSubtitle = selectedSub,
+                                                selectedSubtitleGroupName = selectedSubGroup,
+                                                isAudioSyncAvailable = com.arflix.tv.BuildConfig.AUDIO_SYNC_AVAILABLE,
+                                            ).headerCount
+                                        } ?: 0
                                         val trackCount = (group?.second?.size ?: 0) + headerCount
                                         if (subtitleTrackIndex < trackCount - 1) subtitleTrackIndex++
                                     }
@@ -4263,19 +4272,37 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
                                     }
                                 } else {
                                     val group = subtitleGroups.getOrNull(subtitleLangIndex - 1)
-                                    val matchGroup = latestUiState.matchLanguageName.isNotBlank() &&
-                                        group?.first?.equals(latestUiState.matchLanguageName, ignoreCase = true) == true
-                                    val aiGroup = latestUiState.isAiAvailable &&
-                                        latestUiState.aiTargetLanguageName.isNotBlank() &&
-                                        group?.first?.equals(latestUiState.aiTargetLanguageName, ignoreCase = true) == true
-                                    // Target-language group headers: Find Best Match first (AI-independent),
-                                    // then the AI translate entry when AI is available, then the subs.
-                                    val aiHeaderIdx = if (matchGroup) 1 else 0
-                                    val headerCount = aiHeaderIdx + (if (aiGroup) 1 else 0)
-                                    val realIdx = subtitleTrackIndex - headerCount
-                                    if (matchGroup && subtitleTrackIndex == 0) {
+                                    val selectedSub = latestUiState.selectedSubtitle
+                                    val selectedSubGroup = selectedSub?.let {
+                                        getFullLanguageName(it.lang).ifBlank { it.lang }
+                                    }.orEmpty()
+                                    val headers = group?.first?.let { groupName ->
+                                        tvSubtitleGroupHeaders(
+                                            groupName = groupName,
+                                            matchLanguageName = latestUiState.matchLanguageName,
+                                            aiTargetLanguageName = latestUiState.aiTargetLanguageName,
+                                            isAiAvailable = latestUiState.isAiAvailable,
+                                            selectedSubtitle = selectedSub,
+                                            selectedSubtitleGroupName = selectedSubGroup,
+                                            isAudioSyncAvailable = com.arflix.tv.BuildConfig.AUDIO_SYNC_AVAILABLE,
+                                        )
+                                    } ?: TvSubtitleGroupHeaders(
+                                        matchGroup = false,
+                                        syncAudioGroup = false,
+                                        aiGroup = false,
+                                    )
+                                    // Target-language / selected-track headers: Find Best Match,
+                                    // Sync to Audio, AI Translate, then the tracks.
+                                    val realIdx = subtitleTrackIndex - headers.headerCount
+                                    if (headers.matchGroup && subtitleTrackIndex == 0) {
                                         viewModel.runFindBestMatch()
-                                    } else if (aiGroup && subtitleTrackIndex == aiHeaderIdx) {
+                                    } else if (headers.syncAudioGroup && subtitleTrackIndex == headers.syncAudioHeaderIdx) {
+                                        if (viewModel.uiState.value.isSubtitleAudioSyncRequested) {
+                                            viewModel.stopSubtitleAudioSync()
+                                        } else {
+                                            viewModel.syncCurrentSubtitleToAudio()
+                                        }
+                                    } else if (headers.aiGroup && subtitleTrackIndex == headers.aiHeaderIdx) {
                                         if (!latestUiState.isAiTranslating) viewModel.activateAiTranslation()
                                     } else {
                                         group?.second?.getOrNull(realIdx)?.second
@@ -4797,6 +4824,13 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
                 },
                 onFindBestMatch = {
                     viewModel.runFindBestMatch()
+                },
+                onSyncSubtitleToAudio = {
+                    if (viewModel.uiState.value.isSubtitleAudioSyncRequested) {
+                        viewModel.stopSubtitleAudioSync()
+                    } else {
+                        viewModel.syncCurrentSubtitleToAudio()
+                    }
                 },
                 onActivateAiTranslation = {
                     viewModel.activateAiTranslation()
@@ -5466,9 +5500,17 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
                     },
                     isLiveAudioTranslating = uiState.isLiveAudioTranslating,
                     isFindingBestMatch = uiState.isFindingBestMatch,
+                    isSubtitleAudioSyncRequested = uiState.isSubtitleAudioSyncRequested,
                     onToggleAi = { viewModel.activateAiTranslation() },
                     onToggleLiveAudio = { viewModel.toggleLiveAudioTranslation() },
                     onFindBestMatch = { viewModel.runFindBestMatch() },
+                    onSyncSubtitleToAudio = {
+                        if (viewModel.uiState.value.isSubtitleAudioSyncRequested) {
+                            viewModel.stopSubtitleAudioSync()
+                        } else {
+                            viewModel.syncCurrentSubtitleToAudio()
+                        }
+                    },
                     onClose = {
                         showSubtitleMenu = false
                         showControls = true
@@ -6436,6 +6478,41 @@ private fun handleSubtitleMenuKey(
     }
 }
 
+private data class TvSubtitleGroupHeaders(
+    val matchGroup: Boolean,
+    val syncAudioGroup: Boolean,
+    val aiGroup: Boolean,
+) {
+    val syncAudioHeaderIdx: Int get() = if (matchGroup) 1 else 0
+    val aiHeaderIdx: Int get() = syncAudioHeaderIdx + (if (syncAudioGroup) 1 else 0)
+    val headerCount: Int get() = aiHeaderIdx + (if (aiGroup) 1 else 0)
+}
+
+private fun tvSubtitleGroupHeaders(
+    groupName: String,
+    matchLanguageName: String,
+    aiTargetLanguageName: String,
+    isAiAvailable: Boolean,
+    selectedSubtitle: Subtitle?,
+    selectedSubtitleGroupName: String,
+    isAudioSyncAvailable: Boolean,
+): TvSubtitleGroupHeaders {
+    val matchGroup = matchLanguageName.isNotBlank() &&
+        groupName.equals(matchLanguageName, ignoreCase = true)
+    val hasExternalSelected = selectedSubtitle != null && !selectedSubtitle.isEmbedded && !selectedSubtitle.isBitmap
+    val syncAudioGroup = isAudioSyncAvailable && (
+        (hasExternalSelected && selectedSubtitleGroupName.isNotBlank() && groupName.equals(selectedSubtitleGroupName, ignoreCase = true)) ||
+        (!hasExternalSelected && matchGroup)
+    )
+    val aiGroup = isAiAvailable && aiTargetLanguageName.isNotBlank() &&
+        groupName.equals(aiTargetLanguageName, ignoreCase = true)
+    return TvSubtitleGroupHeaders(
+        matchGroup = matchGroup,
+        syncAudioGroup = syncAudioGroup,
+        aiGroup = aiGroup,
+    )
+}
+
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 private fun SubtitleMenu(
@@ -6447,6 +6524,7 @@ private fun SubtitleMenu(
     matchLanguageName: String = "",
     isLiveAudioTranslating: Boolean = false,
     isFindingBestMatch: Boolean = false,
+    isSubtitleAudioSyncRequested: Boolean = false,
     // Auto-match timing correction on the selected track, shown as "· fixed +1.0s" on its row.
     autoSync: SubtitleAutoSync? = null,
     audioTracks: List<AudioTrackInfo>,
@@ -6464,6 +6542,7 @@ private fun SubtitleMenu(
     onToggleAi: () -> Unit = {},
     onToggleLiveAudio: () -> Unit = {},
     onFindBestMatch: () -> Unit = {},
+    onSyncSubtitleToAudio: () -> Unit = {},
     onClose: () -> Unit
 ) {
     val isMobile = LocalDeviceType.current.isTouchDevice()
@@ -6599,12 +6678,24 @@ private fun SubtitleMenu(
                                 }
                             } else {
                                 val isLiveAudioGroup = selectedGroup.first == "Live Audio"
-                                val isMatchGroup = matchLanguageName.isNotBlank() &&
-                                    selectedGroup.first.equals(matchLanguageName, ignoreCase = true)
-                                val isAiGroup = isAiAvailable && aiTargetLanguageName.isNotBlank() &&
-                                    selectedGroup.first.equals(aiTargetLanguageName, ignoreCase = true)
-                                val aiHeaderIdx = if (isMatchGroup) 1 else 0
-                                val headerCount = aiHeaderIdx + (if (isAiGroup) 1 else 0)
+                                val selectedSubGroup = selectedSubtitle?.let {
+                                    getFullLanguageName(it.lang).ifBlank { it.lang }
+                                }.orEmpty()
+                                val headers = tvSubtitleGroupHeaders(
+                                    groupName = selectedGroup.first,
+                                    matchLanguageName = matchLanguageName,
+                                    aiTargetLanguageName = aiTargetLanguageName,
+                                    isAiAvailable = isAiAvailable,
+                                    selectedSubtitle = selectedSubtitle,
+                                    selectedSubtitleGroupName = selectedSubGroup,
+                                    isAudioSyncAvailable = com.arflix.tv.BuildConfig.AUDIO_SYNC_AVAILABLE,
+                                )
+                                val isMatchGroup = headers.matchGroup
+                                val isSyncAudioGroup = headers.syncAudioGroup
+                                val isAiGroup = headers.aiGroup
+                                val syncAudioHeaderIdx = headers.syncAudioHeaderIdx
+                                val aiHeaderIdx = headers.aiHeaderIdx
+                                val headerCount = headers.headerCount
                                 LazyColumn(
                                     state = trackListState,
                                     modifier = Modifier
@@ -6626,6 +6717,21 @@ private fun SubtitleMenu(
                                                 subtitleDetail = stringResource(R.string.player_subtitle_best_match_hint),
                                                 isSelected = isFindingBestMatch,
                                                 isFocused = subtitlePanelFocus == 1 && subtitleTrackIndex == 0,
+                                                onClick = { /* D-pad only */ }
+                                            )
+                                        }
+                                    }
+                                    if (isSyncAudioGroup) {
+                                        item {
+                                            TrackMenuItem(
+                                                label = stringResource(
+                                                    if (isSubtitleAudioSyncRequested) R.string.player_audio_sync_stop
+                                                    else R.string.player_audio_sync_action
+                                                ),
+                                                subtitle = stringResource(R.string.auto),
+                                                subtitleDetail = stringResource(R.string.player_audio_sync_action_hint),
+                                                isSelected = isSubtitleAudioSyncRequested,
+                                                isFocused = subtitlePanelFocus == 1 && subtitleTrackIndex == syncAudioHeaderIdx,
                                                 onClick = { /* D-pad only */ }
                                             )
                                         }
@@ -6901,10 +7007,21 @@ private fun SubtitleMenu(
                         // Grouped by language
                         subtitleGroups.forEach { (langName, indexedSubs) ->
                             val isLiveAudioGroup = langName == "Live Audio"
-                            val isMatchGroup = matchLanguageName.isNotBlank() &&
-                                langName.equals(matchLanguageName, ignoreCase = true)
-                            val isAiGroup = isAiAvailable && aiTargetLanguageName.isNotBlank() &&
-                                langName.equals(aiTargetLanguageName, ignoreCase = true)
+                            val selectedSubGroup = selectedSubtitle?.let {
+                                getFullLanguageName(it.lang).ifBlank { it.lang }
+                            }.orEmpty()
+                            val headers = tvSubtitleGroupHeaders(
+                                groupName = langName,
+                                matchLanguageName = matchLanguageName,
+                                aiTargetLanguageName = aiTargetLanguageName,
+                                isAiAvailable = isAiAvailable,
+                                selectedSubtitle = selectedSubtitle,
+                                selectedSubtitleGroupName = selectedSubGroup,
+                                isAudioSyncAvailable = com.arflix.tv.BuildConfig.AUDIO_SYNC_AVAILABLE,
+                            )
+                            val isMatchGroup = headers.matchGroup
+                            val isSyncAudioGroup = headers.syncAudioGroup
+                            val isAiGroup = headers.aiGroup
                             item(key = "mobile_header_$langName") {
                                 Text(
                                     text = langName.uppercase(),
@@ -6946,6 +7063,26 @@ private fun SubtitleMenu(
                                         description = stringResource(R.string.auto),
                                         isSelected = isFindingBestMatch,
                                         onClick = { onFindBestMatch(); onClose() }
+                                    )
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 8.dp)
+                                            .height(1.dp)
+                                            .background(Color.White.copy(alpha = 0.06f))
+                                    )
+                                }
+                            }
+                            if (isSyncAudioGroup) {
+                                item(key = "mobile_sync_to_audio_item") {
+                                    MobileTrackItem(
+                                        name = stringResource(
+                                            if (isSubtitleAudioSyncRequested) R.string.player_audio_sync_stop
+                                            else R.string.player_audio_sync_action
+                                        ),
+                                        description = stringResource(R.string.auto),
+                                        isSelected = isSubtitleAudioSyncRequested,
+                                        onClick = { onSyncSubtitleToAudio(); onClose() }
                                     )
                                     Box(
                                         modifier = Modifier

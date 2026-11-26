@@ -669,6 +669,8 @@ fun MobileSubtitlesSheet(
     isFindingBestMatch: Boolean = false,
     matchLanguageName: String = "",
     onFindBestMatch: () -> Unit = {},
+    onSyncSubtitleToAudio: () -> Unit = {},
+    isSubtitleAudioSyncRequested: Boolean = false,
     isAiTranslating: Boolean = false,
     isAiAvailable: Boolean = false,
     aiTargetLanguageName: String = "",
@@ -937,6 +939,37 @@ fun MobileSubtitlesSheet(
                         .padding(horizontal = 10.dp, vertical = 2.dp),
                     verticalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
+                    item {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(MobilePlayerTokens.ShapeCard)
+                                .clickable {
+                                    onSyncSubtitleToAudio()
+                                    onClose()
+                                }
+                                .padding(horizontal = 14.dp, vertical = 11.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = stringResource(
+                                        if (isSubtitleAudioSyncRequested) R.string.player_audio_sync_stop
+                                        else R.string.player_audio_sync_action
+                                    ),
+                                    color = MobilePlayerTokens.InkPrimary,
+                                    fontSize = 13.5.sp,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                                Text(
+                                    text = stringResource(R.string.player_audio_sync_action_hint),
+                                    color = MobilePlayerTokens.InkTertiary,
+                                    fontSize = 11.sp
+                                )
+                            }
+                        }
+                    }
+
                     item {
                         val matchTitle = if (matchLanguageName.isNotBlank()) {
                             stringResource(R.string.mplayer_find_best_match_language, matchLanguageName)
