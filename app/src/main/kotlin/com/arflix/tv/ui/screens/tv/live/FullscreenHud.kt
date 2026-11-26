@@ -448,7 +448,8 @@ fun FullscreenHud(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                             ) {
-                                if (!isCatchupMode) PlayerLiveBadge(stringResource(R.string.live_badge_live))
+                                // Paused is no longer live, so the badge goes with it.
+                                if (!isCatchupMode && localIsPlaying) PlayerLiveBadge(stringResource(R.string.live_badge_live))
                                 val isMobile = onBackClick != null || LocalConfiguration.current.screenWidthDp < 600
                                 if (!isMobile && channel.number > 0) {
                                     Text(
