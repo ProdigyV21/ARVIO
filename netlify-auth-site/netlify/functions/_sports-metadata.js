@@ -5,6 +5,7 @@ const RETRY_MS = 5 * 60_000;
 const MAX_AGE = 24 * 60 * 60_000;
 const LIVE_STALE_MS = 15 * 60_000;
 const { FEEDS, fetchFeed, mergeFixtures } = require('./_sports-supplement');
+const { gameId, fetchGame } = require('./_sports-game');
 
 function image(value) {
   if (typeof value !== 'string' || value.length > 2048) return null;
@@ -209,7 +210,8 @@ async function cachedResource({ store, apiKey, fetcher = fetch, now = Date.now()
   if (!claim.modified || !claim.etag) return usable;
   try {
     const payload = await fetchResource({ fetcher, apiKey, now });
-    await store.setJSON(key, { payload, refreshAfter: now + refresh }, { onlyIfMatch: claim.etag });
+    const delay = typeof refresh === 'function' ? refresh(payload) : refresh;
+    await store.setJSON(key, { payload, refreshAfter: now + delay }, { onlyIfMatch: claim.etag });
     return payload;
   } catch {
     // Do not log upstream URLs or errors: V1 embeds the secret in its URL.
@@ -252,6 +254,16 @@ async function supplementalMetadata(dependencies) {
   return snapshots.filter(Boolean).flatMap(snapshot => snapshot.events);
 }
 
+/**
+ * One game's details, fetched when a viewer opens them. A live game refreshes
+ * every minute, a finished one twice a day, anything else every ten minutes.
+ */
+async function getGameDetails(dependencies, game) {
+  const deps = game.source === 'sportsdb' ? dependencies : { ...dependencies, apiKey: 'public-metadata' };
+  const refresh = payload => payload.status === 'live' ? 60_000 : payload.status === 'finished' ? 12 * 3600_000 : 10 * 60_000;
+  return cachedResource(deps, `game-v1:${game.source}:${game.feed || ''}:${game.id}`, refresh, options => fetchGame(options, game));
+}
+
 async function getMetadata(dependencies) {
   if (!dependencies.supplemental) return getPrimaryMetadata(dependencies);
   const [primary, extra] = await Promise.all([getPrimaryMetadata(dependencies), supplementalMetadata(dependencies)]);
@@ -259,6 +271,19 @@ async function getMetadata(dependencies) {
   const baseline = primary || { version: 1, catalogueEnabled: true, updatedAt: dependencies.now ?? Date.now(),
     partial: true, broadcastsPartial: true, rankingBasis: 'competition-and-broadcast-reach', events: [] };
   return { ...baseline, events: mergeFixtures(baseline.events, extra) };
+}
+
+/**
+ * A small slice of the shared catalogue for score alerts: games with two teams
+ * that are live, ended in the last six hours or start in the next twelve.
+ * Built from the same cached records; never an extra upstream request.
+ */
+function scoresSlice(payload, now) {
+  const events = (payload?.events || []).filter(event => event.homeTeam && event.awayTeam &&
+    event.status !== 'postponed' && event.startsAt > now - 6 * 3600_000 && event.startsAt < now + 12 * 3600_000)
+    .map(({ id, source, title, sport, league, qualifier, startsAt, homeTeam, awayTeam, status, observedAt, homeScore, awayScore }) =>
+      ({ id, source, title, sport, league, qualifier, startsAt, homeTeam, awayTeam, status, observedAt, homeScore, awayScore }));
+  return { version: 1, catalogueEnabled: true, updatedAt: payload.updatedAt, liveUpdatedAt: payload.liveUpdatedAt || null, events };
 }
 
 const headers = {
@@ -272,12 +297,27 @@ function createHandler(dependencies) {
     if (event.httpMethod !== 'GET') return { statusCode: 405, headers: { ...headers, allow: 'GET,OPTIONS' }, body: '{}' };
     let state = 'refreshing';
     const dayParameter = event.queryStringParameters?.day;
+    const gameParameter = event.queryStringParameters?.game;
     let day = null;
     try {
       const deps = { ...await dependencies(event), report: value => { state = value; } };
       if (dayParameter !== undefined) {
         day = requestedDay(dayParameter, deps.now ?? Date.now());
         if (!day) return { statusCode: 400, headers: { ...headers, 'cache-control': 'no-store' }, body: '{"error":"Unsupported day"}' };
+      }
+      if (gameParameter !== undefined) {
+        const game = gameId(gameParameter);
+        if (!game) return { statusCode: 400, headers: { ...headers, 'cache-control': 'no-store' }, body: '{"error":"Unsupported game"}' };
+        const details = await getGameDetails(deps, game);
+        if (details) return { statusCode: 200, headers: { ...headers, 'cache-control': details.status === 'finished' ? 'public, max-age=600, s-maxage=3600' : 'public, max-age=30, s-maxage=60' },
+          body: JSON.stringify(details) };
+        return { statusCode: 503, headers: { ...headers, 'cache-control': 'no-store', 'retry-after': '60' }, body: '{"error":"Game details are temporarily unavailable"}' };
+      }
+      if (event.queryStringParameters?.scores !== undefined) {
+        const payload = await getMetadata(deps);
+        if (payload) return { statusCode: 200, headers: { ...headers, 'cache-control': 'public, max-age=30, s-maxage=60' },
+          body: JSON.stringify(scoresSlice(payload, deps.now ?? Date.now())) };
+        return { statusCode: 503, headers: { ...headers, 'cache-control': 'no-store', 'retry-after': '60' }, body: '{"error":"Scores are temporarily unavailable"}' };
       }
       const payload = day ? await getDayMetadata(deps, day) : await getMetadata(deps);
       if (payload) return { statusCode: 200, headers: { ...headers, 'cache-control': day ? 'public, max-age=300, s-maxage=900' : 'public, max-age=30, s-maxage=60' },
@@ -286,4 +326,4 @@ function createHandler(dependencies) {
     return { statusCode: 503, headers: { ...headers, 'cache-control': 'no-store', 'retry-after': '60', 'x-artwork-status': state }, body: '{"error":"Sports artwork is temporarily unavailable"}' };
   };
 }
-module.exports = { normalizeEvent, eventStatus, fetchFixtures, fetchLive, getMetadata, getDayMetadata, requestedDay, createHandler };
+module.exports = { normalizeEvent, eventStatus, fetchFixtures, fetchLive, getMetadata, getDayMetadata, getGameDetails, requestedDay, scoresSlice, createHandler };

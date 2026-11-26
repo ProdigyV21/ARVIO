@@ -19,6 +19,12 @@ function logo(value) {
       && !url.username && !url.password && !url.search ? url.href : null;
   } catch { return null; }
 }
+/** Both scores or neither; clients keep them behind "show score" and use them for alerts. */
+function scores(home, away) {
+  const value = v => v !== null && v !== undefined && v !== '' && /^\d{1,3}$/.test(String(v)) ? Number(v) : null;
+  const h = value(home), a = value(away);
+  return h === null || a === null ? {} : { homeScore: h, awayScore: a };
+}
 function base(id, feed, startsAt, home, away, now) {
   return { id, source: feed.id === 'mlb' ? 'MLB' : 'ESPN', title: `${home} vs ${away}`,
     sport: feed.sport, league: feed.league, qualifier: feed.qualifier || null, startsAt,
@@ -28,8 +34,9 @@ function base(id, feed, startsAt, home, away, now) {
 function parseEspn(payload, feed, now) {
   if (!Array.isArray(payload?.events)) throw new Error('Invalid scoreboard');
   return payload.events.flatMap(event => (event.competitions || []).flatMap(game => {
-    const home = game.competitors?.find(c => c.homeAway === 'home')?.team;
-    const away = game.competitors?.find(c => c.homeAway === 'away')?.team;
+    const homeSide = game.competitors?.find(c => c.homeAway === 'home');
+    const awaySide = game.competitors?.find(c => c.homeAway === 'away');
+    const home = homeSide?.team, away = awaySide?.team;
     const start = date(game.date || event.date);
     const id = String(game.id || event.id || '');
     if (!/^\d+$/.test(id) || !Number.isFinite(start) || game.timeValid === false || event.dateValid === false
@@ -39,6 +46,7 @@ function parseEspn(payload, feed, now) {
     result.homeBadge = logo(home.logo); result.awayBadge = logo(away.logo);
     result.status = /POSTPON|CANCEL|SUSPEND/i.test(status.name || '') ? 'postponed'
       : status.completed || status.state === 'post' ? 'finished' : status.state === 'in' ? 'live' : 'scheduled';
+    if (result.status === 'live' || result.status === 'finished') Object.assign(result, scores(homeSide?.score, awaySide?.score));
     // Broadcast territories are not consistently supplied; never infer country from league.
     return [result];
   }));
@@ -54,6 +62,7 @@ function parseMlb(payload, feed, now) {
     result.homeBadge = badge(game.teams.home.team); result.awayBadge = badge(game.teams.away.team);
     result.status = /postpon|cancel|suspend/i.test(game.status?.detailedState || '') ? 'postponed'
       : game.status?.abstractGameState === 'Final' ? 'finished' : game.status?.abstractGameState === 'Live' ? 'live' : 'scheduled';
+    if (result.status === 'live' || result.status === 'finished') Object.assign(result, scores(game.teams?.home?.score, game.teams?.away?.score));
     return [result];
   }));
 }

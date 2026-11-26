@@ -20,4 +20,22 @@
     <string name="sports_reminder_cancel">Annuleren</string>
     <string name="sports_reminder_open">Sport openen</string>
     <string name="sports_reminder_auto_hint">Voor teams die je volgt gaan herinneringen vanzelf aan.</string>
+    <string name="sports_game_info">Wedstrijdinfo</string>
+    <string name="sports_channels_tab">Zenders</string>
+    <string name="sports_score_per_period">Score per periode</string>
+    <string name="sports_form">Vorm</string>
+    <string name="sports_head_to_head">Onderling</string>
+    <string name="sports_standings">Stand</string>
+    <string name="sports_details_hidden">Verborgen tot je op Toon score tikt.</string>
+    <string name="sports_details_none">Nog geen extra info voor deze wedstrijd.</string>
+    <string name="sports_details_loading">Wedstrijdinfo laden…</string>
+    <string name="sports_league_networks">Competitiezenders</string>
+    <string name="sports_league_network">Competitiezender</string>
+    <string name="sports_last_used_channel">Laatst gebruikt</string>
+    <string name="sports_score_alerts">Score-meldingen</string>
+    <string name="sports_score_alerts_on">Score-meldingen aan</string>
+    <string name="sports_alert_score">Score-update</string>
+    <string name="sports_alert_final">Einde wedstrijd</string>
+    <string name="sports_failover_switching">Zender werkt niet. %1$s proberen…</string>
+    <string name="live_sports_show_score">Toon score</string>
 </resources>

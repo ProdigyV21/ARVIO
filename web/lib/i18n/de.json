@@ -29,5 +29,8 @@
   "Follow {name}": "{name} folgen",
   "Following {name}": "Du folgst {name}",
   "Days": "Tage",
-  "Filter": "Filter"
+  "Filter": "Filter",
+  " · Last used": " · Zuletzt genutzt",
+  " · League network": " · Ligasender",
+  "Channel failed. Trying {name}…": "Sender gestört. Versuche {name}…"
 }

@@ -2278,6 +2278,29 @@ fun LiveTvScreen(
     }
     val sportsFollows by viewModel.sportsPreferences.follows.collectAsStateWithLifecycle(initialValue = emptyList())
     val sportsReminders by viewModel.sportsPreferences.reminders.collectAsStateWithLifecycle(initialValue = emptyList())
+    val sportsChannelMemory by viewModel.sportsPreferences.channelMemory.collectAsStateWithLifecycle(initialValue = emptyMap())
+    val sportsScoreAlerts by viewModel.sportsPreferences.scoreAlerts.collectAsStateWithLifecycle(initialValue = true)
+    // League networks (NBA TV, Sky Sports F1, ...) found by name in this playlist, once per playlist.
+    var sportsNetworkChannels by remember(broadcasterIndexKey) { mutableStateOf<Map<String, List<IptvChannel>>?>(null) }
+    LaunchedEffect(broadcasterIndexKey, sportsSelected) {
+        if (!sportsSelected || sportsNetworkChannels != null || state.snapshot.loadedAt.toEpochMilli() <= 0L) return@LaunchedEffect
+        sportsNetworkChannels = runCatching {
+            val index = viewModel.sportsBroadcasterIndex(broadcasterIndexKey)
+            withContext(Dispatchers.IO) {
+                val grouped = index.groupedIds { name -> sportsNetworkFor(name)?.id }
+                    .mapValues { (_, ids) -> ids.take(SPORTS_NETWORK_CHANNELS * 2) }
+                val channels = viewModel.iptvRepository.pagedChannelsByIds(grouped.values.flatten())
+                    .filter { !it.enrichForFastStartup(0).isAdult }.associateBy { it.id }
+                grouped.mapValues { (_, ids) -> ids.mapNotNull { channels[it] } }
+            }
+        }.getOrElse { error ->
+            if (error is kotlinx.coroutines.CancellationException) throw error
+            emptyMap()
+        }
+    }
+    val sportsNetworkRow = remember(sportsNetworkChannels, sportsFollows, guideClockMillis / 3_600_000L) {
+        sportsNetworkEvents(sportsNetworkChannels.orEmpty(), sportsFollows, guideClockMillis)
+    }
     // Games of followed teams get a reminder by themselves; channels of existing
     // reminders follow the latest catalogue.
     LaunchedEffect(sportsDisplayEvents, sportsFollows, guideClockMillis / 600_000L) {
@@ -2932,7 +2955,15 @@ fun LiveTvScreen(
         return channel.id == playingChannelId || channel.id == currentDisplayId
     }
 
+    // A game started from Sports moves on to its next channel when one fails for good.
+    var sportsFailover by remember { mutableStateOf<SportsFailover?>(null) }
+    DisposableEffect(Unit) { onDispose { viewModel.sportsPreferences.setWatchingEvent(null) } }
+
     fun playLiveFullscreen(channel: EnrichedChannel) {
+        if (sportsFailover?.covers(channel.id) != true) {
+            sportsFailover = null
+            viewModel.sportsPreferences.setWatchingEvent(null)
+        }
         invalidateProgramActionLookup()
         noteGuideUserNavigation()
         playingChannelId = channel.id
@@ -2955,8 +2986,22 @@ fun LiveTvScreen(
         val found = withContext(Dispatchers.IO) {
             runCatching { viewModel.iptvRepository.pagedChannelsByIds(request.channelIds) }.getOrDefault(emptyList())
         }
-        val channel = request.channelIds.firstNotNullOfOrNull { id -> found.firstOrNull { it.id == id } }
-        if (channel != null) playLiveFullscreen(channel.enrich(0)) else sportsSelected = true
+        val ordered = request.channelIds.mapNotNull { id -> found.firstOrNull { it.id == id } }
+        val channel = ordered.firstOrNull()
+        if (channel != null) {
+            sportsFailover = SportsFailover(request.eventId, request.title, ordered)
+            viewModel.sportsPreferences.setWatchingEvent(request.eventId.removePrefix("sportsdb:"))
+            playLiveFullscreen(channel.enrich(0))
+        } else sportsSelected = true
+    }
+
+    /** A channel picked on a game's sheet: remembered for its competition, with the game's other channels as failover. */
+    fun playSportsChannel(event: SportsGuideEvent, channel: IptvChannel, candidates: List<IptvChannel>) {
+        val keys = event.channelMemoryKeys()
+        if (keys.isNotEmpty()) coroutineScope.launch { viewModel.sportsPreferences.rememberChannel(keys, channel.id) }
+        sportsFailover = sportsFailoverFor(event, channel, candidates)
+        viewModel.sportsPreferences.setWatchingEvent(event.fixture?.id)
+        playLiveFullscreen(channel.enrich(0))
     }
 
     fun playAddonSource(event: com.arflix.tv.data.model.SportsAddonEvent, stream: com.arflix.tv.data.repository.SportsAddonStream) {
@@ -3551,6 +3596,25 @@ fun LiveTvScreen(
     var lastPreparedCatchupOffsetMs by remember { mutableLongStateOf(-1L) }
     var playerRetryCount by remember { mutableIntStateOf(0) }
     var playbackDiagnostic by remember { mutableStateOf<PlaybackDiagnostic?>(null) }
+    LaunchedEffect(playbackDiagnostic) {
+        val failed = playbackDiagnostic?.takeIf { it.severity == PlaybackDiagnosticSeverity.Error } ?: return@LaunchedEffect
+        val failover = sportsFailover ?: return@LaunchedEffect
+        val failedId = playingChannelId
+        if (playingCatchupProgram != null || failedId == null || !failover.covers(failedId)) return@LaunchedEffect
+        val (next, updated) = failover.next(failedId) ?: return@LaunchedEffect
+        System.err.println("[Sports] Channel failed (${failed.detail}); trying the next channel for ${failover.title}")
+        playbackDiagnostic = PlaybackDiagnostic(
+            title = context.getString(R.string.sports_failover_switching, next.name),
+            detail = failover.title,
+            severity = PlaybackDiagnosticSeverity.Warning,
+        )
+        sportsFailover = updated
+        // Not in this effect: the notice above restarts it.
+        coroutineScope.launch {
+            delay(1_500)
+            if (sportsFailover === updated && playingChannelId == failedId) playLiveFullscreen(next.enrich(0))
+        }
+    }
 
     fun prepareStream(
         stream: String,
@@ -4642,6 +4706,12 @@ fun LiveTvScreen(
                             currentMode = LiveTvStartup.LiveTvMode.GroupHome
                         },
                         onPlay = { channel -> playLiveFullscreen(channel.enrich(0)) },
+                        onPlayFromEvent = ::playSportsChannel,
+                        networkEvents = sportsNetworkRow,
+                        channelMemory = sportsChannelMemory,
+                        loadGameDetails = viewModel::loadSportsGameDetails,
+                        scoreAlerts = sportsScoreAlerts,
+                        onToggleScoreAlerts = { on -> coroutineScope.launch { viewModel.sportsPreferences.setScoreAlerts(on) } },
                         resolveAddon = viewModel.sportsAddons::resolve,
                         onPlayAddon = ::playAddonSource,
                         follows = sportsFollows,
@@ -4814,6 +4884,12 @@ fun LiveTvScreen(
                         onContentFocused = { focusZone = LiveTvFocusZone.SPORTS; categoryDrawerOpen = false },
                         onOpenCategories = { openCategoryDrawer() },
                         onPlay = { channel -> playLiveFullscreen(channel.enrich(0)) },
+                        onPlayFromEvent = ::playSportsChannel,
+                        networkEvents = sportsNetworkRow,
+                        channelMemory = sportsChannelMemory,
+                        loadGameDetails = viewModel::loadSportsGameDetails,
+                        scoreAlerts = sportsScoreAlerts,
+                        onToggleScoreAlerts = { on -> coroutineScope.launch { viewModel.sportsPreferences.setScoreAlerts(on) } },
                         resolveAddon = viewModel.sportsAddons::resolve,
                         onPlayAddon = ::playAddonSource,
                         follows = sportsFollows,

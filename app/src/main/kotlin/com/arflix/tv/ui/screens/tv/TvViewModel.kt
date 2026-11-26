@@ -221,6 +221,7 @@ class TvViewModel @Inject constructor(
         }
     suspend fun loadSportsMetadata() = sportsRepository.loadMetadata()
     suspend fun loadSportsMetadataDay(day: String) = sportsRepository.loadMetadataDay(day)
+    suspend fun loadSportsGameDetails(id: String) = sportsRepository.loadGameDetails(id)
     suspend fun loadSportsAddonArtwork() = sportsRepository.loadAddonGuideArtwork()
     fun sportsClockFormat(profileId: String?) = context.settingsDataStore.data.map { prefs ->
         val key = profileId?.let { profileManager.profileStringKeyFor(it, "clock_format") } ?: profileManager.profileStringKey("clock_format")

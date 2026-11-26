@@ -4,13 +4,14 @@ import { useTranslation } from "@/lib/i18n";
 
 
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent } from "react";
-import { X, Tv, PanelLeft, ChevronRight, Play, RefreshCw, Bell, BellRing, Star } from "lucide-react";
+import { X, Tv, PanelLeft, ChevronRight, Play, RefreshCw, Bell, BellRing, Star, Trophy } from "lucide-react";
 import { guideSports, isOnAir, isConfirmedLive, hasSportsChannels, availableEventChannels, sportsPresentationRows, sportsChannelSummary, type SportsGuideEvent } from "@/lib/sportsGuide";
 import { sportsChannelKey, sportsBroadcasterKeys } from "@/lib/sportsCatalogue";
 import type { InstalledAddon, IptvChannel, IptvNowNext } from "@/lib/types";
-import { cachedSportsMetadata, loadSportsDay, loadSportsMetadata, type SportsEventArtwork } from "@/lib/sportsArtwork";
-import { followKey, followOptions, isFinished, isReminded, localDateKey, localDayStart, matchesSportsFilter, mySportsEvents, SPORTS_DAY_OFFSETS, SPORTS_ROW_MINE, sportsDayRows, sportsEventsForDay, sportsFilterOptions, utcDaysFor, withAutoReminders, withReminder, type SportsFilter } from "@/lib/sportsFollows";
-import { useSportsPreferences } from "@/lib/sportsPreferences";
+import { cachedSportsMetadata, loadSportsDay, loadSportsGame, loadSportsMetadata, type SportsEventArtwork } from "@/lib/sportsArtwork";
+import { channelMemoryKeys, gameDetailsEmpty, isNetworkEvent, parseSportsGameDetails, SPORTS_ROW_NETWORKS, sportsNetworkEvents, standingsAround, withRememberedFirst, type SportsGameDetails } from "@/lib/sportsExtras";
+import { eventTeams, followKey, followOptions, followsTeam, isFinished, isReminded, localDateKey, localDayStart, matchesSportsFilter, mySportsEvents, SPORTS_DAY_OFFSETS, SPORTS_ROW_MINE, sportsDayRows, sportsEventsForDay, sportsFilterOptions, utcDaysFor, withAutoReminders, withReminder, type SportsFilter } from "@/lib/sportsFollows";
+import { setSportsFailover, useSportsPreferences } from "@/lib/sportsPreferences";
 import { authClient } from "@/lib/store/clients";
 import { attachSportsAddonSources, loadSportsAddonEvents, resolveSportsAddon, type SportsAddonEvent, type SportsAddonStream } from "@/lib/sportsAddons";
 import { VirtualList } from "@/components/ui/VirtualList";
@@ -45,14 +46,15 @@ function chipKeys(event: ReactKeyboardEvent<HTMLButtonElement>) {
 }
 
 /** Remind me, and follow either team or the competition, from a game's sheet. */
-function SportsEventActions({ event, now, reminded, followed, onToggleReminder, onToggleFollow }: {
+function SportsEventActions({ event, now, reminded, followed, onToggleReminder, onToggleFollow, canAlert, scoreAlerts, onToggleScoreAlerts }: {
   event: SportsGuideEvent; now: number; reminded: boolean; followed: ReadonlySet<string>;
   onToggleReminder: (on: boolean) => void; onToggleFollow: (follow: ReturnType<typeof followOptions>[number]) => void;
+  canAlert: boolean; scoreAlerts: boolean; onToggleScoreAlerts: (on: boolean) => void;
 }) {
   const translateUi = useTranslation();
   const canRemind = !isFinished(event) && !isOnAir(event, now) && event.programme.startUtcMillis > now;
   const options = followOptions(event);
-  if (!canRemind && !options.length) return null;
+  if (!canRemind && !options.length && !canAlert) return null;
   return <div className="tv-event-actions">
     {canRemind && <button type="button" className={`tv-event-action${reminded ? " is-on" : ""}`} aria-pressed={reminded} onClick={() => onToggleReminder(!reminded)}>
       {reminded ? <BellRing size={18} /> : <Bell size={18} />}{reminded ? translateUi("Reminder on") : translateUi("Remind me")}</button>}
@@ -61,6 +63,8 @@ function SportsEventActions({ event, now, reminded, followed, onToggleReminder, 
       return <button type="button" key={followKey(option)} className={`tv-event-action${on ? " is-on" : ""}`} aria-pressed={on} onClick={() => onToggleFollow(option)}>
         <Star size={18} fill={on ? "currentColor" : "none"} />{on ? translateUi("Following {name}", { name: option.name }) : translateUi("Follow {name}", { name: option.name })}</button>;
     })}
+    {canAlert && <button type="button" className={`tv-event-action${scoreAlerts ? " is-on" : ""}`} aria-pressed={scoreAlerts} onClick={() => onToggleScoreAlerts(!scoreAlerts)}>
+      <Trophy size={18} />{scoreAlerts ? translateUi("Score alerts on") : translateUi("Score alerts")}</button>}
   </div>;
 }
 export function SportsGuidePane({ channels, guide, onPlay, onEnter, onOpenCategories, providerNames = {}, addons = NO_ADDONS, clockFormat, profileId }: {
@@ -114,7 +118,8 @@ export function SportsGuidePane({ channels, guide, onPlay, onEnter, onOpenCatego
     return () => { active = false; clearInterval(refresh); };
   }, [addons, retry]);
   const sportsPrefs = useSportsPreferences(authClient, profileId);
-  const { follows, reminders, toggleFollow: onToggleFollow, updateReminders } = sportsPrefs;
+  const { follows, reminders, toggleFollow: onToggleFollow, updateReminders, channelMemory, rememberChannel, scoreAlerts, setScoreAlerts } = sportsPrefs;
+
   // null = the overview; otherwise days from today (-7..7).
   const [dayOffset, setDayOffset] = useState<number | null>(null);
   const [filter, setFilter] = useState<SportsFilter>("all");
@@ -126,6 +131,7 @@ export function SportsGuidePane({ channels, guide, onPlay, onEnter, onOpenCatego
   const [now, setNow] = useState(Date.now);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showScore, setShowScore] = useState(false);
+  const [showDetails, setShowDetails] = useState(false);
   const [rowLimits, setRowLimits] = useState<Record<string, number>>({});
   const [focusedOrder, setFocusedOrder] = useState<{ row: string; ids: string[] } | null>(null);
   // Rows more than a screen away drop their artwork so decoded bitmaps don't
@@ -137,6 +143,11 @@ export function SportsGuidePane({ channels, guide, onPlay, onEnter, onOpenCatego
   const entered = useRef(false);
   useEffect(() => { const timer = setInterval(() => setNow(Date.now()), 30_000); return () => clearInterval(timer); }, []);
   const scanDay = new Date(now).toDateString();
+  // League networks (NBA TV, Sky Sports F1, ...) in this playlist, one tile each.
+  const nowHour = Math.floor(now / 3_600_000);
+  const networkEvents = useMemo(() => sportsNetworkEvents(channels, follows, Date.now()),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [channels, follows, nowHour]);
   useEffect(() => {
     setLoading(true);
     setFailed(false);
@@ -177,16 +188,18 @@ export function SportsGuidePane({ channels, guide, onPlay, onEnter, onOpenCatego
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dayKey]);
   const dayExtra = dayFixtures && dayFixtures.key === dayKey ? dayFixtures.items : NO_ARTWORK;
-  const labelMine = translateUi("My sports"), labelLiveNow = translateUi("Live now");
+  const labelMine = translateUi("My sports"), labelLiveNow = translateUi("Live now"), labelNetworks = translateUi("League networks");
   const baseRows = useMemo(() => {
     if (dayKey === null) {
       const filtered = filter === "all" ? visibleEvents : visibleEvents.filter(e => matchesSportsFilter(e, filter, now));
       const mine = mySportsEvents(filtered, follows, now);
-      return [...(mine.length ? [{ id: SPORTS_ROW_MINE, title: labelMine, events: mine }] : []), ...sportsPresentationRows(filtered, now, failedArtwork)];
+      const networks = networkEvents.filter(e => filter === "all" || (filter !== "live" && matchesSportsFilter(e, filter, now)));
+      return [...(mine.length ? [{ id: SPORTS_ROW_MINE, title: labelMine, events: mine }] : []),
+        ...(networks.length ? [{ id: SPORTS_ROW_NETWORKS, title: labelNetworks, events: networks }] : []), ...sportsPresentationRows(filtered, now, failedArtwork)];
     }
     return sportsDayRows(sportsEventsForDay(visibleEvents, [...artwork, ...dayExtra], dayKey).filter(e => matchesSportsFilter(e, filter, now)), follows, now)
       .map(row => row.id === SPORTS_ROW_MINE ? { ...row, title: labelMine } : row.id === "day-live" ? { ...row, title: labelLiveNow } : row);
-  }, [dayKey, filter, visibleEvents, follows, now, failedArtwork, artwork, dayExtra, labelMine, labelLiveNow]);
+  }, [dayKey, filter, visibleEvents, follows, now, failedArtwork, artwork, dayExtra, labelMine, labelLiveNow, networkEvents, labelNetworks]);
   const filterSports = useMemo(() => sportsFilterOptions(dayKey === null ? visibleEvents.filter(e => hasSportsChannels(e, now))
     : sportsEventsForDay(visibleEvents, [...artwork, ...dayExtra], dayKey)), [dayKey, visibleEvents, artwork, dayExtra, now]);
   // Games of followed teams get a reminder by themselves.
@@ -220,7 +233,18 @@ export function SportsGuidePane({ channels, guide, onPlay, onEnter, onOpenCatego
   const selected = visibleEvents.find((event) => event.id === selectedId) ?? rows.flatMap(row => row.events).find(event => event.id === selectedId);
   const confirmedChannels = selected ? (isOnAir(selected, now) ? availableEventChannels(selected, now) : selected.channels) : [];
   const possibleChannels = (selected?.possibleChannels ?? []).filter((ch, i, rows) => !confirmedChannels.some(match => match.id === ch.id) && rows.findIndex(other => other.id === ch.id) === i);
-  const sourceChannels = [...confirmedChannels, ...possibleChannels];
+  const memoryKeys = selected ? channelMemoryKeys(selected) : [];
+  const sourceChannels = withRememberedFirst([...confirmedChannels, ...possibleChannels], channelMemory, memoryKeys);
+  const rememberedId = memoryKeys.map(key => channelMemory[key]).find(Boolean);
+  const playFromSheet = (event: SportsGuideEvent, ch: IptvChannel) => {
+    const keys = channelMemoryKeys(event);
+    if (keys.length) rememberChannel(keys, ch.id);
+    const others = [ch, ...sourceChannels.filter(other => other.id !== ch.id && accessibleIds.has(other.id))].slice(0, 8);
+    setSportsFailover(others.length > 1 ? { eventId: event.id, title: event.title, channels: others, tried: [] } : null,
+      isNetworkEvent(event) ? null : event.fixture?.id ?? null);
+    close();
+    onPlay(ch);
+  };
   const close = () => { dialog.current?.close(); setSelectedId(null); origin.current?.focus({ preventScroll: true }); };
   useEffect(() => {
     if (!selectedId || dialog.current?.open) return;
@@ -278,9 +302,9 @@ export function SportsGuidePane({ channels, guide, onPlay, onEnter, onOpenCatego
       }}>{row.events.slice(0, rowLimits[row.id] ?? 16).map((event, index) => {
         const sport = guideSports.find((s) => s.id === event.sportId)!;
         // My sports and day rows mix games with and without artwork; the latter use the compact card.
-        const scheduleOnly = row.id.endsWith("-schedule") || ((row.id === SPORTS_ROW_MINE || row.id.startsWith("day-"))
+        const scheduleOnly = row.id.endsWith("-schedule") || ((row.id === SPORTS_ROW_MINE || row.id === SPORTS_ROW_NETWORKS || row.id.startsWith("day-"))
           && (failedArtwork.has(event.id) || !(event.artwork || (event.teamArtwork?.homeBadge && event.teamArtwork.awayBadge))));
-        return <button type="button" className={`tv-event-card${scheduleOnly ? " is-schedule" : ""}`} key={event.id} onFocus={() => {
+        return <button type="button" className={`tv-event-card${scheduleOnly ? " is-schedule" : ""}${isNetworkEvent(event) ? " is-network" : ""}`} key={event.id} onFocus={() => {
           onEnter();
           if (focusedOrder?.row !== row.id) setFocusedOrder({ row: row.id, ids: row.events.map(e => e.id) });
           if (index >= (rowLimits[row.id] ?? 16) - 3 && (rowLimits[row.id] ?? 16) < row.events.length)
@@ -302,7 +326,7 @@ export function SportsGuidePane({ channels, guide, onPlay, onEnter, onOpenCatego
             next?.focus({ preventScroll: true });
             next?.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "instant" });
           }}
-          onClick={(click) => { origin.current = click.currentTarget; setShowScore(false); setSelectedId(event.id); }}>
+          onClick={(click) => { origin.current = click.currentTarget; setShowScore(false); setShowDetails(false); setSelectedId(event.id); }}>
           {scheduleOnly ? <span className="tv-event-schedule-time">{stamp(event)}{isReminded(reminders, event.id) && <BellRing size={12} aria-label={translateUi("Reminder on")} />}</span> : <div className="tv-event-art">{(nearRows.has(row.id) || rowIndex < 2) && <EventArtwork event={event} onUnavailable={() => setFailedArtwork(current => current.has(event.id) ? current : new Set([...current, event.id]))} />}<span className={`tv-event-stamp${isOnAir(event, now) ? " is-on-air" : ""}`}>{stamp(event)}{isReminded(reminders, event.id) && <BellRing size={12} aria-label={translateUi("Reminder on")} />}</span></div>}
           <strong>{event.title}</strong><small className="tv-event-meta"><span className="tv-event-competition">{[sport.title, event.competition].filter(Boolean).join(" · ")}</span>{isOnAir(event, now) && <span><Tv size={16} />{sportsChannelSummary(event, now)}</span>}</small>
         </button>;
@@ -314,23 +338,63 @@ export function SportsGuidePane({ channels, guide, onPlay, onEnter, onOpenCatego
       onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); close(); } }}>
       <header>{selected && !failedArtwork.has(selected.id) && (selected.artwork || selected.teamArtwork) && <div className="tv-event-picker-art"><EventArtwork event={selected} /></div>}<div><p>{selected ? `${stamp(selected)} · ${guideSports.find(s => s.id === selected.sportId)!.title}` : translateUi("This event is no longer in the available guide.")}</p><h2>{selected?.title ?? translateUi("Schedule changed")}</h2></div><button type="button" onClick={close} aria-label={translateUi("Close")}><X /></button></header>
       {selected?.fixture && <div className="tv-event-details"><span>{[selected.competition, selected.fixture.venue, selected.fixture.round ? `Round ${selected.fixture.round}` : undefined].filter(Boolean).join(" · ")}</span>
-        {selected.fixture.homeScore !== undefined && selected.fixture.awayScore !== undefined && (isConfirmedLive(selected, now) || isFinished(selected)) && <button type="button" className="secondary" onClick={() => setShowScore(value => !value)}>{showScore ? `${selected.fixture.homeScore} : ${selected.fixture.awayScore}` : translateUi("Show score")}</button>}</div>}
-      {selected && <SportsEventActions event={selected} now={now} reminded={isReminded(reminders, selected.id)} followed={new Set(follows.map(followKey))}
-        onToggleReminder={on => updateReminders(current => withReminder(current, selected, on))} onToggleFollow={onToggleFollow} />}
+        {selected.fixture.homeScore !== undefined && selected.fixture.awayScore !== undefined && (isConfirmedLive(selected, now) || isFinished(selected)) && <button type="button" className="secondary" onClick={() => setShowScore(value => !value)}>{showScore ? `${selected.fixture.homeScore} : ${selected.fixture.awayScore}` : translateUi("Show score")}</button>}
+        <button type="button" className="secondary" aria-pressed={showDetails} onClick={() => setShowDetails(value => !value)}>{showDetails ? translateUi("Channels") : translateUi("Game info")}</button></div>}
+      {selected && !isNetworkEvent(selected) && <SportsEventActions event={selected} now={now} reminded={isReminded(reminders, selected.id)} followed={new Set(follows.map(followKey))}
+        onToggleReminder={on => updateReminders(current => withReminder(current, selected, on))} onToggleFollow={onToggleFollow}
+        canAlert={!isFinished(selected) && followsTeam(selected, follows)} scoreAlerts={scoreAlerts} onToggleScoreAlerts={setScoreAlerts} />}
+      {selected?.fixture && showDetails ? <SportsGameInfo key={selected.fixture.id} fixtureId={selected.fixture.id} teams={eventTeams(selected)} showScore={showScore}
+        spoilerSensitive={isFinished(selected) || isConfirmedLive(selected, now)} /> : <>
       <h3>{selected?.addonSources?.length ? translateUi("Sources") : selected && isOnAir(selected, now) ? translateUi("Channels") : translateUi("Scheduled channels")}<span>{selected ? sportsChannelSummary(selected, now) : translateUi("No channels")}</span></h3>
       {!sourceChannels.length && !selected?.addonSources?.length && <p className="tv-event-no-channels">{translateUi("No sources found yet.")}</p>}
       {sourceChannels.length > 0 && <VirtualList items={sourceChannels} estimate={72} itemKey={(ch) => ch.id} label={translateUi("Available channels")} renderItem={(ch) =>
         <button type="button" className="tv-event-source" disabled={!selected || !isOnAir(selected, now)} onClick={() => {
-          if (selected && accessibleIds.has(ch.id) && isOnAir(selected, Date.now()) && (availableEventChannels(selected, Date.now()).some(channel => channel.id === ch.id) || possibleChannels.some(channel => channel.id === ch.id))) { close(); onPlay(ch); }
-        }}><span className="tv-source-logo-fallback"><ChannelLogo channel={ch} size={28} /></span><span><strong>{ch.name}</strong><small>{providerNames[channelPlaylistId(ch.id)] || ch.group}{possibleChannels.some(candidate => candidate.id === ch.id) ? translateUi(" · Possible broadcast") : translateUi(" · Guide match")}</small></span>{ch.qualityLabel && <em>{ch.qualityLabel}</em>}{ch.language && <em>{ch.language.toUpperCase()}</em>}<ChevronRight className="tv-source-arrow" size={22} /><Play className="tv-source-play" size={22} /></button>} />}
+          if (selected && accessibleIds.has(ch.id) && isOnAir(selected, Date.now()) && (availableEventChannels(selected, Date.now()).some(channel => channel.id === ch.id) || possibleChannels.some(channel => channel.id === ch.id))) playFromSheet(selected, ch);
+        }}><span className="tv-source-logo-fallback"><ChannelLogo channel={ch} size={28} /></span><span><strong>{ch.name}</strong><small>{providerNames[channelPlaylistId(ch.id)] || ch.group}{ch.id === rememberedId && sourceChannels.length > 1 ? translateUi(" · Last used") : selected && isNetworkEvent(selected) ? translateUi(" · League network") : possibleChannels.some(candidate => candidate.id === ch.id) ? translateUi(" · Possible broadcast") : translateUi(" · Guide match")}</small></span>{ch.qualityLabel && <em>{ch.qualityLabel}</em>}{ch.language && <em>{ch.language.toUpperCase()}</em>}<ChevronRight className="tv-source-arrow" size={22} /><Play className="tv-source-play" size={22} /></button>} />}
       {selected?.addonSources?.map(source => <AddonSourceRow key={`${selected.id}:${source.key}`} event={source} addons={addons} canPlay={isOnAir(selected, now) && (source.startsAt === undefined || source.startsAt <= now)} onPlay={stream => {
         if (!addons.some(a => a.enabled !== false && a.manifestUrl === source.installation)) return;
         if (stream.external) { if (premiumAllows("external")) window.open(stream.url, "_blank", "noopener,noreferrer"); }
         else onPlay({ id: `sports-addon:${source.addonId}:${source.type}:${source.eventId}`, name: source.title, group: source.addonName, streamUrl: stream.url, requestHeaders: stream.headers });
         close();
       }} />)}
+      </>}
     </dialog>
   </section>;
+}
+
+/**
+ * The game page beyond its channels: score per period, form, earlier meetings
+ * and the table. For a live or finished game the period scores and the table
+ * stay hidden until Show score; form and meetings never include this game.
+ */
+function SportsGameInfo({ fixtureId, teams, showScore, spoilerSensitive }: { fixtureId: string; teams: string[]; showScore: boolean; spoilerSensitive: boolean }) {
+  const translateUi = useTranslation();
+  const [details, setDetails] = useState<SportsGameDetails | null | undefined>(undefined);
+  useEffect(() => {
+    let active = true;
+    void loadSportsGame(fixtureId).then(payload => { if (active) setDetails(parseSportsGameDetails(payload)); });
+    return () => { active = false; };
+  }, [fixtureId]);
+  if (details === undefined) return <p className="tv-game-info-note" role="status">{translateUi("Loading game details…")}</p>;
+  if (!details || gameDetailsEmpty(details)) return <p className="tv-game-info-note">{translateUi("No more details for this game yet.")}</p>;
+  const hidden = spoilerSensitive && !showScore;
+  const [home, away] = teams;
+  const hiddenNote = <p className="tv-game-info-note">{translateUi("Hidden until you tap Show score.")}</p>;
+  return <div className="tv-game-info" tabIndex={0} aria-label={translateUi("Game info")}>
+    {details.periods.length > 0 && <section><h4>{translateUi("Score per period")}</h4>{hidden ? hiddenNote :
+      <table><thead><tr><th />{details.periods.map((p, i) => <th key={i}>{p.label}</th>)}</tr></thead>
+        <tbody><tr><th scope="row">{home}</th>{details.periods.map((p, i) => <td key={i}>{p.home}</td>)}</tr>
+          <tr><th scope="row">{away}</th>{details.periods.map((p, i) => <td key={i}>{p.away}</td>)}</tr></tbody></table>}</section>}
+    {(details.homeForm.length > 0 || details.awayForm.length > 0) && <section><h4>{translateUi("Form")}</h4>
+      {([[home, details.homeForm], [away, details.awayForm]] as const).filter(([team, form]) => team && form.length).map(([team, form]) =>
+        <p className="tv-game-form" key={team}><span>{team}</span>{form.map((r, i) => <b key={i} className={`is-${r.toLowerCase()}`}>{r}</b>)}</p>)}</section>}
+    {details.headToHead.length > 0 && <section><h4>{translateUi("Head to head")}</h4>
+      {details.headToHead.map((m, i) => <p className="tv-game-h2h" key={i}><small>{m.date}</small><span>{m.homeTeam} {m.homeScore} – {m.awayScore} {m.awayTeam}</span></p>)}</section>}
+    {details.standings.length > 0 && <section><h4>{[translateUi("Standings"), details.standingsTitle].filter(Boolean).join(" · ")}</h4>{hidden ? hiddenNote :
+      <table className="tv-game-table"><thead><tr><th>#</th><th /><th>P</th><th>W</th><th>D</th><th>L</th><th>+/-</th><th>Pts</th></tr></thead>
+        <tbody>{standingsAround(details.standings).map(row => <tr key={`${row.rank}-${row.team}`} className={row.highlight ? "is-highlight" : undefined}>
+          <td>{row.rank}</td><th scope="row">{row.team}</th>{[row.played, row.won, row.drawn, row.lost, row.difference, row.points].map((v, i) => <td key={i}>{v ?? "–"}</td>)}</tr>)}</tbody></table>}</section>}
+  </div>;
 }
 
 function AddonSourceRow({ event, addons, canPlay, onPlay }: { event: SportsAddonEvent; addons: InstalledAddon[]; canPlay: boolean; onPlay: (stream: SportsAddonStream) => void }) {
