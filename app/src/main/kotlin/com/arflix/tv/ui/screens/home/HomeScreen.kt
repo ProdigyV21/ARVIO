@@ -3505,7 +3505,15 @@ private fun HomeRowsLayer(
     }
 }
 
-private val MobileRankInsetDp = 40.dp
+/**
+ * Room left of the card for each numeral. Glyphs differ in width ("1" is narrow, "10" is two
+ * digits), so a fixed inset hid most of a "2" or "8" under the poster.
+ */
+internal fun mobileRankInset(rank: Int): androidx.compose.ui.unit.Dp = when {
+    rank >= 10 -> 78.dp
+    rank == 1 -> 34.dp
+    else -> 50.dp
+}
 
 /** Outlined rank numeral for phone Top 10 rows; the card that follows overlaps its right edge. */
 @Composable
@@ -3520,7 +3528,7 @@ private fun MobileRankNumber(rank: Int, modifier: Modifier = Modifier) {
     )
     Box(
         modifier = modifier
-            .width(MobileRankInsetDp + 40.dp)
+            .width(mobileRankInset(rank) + 40.dp)
             .semantics { contentDescription = label }
             .testTag("mobile_rank_$rank"),
         contentAlignment = Alignment.BottomStart
@@ -3752,8 +3760,9 @@ private fun MobileHomeRowsLayer(
                             if (isRanked && index < 10) {
                                 // A large outlined rank number beside the artwork, instead of a small ribbon.
                                 val artworkHeight = if (isPortrait) rowMobileItemWidth * 1.5f else rowMobileItemWidth * (9f / 16f)
+                                val rankInset = mobileRankInset(index + 1)
                                 Box(
-                                    modifier = Modifier.width(rowMobileItemWidth + MobileRankInsetDp)
+                                    modifier = Modifier.width(rowMobileItemWidth + rankInset)
                                 ) {
                                     MobileRankNumber(
                                         rank = index + 1,
@@ -3772,7 +3781,7 @@ private fun MobileHomeRowsLayer(
                                         onFocused = {},
                                         onClick = onCardClick,
                                         onLongClick = onCardLongClick,
-                                        modifier = Modifier.padding(start = MobileRankInsetDp)
+                                        modifier = Modifier.padding(start = rankInset)
                                     )
                                 }
                             } else {

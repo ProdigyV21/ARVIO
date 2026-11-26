@@ -3840,6 +3840,7 @@ class HomeViewModel @Inject constructor(
                         if (!rating.isNullOrBlank()) {
                             withContext(Dispatchers.Main.immediate) {
                                 cardImdbRatings[key] = rating
+                                com.arflix.tv.ui.components.CardRatings.put(item.mediaType, item.id, rating)
                             }
                         }
                     } catch (e: Exception) {

@@ -556,9 +556,7 @@ fun MediaCard(
                     if (dateLabel != null) mobileAwareCardSubtitle(isMobile, typeLabel, dateLabel)
                     else item.subtitle.ifBlank { typeLabel }
                 }
-                val cardRating = remember(item.imdbRating, item.tmdbRating, item.rating, isMobile) {
-                    if (isMobile) mobileCardRating(item.imdbRating, item.tmdbRating, item.rating) else null
-                }
+                val cardRating = rememberMobileCardRating(item, enabled = isMobile)
                 androidx.compose.foundation.layout.Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     text = subtitle,

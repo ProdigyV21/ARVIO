@@ -132,6 +132,11 @@ class MediaRepository @Inject constructor(
     private val apiKey = Constants.TMDB_API_KEY
     private val gson = Gson()
     private val repositoryScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    init {
+        // Phone cards everywhere show the same IMDb score as the hero and details page.
+        com.arflix.tv.ui.components.CardRatings.fetcher = { type, id -> getImdbRating(type, id) }
+    }
     // Lazy so constructing the repository (tests do, with mocks) doesn't touch disk.
     private val addonNative by lazy { AddonNativeCatalog(context, streamRepository, gson) }
 

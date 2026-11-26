@@ -8992,6 +8992,16 @@ internal fun CatalogDiscoveryModal(
                     .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(if (isCompact) 12.dp else 18.dp))
                     .padding(if (isCompact) 10.dp else 18.dp)
             ) {
+                if (LocalDeviceType.current.isTouchDevice()) {
+                    // Phones: a real heading so the sheet doesn't open straight onto a hint line.
+                    Text(
+                        stringResource(R.string.add_catalog),
+                        color = Color.White,
+                        fontSize = 22.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(start = 4.dp, top = 6.dp, bottom = 6.dp)
+                    )
+                }
                 Row(Modifier.fillMaxWidth().padding(bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text(stringResource(R.string.settings_simkl_lists_hint), style = ArflixTypography.caption,
                         color = TextSecondary, modifier = Modifier.weight(1f))
@@ -9015,7 +9025,7 @@ internal fun CatalogDiscoveryModal(
                             label = stringResource(R.string.settings_search_lists),
                             value = query,
                             modifier = Modifier.fillMaxWidth(),
-                            placeholder = stringResource(R.string.settings_search_lists),
+                            placeholder = "Trakt, MDBList, Simkl…",
                             onClick = { editingInput = CatalogDiscoveryInputTarget.Search }
                         )
                         Spacer(modifier = Modifier.height(8.dp))
@@ -9063,7 +9073,7 @@ internal fun CatalogDiscoveryModal(
                             label = stringResource(R.string.settings_search_lists),
                             value = query,
                             modifier = Modifier.weight(1f),
-                            placeholder = stringResource(R.string.settings_search_lists),
+                            placeholder = "Trakt, MDBList, Simkl…",
                             onClick = { editingInput = CatalogDiscoveryInputTarget.Search }
                         )
                         Spacer(modifier = Modifier.width(10.dp))
