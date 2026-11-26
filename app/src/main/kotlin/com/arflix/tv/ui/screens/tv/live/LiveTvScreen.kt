@@ -618,13 +618,8 @@ fun LiveTvScreen(
         mutableStateOf(state.tvSession.lastGroupName.takeIf { it.isNotBlank() } ?: "all")
     }
     var currentMode by rememberSaveable {
-        mutableStateOf(
-            if (isTouchDevice && initialChannelId == null && initialStreamUrl == null) {
-                LiveTvStartup.LiveTvMode.GroupHome
-            } else {
-                LiveTvStartup.LiveTvMode.Guide
-            }
-        )
+        mutableStateOf(LiveSportsMemory.startupMode(isTouchDevice, initialChannelId, initialStreamUrl,
+            LiveSportsMemory.reopen(context, currentProfile?.id, initialChannelId, initialStreamUrl)))
     }
     var startupCategoryApplied by rememberSaveable { mutableStateOf(false) }
     var selectedProviderId by rememberSaveable { mutableStateOf("all") }
@@ -1982,7 +1977,9 @@ fun LiveTvScreen(
     }
 
     var categoryDrawerOpen by rememberSaveable { mutableStateOf(true) }
-    var sportsSelected by rememberSaveable(currentProfile?.id) { mutableStateOf(false) }
+    var sportsSelected by rememberSaveable(currentProfile?.id) {
+        mutableStateOf(LiveSportsMemory.reopen(context, currentProfile?.id, initialChannelId, initialStreamUrl))
+    }
     val latestSportsSelected by rememberUpdatedState(sportsSelected)
     // Background sports enrichment waits until the guide and player have settled, or
     // until Sports is opened, whichever comes first (see LiveSportsWorkPolicy).
@@ -2028,6 +2025,9 @@ fun LiveTvScreen(
     var sportsRetryOnOpen by remember(sportsScope) { mutableIntStateOf(0) }
     LaunchedEffect(sportsSelected) {
         if (sportsSelected && sportsError && !sportsLoading) sportsRetryOnOpen++
+        // Leaving Live TV on Sports opens Sports again next time (see LiveSportsMemory).
+        LiveSportsMemory.save(context, currentProfile?.id, sportsSelected)
+        if (sportsSelected && isTouchDevice) currentMode = LiveTvStartup.LiveTvMode.Guide
     }
     var addonEvents by remember(currentProfile?.id, sportsAddonInstallations) { mutableStateOf(emptyList<com.arflix.tv.data.model.SportsAddonEvent>()) }
     var addonLoading by remember { mutableStateOf(false) }
