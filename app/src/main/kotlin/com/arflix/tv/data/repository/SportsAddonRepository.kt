@@ -42,6 +42,7 @@ class SportsAddonRepository @Inject constructor(private val streams: StreamRepos
     suspend fun load(addons: List<Addon>, publish: suspend (List<SportsAddonEvent>) -> Unit): List<SportsAddonEvent> {
         val publishContext = currentCoroutineContext().minusKey(Job)
         return withContext(Dispatchers.Default) {
+        val startedAt = android.os.SystemClock.elapsedRealtime()
         val results = linkedMapOf<String, SportsAddonEvent>()
         val publishMutex = Mutex()
         var lastPublish = 0L
@@ -108,6 +109,7 @@ class SportsAddonRepository @Inject constructor(private val streams: StreamRepos
             merge(events, force = false)
         } }.awaitAll()
         merge(emptyList(), force = true)
+        System.err.println("[Sports-Addons] events=${results.size} elapsed=${android.os.SystemClock.elapsedRealtime() - startedAt}ms")
         results.values.toList()
         }
     }

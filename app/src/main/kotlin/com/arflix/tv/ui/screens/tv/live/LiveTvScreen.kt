@@ -2029,22 +2029,32 @@ fun LiveTvScreen(
         LiveSportsMemory.save(context, currentProfile?.id, sportsSelected)
         if (sportsSelected && isTouchDevice) currentMode = LiveTvStartup.LiveTvMode.Guide
     }
-    var addonEvents by remember(currentProfile?.id, sportsAddonInstallations) { mutableStateOf(emptyList<com.arflix.tv.data.model.SportsAddonEvent>()) }
+    // Keyed by which add-ons (and versions) are installed, not by the list instance: the
+    // add-on list is re-emitted when manifests refresh, and that must not restart loading.
+    val sportsAddonKey = remember(sportsAddonInstallations) {
+        sportsAddonInstallations.map { "${com.arflix.tv.data.model.sportsAddonInstallation(it)}|${it.version}" }.toSet()
+    }
+    val latestSportsAddonInstallations by rememberUpdatedState(sportsAddonInstallations)
+    var addonEvents by remember(currentProfile?.id, sportsAddonKey) { mutableStateOf(emptyList<com.arflix.tv.data.model.SportsAddonEvent>()) }
     var addonLoading by remember { mutableStateOf(false) }
-    var addonReady by remember(currentProfile?.id, sportsAddonInstallations, sportsRefresh) { mutableStateOf(false) }
-    LaunchedEffect(currentProfile?.id, sportsAddonInstallations, sportsRefresh) {
-        if (sportsAddonInstallations.isEmpty()) return@LaunchedEffect
-        val installations = sportsAddonInstallations.map { com.arflix.tv.data.model.sportsAddonInstallation(it) }.toSet()
+    var addonReady by remember(currentProfile?.id, sportsAddonKey, sportsRefresh) { mutableStateOf(false) }
+    LaunchedEffect(currentProfile?.id, sportsAddonKey, sportsRefresh) {
+        if (latestSportsAddonInstallations.isEmpty()) return@LaunchedEffect
+        val installations = latestSportsAddonInstallations.map { com.arflix.tv.data.model.sportsAddonInstallation(it) }.toSet()
         // The schedule from the last run shows at once; the network refresh replaces it.
+        var fromDisk = false
         if (addonEvents.isEmpty()) {
             val restored = viewModel.restoreSportsAddonEvents(installations)
-            if (restored.isNotEmpty() && addonEvents.isEmpty()) addonEvents = restored
+            if (restored.isNotEmpty() && addonEvents.isEmpty()) { addonEvents = restored; fromDisk = true }
         }
         while (true) {
             addonLoading = true
             try {
-                val refreshing = addonEvents.isNotEmpty()
-                val refreshed = viewModel.sportsAddons.load(sportsAddonInstallations) {
+                // A copy from disk may hold only games that already started (no longer
+                // marked live), so it is replaced page by page like a first load.
+                val refreshing = addonEvents.isNotEmpty() && !fromDisk
+                fromDisk = false
+                val refreshed = viewModel.sportsAddons.load(latestSportsAddonInstallations) {
                     if (!refreshing) addonEvents = it
                 }
                 addonEvents = refreshed
