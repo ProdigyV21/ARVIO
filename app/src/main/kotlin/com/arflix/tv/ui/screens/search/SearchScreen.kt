@@ -970,7 +970,8 @@ fun SearchScreen(
                         viewModel.searchRecent(query)
                     },
                     onClear = viewModel::clearRecentSearches,
-                    modifier = Modifier.align(Alignment.CenterHorizontally),
+                    // Phones line the row up with the search field and results instead of centring it.
+                    modifier = if (isTouchDevice) Modifier.fillMaxWidth() else Modifier.align(Alignment.CenterHorizontally),
                     focusRequester = if (isTouchDevice) null else recentFocusRequester
                 )
             }

@@ -4387,8 +4387,9 @@ fun LiveTvScreen(
                 // PlayerView owns ExoPlayer.
             } else if (!state.isConfigured && state.snapshot.channels.isEmpty() && sportsAddonInstallations.isEmpty()) {
             EmptyStatePane(
-                message = stringResource(R.string.live_empty_no_playlist),
-                actionLabel = stringResource(R.string.live_btn_open_settings),
+                message = if (isTouchDevice) stringResource(R.string.mobile_live_empty_hint) else stringResource(R.string.live_empty_no_playlist),
+                touchTitle = stringResource(R.string.mobile_live_empty_title),
+                actionLabel = if (isTouchDevice) stringResource(R.string.mobile_live_empty_action) else stringResource(R.string.live_btn_open_settings),
                 onAction = onNavigateToIptvSettings ?: onNavigateToSettings,
                 isFocused = focusZone != LiveTvFocusZone.TOPBAR,
                 focusRequester = emptyStateButtonFocus,

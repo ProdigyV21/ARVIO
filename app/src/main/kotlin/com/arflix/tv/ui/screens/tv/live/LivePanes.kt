@@ -30,6 +30,7 @@ import androidx.compose.ui.input.key.type
 import androidx.tv.material3.Button
 import androidx.tv.material3.ButtonDefaults
 import androidx.compose.ui.graphics.Color
+import androidx.compose.material.icons.filled.LiveTv
 import com.arflix.tv.util.LocalDeviceType
 
 @OptIn(ExperimentalTvMaterial3Api::class)
@@ -66,9 +67,23 @@ fun EmptyStatePane(
     modifier: Modifier = Modifier,
     isFocused: Boolean = true,
     onMoveUp: (() -> Unit)? = null,
-    focusRequester: FocusRequester? = null
+    focusRequester: FocusRequester? = null,
+    touchTitle: String? = null,
+    touchIcon: androidx.compose.ui.graphics.vector.ImageVector = androidx.compose.material.icons.Icons.Filled.LiveTv,
 ) {
     val isTouchDevice = LocalDeviceType.current.isTouchDevice()
+    if (isTouchDevice) {
+        Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            com.arflix.tv.ui.components.MobileEmptyState(
+                icon = touchIcon,
+                title = touchTitle ?: message,
+                message = if (touchTitle != null) message else null,
+                actionLabel = actionLabel,
+                onAction = onAction,
+            )
+        }
+        return
+    }
     Column(
         modifier = modifier.fillMaxSize(),
         verticalArrangement = Arrangement.Center,

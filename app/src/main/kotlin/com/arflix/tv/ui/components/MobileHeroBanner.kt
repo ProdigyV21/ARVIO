@@ -80,8 +80,10 @@ internal fun MobileHeroScrim(
 ) {
     val immersiveScrim = remember(background, posterArtwork) {
         Brush.verticalGradient(
-            0f to Color.Black.copy(alpha = 0.10f),
-            0.16f to Color.Transparent,
+            // Darker top so the wordmark and avatar stay legible over titles printed in the artwork.
+            0f to Color.Black.copy(alpha = 0.55f),
+            0.08f to Color.Black.copy(alpha = 0.30f),
+            0.18f to Color.Transparent,
             0.40f to Color.Transparent,
             0.52f to background.copy(alpha = 0.06f),
             0.64f to background.copy(alpha = if (posterArtwork) 0.60f else 0.26f),
@@ -181,6 +183,8 @@ fun MobileHeroBanner(
 ) {
     val context = LocalContext.current
     var logoFailed by remember(title, logoUrl) { mutableStateOf(false) }
+    // Black title logos vanish on the dark scrim; those are drawn white instead.
+    var logoDark by remember(logoUrl) { mutableStateOf(false) }
 
     Box(
         modifier = modifier
@@ -215,12 +219,18 @@ fun MobileHeroBanner(
                     model = ImageRequest.Builder(context)
                         .data(logoUrl)
                         .precision(Precision.INEXACT)
-                        .allowHardware(true)
+                        .allowHardware(false)
                         .crossfade(300)
                         .build(),
                     contentDescription = title,
                     contentScale = ContentScale.Fit,
                     onError = { logoFailed = true },
+                    onSuccess = { state ->
+                        (state.result.drawable as? android.graphics.drawable.BitmapDrawable)?.bitmap?.let {
+                            logoDark = logoBitmapIsDark(it)
+                        }
+                    },
+                    colorFilter = if (logoDark) androidx.compose.ui.graphics.ColorFilter.tint(Color.White) else null,
                     alignment = Alignment.Center,
                     modifier = Modifier
                         .height(if (compactContent) 38.dp else 56.dp)

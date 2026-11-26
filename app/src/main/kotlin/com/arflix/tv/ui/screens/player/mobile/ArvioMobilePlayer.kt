@@ -93,6 +93,7 @@ import androidx.compose.ui.input.pointer.PointerInputScope
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -155,6 +156,7 @@ fun ArvioMobilePlayer(
     onOpenCastChooser: () -> Unit,
     onRetryPlayback: () -> Unit,
     onReloadStreams: () -> Unit,
+    onOpenAddons: (() -> Unit)? = null,
     onUpdateAutoplay: (Boolean) -> Unit,
     onUpdateAutoSkipIntro: (Boolean) -> Unit,
     onUpdateAutoSkipOutro: (Boolean) -> Unit,
@@ -1195,6 +1197,30 @@ fun ArvioMobilePlayer(
                                 fontSize = 13.5.sp,
                                 fontWeight = FontWeight.Bold
                             )
+                        }
+
+                        // No streams usually means no addon is installed: offer the way there.
+                        if (!hasStreams && onOpenAddons != null) {
+                            Box(
+                                modifier = Modifier
+                                    .clip(MobilePlayerTokens.ShapeBtn)
+                                    .border(1.dp, Color(0x47FFFFFF), MobilePlayerTokens.ShapeBtn)
+                                    .clickable(
+                                        interactionSource = remember { MutableInteractionSource() },
+                                        indication = null,
+                                        onClick = onOpenAddons
+                                    )
+                                    .padding(horizontal = 22.dp, vertical = 10.dp)
+                                    .testTag("mobile_player_open_addons"),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = stringResource(R.string.mplayer_open_addons),
+                                    color = MobilePlayerTokens.InkPrimary,
+                                    fontSize = 13.5.sp,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
                         }
                     }
                 }
