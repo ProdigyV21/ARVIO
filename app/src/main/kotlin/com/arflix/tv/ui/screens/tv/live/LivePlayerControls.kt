@@ -20,11 +20,13 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
@@ -380,3 +382,54 @@ internal fun livePlayerSeekable(
     (playerSeekable && playerDurationMs != androidx.media3.common.C.TIME_UNSET && playerDurationMs >= MinSeekableWindowMs)
 
 private const val MinSeekableWindowMs = 30_000L
+
+/** A row in a player list (sources): white with dark text on focus, a tick on the current choice. */
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+internal fun PlayerListRow(
+    label: String,
+    detail: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var focused by remember { mutableStateOf(false) }
+    val bg by animateColorAsState(if (focused) Color.White else LiveColors.PanelDeep, tween(140), label = "player-row-bg")
+    val fg = if (focused) PlayerControlStyle.OnFocused else LiveColors.Fg
+    val scale = playerFocusScale(focused, 1.02f)
+    val shape = RoundedCornerShape(10.dp)
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+            }
+            .clip(shape)
+            .background(bg)
+            .border(1.dp, if (focused) Color.Transparent else LiveColors.Divider, shape)
+            .onFocusChanged { focused = it.hasFocus }
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Box(Modifier.size(20.dp), contentAlignment = Alignment.Center) {
+            if (selected) Icon(androidx.compose.material.icons.Icons.Filled.Check, contentDescription = null, tint = fg, modifier = Modifier.size(20.dp))
+        }
+        Text(
+            text = label,
+            style = LiveType.CellTitle.copy(color = fg, fontSize = 15.sp, lineHeight = 19.sp, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
+        )
+        if (detail.isNotBlank()) {
+            Text(
+                text = detail,
+                style = LiveType.Badge.copy(color = if (focused) fg.copy(alpha = 0.65f) else LiveColors.FgDim, fontSize = 12.sp, lineHeight = 15.sp),
+                maxLines = 1,
+            )
+        }
+    }
+}
