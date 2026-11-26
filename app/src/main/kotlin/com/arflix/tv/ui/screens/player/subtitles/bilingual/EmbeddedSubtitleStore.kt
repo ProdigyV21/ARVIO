@@ -55,21 +55,41 @@ class EmbeddedSubtitleStore {
      * episode — or one that starts before the UI learned the new URL — can't mix its cues into
      * another episode. A few recent sources are kept so switching back is instant.
      */
-    private val sources = object : LinkedHashMap<String, LinkedHashMap<Int, TrackData>>(8, 0.75f, true) {
+    private val sources = object : LinkedHashMap<String, LinkedHashMap<Int, TrackData>>(4, 0.75f, true) {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, LinkedHashMap<Int, TrackData>>?): Boolean =
             size > MAX_SOURCES
     }
     private val tracks: Map<Int, TrackData> get() = sources[sourceKey ?: NO_KEY] ?: emptyMap()
     private val versionCounter = AtomicLong(0)
+    private val generationCounter = AtomicLong(0)
+    private var extractorBoundGeneration = 0L
 
     /** Increments on every change; cheap staleness check for cached alignments. */
     val version: Long get() = versionCounter.get()
 
     fun currentSourceKey(): String? = synchronized(lock) { sourceKey }
 
+    fun currentGeneration(): Long = generationCounter.get()
+
+    /**
+     * Starts a new player load generation and tentatively points [sourceKey] at [key] (which may
+     * still be a pre-redirect URL until the extractor reports the resolved URI).
+     */
+    fun openSource(key: String?): Long = synchronized(lock) {
+        val gen = generationCounter.incrementAndGet()
+        extractorBoundGeneration = 0L
+        if (key != sourceKey) {
+            sourceKey = key
+            versionCounter.incrementAndGet()
+        }
+        gen
+    }
+
     /** Makes [key] the media whose tracks and cues are read. Data of other sources is kept apart. */
     fun beginSource(key: String?): Unit = synchronized(lock) {
         if (key != sourceKey) {
+            generationCounter.incrementAndGet()
+            extractorBoundGeneration = 0L
             sourceKey = key
             versionCounter.incrementAndGet()
         }
@@ -77,6 +97,31 @@ class EmbeddedSubtitleStore {
 
     /** Same as [beginSource]; called by the player whenever its current media changes. */
     fun setActiveSource(key: String?) = beginSource(key)
+
+    /**
+     * Binds [sourceKey] to the URI an extractor from [extractorGeneration] actually opened
+     * (handles HTTP redirects, local proxies, and sideloaded URIs). Stale generations are ignored.
+     */
+    fun bindExtractorSource(extractorGeneration: Long, uriKey: String?): Unit = synchronized(lock) {
+        if (uriKey.isNullOrBlank() || extractorGeneration <= 0L) return@synchronized
+        if (extractorGeneration != generationCounter.get()) return@synchronized
+        extractorBoundGeneration = extractorGeneration
+        if (uriKey != sourceKey) {
+            sourceKey = uriKey
+            versionCounter.incrementAndGet()
+        }
+    }
+
+    /** Updates [sourceKey] from a media load event unless an extractor already bound a resolved URI. */
+    fun bindLoadSource(uriKey: String?): Unit = synchronized(lock) {
+        if (uriKey.isNullOrBlank()) return@synchronized
+        val currentGen = generationCounter.get()
+        if (extractorBoundGeneration == currentGen && !sources.containsKey(uriKey)) return@synchronized
+        if (uriKey != sourceKey) {
+            sourceKey = uriKey
+            versionCounter.incrementAndGet()
+        }
+    }
 
     /** Drops data previously collected for [key] (e.g. the same URL re-opened for new content). */
     fun resetSource(key: String?): Unit = synchronized(lock) {
@@ -86,6 +131,8 @@ class EmbeddedSubtitleStore {
     fun clear(): Unit = synchronized(lock) {
         sources.clear()
         sourceKey = null
+        extractorBoundGeneration = 0L
+        generationCounter.incrementAndGet()
         versionCounter.incrementAndGet()
     }
 
@@ -159,8 +206,8 @@ class EmbeddedSubtitleStore {
     companion object {
         const val UNKNOWN_END_CAP_MS = 4_000L
         private const val NO_KEY = "\u0000none"
-        private const val MAX_SOURCES = 4
+        private const val MAX_SOURCES = 2
         private const val MAX_CUE_LOOKBACK_MS = 30_000L
-        private const val MAX_CUES_PER_TRACK = 20_000
+        private const val MAX_CUES_PER_TRACK = 8_000
     }
 }

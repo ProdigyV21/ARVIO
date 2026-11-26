@@ -79,21 +79,36 @@ class SubtitleLanguageTest {
         assertEquals("Japanese", SubtitleLanguage.parse("ja")!!.translationTargetName)
     }
 
-    @Test fun `settings sanitise languages and default secondary is Simplified Chinese`() {
-        val d = BilingualSubtitleSettings()
-        assertFalse(d.smartEnabled)
-        assertEquals("auto", d.primaryLanguage)
-        assertEquals("zh-Hans", d.secondary.tag)
-        val s = BilingualSubtitleSettings(primaryLanguage = "jpn", secondaryLanguage = "zh-TW").sanitized()
-        assertEquals("ja", s.primaryLanguage)
-        assertEquals("zh-Hant", s.secondaryLanguage)
-        val bad = BilingualSubtitleSettings(primaryLanguage = "???", secondaryLanguage = "nope!").sanitized()
-        assertEquals("auto", bad.primaryLanguage)
-        assertEquals("zh-Hans", bad.secondaryLanguage)
-        // Round-trip through the persisted JSON.
-        val back = BilingualSettingsCodec.decode(BilingualSettingsCodec.encode(s.copy(smartEnabled = true)))
-        assertTrue(back.smartEnabled)
-        assertEquals("ja", back.primaryLanguage)
-        assertEquals("zh-Hant", back.secondaryLanguage)
+    @Test fun `default secondary follows device locale`() {
+        assertEquals("en", SubtitleLanguage.defaultSecondary(java.util.Locale.US).tag)
+        assertEquals("zh-Hans", SubtitleLanguage.defaultSecondary(java.util.Locale.SIMPLIFIED_CHINESE).tag)
+        assertEquals("zh-Hant", SubtitleLanguage.defaultSecondary(java.util.Locale.TRADITIONAL_CHINESE).tag)
+        assertEquals("el", SubtitleLanguage.defaultSecondary(java.util.Locale("el", "GR")).tag)
+        assertEquals("he", SubtitleLanguage.defaultSecondary(java.util.Locale("he", "IL")).tag)
+        assertEquals("en", SubtitleLanguage.defaultSecondary(java.util.Locale("xx", "YY")).tag)
+    }
+
+    @Test fun `settings sanitise languages and default secondary matches device locale`() {
+        val original = java.util.Locale.getDefault()
+        try {
+            java.util.Locale.setDefault(java.util.Locale("he", "IL"))
+            val d = BilingualSubtitleSettings()
+            assertFalse(d.smartEnabled)
+            assertEquals("auto", d.primaryLanguage)
+            assertEquals("he", d.secondary.tag)
+            val s = BilingualSubtitleSettings(primaryLanguage = "jpn", secondaryLanguage = "zh-TW").sanitized()
+            assertEquals("ja", s.primaryLanguage)
+            assertEquals("zh-Hant", s.secondaryLanguage)
+            val bad = BilingualSubtitleSettings(primaryLanguage = "???", secondaryLanguage = "nope!").sanitized()
+            assertEquals("auto", bad.primaryLanguage)
+            assertEquals("he", bad.secondaryLanguage)
+            // Round-trip through the persisted JSON.
+            val back = BilingualSettingsCodec.decode(BilingualSettingsCodec.encode(s.copy(smartEnabled = true)))
+            assertTrue(back.smartEnabled)
+            assertEquals("ja", back.primaryLanguage)
+            assertEquals("zh-Hant", back.secondaryLanguage)
+        } finally {
+            java.util.Locale.setDefault(original)
+        }
     }
 }

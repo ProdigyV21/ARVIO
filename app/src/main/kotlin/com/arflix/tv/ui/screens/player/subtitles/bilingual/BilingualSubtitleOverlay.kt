@@ -57,8 +57,14 @@ fun BilingualSubtitleOverlay(
     val settings = legacyAppearance?.resolve(storedSettings) ?: storedSettings
     val frame by manager.bilingualBus.frame.collectAsState()
 
-    // Keep the renderer in step with the chosen mode ("Original only"/"Off" stop API calls).
-    LaunchedEffect(settings.mode) { manager.displayMode = settings.mode }
+    // Keep the renderer in step with the chosen mode ONLY while the smart bilingual overlay
+    // is active so "Original only"/"Off" never suppresses regular standalone AI translation.
+    LaunchedEffect(aiActive, settings.mode) {
+        manager.displayMode = if (aiActive) settings.mode else BilingualDisplayMode.BILINGUAL
+    }
+    androidx.compose.runtime.DisposableEffect(manager) {
+        onDispose { manager.displayMode = BilingualDisplayMode.BILINGUAL }
+    }
 
     // Switching to a translating mode mid-line: fetch the current line's translation too.
     // translate() joins an in-flight request / hits the cache, so this never duplicates a call.

@@ -110,21 +110,21 @@ data class BilingualSubtitleSettings(
     val generationMode: BilingualGenerationMode = BilingualGenerationMode.AUTO,
     /** "auto" or a BCP 47 tag (e.g. "en", "ja"). */
     val primaryLanguage: String = SubtitleLanguage.AUTO,
-    /** BCP 47 tag of the second language, default Simplified Chinese. */
-    val secondaryLanguage: String = DEFAULT_SECONDARY_LANGUAGE,
+    /** BCP 47 tag of the second language, defaulting to the device locale. */
+    val secondaryLanguage: String = SubtitleLanguage.defaultSecondaryTag(),
     /** Legacy values already accounted for in the stored styles; null on pre-migration JSON. */
     val legacyAppearance: LegacySubtitleAppearance? = null,
 ) {
     /** Resolved secondary language (never null). */
     val secondary: SubtitleLanguage
-        get() = SubtitleLanguage.parse(secondaryLanguage) ?: SubtitleLanguage.SIMPLIFIED_CHINESE
+        get() = SubtitleLanguage.parse(secondaryLanguage) ?: SubtitleLanguage.defaultSecondary()
 
     /** Explicit primary language, or null for Auto. */
     val primaryExplicit: SubtitleLanguage? get() = SubtitleLanguage.parse(primaryLanguage)
 
     fun sanitized(): BilingualSubtitleSettings = copy(
         primaryLanguage = SubtitleLanguage.parse(primaryLanguage)?.tag ?: SubtitleLanguage.AUTO,
-        secondaryLanguage = SubtitleLanguage.parse(secondaryLanguage)?.tag ?: DEFAULT_SECONDARY_LANGUAGE,
+        secondaryLanguage = SubtitleLanguage.parse(secondaryLanguage)?.tag ?: SubtitleLanguage.defaultSecondaryTag(),
         gapDp = gapDp.coerceIn(0, MAX_GAP_DP),
         bottomPercent = bottomPercent.coerceIn(0, MAX_BOTTOM_PERCENT),
         original = original.sanitized(),
@@ -132,7 +132,6 @@ data class BilingualSubtitleSettings(
     )
 
     companion object {
-        const val DEFAULT_SECONDARY_LANGUAGE = "zh-Hans"
         const val MAX_GAP_DP = 48
         const val MAX_BOTTOM_PERCENT = 88
 
@@ -148,7 +147,7 @@ data class BilingualSubtitleSettings(
             bold = true,
             outline = SubtitleOutline.THIN,
         )
-        val DEFAULT = BilingualSubtitleSettings()
+        val DEFAULT: BilingualSubtitleSettings get() = BilingualSubtitleSettings()
     }
 }
 

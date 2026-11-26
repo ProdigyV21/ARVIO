@@ -58,6 +58,17 @@ data class SubtitleLanguage(val base: String, val script: String? = null) {
         val TRADITIONAL_CHINESE = SubtitleLanguage("zh", HANT)
         val ENGLISH = SubtitleLanguage("en")
 
+        /** Default secondary language from the device locale (never ambiguous Chinese; falls back to English). */
+        fun defaultSecondary(locale: Locale = Locale.getDefault()): SubtitleLanguage {
+            val resolved = (parse(locale.toLanguageTag()) ?: parse(locale.language))
+                ?.takeIf { it.base in NAMES || it.base in Locale.getISOLanguages() }
+                ?: return ENGLISH
+            if (!resolved.isChinese || resolved.script != null) return resolved
+            return if (BilingualStrings.isTraditional(locale)) TRADITIONAL_CHINESE else SIMPLIFIED_CHINESE
+        }
+
+        fun defaultSecondaryTag(locale: Locale = Locale.getDefault()): String = defaultSecondary(locale).tag
+
         private val NAMES = mapOf(
             "en" to "English", "ja" to "Japanese", "ko" to "Korean", "fr" to "French", "de" to "German",
             "es" to "Spanish", "it" to "Italian", "pt" to "Portuguese", "ru" to "Russian", "ar" to "Arabic",

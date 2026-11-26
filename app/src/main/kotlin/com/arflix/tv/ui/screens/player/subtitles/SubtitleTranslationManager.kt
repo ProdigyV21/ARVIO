@@ -60,9 +60,18 @@ class SubtitleTranslationManager(
     var onSecondaryLookup:
         ((com.arflix.tv.ui.screens.player.subtitles.bilingual.DualTrackSecondarySource.Lookup) -> Unit)? = null
 
-    /** Translation requests are made only when the display mode needs them and path B is selected. */
+    /** True only while smart bilingual mode owns the subtitle layer (isolates displayMode from regular AI). */
+    @Volatile var bilingualActive: Boolean = false
+        set(value) {
+            if (field && !value) bilingualBus.clear()
+            field = value
+        }
+
+    /** Translation requests are made only when enabled, path B is selected, and bilingual mode needs translation. */
     val translationNeeded: Boolean
-        get() = isEnabled && displayMode.needsTranslation && bilingualSource == BilingualSource.AI_TRANSLATION
+        get() = isEnabled &&
+            bilingualSource == BilingualSource.AI_TRANSLATION &&
+            (!bilingualActive || displayMode.needsTranslation)
 
     var onTranslatingChanged: ((Boolean) -> Unit)? = null
     var onBatchResult: ((success: Boolean, error: String?) -> Unit)? = null
@@ -180,6 +189,7 @@ class SubtitleTranslationManager(
     fun isInFlight(text: String): Boolean = inFlight.containsKey(text)
 
     suspend fun translate(text: String): String {
+        if (!translationNeeded) return text
         cache[text]?.let { return it }
         // If the same text is already queued (e.g. preTranslateWindow raced us), join it.
         inFlight[text]?.let { return it.await() }

@@ -222,16 +222,16 @@ fun ArvioTvPlayer(
                             Key.DirectionLeft -> {
                                 when (subtitleSettingsRow) {
                                     0 -> { subtitleSyncOffsetMs = (subtitleSyncOffsetMs - 100L).coerceAtLeast(-10000L); onUpdateSubtitleDelay(subtitleSyncOffsetMs) }
-                                    1 -> { subtitleSizePct = (subtitleSizePct - 10).coerceAtLeast(50); onUpdateSubtitleSize(subtitleSizePct) }
-                                    2 -> { subtitleVerticalPct = (subtitleVerticalPct - 1).coerceAtLeast(0); onUpdateSubtitleVerticalPosition(subtitleVerticalPct) }
+                                    1 -> { subtitleSizePct = (subtitleSizePct - 10).coerceIn(50, 250); onUpdateSubtitleSize(subtitleSizePct) }
+                                    2 -> { subtitleVerticalPct = (subtitleVerticalPct - 1).coerceIn(1, 88); onUpdateSubtitleVerticalPosition(subtitleVerticalPct) }
                                 }
                                 true
                             }
                             Key.DirectionRight -> {
                                 when (subtitleSettingsRow) {
                                     0 -> { subtitleSyncOffsetMs = (subtitleSyncOffsetMs + 100L).coerceAtMost(10000L); onUpdateSubtitleDelay(subtitleSyncOffsetMs) }
-                                    1 -> { subtitleSizePct = (subtitleSizePct + 10).coerceAtMost(250); onUpdateSubtitleSize(subtitleSizePct) }
-                                    2 -> { subtitleVerticalPct = (subtitleVerticalPct + 1).coerceAtMost(50); onUpdateSubtitleVerticalPosition(subtitleVerticalPct) }
+                                    1 -> { subtitleSizePct = (subtitleSizePct + 10).coerceIn(50, 250); onUpdateSubtitleSize(subtitleSizePct) }
+                                    2 -> { subtitleVerticalPct = (subtitleVerticalPct + 1).coerceIn(1, 88); onUpdateSubtitleVerticalPosition(subtitleVerticalPct) }
                                 }
                                 true
                             }
@@ -542,19 +542,19 @@ fun ArvioTvPlayer(
                 onUpdateSubtitleDelay(subtitleSyncOffsetMs)
             },
             onSizeDecrease = {
-                subtitleSizePct = (subtitleSizePct - 10).coerceAtLeast(50)
+                subtitleSizePct = (subtitleSizePct - 10).coerceIn(50, 250)
                 onUpdateSubtitleSize(subtitleSizePct)
             },
             onSizeIncrease = {
-                subtitleSizePct = (subtitleSizePct + 10).coerceAtMost(300)
+                subtitleSizePct = (subtitleSizePct + 10).coerceIn(50, 250)
                 onUpdateSubtitleSize(subtitleSizePct)
             },
             onVerticalDecrease = {
-                subtitleVerticalPct = (subtitleVerticalPct - 1).coerceAtLeast(0)
+                subtitleVerticalPct = (subtitleVerticalPct - 1).coerceIn(1, 88)
                 onUpdateSubtitleVerticalPosition(subtitleVerticalPct)
             },
             onVerticalIncrease = {
-                subtitleVerticalPct = (subtitleVerticalPct + 1).coerceAtMost(50)
+                subtitleVerticalPct = (subtitleVerticalPct + 1).coerceIn(1, 88)
                 onUpdateSubtitleVerticalPosition(subtitleVerticalPct)
             },
             modifier = Modifier

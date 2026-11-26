@@ -27,6 +27,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -36,8 +37,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardCapitalization
@@ -76,6 +81,8 @@ fun BilingualSubtitleSettingsPanel(
     val geminiKeyConfigured by store.aiKeyConfigured.collectAsState(initial = true)
     val keyConfigured = geminiKeyConfigured
     var advanced by rememberSaveable { mutableStateOf(false) }
+    val masterToggleFocusRequester = remember { FocusRequester() }
+    LaunchedEffect(Unit) { runCatching { masterToggleFocusRequester.requestFocus() } }
 
     Column(
         modifier = modifier
@@ -93,6 +100,7 @@ fun BilingualSubtitleSettingsPanel(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(10.dp))
+                    .tvFocusOutline(RoundedCornerShape(10.dp))
                     .background(Accent.copy(alpha = 0.18f))
                     .clickable { onEnableAiTranslation() }
                     .padding(horizontal = 12.dp, vertical = 10.dp),
@@ -112,6 +120,7 @@ fun BilingualSubtitleSettingsPanel(
         ToggleLine(
             label = bt("Bilingual subtitles on"),
             checked = settings.smartEnabled,
+            focusRequester = masterToggleFocusRequester,
             onToggle = { on ->
                 store.update { it.copy(smartEnabled = on) }
                 if (on) BilingualPlayerBridge.requestSmartMode() else BilingualPlayerBridge.stopSmartMode()
@@ -173,6 +182,7 @@ fun BilingualSubtitleSettingsPanel(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(10.dp))
+                    .tvFocusOutline(RoundedCornerShape(10.dp))
                     .background(Accent.copy(alpha = 0.18f))
                     .clickable { BilingualPlayerBridge.requestSmartMode() }
                     .padding(horizontal = 12.dp, vertical = 10.dp),
@@ -181,16 +191,22 @@ fun BilingualSubtitleSettingsPanel(
                 Text(bt("Turn on bilingual for this video"), color = Accent, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
             }
         }
+        val primaryChoices = remember(settings.primaryExplicit?.tag) {
+            (SubtitleLanguage.PICKER_OPTIONS + listOfNotNull(settings.primaryExplicit)).distinctBy { it.tag }
+        }
+        val secondaryChoices = remember(settings.secondary.tag) {
+            (SubtitleLanguage.PICKER_OPTIONS + settings.secondary).distinctBy { it.tag }
+        }
         Text(bt("Primary subtitle language"), color = Ink, fontSize = 13.sp)
         ChipRow(
             options = listOf(SubtitleLanguage.AUTO to bt("Auto")) +
-                SubtitleLanguage.PICKER_OPTIONS.map { it.tag to it.localName },
+                primaryChoices.map { it.tag to it.localName },
             selected = settings.primaryExplicit?.tag ?: SubtitleLanguage.AUTO,
             onSelect = { tag -> store.update { it.copy(primaryLanguage = tag) } }
         )
         Text(bt("Secondary subtitle language"), color = Ink, fontSize = 13.sp)
         ChipRow(
-            options = SubtitleLanguage.PICKER_OPTIONS.map { it.tag to it.localName },
+            options = secondaryChoices.map { it.tag to it.localName },
             selected = settings.secondary.tag,
             onSelect = { tag -> store.update { it.copy(secondaryLanguage = tag) } }
         )
@@ -281,6 +297,7 @@ fun BilingualSubtitleSettingsPanel(
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(10.dp))
+                .tvFocusOutline(RoundedCornerShape(10.dp))
                 .background(CardBg)
                 .clickable { store.resetToDefaults() }
                 .padding(horizontal = 12.dp, vertical = 10.dp)
@@ -358,6 +375,7 @@ private fun LanguageSection(title: String, style: BilingualLineStyle, onChange: 
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(8.dp))
+                .tvFocusOutline(RoundedCornerShape(8.dp))
                 .clickable {
                     val all = SubtitleFontOption.entries
                     val idx = all.indexOf(SubtitleFontOption.fromPreference(style.font))
@@ -398,6 +416,7 @@ private fun ColorPicker(label: String, hex: String, onPick: (String) -> Unit) {
                     modifier = Modifier
                         .size(30.dp)
                         .clip(CircleShape)
+                        .tvFocusOutline(CircleShape)
                         .background(Color(BilingualColors.parseArgb(preset)))
                         .border(if (selected) 3.dp else 1.dp, if (selected) Accent else Color.White.copy(alpha = 0.4f), CircleShape)
                         .clickable { onPick(preset) }
@@ -429,6 +448,14 @@ private fun ColorPicker(label: String, hex: String, onPick: (String) -> Unit) {
 }
 
 @Composable
+private fun Modifier.tvFocusOutline(shape: Shape = RoundedCornerShape(10.dp)): Modifier {
+    var focused by remember { mutableStateOf(false) }
+    return this
+        .onFocusChanged { focused = it.isFocused }
+        .then(if (focused) Modifier.border(2.dp, Color.White, shape) else Modifier)
+}
+
+@Composable
 private fun <T> ChipRow(options: List<Pair<T, String>>, selected: T, onSelect: (T) -> Unit) {
     Row(
         modifier = Modifier.horizontalScroll(rememberScrollState()),
@@ -439,6 +466,7 @@ private fun <T> ChipRow(options: List<Pair<T, String>>, selected: T, onSelect: (
             Box(
                 modifier = Modifier
                     .clip(RoundedCornerShape(16.dp))
+                    .tvFocusOutline(RoundedCornerShape(16.dp))
                     .background(if (isSel) Accent else CardBg)
                     .clickable { onSelect(value) }
                     .padding(horizontal = 12.dp, vertical = 7.dp)
@@ -471,16 +499,26 @@ private fun LabeledSlider(
                 activeTrackColor = Accent,
                 inactiveTrackColor = Color.White.copy(alpha = 0.2f),
             ),
-            modifier = Modifier.height(32.dp)
+            modifier = Modifier
+                .height(32.dp)
+                .tvFocusOutline(RoundedCornerShape(8.dp))
         )
     }
 }
 
 @Composable
-private fun ToggleLine(label: String, checked: Boolean, onToggle: (Boolean) -> Unit) {
+private fun ToggleLine(
+    label: String,
+    checked: Boolean,
+    focusRequester: FocusRequester? = null,
+    onToggle: (Boolean) -> Unit,
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
+            .tvFocusOutline(RoundedCornerShape(8.dp))
             .clickable { onToggle(!checked) },
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween

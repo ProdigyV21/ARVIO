@@ -42,8 +42,24 @@ class SmartBilingualSession {
     private var previous: SubtitleModeSnapshot? = null
     val isActive: Boolean get() = previous != null
 
+    /** The regular-mode track smart mode took over from, if any. Never consumed. */
+    val snapshotSelected: Subtitle? get() = previous?.selectedSubtitle
+
     fun enter(snapshot: SubtitleModeSnapshot) {
         if (previous == null) previous = snapshot
+    }
+
+    /** Records an explicit track pick while smart mode is active so leaving never restores the old one. */
+    fun onUserPickedSubtitle(subtitle: Subtitle) {
+        val current = previous ?: return
+        previous = current.copy(
+            selectedSubtitle = subtitle,
+            aiSourceSubtitle = null,
+            aiTranslating = false,
+            managerEnabled = false,
+            manualSelection = true,
+            userPicked = true,
+        )
     }
 
     fun leave(streamUrl: String?, restorePrevious: Boolean = true): SubtitleModeSnapshot? {

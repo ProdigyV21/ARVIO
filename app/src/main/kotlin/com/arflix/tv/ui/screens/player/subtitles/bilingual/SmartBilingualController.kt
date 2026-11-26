@@ -96,10 +96,12 @@ fun SmartBilingualController(
     // A subtitle the user picks while bilingual is on becomes the new primary (re-planned below);
     // only turning subtitles Off from the menu pauses the bilingual layer for this video.
     val suspendedByUser = uiState.subtitleUserPickNonce != pickBaseline && uiState.selectedSubtitle == null
-    val active = loadedProfile != null && settingsStore.isLoadedForCurrentProfile && uiState.smartBilingualRequest.shouldRun(
-        settings.smartEnabled, uiState.isLiveAudioTranslating, uiState.isFindingBestMatch,
-        uiState.subtitleSelectionPending,
-    ) && !suspendedByUser
+    // Stay attached while a manual remote subtitle is localizing: only leave when ownership ends.
+    val shouldStayActive = loadedProfile != null && settingsStore.isLoadedForCurrentProfile &&
+        uiState.smartBilingualRequest.shouldRun(
+            settings.smartEnabled, uiState.isLiveAudioTranslating, uiState.isFindingBestMatch,
+            selectionPending = false,
+        ) && !suspendedByUser
 
     // Track list of the tap changes only a few times per file; poll its version cheaply.
     val tapSignature by produceState("", stream) {
@@ -132,24 +134,28 @@ fun SmartBilingualController(
     }
 
     LaunchedEffect(
-        active, settings.generationMode, settings.primaryLanguage, settings.secondaryLanguage,
+        shouldStayActive, uiState.subtitleSelectionPending,
+        settings.generationMode, settings.primaryLanguage, settings.secondaryLanguage,
         uiState.subtitles, tapSignature, unreliable, stream, primaryOverride, secondaryOverride,
         uiState.selectedSubtitle?.id, uiState.smartBilingualActive,
         uiState.subtitleUserPickNonce, uiState.smartBilingualRequestNonce, pinUserSelection,
     ) {
-        if (!active) {
+        if (!shouldStayActive) {
             appliedPlanKey = null
             BilingualPlayerBridge.status.value = null
             if (latest.smartBilingualActive) viewModel.leaveSmartBilingual()
             return@LaunchedEffect
         }
+        if (uiState.subtitleSelectionPending) return@LaunchedEffect
         if (latest.subtitles.isEmpty()) return@LaunchedEffect
         delay(500) // let track lists settle (embedded tracks and addon lists arrive in bursts)
         val state = viewModel.uiState.value
         // A setting/ownership change can happen during the debounce, before recomposition cancels
         // this effect. Check the actual sources of truth, not a captured active flag.
         val currentSettings = settingsStore.settings.value
+        val stillSuspendedByUser = state.subtitleUserPickNonce != pickBaseline && state.selectedSubtitle == null
         if (!settingsStore.isLoadedForCurrentProfile || state.selectedStreamUrl != stream ||
+            stillSuspendedByUser ||
             currentSettings.smartEnabled != settings.smartEnabled ||
             currentSettings.generationMode != settings.generationMode ||
             currentSettings.primaryLanguage != settings.primaryLanguage ||
@@ -176,7 +182,8 @@ fun SmartBilingualController(
                 secondaryLanguage = settings.secondary,
                 audioLanguageTag = audioLanguage(),
                 selectedId = state.selectedSubtitle?.id,
-                userPinnedSelection = pinUserSelection,
+                userPinnedSelection = pinUserSelection ||
+                    (state.subtitleUserPickNonce != pickBaseline && state.selectedSubtitle != null),
                 aiConfigured = viewModel.isAiTranslationConfigured(),
                 unreliableSecondaryIds = unreliable,
                 mode = settings.generationMode,

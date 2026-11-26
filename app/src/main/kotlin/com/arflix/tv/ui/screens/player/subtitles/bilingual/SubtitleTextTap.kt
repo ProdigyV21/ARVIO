@@ -30,14 +30,26 @@ class SubtitleTextTapExtractorsFactory(
     private val delegate: ExtractorsFactory,
     private val store: EmbeddedSubtitleStore,
     private val currentSourceKey: () -> String?,
+    private val enabledProvider: () -> Boolean = { true },
 ) : ExtractorsFactory {
 
-    override fun createExtractors(): Array<Extractor> = wrap(delegate.createExtractors(), null)
+    constructor(
+        delegate: ExtractorsFactory,
+        store: EmbeddedSubtitleStore,
+        currentSourceKey: () -> String?,
+    ) : this(delegate, store, currentSourceKey, { true })
+
+    override fun createExtractors(): Array<Extractor> {
+        val extractors = delegate.createExtractors()
+        return if (enabledProvider()) wrap(extractors, null, store.currentGeneration()) else extractors
+    }
 
     // Media3's progressive loader calls this overload with the URI it is actually reading: that
     // URI, not the UI's idea of the current stream, keys the cues (no cross-episode mixing).
-    override fun createExtractors(uri: Uri, responseHeaders: Map<String, List<String>>): Array<Extractor> =
-        wrap(delegate.createExtractors(uri, responseHeaders), uri.toString())
+    override fun createExtractors(uri: Uri, responseHeaders: Map<String, List<String>>): Array<Extractor> {
+        val extractors = delegate.createExtractors(uri, responseHeaders)
+        return if (enabledProvider()) wrap(extractors, uri.toString(), store.currentGeneration()) else extractors
+    }
 
     // Forward configuration so the wrapped factory keeps behaving exactly as before.
     override fun experimentalSetTextTrackTranscodingEnabled(textTrackTranscodingEnabled: Boolean): ExtractorsFactory {
@@ -55,8 +67,8 @@ class SubtitleTextTapExtractorsFactory(
         return this
     }
 
-    private fun wrap(extractors: Array<Extractor>, uriKey: String?): Array<Extractor> =
-        Array(extractors.size) { i -> SubtitleTapExtractor(extractors[i], store, uriKey, currentSourceKey) }
+    private fun wrap(extractors: Array<Extractor>, uriKey: String?, generation: Long): Array<Extractor> =
+        Array(extractors.size) { i -> SubtitleTapExtractor(extractors[i], store, uriKey, generation, currentSourceKey) }
 }
 
 @OptIn(UnstableApi::class)
@@ -64,6 +76,7 @@ private class SubtitleTapExtractor(
     private val delegate: Extractor,
     private val store: EmbeddedSubtitleStore,
     private val uriKey: String?,
+    private val generation: Long,
     private val currentSourceKey: () -> String?,
 ) : Extractor {
     override fun sniff(input: ExtractorInput): Boolean = delegate.sniff(input)
@@ -71,7 +84,7 @@ private class SubtitleTapExtractor(
     override fun init(output: ExtractorOutput) {
         // Writes go to this extractor's own media; the player decides which media is read.
         val key = uriKey ?: runCatching { currentSourceKey() }.getOrNull()
-        delegate.init(SubtitleTapExtractorOutput(output, store, key))
+        delegate.init(SubtitleTapExtractorOutput(output, store, key, generation))
     }
     override fun read(input: ExtractorInput, seekPosition: PositionHolder): Int = delegate.read(input, seekPosition)
     override fun seek(position: Long, timeUs: Long) = delegate.seek(position, timeUs)
@@ -84,17 +97,41 @@ internal class SubtitleTapExtractorOutput(
     private val delegate: ExtractorOutput,
     private val store: EmbeddedSubtitleStore,
     private val sourceKey: String?,
+    private val extractorGeneration: Long = -1L,
 ) : ExtractorOutput {
     private val outputs = HashMap<Int, TrackOutput>()
+    private var hasAVTrack = false
+    private var hasTextTrack = false
 
     override fun track(id: Int, type: Int): TrackOutput {
         val output = delegate.track(id, type)
+        if (type == C.TRACK_TYPE_VIDEO || type == C.TRACK_TYPE_AUDIO) {
+            hasAVTrack = true
+            store.bindExtractorSource(extractorGeneration, sourceKey)
+            return output
+        }
         if (type != C.TRACK_TYPE_TEXT) return output
+        hasTextTrack = true
         return outputs.getOrPut(id) { SubtitleTapTrackOutput(output, id, store, sourceKey) }
     }
 
-    override fun endTracks() = delegate.endTracks()
+    override fun endTracks() {
+        if ((hasAVTrack || hasTextTrack) && sourceKey != null &&
+            (hasAVTrack || !isLikelySidecarCacheUri(sourceKey))
+        ) {
+            store.bindExtractorSource(extractorGeneration, sourceKey)
+        }
+        delegate.endTracks()
+    }
+
     override fun seekMap(seekMap: SeekMap) = delegate.seekMap(seekMap)
+
+    private fun isLikelySidecarCacheUri(uri: String): Boolean {
+        val lower = uri.lowercase()
+        if ("/matched_subs/" in lower) return true
+        val path = lower.substringBefore('?').substringBefore('#')
+        return path.endsWith(".srt") || path.endsWith(".vtt") || path.endsWith(".ass") || path.endsWith(".ssa")
+    }
 }
 
 /**
