@@ -3819,16 +3819,17 @@ private fun MobileHomeRowsLayer(
             }
         }
         }
-        Spacer(Modifier.align(Alignment.TopCenter).fillMaxWidth()
+        // Rows scroll under the status bar: a solid band as tall as the bar, then a short fade.
+        Column(Modifier.align(Alignment.TopCenter).fillMaxWidth()
             .graphicsLayer {
                 val progress = if (mobileListState.firstVisibleItemIndex > 0) 1f
                     else (mobileListState.firstVisibleItemScrollOffset / statusScrimScrollDistance).coerceIn(0f, 1f)
                 alpha = 0.35f + progress * 0.65f
-            }
-            // Rows scroll under the status bar; a near-solid band keeps the clock readable.
-            .background(Brush.verticalGradient(0f to Color.Black.copy(alpha = 0.92f),
-                0.7f to Color.Black.copy(alpha = 0.85f), 1f to Color.Transparent))
-            .statusBarsPadding().height(16.dp))
+            }) {
+            Spacer(Modifier.fillMaxWidth().background(Color.Black).statusBarsPadding())
+            Spacer(Modifier.fillMaxWidth().height(14.dp)
+                .background(Brush.verticalGradient(0f to Color.Black, 1f to Color.Transparent)))
+        }
     }
 }
 

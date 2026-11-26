@@ -311,7 +311,7 @@ fun AppBottomBar(
                 modifier = Modifier.fillMaxWidth().height(barHeight)
                     .shadow(16.dp, FloatingBarShape, clip = false)
                     .clip(FloatingBarShape)
-                    .background(Color(0xFF17171A).copy(alpha = 0.98f))
+                    .background(Color(0xFF17171A))
                     .border(1.dp, Color.White.copy(alpha = 0.08f), FloatingBarShape)
                     .padding(horizontal = 6.dp),
                 horizontalArrangement = Arrangement.SpaceEvenly,
