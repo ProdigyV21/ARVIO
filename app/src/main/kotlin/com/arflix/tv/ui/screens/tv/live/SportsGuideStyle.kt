@@ -263,7 +263,7 @@ internal fun SportsPill(
     val bg by animateColorAsState(
         when {
             focused -> Color.White
-            active -> Color.White.copy(alpha = .16f)
+            active -> Color.White.copy(alpha = .20f)
             else -> Color.White.copy(alpha = .07f)
         }, tween(140), label = "sports-pill-bg")
     val fg = if (focused) Color(0xFF0B0B0D) else LiveColors.Fg
@@ -273,7 +273,6 @@ internal fun SportsPill(
         .height(height)
         .clip(RoundedCornerShape(50))
         .background(bg)
-        .border(1.dp, if (active && !focused) Color.White.copy(alpha = .38f) else Color.Transparent, RoundedCornerShape(50))
         .onFocusChanged { focused = it.isFocused }
         .clickable(onClick = onClick)
         .padding(horizontal = if (iconOnly) 9.dp else 14.dp),

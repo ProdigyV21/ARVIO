@@ -319,6 +319,13 @@ internal fun SportsGuidePane(
     val keysByRow = remember(rows) {
         rows.associate { it.id to disambiguatedLazyKeys(it.events) { event -> event.id } }
     }
+    // Up/Down lands on the card that is visually above/below, even when the two rows
+    // are scrolled differently.
+    fun alignedColumn(fromRow: Int, fromColumn: Int, toRow: Int): Int {
+        val from = rows.getOrNull(fromRow)?.id?.let { rowStates[it] }?.firstVisibleItemIndex ?: 0
+        val to = rows.getOrNull(toRow)?.id?.let { rowStates[it] }?.firstVisibleItemIndex ?: 0
+        return (to + (fromColumn - from)).coerceAtLeast(0)
+    }
     fun moveTo(rowIndex: Int, columnIndex: Int) {
         val row = rows.getOrNull(rowIndex) ?: return
         val column = columnIndex.coerceIn(0, row.events.lastIndex)
@@ -346,7 +353,9 @@ internal fun SportsGuidePane(
                 }
             }
             // Scrolling may continue after focus moves; new keys replace this job.
-            launch { reveal(listState, rowIndex) }
+            // On a TV the focused row moves to the top, so no half row (captions without
+            // their cards) is left showing under the preview.
+            launch { if (!touch) listState.animateScrollToItem(rowIndex) else reveal(listState, rowIndex) }
             if (visibleRow == null) withFrameNanos { }
             rowStates[row.id]?.let { horizontal ->
                 launch { reveal(horizontal, column) }
@@ -394,7 +403,7 @@ internal fun SportsGuidePane(
         return "$day ${timeFormat.format(Date(event.programme.startUtcMillis))}"
     }
     LaunchedEffect(focusSignal, rows.isEmpty(), sidebarOpen) {
-        if (!touch && focusSignal > handledFocusSignal && rows.isNotEmpty() && !sidebarOpen) {
+        if (!touch && focusSignal > handledFocusSignal && !sidebarOpen) {
             // Lazy cards are attached after the drawer starts its layout transition.
             withFrameNanos { }
             withFrameNanos { }
@@ -439,7 +448,10 @@ internal fun SportsGuidePane(
                             .focusRequester(categoriesFocus)
                             .onPreviewKeyEvent { key ->
                                 if (key.key == Key.DirectionDown && key.type == KeyEventType.KeyDown) {
-                                    if (runCatching { dayChipsFocus.requestFocus() }.isFailure) moveTo(0, 0); true
+                                    // Toolbar first; on the empty page its Retry button.
+                                    if (runCatching { dayChipsFocus.requestFocus() }.isFailure &&
+                                        runCatching { firstFocus.requestFocus() }.isFailure) moveTo(0, 0)
+                                    true
                                 } else false
                             }
                             .padding(end = 0.dp),
@@ -513,6 +525,8 @@ internal fun SportsGuidePane(
                 onPickSport = { picker = SportsPicker.Sport },
                 onToggleLive = {
                     sportsFilter = if (sportsFilter == SPORTS_FILTER_LIVE) SPORTS_FILTER_ALL else SPORTS_FILTER_LIVE
+                    // Live means now, so it always shows the overview, whatever day was picked.
+                    if (sportsFilter == SPORTS_FILTER_LIVE) dayOffset = null
                     focusedOrder[0] = null
                 },
                 onUp = { if (showHeader && !sidebarOpen) runCatching { categoriesFocus.requestFocus() } },
@@ -595,14 +609,20 @@ internal fun SportsGuidePane(
                                     if (direction !in listOf(Key.DirectionUp, Key.DirectionDown, Key.DirectionLeft, Key.DirectionRight)) false
                                     else {
                                         if (key.type == KeyEventType.KeyDown) when (direction) {
-                                            Key.DirectionUp -> if ((navigationTarget?.first ?: rowIndex) > 0) moveTo((navigationTarget?.first ?: rowIndex) - 1, navigationTarget?.second ?: index)
+                                            Key.DirectionUp -> if ((navigationTarget?.first ?: rowIndex) > 0) {
+                                                    val fromRow = navigationTarget?.first ?: rowIndex
+                                                    moveTo(fromRow - 1, alignedColumn(fromRow, navigationTarget?.second ?: index, fromRow - 1))
+                                                }
                                                 else {
                                                     navigationJob?.cancel(); navigationTarget = null
                                                     if (runCatching { dayChipsFocus.requestFocus() }.isFailure) {
                                                         if (sidebarOpen) leaveCards() else runCatching { categoriesFocus.requestFocus() }
                                                     }
                                                 }
-                                            Key.DirectionDown -> moveTo((navigationTarget?.first ?: rowIndex) + 1, navigationTarget?.second ?: index)
+                                            Key.DirectionDown -> {
+                                                val fromRow = navigationTarget?.first ?: rowIndex
+                                                moveTo(fromRow + 1, alignedColumn(fromRow, navigationTarget?.second ?: index, fromRow + 1))
+                                            }
                                             Key.DirectionLeft -> if ((navigationTarget?.second ?: index) == 0) leaveCards() else moveTo(navigationTarget?.first ?: rowIndex, (navigationTarget?.second ?: index) - 1)
                                             Key.DirectionRight -> moveTo(navigationTarget?.first ?: rowIndex, (navigationTarget?.second ?: index) + 1)
                                         }
@@ -669,6 +689,7 @@ internal fun SportsGuidePane(
             selectedKey = dayOffset?.toString() ?: SPORTS_DAY_OVERVIEW,
             onPick = { key ->
                 dayOffset = key.toIntOrNull()
+                if (dayOffset != null && sportsFilter == SPORTS_FILTER_LIVE) sportsFilter = SPORTS_FILTER_ALL
                 focusedOrder[0] = null
                 picker = null
             },
@@ -1029,6 +1050,7 @@ private fun PickerBadge(label: String) {
 
 
 /** Remind me, and follow either team or the competition, from a game's detail sheet. */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 private fun SportsEventActions(
     event: SportsGuideEvent,
@@ -1047,8 +1069,9 @@ private fun SportsEventActions(
     val playsFollowedTeam = remember(event.id, follows) { event.followsTeam(follows) }
     val canAlert = !event.isFinished() && playsFollowedTeam
     if (!canRemind && options.isEmpty() && !canAlert) return
-    Row(Modifier.fillMaxWidth().padding(top = 10.dp).horizontalScroll(androidx.compose.foundation.rememberScrollState()),
-        horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    // Wraps instead of scrolling sideways, so no chip is ever half outside the sheet.
+    FlowRow(Modifier.fillMaxWidth().padding(top = 10.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         if (canRemind) SportsActionChip(
             label = stringResource(if (reminded) R.string.sports_reminder_on else R.string.sports_remind_me),
             icon = if (reminded) Icons.Default.NotificationsActive else Icons.Default.NotificationsNone,
@@ -1071,6 +1094,7 @@ private fun SportsEventActions(
 }
 
 /** Watch alongside other games, or record this one from the user's own channels. */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 private fun SportsWatchActions(
     canWatch: Boolean,
@@ -1082,8 +1106,9 @@ private fun SportsWatchActions(
     val showMultiview = canWatch && onMultiview != null
     val showRecord = (canRecord || recorded) && onRecord != null
     if (!showMultiview && !showRecord) return
-    Row(Modifier.fillMaxWidth().padding(top = 8.dp).horizontalScroll(androidx.compose.foundation.rememberScrollState()),
-        horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    // Wraps instead of scrolling sideways, so no chip is ever half outside the sheet.
+    FlowRow(Modifier.fillMaxWidth().padding(top = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         if (showMultiview && onMultiview != null) SportsActionChip(
             label = stringResource(R.string.multiview_add_to),
             icon = Icons.Default.GridView,
@@ -1246,7 +1271,8 @@ private fun GameInfoTitle(text: String) {
 private fun GameInfoLine(modifier: Modifier = Modifier, content: @Composable RowScope.() -> Unit) {
     var focused by remember { mutableStateOf(false) }
     Row(modifier.fillMaxWidth().heightIn(min = 32.dp).clip(RoundedCornerShape(6.dp))
-        .background(if (focused) LiveColors.FocusBg else Color.Transparent)
+        .background(if (focused) Color.White.copy(alpha = .12f) else Color.Transparent)
+        .border(2.dp, if (focused) Color.White else Color.Transparent, RoundedCornerShape(6.dp))
         .onFocusChanged { focused = it.isFocused }.focusable()
         .padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically, content = content)
 }
