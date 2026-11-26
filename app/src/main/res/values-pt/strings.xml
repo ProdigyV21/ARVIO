@@ -1584,4 +1584,6 @@
     <string name="phone_input_page_sent">Enviado ✓ — prima OK na TV.</string>
     <string name="phone_input_page_not_sent">Não enviado</string>
     <string name="phone_input_page_expired">Este código expirou — leia novamente o código QR na TV.</string>
+    <string name="seek_thumbnails">Miniaturas ao avançar</string>
+    <string name="seek_thumbnails_desc">Mostra pequenas imagens do vídeo enquanto avança ou recua. São criadas neste dispositivo em segundo plano durante a reprodução e pausam quando a reprodução precisa de rede ou memória.</string>
 </resources>

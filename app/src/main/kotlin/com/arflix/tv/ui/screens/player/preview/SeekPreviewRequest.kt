@@ -8,6 +8,9 @@ import kotlinx.coroutines.withTimeoutOrNull
 
 // Provider image previews and already captured frames remain available. A second
 // video connection may violate the IPTV subscription's single-connection limit.
+/** Profile preference (boolean, default on) for seek-bar thumbnails; synced to the cloud. */
+const val SEEK_THUMBNAILS_PREF = "seek_thumbnails"
+
 internal fun allowSecondarySeekPreviewExtraction(memoryClassMb: Int, addonId: String?): Boolean =
     memoryClassMb >= 192 && !IptvVodSourceIds.isIptvVodAddonId(addonId)
 

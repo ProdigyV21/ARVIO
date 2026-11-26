@@ -23,6 +23,13 @@ class PlaybackCacheSettingsRowsTest {
     }
 
     @Test
+    fun `seek thumbnails toggle has one playback slot`() {
+        val playback = tvGeneralRowsForSection("playback")
+        assertEquals(1, playback.count { it == SEEK_THUMBNAILS_ROW })
+        assertTrue(playback.indexOf(SEEK_THUMBNAILS_ROW) > playback.indexOf(55))
+    }
+
+    @Test
     fun `cache actions do not reuse live AI subtitle actions`() {
         val playback = tvGeneralRowsForSection("playback")
         val ai = tvGeneralRowsForSection("ai_subtitles")
