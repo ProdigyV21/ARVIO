@@ -1034,6 +1034,12 @@ fun ArvioMobilePlayer(
                     isEpisodeListAvailable = uiState.seasonEpisodes.isNotEmpty(),
                     isPromptShowing = isPromptShowing,
                     seekPreviewFrame = seekPreviewFrame,
+                    hasNextEpisode = isTv && nextEpisode != null,
+                    onPlayNextEpisode = {
+                        closeAllPanels()
+                        dismissedUpNext = true
+                        onPlayNextEpisode()
+                    },
                     onOpenSources = {
                         closeAllPanels()
                         showSourcesDrawer = true

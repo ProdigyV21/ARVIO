@@ -352,6 +352,10 @@ private val tvGeneralSectionIds = setOf(
 internal const val NEWS_TAB_ROW = 61
 /** Settings > Playback: seek-bar thumbnails on/off. */
 internal const val SEEK_THUMBNAILS_ROW = 64
+/** Settings > Language: second-choice audio language. */
+internal const val SECONDARY_AUDIO_ROW = 65
+/** Settings > Playback: switch to the next source when one fails. */
+internal const val AUTO_SOURCE_FAILOVER_ROW = 66
 
 /** The optional tab a navigation switch row controls. */
 internal fun navigationSectionForRow(rowId: Int): String =
@@ -359,13 +363,13 @@ internal fun navigationSectionForRow(rowId: Int): String =
 
 internal fun tvGeneralRowsForSection(section: String): List<Int> {
     return when (section) {
-        "language" -> listOf(0, 3, 1, 2)
+        "language" -> listOf(0, 3, SECONDARY_AUDIO_ROW, 1, 2)
         // 48 (sync by hearing) only where it exists: the sideload build.
         "subtitles" -> listOf(4, 5, 6, 7, 42, 8, 38) +
             (if (BuildConfig.AUDIO_SYNC_AVAILABLE) listOf(48) else emptyList()) +
             listOf(39, 9, 45)
         "ai_subtitles" -> listOf(28, 29, 30, 31, 32, 33) + LIVE_AI_SUBS_ROWS
-        "playback" -> listOf(10, 11, 12, 43, 44, 55, SEEK_THUMBNAILS_ROW, 13, 14, 34, 37, 16, 15, 40, 27, 53, 54, 60)
+        "playback" -> listOf(10, 11, AUTO_SOURCE_FAILOVER_ROW, 12, 43, 44, 55, SEEK_THUMBNAILS_ROW, 13, 14, 34, 37, 16, 15, 40, 27, 53, 54, 60)
         "appearance" -> listOf(17, 49, 50, 18, 20, 21, 24, 23, 22, 41, 46, 36, 47, 56, 57) +
             (if (com.arflix.tv.ui.components.KidsNavigation.hideLiveTv) emptyList() else listOf(58)) + 59
         // News: the tab switch, then what the tab shows. Kids profiles never get the section.
@@ -748,6 +752,8 @@ fun SettingsScreen(
     var secondarySubtitlePickerIndex by remember { mutableIntStateOf(0) }
     var showAudioLanguagePicker by remember { mutableStateOf(false) }
     var audioLanguagePickerIndex by remember { mutableIntStateOf(0) }
+    var showSecondaryAudioPicker by remember { mutableStateOf(false) }
+    var secondaryAudioPickerIndex by remember { mutableIntStateOf(0) }
     var showDnsProviderPicker by remember { mutableStateOf(false) }
     var dnsProviderPickerIndex by remember { mutableIntStateOf(0) }
     var showContentLanguagePicker by remember { mutableStateOf(false) }
@@ -850,6 +856,13 @@ fun SettingsScreen(
         audioLanguagePickerIndex = options.indexOfFirst { it.equals(uiState.defaultAudioLanguage, ignoreCase = true) }
             .coerceAtLeast(0)
         showAudioLanguagePicker = true
+    }
+    val openSecondaryAudioPicker = {
+        viewModel.refreshAudioLanguageOptions()
+        secondaryAudioPickerIndex = secondaryAudioLanguageOptions(uiState.audioLanguageOptions)
+            .indexOfFirst { it.equals(uiState.secondaryAudioLanguage, ignoreCase = true) }
+            .coerceAtLeast(0)
+        showSecondaryAudioPicker = true
     }
     val openDnsProviderPicker = {
         val options = uiState.dnsProviderOptions
@@ -1500,6 +1513,8 @@ fun SettingsScreen(
                                                 1 -> openSubtitlePicker()
                                                 2 -> openSecondarySubtitlePicker()
                                                 3 -> openAudioLanguagePicker()
+                                                SECONDARY_AUDIO_ROW -> openSecondaryAudioPicker()
+                                                AUTO_SOURCE_FAILOVER_ROW -> viewModel.setAutoSourceFailover(!uiState.autoSourceFailover)
                                                 4 -> viewModel.cycleSubtitleSize()
                                                 5 -> viewModel.cycleSubtitleColor()
                                                 6 -> viewModel.cycleSubtitleOffset()
@@ -2262,6 +2277,10 @@ fun SettingsScreen(
                             onShowAddonStreamDetailsToggle = { viewModel.setShowAddonStreamDetails(it) },
                             seekThumbnailsEnabled = uiState.seekThumbnailsEnabled,
                             onSeekThumbnailsToggle = { viewModel.setSeekThumbnailsEnabled(it) },
+                            secondaryAudioLanguage = uiState.secondaryAudioLanguage,
+                            onSecondaryAudioClick = openSecondaryAudioPicker,
+                            autoSourceFailover = uiState.autoSourceFailover,
+                            onAutoSourceFailoverToggle = { viewModel.setAutoSourceFailover(it) },
                             hiddenNavigationSections = uiState.hiddenNavigationSections,
                             onNavigationSectionVisibleChange = viewModel::setNavigationSectionVisible,
                             newsTopicsSummary = com.arflix.tv.ui.screens.news.newsTopicsSummary(newsSelection),
@@ -3284,6 +3303,21 @@ fun SettingsScreen(
                     showAudioLanguagePicker = false
                 },
                 onDismiss = { showAudioLanguagePicker = false }
+            )
+        }
+
+        if (showSecondaryAudioPicker) {
+            SubtitlePickerModal(
+                title = stringResource(R.string.secondary_audio),
+                options = secondaryAudioLanguageOptions(uiState.audioLanguageOptions),
+                selected = uiState.secondaryAudioLanguage,
+                focusedIndex = secondaryAudioPickerIndex,
+                onFocusChange = { secondaryAudioPickerIndex = it },
+                onSelect = {
+                    viewModel.setSecondaryAudioLanguage(it)
+                    showSecondaryAudioPicker = false
+                },
+                onDismiss = { showSecondaryAudioPicker = false }
             )
         }
 
@@ -5111,6 +5145,14 @@ private fun MobileSettingsMainPage(
                     onClick = openAudioLanguagePicker
                 )
                 MobileSettingsRow(
+                    icon = Icons.Default.VolumeUp,
+                    title = stringResource(R.string.secondary_audio),
+                    value = uiState.secondaryAudioLanguage,
+                    isToggle = false,
+                    isFocused = false,
+                    onClick = openSecondaryAudioPicker
+                )
+                MobileSettingsRow(
                     icon = Icons.Default.Subtitles,
                     title = stringResource(R.string.default_subtitle),
                     value = uiState.defaultSubtitle,
@@ -5415,6 +5457,15 @@ private fun MobileSettingsSubPage(
                         toggleChecked = uiState.autoPlayNext,
                         isFocused = false,
                         onClick = { viewModel.setAutoPlayNext(!uiState.autoPlayNext) }
+                    )
+                    MobileSettingsRow(
+                        icon = Icons.Default.SwapHoriz,
+                        title = stringResource(R.string.auto_source_failover),
+                        subtitle = stringResource(R.string.auto_source_failover_desc),
+                        value = stringResource(if (uiState.autoSourceFailover) R.string.on else R.string.off),
+                        toggleChecked = uiState.autoSourceFailover,
+                        isFocused = false,
+                        onClick = { viewModel.setAutoSourceFailover(!uiState.autoSourceFailover) }
                     )
                     MobileSettingsRow(
                         icon = Icons.Default.Image,
@@ -6934,6 +6985,8 @@ private fun tvSettingsFocusedHelp(section: String, focusedIndex: Int): TvSetting
     return when (section) {
         "language" -> when (focusedIndex) {
             0 -> TvSettingsHelp(stringResource(R.string.settings_fact_app_language), stringResource(R.string.settings_help_app_language_desc))
+            tvGeneralRowsForSection(section).indexOf(SECONDARY_AUDIO_ROW) ->
+                TvSettingsHelp(stringResource(R.string.secondary_audio), stringResource(R.string.secondary_audio_desc))
             else -> TvSettingsHelp(stringResource(R.string.default_audio), stringResource(R.string.settings_help_default_audio_desc))
         }
         "subtitles" -> when (focusedIndex) {
@@ -6948,6 +7001,7 @@ private fun tvSettingsFocusedHelp(section: String, focusedIndex: Int): TvSetting
             11 -> TvSettingsHelp(stringResource(R.string.settings_help_source_autoplay), stringResource(R.string.settings_help_source_autoplay_desc))
             13, 14, 34, 37 -> TvSettingsHelp(stringResource(R.string.settings_help_trailers), stringResource(R.string.settings_help_trailers_desc))
             SEEK_THUMBNAILS_ROW -> TvSettingsHelp(stringResource(R.string.seek_thumbnails), stringResource(R.string.seek_thumbnails_desc))
+            AUTO_SOURCE_FAILOVER_ROW -> TvSettingsHelp(stringResource(R.string.auto_source_failover), stringResource(R.string.auto_source_failover_desc))
             27 -> TvSettingsHelp(stringResource(R.string.volume_boost), stringResource(R.string.settings_help_volume_boost_desc))
             53, 54 -> TvSettingsHelp(stringResource(R.string.playback_cache_size), stringResource(R.string.settings_help_playback_cache_desc))
             else -> TvSettingsHelp(stringResource(R.string.playback), stringResource(R.string.settings_help_playback_desc))
@@ -7149,6 +7203,10 @@ private fun TvGeneralSettingsRows(
     onShowAddonStreamDetailsToggle: (Boolean) -> Unit = {},
     seekThumbnailsEnabled: Boolean = true,
     onSeekThumbnailsToggle: (Boolean) -> Unit = {},
+    secondaryAudioLanguage: String = "Off",
+    onSecondaryAudioClick: () -> Unit = {},
+    autoSourceFailover: Boolean = true,
+    onAutoSourceFailoverToggle: (Boolean) -> Unit = {},
     hiddenNavigationSections: Set<String> = emptySet(),
     onNavigationSectionVisibleChange: (String, Boolean) -> Unit = { _, _ -> },
     newsTopicsSummary: String = "",
@@ -7175,6 +7233,18 @@ private fun TvGeneralSettingsRows(
                 55 -> SettingsToggleRow(stringResource(R.string.show_addon_stream_details),
                     stringResource(R.string.show_addon_stream_details_desc), showAddonStreamDetails,
                     focusedIndex == localIndex, onShowAddonStreamDetailsToggle, Modifier.settingsFocusSlot(localIndex))
+                AUTO_SOURCE_FAILOVER_ROW -> SettingsToggleRow(stringResource(R.string.auto_source_failover),
+                    stringResource(R.string.auto_source_failover_desc), autoSourceFailover,
+                    focusedIndex == localIndex, onAutoSourceFailoverToggle, Modifier.settingsFocusSlot(localIndex))
+                SECONDARY_AUDIO_ROW -> SettingsRow(
+                    icon = Icons.Default.VolumeUp,
+                    title = stringResource(R.string.secondary_audio),
+                    subtitle = stringResource(R.string.secondary_audio_desc),
+                    value = secondaryAudioLanguage,
+                    isFocused = focusedIndex == localIndex,
+                    onClick = onSecondaryAudioClick,
+                    modifier = Modifier.settingsFocusSlot(localIndex)
+                )
                 SEEK_THUMBNAILS_ROW -> SettingsToggleRow(stringResource(R.string.seek_thumbnails),
                     stringResource(R.string.seek_thumbnails_desc), seekThumbnailsEnabled,
                     focusedIndex == localIndex, onSeekThumbnailsToggle, Modifier.settingsFocusSlot(localIndex))
@@ -14626,3 +14696,9 @@ private fun YouTubeActionChip(
         )
     }
 }
+
+/** Secondary audio choices: "Off" plus every real language (no Auto/None). */
+internal fun secondaryAudioLanguageOptions(audioOptions: List<String>): List<String> =
+    (listOf("Off") + audioOptions.filterNot {
+        it.startsWith("Auto", ignoreCase = true) || it.equals("None", ignoreCase = true) || it.equals("Off", ignoreCase = true)
+    }).distinct()

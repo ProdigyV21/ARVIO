@@ -1,5 +1,7 @@
 package com.arflix.tv.ui.screens.settings
 import com.arflix.tv.ui.screens.player.preview.SEEK_THUMBNAILS_PREF
+import com.arflix.tv.ui.screens.player.SECONDARY_AUDIO_LANGUAGE_PREF
+import com.arflix.tv.ui.screens.player.AUTO_SOURCE_FAILOVER_PREF
 import com.arflix.tv.data.model.AnimeStructuringStyle
 import com.arflix.tv.data.model.AutoplayLimits
 
@@ -222,11 +224,13 @@ data class SettingsUiState(
     val defaultSubtitle: String = "Off",
     val subtitleOptions: List<String> = emptyList(),
     val defaultAudioLanguage: String = "Auto (Original)",
+    val secondaryAudioLanguage: String = "Off",
     val audioLanguageOptions: List<String> = emptyList(),
     val cardLayoutMode: String = CARD_LAYOUT_MODE_LANDSCAPE,
     val frameRateMatchingMode: String = "Off",
     val autoPlayNext: Boolean = true,
     val seekThumbnailsEnabled: Boolean = true,
+    val autoSourceFailover: Boolean = true,
     val autoPlaySingleSource: Boolean = true,
     val autoPlayMinQuality: String = "Any",
     val autoPlayMaxQuality: String = "Unlimited",
@@ -591,6 +595,8 @@ class SettingsViewModel @Inject constructor(
     private fun frameRateMatchingModeKeyFor(profileId: String) = profileManager.profileStringKeyFor(profileId, "frame_rate_matching_mode")
     private fun autoPlayNextKey() = profileManager.profileBooleanKey("auto_play_next")
     private fun seekThumbnailsKey() = profileManager.profileBooleanKey(SEEK_THUMBNAILS_PREF)
+    private fun secondaryAudioLanguageKey() = profileManager.profileStringKey(SECONDARY_AUDIO_LANGUAGE_PREF)
+    private fun autoSourceFailoverKey() = profileManager.profileBooleanKey(AUTO_SOURCE_FAILOVER_PREF)
     private fun autoPlayNextKeyFor(profileId: String) = profileManager.profileBooleanKeyFor(profileId, "auto_play_next")
     private fun autoPlaySingleSourceKey() = profileManager.profileBooleanKey("auto_play_single_source")
     private fun autoPlaySingleSourceKeyFor(profileId: String) = profileManager.profileBooleanKeyFor(profileId, "auto_play_single_source")
@@ -896,6 +902,8 @@ class SettingsViewModel @Inject constructor(
             mediaRepository.contentLanguage = contentLang
             var autoPlay = prefs[autoPlayNextKey()] ?: true
             val seekThumbnailsEnabled = prefs[seekThumbnailsKey()] ?: true
+            val secondaryAudio = prefs[secondaryAudioLanguageKey()]?.trim()?.takeIf { it.isNotBlank() } ?: "Off"
+            val autoSourceFailover = prefs[autoSourceFailoverKey()] ?: true
             var autoPlaySingleSource = prefs[autoPlaySingleSourceKey()] ?: true
             // Ensure defaults are persisted on first launch so they're never ambiguous
             if (prefs[autoPlaySingleSourceKey()] == null) {
@@ -1031,6 +1039,8 @@ class SettingsViewModel @Inject constructor(
                 frameRateMatchingMode = frameRateMode,
                 autoPlayNext = autoPlay,
                 seekThumbnailsEnabled = seekThumbnailsEnabled,
+                secondaryAudioLanguage = secondaryAudio,
+                autoSourceFailover = autoSourceFailover,
                 autoPlaySingleSource = autoPlaySingleSource,
                 autoPlayMinQuality = autoPlayMinQuality,
                 autoPlayMaxQuality = autoPlayMaxQuality,
@@ -1945,6 +1955,19 @@ class SettingsViewModel @Inject constructor(
             syncLocalStateToCloud(silent = true)
             authRepository.saveAutoPlayNextToProfile(enabled)
         }
+    }
+
+    fun setAutoSourceFailover(enabled: Boolean) {
+        if (!canManage("playback")) return
+        preferenceWriter.save(autoSourceFailoverKey(), enabled, { it.autoSourceFailover },
+            { state, value -> state.copy(autoSourceFailover = value) })
+    }
+
+    fun setSecondaryAudioLanguage(language: String) {
+        if (!canManage("playback")) return
+        val value = language.trim().ifBlank { "Off" }
+        preferenceWriter.save(secondaryAudioLanguageKey(), value, { it.secondaryAudioLanguage },
+            { state, saved -> state.copy(secondaryAudioLanguage = saved) })
     }
 
     fun setSeekThumbnailsEnabled(enabled: Boolean) {

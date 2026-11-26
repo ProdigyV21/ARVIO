@@ -1,5 +1,7 @@
 package com.arflix.tv.ui.screens.player.mobile
 
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.animateDpAsState
@@ -480,6 +482,8 @@ fun MobilePlayerBottomSection(
     isEpisodeListAvailable: Boolean,
     isPromptShowing: Boolean,
     seekPreviewFrame: SeekPreviewFrame? = null,
+    hasNextEpisode: Boolean = false,
+    onPlayNextEpisode: () -> Unit = {},
     onOpenSources: () -> Unit,
     onOpenEpisodes: () -> Unit,
     onOpenAudio: () -> Unit,
@@ -565,6 +569,14 @@ fun MobilePlayerBottomSection(
                         contentDescription = stringResource(R.string.episodes),
                         size = 20.dp,
                         onClick = onOpenEpisodes
+                    )
+                }
+                if (hasNextEpisode) {
+                    MobileIconButton(
+                        icon = Icons.Default.SkipNext,
+                        contentDescription = stringResource(R.string.next_episode),
+                        size = 22.dp,
+                        onClick = onPlayNextEpisode
                     )
                 }
             }

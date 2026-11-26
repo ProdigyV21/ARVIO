@@ -1024,6 +1024,12 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
         recordCurrentFailure: Boolean = true,
         reason: String = context.getString(R.string.player_fail_source_didnt_start)
     ): Boolean {
+        if (!uiState.autoSourceFailover) {
+            // Settings > Playback "Switch source automatically" is off: stay on this source
+            // and let the caller show why it failed, so the user can retry or pick another.
+            sourceFailoverLog("automatic source switching is off; staying on ${uiState.selectedStream.failoverSummary()} reason=$reason")
+            return false
+        }
         val streams = uiState.streams
         return if (streams.size <= 1) {
             sourceFailoverLog(
@@ -1410,7 +1416,7 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
                 androidx.media3.exoplayer.trackselection.DefaultTrackSelector(context).apply {
                     parameters = buildUponParameters()
                         // Prefer original audio language when available
-                        .setPreferredAudioLanguage(uiState.preferredAudioLanguage.takeUnless { it.isBlank() || it.equals("none", ignoreCase = true) })
+                        .setPreferredAudioLanguages(*preferredAudioLanguageList(uiState.preferredAudioLanguage, uiState.secondaryAudioLanguage))
                         // Allow decoder fallback for unsupported codecs
                         .setAllowVideoMixedMimeTypeAdaptiveness(true)
                         .setAllowVideoNonSeamlessAdaptiveness(true)
@@ -2656,12 +2662,12 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
         }
     }
 
-    LaunchedEffect(uiState.preferredAudioLanguage) {
+    LaunchedEffect(uiState.preferredAudioLanguage, uiState.secondaryAudioLanguage) {
         if (playerReleased) return@LaunchedEffect
         val trackSelector = exoPlayer.trackSelector as? androidx.media3.exoplayer.trackselection.DefaultTrackSelector
         if (trackSelector != null) {
             val params = trackSelector.buildUponParameters()
-                .setPreferredAudioLanguage(uiState.preferredAudioLanguage.takeUnless { it.isBlank() || it.equals("none", ignoreCase = true) })
+                .setPreferredAudioLanguages(*preferredAudioLanguageList(uiState.preferredAudioLanguage, uiState.secondaryAudioLanguage))
                 .build()
             trackSelector.parameters = params
         }
@@ -2679,12 +2685,12 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
     // tag get skipped and playback falls back to the default track (often Russian on
     // multi-audio releases). We additionally match on the track label here so the user's
     // chosen language wins regardless of how the track was tagged.
-    LaunchedEffect(audioTracks, uiState.preferredAudioLanguage, userPickedAudioForStream) {
+    LaunchedEffect(audioTracks, uiState.preferredAudioLanguage, uiState.secondaryAudioLanguage, userPickedAudioForStream) {
         if (playerReleased || userPickedAudioForStream) return@LaunchedEffect
         if (audioTracks.size < 2) return@LaunchedEffect
-        val preferred = uiState.preferredAudioLanguage.trim()
-        if (preferred.isBlank() || preferred.equals("none", ignoreCase = true)) return@LaunchedEffect
-        val matchIndex = findPreferredAudioTrackIndex(audioTracks, preferred)
+        val matchIndex = pickAudioTrackByLanguage(
+            audioTracks, uiState.preferredAudioLanguage, uiState.secondaryAudioLanguage, ::findPreferredAudioTrackIndex
+        )
         if (matchIndex == null || matchIndex == selectedAudioIndex) return@LaunchedEffect
         audioTracks.getOrNull(matchIndex)?.let { track ->
             applyAudioTrackSelection(exoPlayer, track, audioTracks)?.let {

@@ -515,6 +515,7 @@ function androidProfileSettings(settings: AppSettings) {
     subtitleStyle: androidSubtitleStyle(settings.subtitleStyle),
     subtitleStylized: settings.subtitleStylized,
     secondarySubtitle: settings.secondarySubtitle || "Off",
+    secondaryAudioLanguage: settings.secondaryAudioLanguage || "Off",
     filterSubtitlesByLanguage: settings.filterSubtitlesByLanguage,
     subtitleFont: settings.subtitleFont || "System",
     useForcedSubtitles: settings.useForcedSubtitles,
@@ -589,6 +590,10 @@ function settingsFromAndroidProfile(value: unknown): Partial<AppSettings> {
   if (state.autoPlayMaxQuality !== undefined && state.autoPlayMaxQuality !== null) partial.autoPlayMaxQuality = webMaxQuality(state.autoPlayMaxQuality);
   if (state.autoPlayMaxSizeGb !== undefined && state.autoPlayMaxSizeGb !== null && Number.isFinite(Number(state.autoPlayMaxSizeGb))) partial.autoPlayMaxSizeGb = Number(state.autoPlayMaxSizeGb);
   if ("secondarySubtitle" in state) partial.secondarySubtitle = String(state.secondarySubtitle || "");
+  if ("secondaryAudioLanguage" in state && state.secondaryAudioLanguage != null) {
+    const value = String(state.secondaryAudioLanguage || "");
+    partial.secondaryAudioLanguage = value.toLowerCase() === "off" ? "" : value;
+  }
   if ("filterSubtitlesByLanguage" in state) partial.filterSubtitlesByLanguage = Boolean(state.filterSubtitlesByLanguage);
   if ("homeServerConnectionJson" in state && typeof state.homeServerConnectionJson === "string" && state.homeServerConnectionJson.trim()) {
     // The Android app writes { connections: [...] } with its own field names;

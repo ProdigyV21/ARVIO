@@ -92,7 +92,7 @@ export function usePlaybackEngine({ autoSourceHopsRef, currentStreamRef, failure
           const iptvVod = stream.addonId === "iptv_xtream_vod";
           const directIptv = iptvVod && stream.originalUrl && stream.originalUrl !== stream.url;
           const prepared = await probeAndPrepareRemux(directIptv ? stream.originalUrl! : stream.url!,
-            directIptv ? undefined : stream.behaviorHints?.proxyHeaders?.request, settings.audioLanguage,
+            directIptv ? undefined : stream.behaviorHints?.proxyHeaders?.request, settings.secondaryAudioLanguage ? `${settings.audioLanguage || ""},${settings.secondaryAudioLanguage}` : settings.audioLanguage,
             { signal: controller.signal, onError: remuxFailed, expectDolbyVision: hasDolbyVision(stream),
               fallbackUrl: directIptv ? stream.url! : undefined, iptv: iptvVod });
           if (cancelled || recovering) { prepared?.destroy(); return; }
