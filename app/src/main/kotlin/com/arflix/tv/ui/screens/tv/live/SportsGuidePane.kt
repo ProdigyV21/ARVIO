@@ -807,7 +807,7 @@ private fun SportsAddonSourceRow(
 @Composable
 private fun channelCount(count: Int) =
     if (count == 1) stringResource(R.string.live_channel_count_one, count)
-    else stringResource(R.string.live_channels_count, count)
+    else liveChannelsLabel(count)
 
 @Composable
 private fun EventArtwork(

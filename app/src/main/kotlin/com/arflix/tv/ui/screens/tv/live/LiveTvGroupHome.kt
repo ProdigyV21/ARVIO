@@ -288,7 +288,7 @@ private fun QuickAccessGrid(
         ) {
             QuickAccessTile(
                 title = stringResource(R.string.live_quick_all_channels),
-                subtitle = stringResource(R.string.live_channels_count, allChannelsCount),
+                subtitle = liveChannelsLabel(allChannelsCount),
                 icon = Icons.Default.GridView,
                 iconTint = liveAccent(),
                 onClick = onOpenAllChannels,
@@ -296,7 +296,7 @@ private fun QuickAccessGrid(
             )
             QuickAccessTile(
                 title = stringResource(R.string.live_quick_sports),
-                subtitle = if (sportsCount > 0) stringResource(R.string.live_channels_count, sportsCount) else stringResource(R.string.live_sports_live_and_upcoming),
+                subtitle = if (sportsCount > 0) liveChannelsLabel(sportsCount) else stringResource(R.string.live_sports_live_and_upcoming),
                 icon = Icons.Default.SportsSoccer,
                 iconTint = AccentGreen,
                 onClick = onOpenSports,
@@ -310,7 +310,7 @@ private fun QuickAccessGrid(
             val favEnabled = favoritesCount > 0
             QuickAccessTile(
                 title = stringResource(R.string.live_quick_favourites),
-                subtitle = stringResource(R.string.live_channels_count, favoritesCount),
+                subtitle = liveChannelsLabel(favoritesCount),
                 icon = Icons.Default.Star,
                 iconTint = Color(0xFFFBBF24),
                 onClick = onOpenFavorites,
@@ -320,7 +320,7 @@ private fun QuickAccessGrid(
             val recentsEnabled = recentsCount > 0
             QuickAccessTile(
                 title = stringResource(R.string.live_quick_recent),
-                subtitle = stringResource(R.string.live_channels_count, recentsCount),
+                subtitle = liveChannelsLabel(recentsCount),
                 icon = Icons.Default.History,
                 iconTint = Color(0xFF60A5FA),
                 onClick = onOpenRecents,
@@ -472,7 +472,7 @@ private fun PlaylistSubwayTile(
                     overflow = TextOverflow.Ellipsis,
                 )
                 Text(
-                    text = currentProvider?.let { stringResource(R.string.live_channels_count, it.count) }
+                    text = currentProvider?.let { liveChannelsLabel(it.count) }
                         ?: stringResource(R.string.settings_fact_playlists),
                     style = LiveType.TimeMono.copy(
                         fontSize = 11.sp,
@@ -623,7 +623,7 @@ private fun GroupPlankTile(
     modifier: Modifier = Modifier,
 ) {
     val displayLabel = liveCategoryDisplayLabel(category, category.playlistGroupName ?: category.label)
-    val channelsSubtitle = stringResource(R.string.live_channels_count, category.count)
+    val channelsSubtitle = liveChannelsLabel(category.count)
     val plankDescription = "$displayLabel, $channelsSubtitle"
 
     Row(

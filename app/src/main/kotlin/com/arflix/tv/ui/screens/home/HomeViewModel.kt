@@ -1696,6 +1696,8 @@ class HomeViewModel @Inject constructor(
     }
     val cardLogoUrls = mutableStateMapOf<String, String>()
     val cardImdbRatings = mutableStateMapOf<String, String>()
+    /** Hero artwork without baked-in title text: "<type>_<id>:poster" / ":backdrop" to a URL. */
+    val heroTextlessArt = mutableStateMapOf<String, String>()
 
     // Debounce job for hero updates (Phase 6.1)
     private var heroUpdateJob: Job? = null
@@ -3811,6 +3813,24 @@ class HomeViewModel @Inject constructor(
 
     fun preloadImdbRatingsForHeroItems(items: List<MediaItem>) {
         preloadLogosForCategoryItems(items)
+        viewModelScope.launch(networkDispatcher) {
+            items.filter { isActionableMediaItem(it) && !isIptvItem(it) && it.id > 0 }.forEach { item ->
+                val key = "${item.mediaType}_${item.id}"
+                if (heroTextlessArt.containsKey("$key:checked")) return@forEach
+                try {
+                    val art = tmdbPriorityDispatcher.withPermit(Priority.BACKGROUND) {
+                        mediaRepository.getTextlessArtwork(item.mediaType, item.id)
+                    }
+                    withContext(Dispatchers.Main.immediate) {
+                        heroTextlessArt["$key:checked"] = ""
+                        art?.posterPath?.let { heroTextlessArt["$key:poster"] = com.arflix.tv.util.Constants.IMAGE_BASE + it }
+                        art?.backdropPath?.let { heroTextlessArt["$key:backdrop"] = com.arflix.tv.util.Constants.BACKDROP_BASE + it }
+                    }
+                } catch (e: Exception) {
+                    if (e is CancellationException) throw e
+                }
+            }
+        }
         viewModelScope.launch(networkDispatcher) {
             items.filter { isActionableMediaItem(it) && !isIptvItem(it) }.forEach { item ->
                 val key = "${item.mediaType}_${item.id}"

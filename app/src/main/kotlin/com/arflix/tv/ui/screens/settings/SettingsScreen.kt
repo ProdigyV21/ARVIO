@@ -8955,7 +8955,7 @@ internal fun CatalogDiscoveryModal(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.86f))
+                    .background(Color.Black.copy(alpha = 0.96f))
                     .padding(
                         horizontal = if (isCompact) 10.dp else 48.dp,
                         vertical = if (isCompact) 10.dp else 34.dp
@@ -8966,7 +8966,7 @@ internal fun CatalogDiscoveryModal(
                 modifier = Modifier
                     .fillMaxSize()
                     .clip(RoundedCornerShape(if (isCompact) 12.dp else 18.dp))
-                    .background(Color.Black.copy(alpha = 0.34f), RoundedCornerShape(if (isCompact) 12.dp else 18.dp))
+                    .background(Color(0xFF0E0E10), RoundedCornerShape(if (isCompact) 12.dp else 18.dp))
                     .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(if (isCompact) 12.dp else 18.dp))
                     .padding(if (isCompact) 10.dp else 18.dp)
             ) {

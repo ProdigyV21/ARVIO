@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -41,6 +42,11 @@ import androidx.compose.material.icons.filled.LiveTv
 import androidx.compose.material.icons.filled.Newspaper
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.outlined.BookmarkBorder
+import androidx.compose.material.icons.outlined.Home
+import androidx.compose.material.icons.outlined.LibraryMusic
+import androidx.compose.material.icons.outlined.LiveTv
+import androidx.compose.material.icons.outlined.Search
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -60,6 +66,7 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.annotation.StringRes
 import androidx.compose.ui.platform.LocalConfiguration
@@ -209,7 +216,9 @@ internal fun shouldShowBottomBar(
 data class BottomBarItem(
     @StringRes val labelRes: Int,
     val icon: ImageVector,
-    val route: String
+    val route: String,
+    /** Line icon for the unselected tab; the filled [icon] marks the selected one. */
+    val idleIcon: ImageVector = icon,
 )
 
 /**
@@ -217,11 +226,11 @@ data class BottomBarItem(
  * bar keeps five readable tabs, like the web app.
  */
 val bottomBarItems = listOf(
-    BottomBarItem(R.string.home, Icons.Default.Home, "home"),
-    BottomBarItem(R.string.search, Icons.Default.Search, "search"),
-    BottomBarItem(R.string.nav_library, Icons.Default.Bookmark, "watchlist"),
-    BottomBarItem(R.string.topbar_tv, Icons.Default.LiveTv, "tv"),
-    BottomBarItem(R.string.nav_music, Icons.Default.LibraryMusic, "music"),
+    BottomBarItem(R.string.home, Icons.Default.Home, "home", Icons.Outlined.Home),
+    BottomBarItem(R.string.search, Icons.Default.Search, "search", Icons.Outlined.Search),
+    BottomBarItem(R.string.nav_library, Icons.Default.Bookmark, "watchlist", Icons.Outlined.BookmarkBorder),
+    BottomBarItem(R.string.topbar_tv, Icons.Default.LiveTv, "tv", Icons.Outlined.LiveTv),
+    BottomBarItem(R.string.nav_music, Icons.Default.LibraryMusic, "music", Icons.Outlined.LibraryMusic),
 )
 
 /** The landscape rail has the height for Settings, pinned below the tabs. */
@@ -310,18 +319,43 @@ fun AppBottomBar(
                 .navigationBarsPadding()
                 .padding(start = 12.dp, end = 12.dp, top = 6.dp, bottom = 8.dp)
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth().height(barHeight)
-                    .shadow(16.dp, FloatingBarShape, clip = false)
+            // Glassy dark capsule: a lit top edge, a deep soft shadow, and one indicator that
+            // glides between tabs instead of each tab fading its own highlight.
+            androidx.compose.foundation.layout.BoxWithConstraints(
+                modifier = Modifier.align(Alignment.CenterHorizontally).widthIn(max = 480.dp).fillMaxWidth().height(barHeight)
+                    .shadow(24.dp, FloatingBarShape, clip = false, ambientColor = Color.Black, spotColor = Color.Black)
                     .clip(FloatingBarShape)
-                    .background(Color(0xFF17171A))
-                    .border(1.dp, Color.White.copy(alpha = 0.08f), FloatingBarShape)
-                    .padding(horizontal = 6.dp),
-                horizontalArrangement = Arrangement.SpaceEvenly,
-                verticalAlignment = Alignment.CenterVertically,
+                    .background(Brush.verticalGradient(listOf(Color(0xF2202024), Color(0xF5121215))))
+                    .border(
+                        1.dp,
+                        Brush.verticalGradient(listOf(Color.White.copy(alpha = 0.16f), Color.White.copy(alpha = 0.04f))),
+                        FloatingBarShape,
+                    )
+                    .padding(horizontal = 6.dp, vertical = 6.dp)
+                    .testTag("floating_tab_bar"),
             ) {
-                items.forEach { item ->
-                    BottomBarItemButton(item, currentRoute, onNavigate, spec, accent, Modifier.weight(1f).fillMaxHeight())
+                val slot = if (items.isEmpty()) maxWidth else maxWidth / items.size
+                val selectedIndex = items.indexOfFirst { currentRoute?.substringBefore('?') == it.route }
+                val indicatorX by androidx.compose.animation.core.animateDpAsState(
+                    targetValue = slot * selectedIndex.coerceAtLeast(0),
+                    animationSpec = androidx.compose.animation.core.spring(dampingRatio = 0.78f, stiffness = 420f),
+                    label = "tab_indicator_x",
+                )
+                val indicatorAlpha by androidx.compose.animation.core.animateFloatAsState(
+                    if (selectedIndex >= 0) 1f else 0f, tween(200), label = "tab_indicator_alpha")
+                Box(
+                    Modifier.offset(x = indicatorX).width(slot).fillMaxHeight()
+                        .padding(horizontal = 4.dp)
+                        .graphicsLayer { alpha = indicatorAlpha }
+                        .clip(RoundedCornerShape(22.dp))
+                        .background(Brush.verticalGradient(listOf(accent.copy(alpha = 0.18f), accent.copy(alpha = 0.10f))))
+                        .border(1.dp, accent.copy(alpha = 0.10f), RoundedCornerShape(22.dp))
+                )
+                Row(Modifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
+                    items.forEach { item ->
+                        BottomBarItemButton(item, currentRoute, onNavigate, spec, accent,
+                            Modifier.weight(1f).fillMaxHeight(), ownIndicator = false)
+                    }
                 }
             }
         }
@@ -338,6 +372,7 @@ private fun BottomBarItemButton(
     spec: AppBottomBarSpec,
     accent: Color,
     modifier: Modifier,
+    ownIndicator: Boolean = true,
 ) {
     val isSelected = currentRoute?.substringBefore('?') == item.route
     val haptic = LocalHapticFeedback.current
@@ -358,7 +393,7 @@ private fun BottomBarItemButton(
         label = "navigation_icon_scale"
     )
     val indicatorColor by animateColorAsState(
-        targetValue = if (isSelected) accent.copy(alpha = 0.16f) else Color.Transparent,
+        targetValue = if (isSelected && ownIndicator) accent.copy(alpha = 0.16f) else Color.Transparent,
         animationSpec = tween(200),
         label = "navigation_indicator"
     )
@@ -392,7 +427,7 @@ private fun BottomBarItemButton(
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
-                    imageVector = item.icon,
+                    imageVector = if (isSelected) item.icon else item.idleIcon,
                     contentDescription = null,
                     tint = iconColor,
                     modifier = Modifier.size(24.dp).graphicsLayer { scaleX = iconScale; scaleY = iconScale }
