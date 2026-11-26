@@ -451,7 +451,7 @@ data class TmdbGenre(val id: Int = 0, val name: String = "")
 data class TmdbCreditsResponse(val id: Int = 0, val cast: List<TmdbCastMember> = emptyList(), val crew: List<TmdbCrewMember> = emptyList())
 data class TmdbCastMember(val id: Int = 0, val name: String = "", val character: String? = null, @SerializedName("profile_path") val profilePath: String? = null, val order: Int = 0)
 data class TmdbCrewMember(val id: Int = 0, val name: String = "", val job: String = "", @SerializedName("profile_path") val profilePath: String? = null, val department: String = "")
-data class TmdbImagesResponse(val id: Int = 0, val logos: List<TmdbImage> = emptyList(), val backdrops: List<TmdbImage> = emptyList())
+data class TmdbImagesResponse(val id: Int = 0, val logos: List<TmdbImage> = emptyList(), val backdrops: List<TmdbImage> = emptyList(), val posters: List<TmdbImage> = emptyList())
 data class TmdbImage(@SerializedName("file_path") val filePath: String? = null, @SerializedName("iso_639_1") val iso6391: String? = null, val width: Int = 0, val height: Int = 0, @SerializedName("vote_average") val voteAverage: Float = 0f, @SerializedName("vote_count") val voteCount: Int = 0)
 data class TmdbVideosResponse(val id: Int = 0, val results: List<TmdbVideo> = emptyList())
 data class TmdbVideo(val id: String = "", val key: String = "", val name: String = "", val site: String = "", val type: String = "", val official: Boolean = false, val size: Int = 0)
@@ -507,3 +507,14 @@ data class TmdbTvSeason(
     @SerializedName("poster_path") val posterPath: String? = null,
     @SerializedName("air_date") val airDate: String? = null
 )
+
+/** Artwork without baked-in title text (TMDB marks it with no language), so a clear logo can sit on top. */
+data class TextlessArtwork(val posterPath: String?, val backdropPath: String?)
+
+internal fun pickTextlessArtwork(images: TmdbImagesResponse): TextlessArtwork {
+    fun best(list: List<TmdbImage>) = list.asSequence()
+        .filter { it.iso6391.isNullOrBlank() && !it.filePath.isNullOrBlank() }
+        .sortedWith(compareByDescending<TmdbImage> { it.voteAverage }.thenByDescending { it.voteCount }.thenByDescending { it.width })
+        .firstOrNull()?.filePath
+    return TextlessArtwork(best(images.posters), best(images.backdrops))
+}

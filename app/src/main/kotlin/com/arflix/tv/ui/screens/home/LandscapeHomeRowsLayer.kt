@@ -71,6 +71,7 @@ fun LandscapeHomeRowsLayer(
     categories: List<Category>,
     cardLogoUrls: Map<String, String>,
     cardImdbRatings: Map<String, String> = emptyMap(),
+    heroTextlessArt: Map<String, String> = emptyMap(),
     onPreloadHeroImdbRatings: (List<MediaItem>) -> Unit = {},
     contentStartPadding: Dp,
     onNavigateToDetails: (MediaType, Int, Int?, Int?) -> Unit = { _, _, _, _ -> },

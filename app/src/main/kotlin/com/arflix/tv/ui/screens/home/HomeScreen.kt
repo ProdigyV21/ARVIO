@@ -840,6 +840,7 @@ fun HomeScreen(
     // logo arriving no longer recomposes the full home surface.
     val cardLogoUrls = viewModel.cardLogoUrls
     val cardImdbRatings = viewModel.cardImdbRatings
+    val heroTextlessArt = viewModel.heroTextlessArt
     val profileCount = if (currentProfile != null) 1 else 0
     val usePosterCards = rememberCardLayoutMode() == CardLayoutMode.POSTER
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -1604,6 +1605,7 @@ fun HomeScreen(
             categories = displayCategories,
             cardLogoUrls = cardLogoUrls,
             cardImdbRatings = cardImdbRatings,
+            heroTextlessArt = heroTextlessArt,
             onPreloadHeroImdbRatings = viewModel::preloadImdbRatingsForHeroItems,
             focusState = focusState,
             limitRowsDuringStartup = limitRowsDuringStartup,
@@ -2590,6 +2592,7 @@ internal fun MobileHeroCarousel(
     posterStyle: Boolean = true,
     cardLogoUrls: Map<String, String> = emptyMap(),
     cardImdbRatings: Map<String, String> = emptyMap(),
+    heroTextlessArt: Map<String, String> = emptyMap(),
     currentProfile: com.arflix.tv.data.model.Profile? = null,
     onNavigateToSearch: () -> Unit = {},
     onSwitchProfile: () -> Unit = {},
@@ -2707,8 +2710,12 @@ internal fun MobileHeroCarousel(
                 }
             }
             val logoUrl = cardLogoUrls["${item.mediaType}_${item.id}"]
-            val heroArtwork = remember(item.backdrop, item.image, heroLayout.compactContent) {
-                mobileDetailsArtworkSource(item.image, item.backdrop, portrait = !heroLayout.compactContent)
+            // Prefer artwork without title text: a poster with the title printed on it plus the
+            // clear logo on top showed the title twice.
+            val textlessPoster = heroTextlessArt["${item.mediaType}_${item.id}:poster"]
+            val textlessBackdrop = heroTextlessArt["${item.mediaType}_${item.id}:backdrop"]
+            val heroArtwork = remember(item.backdrop, item.image, heroLayout.compactContent, textlessPoster, textlessBackdrop) {
+                mobileDetailsArtworkSource(textlessPoster ?: item.image, textlessBackdrop ?: item.backdrop, portrait = !heroLayout.compactContent)
             }
 
             // Scale down cards that aren't in the center; animate smoothly as they scroll in/out
@@ -2789,6 +2796,7 @@ internal fun HomeInputLayer(
     categories: List<Category>,
     cardLogoUrls: Map<String, String>,
     cardImdbRatings: Map<String, String> = emptyMap(),
+    heroTextlessArt: Map<String, String> = emptyMap(),
     onPreloadHeroImdbRatings: (List<MediaItem>) -> Unit = {},
     focusState: HomeFocusState,
     limitRowsDuringStartup: Boolean,
@@ -3284,6 +3292,7 @@ internal fun HomeInputLayer(
             categories = categories,
             cardLogoUrls = cardLogoUrls,
             cardImdbRatings = cardImdbRatings,
+            heroTextlessArt = heroTextlessArt,
             onPreloadHeroImdbRatings = onPreloadHeroImdbRatings,
             focusState = focusState,
             limitRowsDuringStartup = limitRowsDuringStartup,
@@ -3358,6 +3367,7 @@ private fun HomeRowsLayer(
     categories: List<Category>,
     cardLogoUrls: Map<String, String>,
     cardImdbRatings: Map<String, String> = emptyMap(),
+    heroTextlessArt: Map<String, String> = emptyMap(),
     onPreloadHeroImdbRatings: (List<MediaItem>) -> Unit = {},
     focusState: HomeFocusState,
     limitRowsDuringStartup: Boolean,
@@ -3415,6 +3425,7 @@ private fun HomeRowsLayer(
                     categories = categories,
                     cardLogoUrls = cardLogoUrls,
                     cardImdbRatings = cardImdbRatings,
+            heroTextlessArt = heroTextlessArt,
                     onPreloadHeroImdbRatings = onPreloadHeroImdbRatings,
                     contentStartPadding = contentStartPadding,
                     onNavigateToDetails = onNavigateToDetails,
@@ -3439,6 +3450,7 @@ private fun HomeRowsLayer(
                     categories = categories,
                     cardLogoUrls = cardLogoUrls,
                     cardImdbRatings = cardImdbRatings,
+            heroTextlessArt = heroTextlessArt,
                     onPreloadHeroImdbRatings = onPreloadHeroImdbRatings,
                     contentStartPadding = contentStartPadding,
                     currentProfile = currentProfile,
@@ -3527,6 +3539,7 @@ private fun MobileHomeRowsLayer(
     categories: List<Category>,
     cardLogoUrls: Map<String, String>,
     cardImdbRatings: Map<String, String> = emptyMap(),
+    heroTextlessArt: Map<String, String> = emptyMap(),
     onPreloadHeroImdbRatings: (List<MediaItem>) -> Unit = {},
     contentStartPadding: androidx.compose.ui.unit.Dp,
     usePosterCards: Boolean,
@@ -3574,6 +3587,7 @@ private fun MobileHomeRowsLayer(
                 posterStyle = posterHero,
                 cardLogoUrls = cardLogoUrls,
                 cardImdbRatings = cardImdbRatings,
+            heroTextlessArt = heroTextlessArt,
                 currentProfile = currentProfile,
                 onNavigateToSearch = onNavigateToSearch,
                 onSwitchProfile = onSwitchProfile,
