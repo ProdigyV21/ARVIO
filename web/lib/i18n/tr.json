@@ -5,5 +5,13 @@
   "Completed": "Tamamlanan",
   "Dropped": "Bırakılan",
   "Silo: use the Jellyfin-compatible address. Optional profile: username#ProfileName. Protected profile: password#PIN.": "Silo: Jellyfin uyumlu adresi kullanın. İsteğe bağlı profil: username#ProfileName. Korumalı profil: password#PIN.",
-  "None of your enabled addons provide playback sources.": "Etkin eklentilerinizin hiçbiri oynatma kaynağı sağlamıyor."
+  "None of your enabled addons provide playback sources.": "Etkin eklentilerinizin hiçbiri oynatma kaynağı sağlamıyor.",
+  "Game info": "Maç bilgisi",
+  "Standings": "Puan durumu",
+  "Form": "Form",
+  "Head to head": "Aralarındaki maçlar",
+  "Score alerts": "Skor bildirimleri",
+  "League networks": "Lig kanalları",
+  "Score update": "Skor güncellemesi",
+  "Full time": "Maç sonu"
 }

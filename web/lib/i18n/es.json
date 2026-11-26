@@ -838,5 +838,13 @@
   "Uses http://, which this secure page cannot reach.": "Usa http://, al que esta página segura no puede acceder.",
   "Your music server": "Tu servidor de música",
   "{value0} songs": "{value0} canciones",
-  "1 song": "1 canción"
+  "1 song": "1 canción",
+  "Game info": "Información del partido",
+  "Standings": "Clasificación",
+  "Form": "Forma",
+  "Head to head": "Cara a cara",
+  "Score alerts": "Alertas de marcador",
+  "League networks": "Canales de la liga",
+  "Score update": "Cambio en el marcador",
+  "Full time": "Final"
 }

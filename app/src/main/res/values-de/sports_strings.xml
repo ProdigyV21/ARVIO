@@ -20,4 +20,21 @@
     <string name="sports_reminder_cancel">Abbrechen</string>
     <string name="sports_reminder_open">Sport öffnen</string>
     <string name="sports_reminder_auto_hint">Für Teams, denen du folgst, sind Erinnerungen automatisch an.</string>
+    <string name="sports_game_info">Spielinfo</string>
+    <string name="sports_channels_tab">Sender</string>
+    <string name="sports_score_per_period">Ergebnis je Abschnitt</string>
+    <string name="sports_form">Form</string>
+    <string name="sports_head_to_head">Direkter Vergleich</string>
+    <string name="sports_standings">Tabelle</string>
+    <string name="sports_details_hidden">Verborgen, bis du auf Ergebnis zeigen tippst.</string>
+    <string name="sports_details_none">Noch keine weiteren Infos zu diesem Spiel.</string>
+    <string name="sports_details_loading">Spielinfo wird geladen…</string>
+    <string name="sports_league_networks">Ligasender</string>
+    <string name="sports_league_network">Ligasender</string>
+    <string name="sports_last_used_channel">Zuletzt genutzt</string>
+    <string name="sports_score_alerts">Ergebnis-Hinweise</string>
+    <string name="sports_score_alerts_on">Ergebnis-Hinweise an</string>
+    <string name="sports_alert_score">Spielstand</string>
+    <string name="sports_alert_final">Abpfiff</string>
+    <string name="sports_failover_switching">Sender gestört. Versuche %1$s…</string>
 </resources>

@@ -901,6 +901,11 @@ fun AppNavigation(
         isOnLiveTv = { navController.currentDestination?.route?.substringBefore('?') == "tv" },
         openLiveTv = { navigateTopLevel(Screen.Tv.createRoute()) },
     )
+    // Score alerts for followed teams, over whatever screen is open.
+    com.arflix.tv.ui.screens.tv.live.SportsScoreAlertHost(
+        enabled = !isKidsProfile && currentRoute != null &&
+            currentRoute.substringBefore('?') !in setOf(Screen.Login.route, Screen.ProfileSelection.route),
+    )
     }
 }
 

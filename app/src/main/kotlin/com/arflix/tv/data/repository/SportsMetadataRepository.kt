@@ -2,6 +2,8 @@ package com.arflix.tv.data.repository
 
 import com.arflix.tv.BuildConfig
 import com.arflix.tv.data.model.SportsEventArtwork
+import com.arflix.tv.data.model.SportsGameDetails
+import com.arflix.tv.data.model.parseSportsGameDetails
 import com.arflix.tv.data.model.parseSportsMetadata
 import com.arflix.tv.util.Constants
 import kotlinx.coroutines.Dispatchers
@@ -72,6 +74,55 @@ class SportsMetadataRepository @Inject constructor(client: OkHttpClient, @Applic
                 dayCache[day]?.second.orEmpty()
             }
         }
+    }
+
+    private val gameCache = HashMap<String, Pair<Long, SportsGameDetails>>()
+    private val gameMutex = Mutex()
+
+    /**
+     * The details of one game ("123", "espn:nba:401", "mlb:77"), fetched when its
+     * page opens. Kept for a minute; a failed request returns the last copy.
+     */
+    suspend fun loadGame(id: String): SportsGameDetails? = withContext(Dispatchers.IO) {
+        gameMutex.withLock {
+            val now = System.currentTimeMillis()
+            gameCache[id]?.let { (at, details) -> if (now - at < 60_000L) return@withLock details }
+            val url = endpoint().toHttpUrlOrNull()?.newBuilder()?.addQueryParameter("game", id)?.build()
+                ?: return@withLock gameCache[id]?.second
+            val result = runCatching {
+                http.newCall(Request.Builder().url(url).get().build()).execute().use { response ->
+                    check(response.isSuccessful)
+                    val body = response.body ?: error("Empty game details")
+                    check(!body.source().request(512_001L))
+                    parseSportsGameDetails(body.source().readUtf8())
+                }
+            }.getOrNull()
+            if (result != null) {
+                if (gameCache.size >= 30) gameCache.remove(gameCache.minByOrNull { it.value.first }?.key)
+                gameCache[id] = now to result
+            }
+            result ?: gameCache[id]?.second
+        }
+    }
+
+    /**
+     * Live and recent scores of games near now, a small slice of the catalogue,
+     * for score alerts. Null when the request fails.
+     */
+    suspend fun loadScores(): List<SportsEventArtwork>? = withContext(Dispatchers.IO) {
+        val url = endpoint().toHttpUrlOrNull()?.newBuilder()?.addQueryParameter("scores", "1")?.build() ?: return@withContext null
+        runCatching {
+            http.newCall(Request.Builder().url(url).get().build()).execute().use { response ->
+                check(response.isSuccessful)
+                val body = response.body ?: error("Empty scores")
+                check(!body.source().request(2_000_001L))
+                parseSportsMetadata(body.source().readUtf8())
+            }
+        }.getOrNull()
+    }
+
+    private fun endpoint() = BuildConfig.SPORTS_METADATA_URL.ifBlank {
+        "${Constants.NETLIFY_BACKEND_URL.ifBlank { "https://auth.arvio.tv/.netlify/functions" }}/sports-metadata"
     }
 
     suspend fun load(): List<SportsEventArtwork> = withContext(Dispatchers.IO) {

@@ -88,6 +88,7 @@ class SportsRepository @Inject constructor(
     suspend fun cachedMetadata() = sportsMetadataRepository.peek()
     suspend fun loadMetadata() = sportsMetadataRepository.load()
     suspend fun loadMetadataDay(day: String) = sportsMetadataRepository.loadDay(day)
+    suspend fun loadGameDetails(id: String) = sportsMetadataRepository.loadGame(id)
     suspend fun loadAddonGuideArtwork(): List<SportsEventArtwork> = withContext(Dispatchers.IO) {
         val addons = streamRepository.installedAddons.first().filter {
             it.isInstalled && it.isEnabled && !it.url.isNullOrBlank() && SportsAddonCapabilities.isSportsLiveTvAddon(it)

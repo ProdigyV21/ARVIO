@@ -7,5 +7,13 @@
   "Library": "ライブラリ",
   "Libraries": "ライブラリ",
   "Silo: use the Jellyfin-compatible address. Optional profile: username#ProfileName. Protected profile: password#PIN.": "Silo: Jellyfin互換のアドレスを使用してください. 任意のプロフィール: username#ProfileName. 保護されたプロフィール: password#PIN.",
-  "None of your enabled addons provide playback sources.": "有効なアドオンには再生ソースを提供するものがありません。"
+  "None of your enabled addons provide playback sources.": "有効なアドオンには再生ソースを提供するものがありません。",
+  "Game info": "試合情報",
+  "Standings": "順位表",
+  "Form": "調子",
+  "Head to head": "直接対決",
+  "Score alerts": "スコア通知",
+  "League networks": "リーグのチャンネル",
+  "Score update": "スコア更新",
+  "Full time": "試合終了"
 }

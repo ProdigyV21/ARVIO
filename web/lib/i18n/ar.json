@@ -5,5 +5,13 @@
   "Completed": "مكتمل",
   "Dropped": "متروك",
   "Silo: use the Jellyfin-compatible address. Optional profile: username#ProfileName. Protected profile: password#PIN.": "Silo: استخدم العنوان المتوافق مع Jellyfin. ملف شخصي اختياري: username#ProfileName. ملف شخصي محمي: password#PIN.",
-  "None of your enabled addons provide playback sources.": "لا توفر أي من الإضافات المفعّلة لديك مصادر للتشغيل."
+  "None of your enabled addons provide playback sources.": "لا توفر أي من الإضافات المفعّلة لديك مصادر للتشغيل.",
+  "Game info": "معلومات المباراة",
+  "Standings": "الترتيب",
+  "Form": "المستوى",
+  "Head to head": "المواجهات المباشرة",
+  "Score alerts": "تنبيهات النتيجة",
+  "League networks": "قنوات الدوري",
+  "Score update": "تحديث النتيجة",
+  "Full time": "نهاية المباراة"
 }

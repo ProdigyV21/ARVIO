@@ -8,5 +8,13 @@
   "Completed": "పూర్తయినవి",
   "Dropped": "వదిలేసినవి",
   "Silo: use the Jellyfin-compatible address. Optional profile: username#ProfileName. Protected profile: password#PIN.": "Silo: Jellyfin-అనుకూల చిరునామాను ఉపయోగించండి. ఐచ్ఛిక ప్రొఫైల్: username#ProfileName. రక్షిత ప్రొఫైల్: password#PIN.",
-  "None of your enabled addons provide playback sources.": "మీరు ప్రారంభించిన యాడ్‌ఆన్‌లలో ఏదీ ప్లేబ్యాక్ వనరులను అందించడం లేదు."
+  "None of your enabled addons provide playback sources.": "మీరు ప్రారంభించిన యాడ్‌ఆన్‌లలో ఏదీ ప్లేబ్యాక్ వనరులను అందించడం లేదు.",
+  "Game info": "మ్యాచ్ సమాచారం",
+  "Standings": "పాయింట్ల పట్టిక",
+  "Form": "ఫామ్",
+  "Head to head": "ముఖాముఖి",
+  "Score alerts": "స్కోర్ హెచ్చరికలు",
+  "League networks": "లీగ్ ఛానెళ్లు",
+  "Score update": "స్కోర్ అప్‌డేట్",
+  "Full time": "మ్యాచ్ ముగిసింది"
 }

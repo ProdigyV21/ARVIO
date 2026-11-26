@@ -49,5 +49,13 @@
   "Uses http://, which this secure page cannot reach.": "Utilise http://, que cette page sécurisée ne peut pas joindre.",
   "Your music server": "Ton serveur musical",
   "{value0} songs": "{value0} titres",
-  "1 song": "1 titre"
+  "1 song": "1 titre",
+  "Game info": "Infos du match",
+  "Standings": "Classement",
+  "Form": "Forme",
+  "Head to head": "Face-à-face",
+  "Score alerts": "Alertes de score",
+  "League networks": "Chaînes de la ligue",
+  "Score update": "Mise à jour du score",
+  "Full time": "Fin du match"
 }

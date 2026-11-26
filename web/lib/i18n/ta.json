@@ -6,5 +6,13 @@
   "Completed": "முடித்தவை",
   "Dropped": "கைவிட்டவை",
   "Silo: use the Jellyfin-compatible address. Optional profile: username#ProfileName. Protected profile: password#PIN.": "Silo: Jellyfin-இணக்கமான முகவரியைப் பயன்படுத்தவும். விருப்பச் சுயவிவரம்: username#ProfileName. பாதுகாக்கப்பட்ட சுயவிவரம்: password#PIN.",
-  "None of your enabled addons provide playback sources.": "இயக்கப்பட்டுள்ள உங்கள் துணை நிரல்கள் எதுவும் இயக்குவதற்கான மூலங்களை வழங்கவில்லை."
+  "None of your enabled addons provide playback sources.": "இயக்கப்பட்டுள்ள உங்கள் துணை நிரல்கள் எதுவும் இயக்குவதற்கான மூலங்களை வழங்கவில்லை.",
+  "Game info": "போட்டி தகவல்",
+  "Standings": "புள்ளிப் பட்டியல்",
+  "Form": "ஃபார்ம்",
+  "Head to head": "நேருக்கு நேர்",
+  "Score alerts": "ஸ்கோர் விழிப்பூட்டல்கள்",
+  "League networks": "லீக் சேனல்கள்",
+  "Score update": "ஸ்கோர் புதுப்பிப்பு",
+  "Full time": "போட்டி முடிந்தது"
 }

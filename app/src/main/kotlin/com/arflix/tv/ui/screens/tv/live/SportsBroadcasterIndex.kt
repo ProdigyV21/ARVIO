@@ -16,6 +16,16 @@ internal class SportsBroadcasterIndex private constructor(
     fun matchingIds(names: Set<String>): List<String> =
         names.flatMap { idsByName[it].orEmpty() }.distinct().sortedBy { sourceOrder[it] }
 
+    /** Channel ids per group for every channel name [group] places, in playlist order. */
+    fun groupedIds(group: (String) -> String?): Map<String, List<String>> {
+        val output = LinkedHashMap<String, MutableList<String>>()
+        for ((name, ids) in idsByName) {
+            val id = group(name) ?: continue
+            output.getOrPut(id) { ArrayList() }.addAll(ids)
+        }
+        return output.mapValues { (_, ids) -> ids.distinct().sortedBy { sourceOrder[it] } }
+    }
+
     companion object {
         fun build(key: SportsBroadcasterIndexKey, visit: (visitor: (String, String, String) -> Unit) -> Unit): SportsBroadcasterIndex {
             val normalized = HashMap<String, String>()

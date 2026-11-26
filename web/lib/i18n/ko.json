@@ -5,5 +5,13 @@
   "Completed": "시청 완료",
   "Dropped": "시청 중단",
   "Silo: use the Jellyfin-compatible address. Optional profile: username#ProfileName. Protected profile: password#PIN.": "Silo: Jellyfin 호환 주소를 사용하세요. 선택적 프로필: username#ProfileName. 보호된 프로필: password#PIN.",
-  "None of your enabled addons provide playback sources.": "활성화된 애드온 중 재생 소스를 제공하는 것이 없습니다."
+  "None of your enabled addons provide playback sources.": "활성화된 애드온 중 재생 소스를 제공하는 것이 없습니다.",
+  "Game info": "경기 정보",
+  "Standings": "순위",
+  "Form": "최근 폼",
+  "Head to head": "상대 전적",
+  "Score alerts": "점수 알림",
+  "League networks": "리그 채널",
+  "Score update": "점수 업데이트",
+  "Full time": "경기 종료"
 }

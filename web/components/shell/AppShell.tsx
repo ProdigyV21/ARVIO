@@ -29,6 +29,7 @@ import { XboxControllerTip } from "./XboxControllerTip";
 import { OfflineNotice } from "./OfflineNotice";
 import { PremiumPurchaseIntent } from "./PremiumPurchaseIntent";
 import { SportsReminderHost } from "./SportsReminderHost";
+import { SportsLiveHost } from "./SportsLiveHost";
 
 // The shell re-renders whenever the view, section, details or player change.
 // Its always-mounted children subscribe to the store fields they show
@@ -258,6 +259,7 @@ export function AppShell() {
       {musicUsed && !kidsProfile && <ScreenBoundary screen="music-player"><MusicHost /></ScreenBoundary>}
       <ExternalPlaybackPrompt />
       {!kidsProfile && <SportsReminderHost />}
+      {!kidsProfile && <SportsLiveHost />}
       <MediaContextMenu />
       <PremiumUsage />
       <BackHandler />

@@ -5,5 +5,13 @@
   "Completed": "Voltooi",
   "Dropped": "Laat vaar",
   "Silo: use the Jellyfin-compatible address. Optional profile: username#ProfileName. Protected profile: password#PIN.": "Silo: gebruik die Jellyfin-versoenbare adres. Opsionele profiel: username#ProfileName. Beskermde profiel: password#PIN.",
-  "None of your enabled addons provide playback sources.": "Geen van jou geaktiveerde byvoegings verskaf afspeelbronne nie."
+  "None of your enabled addons provide playback sources.": "Geen van jou geaktiveerde byvoegings verskaf afspeelbronne nie.",
+  "Game info": "Wedstryd-inligting",
+  "Standings": "Stand",
+  "Form": "Vorm",
+  "Head to head": "Kop aan kop",
+  "Score alerts": "Telling-waarskuwings",
+  "League networks": "Ligakanale",
+  "Score update": "Tellingopdatering",
+  "Full time": "Volle tyd"
 }

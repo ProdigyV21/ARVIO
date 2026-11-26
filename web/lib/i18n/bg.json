@@ -5,5 +5,13 @@
   "Completed": "Завършени",
   "Dropped": "Отказани",
   "Silo: use the Jellyfin-compatible address. Optional profile: username#ProfileName. Protected profile: password#PIN.": "Silo: използвайте адреса, съвместим с Jellyfin. Незадължителен профил: username#ProfileName. Защитен профил: password#PIN.",
-  "None of your enabled addons provide playback sources.": "Нито една от активираните ви добавки не предоставя източници за възпроизвеждане."
+  "None of your enabled addons provide playback sources.": "Нито една от активираните ви добавки не предоставя източници за възпроизвеждане.",
+  "Game info": "Информация за мача",
+  "Standings": "Класиране",
+  "Form": "Форма",
+  "Head to head": "Директни срещи",
+  "Score alerts": "Известия за резултат",
+  "League networks": "Канали на лигата",
+  "Score update": "Промяна в резултата",
+  "Full time": "Краен резултат"
 }

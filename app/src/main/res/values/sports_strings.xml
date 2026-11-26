@@ -20,4 +20,21 @@
     <string name="sports_reminder_cancel">Cancel</string>
     <string name="sports_reminder_open">Open Sports</string>
     <string name="sports_reminder_auto_hint">Reminders turn on by themselves for teams you follow.</string>
+    <string name="sports_game_info">Game info</string>
+    <string name="sports_channels_tab">Channels</string>
+    <string name="sports_score_per_period">Score per period</string>
+    <string name="sports_form">Form</string>
+    <string name="sports_head_to_head">Head to head</string>
+    <string name="sports_standings">Standings</string>
+    <string name="sports_details_hidden">Hidden until you tap Show score.</string>
+    <string name="sports_details_none">No more details for this game yet.</string>
+    <string name="sports_details_loading">Loading game details…</string>
+    <string name="sports_league_networks">League networks</string>
+    <string name="sports_league_network">League network</string>
+    <string name="sports_last_used_channel">Last used</string>
+    <string name="sports_score_alerts">Score alerts</string>
+    <string name="sports_score_alerts_on">Score alerts on</string>
+    <string name="sports_alert_score">Score update</string>
+    <string name="sports_alert_final">Full time</string>
+    <string name="sports_failover_switching">Channel failed. Trying %1$s…</string>
 </resources>

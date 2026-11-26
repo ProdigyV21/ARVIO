@@ -9,5 +9,13 @@
   "Completed": "പൂർത്തിയായി",
   "Dropped": "ഉപേക്ഷിച്ചു",
   "Silo: use the Jellyfin-compatible address. Optional profile: username#ProfileName. Protected profile: password#PIN.": "Silo: Jellyfin-അനുയോജ്യമായ വിലാസം ഉപയോഗിക്കുക. ഐച്ഛിക പ്രൊഫൈൽ: username#ProfileName. സംരക്ഷിത പ്രൊഫൈൽ: password#PIN.",
-  "None of your enabled addons provide playback sources.": "നിങ്ങൾ പ്രവർത്തനക്ഷമമാക്കിയ ആഡ്ഓണുകളൊന്നും പ്ലേബാക്ക് ഉറവിടങ്ങൾ നൽകുന്നില്ല."
+  "None of your enabled addons provide playback sources.": "നിങ്ങൾ പ്രവർത്തനക്ഷമമാക്കിയ ആഡ്ഓണുകളൊന്നും പ്ലേബാക്ക് ഉറവിടങ്ങൾ നൽകുന്നില്ല.",
+  "Game info": "മത്സര വിവരം",
+  "Standings": "പോയിന്റ് പട്ടിക",
+  "Form": "ഫോം",
+  "Head to head": "നേർക്കുനേർ",
+  "Score alerts": "സ്കോർ അലേർട്ടുകൾ",
+  "League networks": "ലീഗ് ചാനലുകൾ",
+  "Score update": "സ്കോർ അപ്ഡേറ്റ്",
+  "Full time": "മത്സരം അവസാനിച്ചു"
 }

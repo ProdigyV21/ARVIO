@@ -1,6 +1,7 @@
 package com.arflix.tv.data.repository
 
 import android.content.Context
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import com.arflix.tv.data.model.SportsFollow
@@ -24,6 +25,9 @@ import javax.inject.Singleton
 object SportsCloudKeys {
     fun follows(profileId: String) = stringPreferencesKey("profile_${profileId}_sports_follows_v1")
     fun reminders(profileId: String) = stringPreferencesKey("profile_${profileId}_sports_reminders_v1")
+    /** Device only: channel ids differ per playlist and per device. */
+    fun channelMemory(profileId: String) = stringPreferencesKey("profile_${profileId}_sports_channel_memory_v1")
+    fun scoreAlerts(profileId: String) = booleanPreferencesKey("profile_${profileId}_sports_score_alerts_v1")
 }
 
 /** Where a kick-off reminder wants Live TV to go. Live TV consumes it once. */
@@ -49,6 +53,40 @@ class SportsPreferencesRepository @Inject constructor(
     val reminders: Flow<List<SportsReminder>> = combine(profileManager.currentProfileId, context.settingsDataStore.data) { profileId, prefs ->
         decodeReminders(prefs[SportsCloudKeys.reminders(profileId)])
     }.distinctUntilChanged()
+
+    /** League or network key -> the channel last chosen for it, on this device. */
+    val channelMemory: Flow<Map<String, String>> = combine(profileManager.currentProfileId, context.settingsDataStore.data) { profileId, prefs ->
+        decodeMemory(prefs[SportsCloudKeys.channelMemory(profileId)])
+    }.distinctUntilChanged()
+
+    /** Score alerts for followed teams; on unless turned off on this device. */
+    val scoreAlerts: Flow<Boolean> = combine(profileManager.currentProfileId, context.settingsDataStore.data) { profileId, prefs ->
+        prefs[SportsCloudKeys.scoreAlerts(profileId)] != false
+    }.distinctUntilChanged()
+
+    suspend fun setScoreAlerts(on: Boolean) {
+        val profileId = profileManager.getProfileIdSync()
+        context.settingsDataStore.edit { it[SportsCloudKeys.scoreAlerts(profileId)] = on }
+    }
+
+    suspend fun rememberChannel(keys: Collection<String>, channelId: String) {
+        if (keys.isEmpty() || channelId.isBlank()) return
+        val profileId = profileManager.getProfileIdSync()
+        context.settingsDataStore.edit { prefs ->
+            val key = SportsCloudKeys.channelMemory(profileId)
+            val current = decodeMemory(prefs[key])
+            val next = current.withRemembered(keys, channelId)
+            if (next != current) prefs[key] = gson.toJson(next)
+        }
+    }
+
+    /**
+     * The game being watched right now, if it was started from Sports. Score
+     * alerts skip it: the stream may run behind the score feed.
+     */
+    private val _watchingEventId = MutableStateFlow<String?>(null)
+    val watchingEventId: StateFlow<String?> = _watchingEventId.asStateFlow()
+    fun setWatchingEvent(eventId: String?) { _watchingEventId.value = eventId }
 
     suspend fun toggleFollow(follow: SportsFollow) {
         val profileId = profileManager.getProfileIdSync()
@@ -82,6 +120,14 @@ class SportsPreferencesRepository @Inject constructor(
         }
     }
 
+    private fun decodeMemory(json: String?): Map<String, String> = json?.let {
+        runCatching {
+            (gson.fromJson(it, Map::class.java) as? Map<*, *>)?.entries
+                ?.mapNotNull { (k, v) -> if (k is String && v is String && k.isNotBlank() && v.isNotBlank()) k to v else null }
+                ?.toMap()
+        }.getOrNull()
+    }.orEmpty()
+
     private fun decodeFollows(json: String?): List<SportsFollow> = json?.let {
         runCatching { gson.fromJson(it, Array<SportsFollow?>::class.java)?.filterNotNull()?.sanitizedFollows() }.getOrNull()
     }.orEmpty()
@@ -89,4 +135,13 @@ class SportsPreferencesRepository @Inject constructor(
     private fun decodeReminders(json: String?): List<SportsReminder> = json?.let {
         runCatching { gson.fromJson(it, Array<SportsReminder?>::class.java)?.filterNotNull()?.sanitizedReminders() }.getOrNull()
     }.orEmpty()
+}
+
+/** Newest choices first, at most [SPORTS_CHANNEL_MEMORY_LIMIT] keys. */
+internal const val SPORTS_CHANNEL_MEMORY_LIMIT = 60
+internal fun Map<String, String>.withRemembered(keys: Collection<String>, channelId: String): Map<String, String> {
+    val fresh = keys.filter { it.isNotBlank() }.distinct().associateWith { channelId }
+    val rest = filterKeys { it !in fresh }
+    return LinkedHashMap<String, String>().apply { putAll(fresh); putAll(rest) }
+        .entries.take(SPORTS_CHANNEL_MEMORY_LIMIT).associate { it.key to it.value }
 }

@@ -127,5 +127,8 @@
   "Follow {name}": "{name} volgen",
   "Following {name}": "Je volgt {name}",
   "Days": "Dagen",
-  "Filter": "Filter"
+  "Filter": "Filter",
+  " · Last used": " · Laatst gebruikt",
+  " · League network": " · Competitiezender",
+  "Channel failed. Trying {name}…": "Zender werkt niet. {name} proberen…"
 }
