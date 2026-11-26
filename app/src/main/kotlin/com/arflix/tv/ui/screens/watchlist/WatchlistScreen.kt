@@ -961,15 +961,22 @@ private fun OledSources(
 private fun OledCollection(source: WatchlistSourceItem, cover: String?, width: Dp, onClick: () -> Unit) {
     var focused by remember { mutableStateOf(false) }
     val accent = resolveAccentColor(Color.White)
-    Column(Modifier.width(width).onFocusChanged { focused = it.isFocused }.clip(RoundedCornerShape(8.dp)).clickable(onClick = onClick)) {
-        Box(Modifier.fillMaxWidth().padding(top = 5.dp)) {
-            Box(Modifier.padding(horizontal = 10.dp).offset(y = (-5).dp).fillMaxWidth().height(8.dp).background(BackgroundElevated, RoundedCornerShape(8.dp)))
-            AsyncImage(cover, source.title, modifier = Modifier.fillMaxWidth().aspectRatio(2.2f).clip(RoundedCornerShape(8.dp)).background(BackgroundCard), contentScale = ContentScale.Crop)
+    val touch = LocalDeviceType.current.isTouchDevice()
+    val press = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+    Column(Modifier.width(width).onFocusChanged { focused = it.isFocused }
+        .then(if (touch) Modifier.mobilePressScale(press) else Modifier)
+        .clip(RoundedCornerShape(if (touch) 14.dp else 8.dp))
+        .clickable(interactionSource = press, indication = androidx.compose.foundation.LocalIndication.current, onClick = onClick)) {
+        // TV keeps the stacked-card hint; on phones it read as a stray grey bar above the artwork.
+        Box(Modifier.fillMaxWidth().padding(top = if (touch) 0.dp else 5.dp)) {
+            if (!touch) Box(Modifier.padding(horizontal = 10.dp).offset(y = (-5).dp).fillMaxWidth().height(8.dp).background(BackgroundElevated, RoundedCornerShape(8.dp)))
+            AsyncImage(cover, source.title, modifier = Modifier.fillMaxWidth().aspectRatio(2.2f).clip(RoundedCornerShape(if (touch) 14.dp else 8.dp)).background(BackgroundCard), contentScale = ContentScale.Crop)
         }
-        Column(Modifier.fillMaxWidth().background(if(focused) accent else Color.Black).padding(10.dp)) {
+        Column(Modifier.fillMaxWidth().background(if(focused) accent else Color.Black).padding(horizontal = if (touch) 2.dp else 10.dp, vertical = 10.dp)) {
             val ink = if(focused && accent.luminance() > .4f) Color.Black else Color.White
-            Text(source.title, color = ink, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(source.subtitle ?: tr("Personal list"), color = ink.copy(alpha = .7f), fontSize = 13.sp, maxLines = 1)
+            Text(source.title, color = ink, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, maxLines = if (touch) 2 else 1,
+                lineHeight = 21.sp, overflow = TextOverflow.Ellipsis)
+            Text(source.subtitle ?: tr("Personal list"), color = ink.copy(alpha = .7f), fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
 }

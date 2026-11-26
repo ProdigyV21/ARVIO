@@ -171,7 +171,7 @@ fun LibraryCalendarPane(
                         textAlign = androidx.compose.ui.text.style.TextAlign.Center, maxLines = 1)
                 }
             }
-            val gridHeight = if (touch) (dates.size / 7 * (if (LocalConfiguration.current.screenHeightDp < 500) 40 else 56)).dp else if (compact) (dates.size / 7 * 64).dp else (dates.size / 7 * 52).dp
+            val gridHeight = if (touch) (dates.size / 7 * (if (LocalConfiguration.current.screenHeightDp < 500) 40 else 50)).dp else if (compact) (dates.size / 7 * 64).dp else (dates.size / 7 * 52).dp
             Column(Modifier.fillMaxWidth().then(if (scrollable) Modifier.height(gridHeight) else Modifier.weight(1f))
                 .testTag("calendar-month-grid"), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 dates.chunked(7).forEach { week ->
@@ -236,7 +236,8 @@ fun LibraryCalendarPane(
                     }
                 }
             } else {
-                Column(Modifier.fillMaxWidth().height(if (compact) 140.dp else 130.dp).testTag("calendar-empty-day"),
+                // Phones: shorter so the day message clears the floating tab bar without scrolling.
+                Column(Modifier.fillMaxWidth().height(if (touch) 104.dp else if (compact) 140.dp else 130.dp).testTag("calendar-empty-day"),
                     verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(tr(when { state.isLoading -> "Finding your releases…"; hasProblem -> "Release schedule incomplete"
                         state.watchlistCount == 0 -> "Your watchlist, on the calendar"; else -> "No releases on this day" }), color = Color.White, fontSize = 15.sp,
