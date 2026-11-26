@@ -224,6 +224,7 @@ private const val SportsGuideScanBatchSize = 8_192
 // requests. One step per this interval is still far faster than anyone zaps.
 private const val MinZapIntervalMs = 150L
 private const val CatchupUrlAnchorGranularityMs = 60_000L
+private const val CatchupSeekReopenAfterMs = 6_000L
 private const val IptvPlaybackUserAgent = "VLC/3.0.20 LibVLC/3.0.20"
 private const val VisibleGuidePastWindowMs = 48L * 60L * 60_000L
 /** How far ahead one channel's schedule (the Guide panel) reads from the local guide index. */
@@ -1413,6 +1414,10 @@ fun LiveTvScreen(
     var playingCatchupProgram by remember { mutableStateOf<IptvProgram?>(null) }
     var catchupPlaybackOffsetMs by remember { mutableLongStateOf(0L) }
     var catchupReloadSignal by remember { mutableIntStateOf(0) }
+    // Target of an in-stream catch-up seek into a later URL minute. Some timeshift servers
+    // answer byte-range seeks past the part they have generated with 404s or HTML pages,
+    // so when that seek fails or stalls we reopen the archive at the target minute instead.
+    var pendingCatchupSeekReopenMs by remember { mutableStateOf<Long?>(null) }
     val rememberedChannelByCategory = remember { mutableMapOf<String, String>() }
     val focusCommitScope = rememberCoroutineScope()
     val mobileScrollCommitJob = remember { arrayOf<Job?>(null) }
@@ -3900,8 +3905,10 @@ fun LiveTvScreen(
         playerPositionMs = target
         exoPlayer.playWhenReady = true
         if (seekInStream) {
+            pendingCatchupSeekReopenMs = target.takeIf { targetAnchor != catchupUrlAnchorOffsetMs }
             exoPlayer.seekTo(target - catchupUrlAnchorOffsetMs)
         } else {
+            pendingCatchupSeekReopenMs = null
             catchupPlaybackOffsetMs = target
             lastPreparedStreamUrl = null
             catchupReloadSignal++
@@ -3915,6 +3922,26 @@ fun LiveTvScreen(
                 "inSegment=$targetInSegment seekInStream=$seekInStream exo=${exoPlayer.currentPosition}"
         )
         hudPokeSignal++
+    }
+
+    fun reopenCatchupAtPendingSeek(reason: String): Boolean {
+        val target = pendingCatchupSeekReopenMs ?: return false
+        pendingCatchupSeekReopenMs = null
+        if (playingCatchupProgram == null) return false
+        System.err.println("[IPTV-Catchup] in-stream seek failed ($reason); reopening at target=$target")
+        catchupPlaybackOffsetMs = target
+        playerPositionMs = target
+        lastPreparedStreamUrl = null
+        playerIsBuffering = true
+        catchupReloadSignal++
+        return true
+    }
+
+    // An in-stream seek that is still loading after a few seconds is treated like a failed one.
+    LaunchedEffect(pendingCatchupSeekReopenMs) {
+        if (pendingCatchupSeekReopenMs == null) return@LaunchedEffect
+        delay(CatchupSeekReopenAfterMs)
+        if (exoPlayer.playbackState != Player.STATE_READY) reopenCatchupAtPendingSeek("stalled")
     }
 
     fun seekToPosition(targetMs: Long) {
@@ -4083,6 +4110,7 @@ fun LiveTvScreen(
                 if (playbackState == Player.STATE_READY) {
                     playbackDiagnostic = null
                     playerIsBuffering = false
+                    pendingCatchupSeekReopenMs = null
                     if (liveReadySinceMs == null) liveReadySinceMs = android.os.SystemClock.elapsedRealtime()
                 }
                 if (isLiveDropEnd(playbackState, exoPlayer.duration, playingCatchupProgram != null, liveStreamGate.isLimited,
@@ -4110,6 +4138,7 @@ fun LiveTvScreen(
                 // This device closed that session on purpose, so it says nothing about the source.
                 if (com.arflix.tv.network.isIptvStreamSessionClosed(error)) return
                 if (!playbackForeground || sportsHiddenPlayback) return
+                if (reopenCatchupAtPendingSeek("error=${error.errorCodeName}")) return
                 val prepared = lastPreparedStreamUrl ?: return
                 val detectedHls = error.iptvHlsFormatDetected()
                 if (detectedHls?.sourceUrl == prepared && !lastPreparedIsHls &&
