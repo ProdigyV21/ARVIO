@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
@@ -73,6 +74,7 @@ internal fun CollectionFolderRowsMobile(
             ?: rows.flatMap { it.items }.firstOrNull { !it.backdrop.isNullOrBlank() }
     }
     val compact = LocalConfiguration.current.screenHeightDp < 480
+    val openedAt = rememberCollectionOpenedAt()
 
     Box(Modifier.fillMaxSize().background(appBackgroundDark()).testTag("collection_folder_rows")) {
         CollectionBackdrop(folder, lead, true, collectionSpotlightHeight(true, compact) + 150.dp)
@@ -95,9 +97,16 @@ internal fun CollectionFolderRowsMobile(
                 verticalArrangement = Arrangement.spacedBy(22.dp)
             ) {
                 item(key = "spotlight", contentType = "spotlight") {
-                    CollectionSpotlight(
-                        folder, lead, true, compact, onBack,
-                        clearLogoUrl = lead?.let { cardLogoUrls["${it.mediaType}_${it.id}"] },
+                    // The lead title arrives with the first row; it rises in like the rows do.
+                    if (lead != null) CollectionSpotlightEntrance(openedAt) {
+                        CollectionSpotlight(
+                            folder, lead, true, compact, onBack,
+                            clearLogoUrl = cardLogoUrls["${lead.mediaType}_${lead.id}"],
+                            showBackButton = false
+                        )
+                    } else CollectionSpotlight(
+                        folder, null, true, compact, onBack,
+                        clearLogoUrl = null,
                         showBackButton = false
                     )
                 }
@@ -120,12 +129,13 @@ internal fun CollectionFolderRowsMobile(
                             TextButton(onClick = viewModel::retry) { Text(stringResource(R.string.retry), color = Color.White) }
                         }
                     }
-                    else -> items(rows, key = { it.row.id }, contentType = { "catalog_row" }) { row ->
+                    else -> itemsIndexed(rows, key = { _, it -> it.row.id }, contentType = { _, _ -> "catalog_row" }) { index, row ->
                         FolderCatalogRow(
                             title = serviceHomeRowTitle(row, folder.title),
                             items = row.items,
                             onOpen = onOpen,
-                            onViewAll = row.row.viewAll?.let { viewAll -> { onViewAll(viewAll) } }
+                            onViewAll = row.row.viewAll?.let { viewAll -> { onViewAll(viewAll) } },
+                            modifier = Modifier.collectionEntrance(openedAt, index + 1)
                         )
                     }
                 }
@@ -139,9 +149,10 @@ private fun FolderCatalogRow(
     title: String,
     items: List<MediaItem>,
     onOpen: (MediaItem) -> Unit,
-    onViewAll: (() -> Unit)?
+    onViewAll: (() -> Unit)?,
+    modifier: Modifier = Modifier
 ) {
-    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Row(
             Modifier
                 .fillMaxWidth()
@@ -180,4 +191,10 @@ private fun FolderCatalogRow(
             }
         }
     }
+}
+
+/** The spotlight's entrance: it fades in and rises with the first row. */
+@Composable
+private fun CollectionSpotlightEntrance(openedAt: Long, content: @Composable () -> Unit) {
+    Box(Modifier.collectionEntrance(openedAt, 0)) { content() }
 }

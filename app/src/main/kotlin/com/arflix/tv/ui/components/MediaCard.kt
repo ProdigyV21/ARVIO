@@ -31,6 +31,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import coil.imageLoader
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
@@ -572,10 +573,22 @@ fun MediaCard(
                     overflow = TextOverflow.Ellipsis,
                     modifier = if (cardRating != null) Modifier.weight(1f, fill = false) else Modifier,
                 )
-                // Phones: the score sits next to the date, a small gold star like the web cards.
-                if (cardRating != null) {
+                // Phones: the score sits next to the date. An IMDb score carries the IMDb badge;
+                // a TMDB vote (only when IMDb has none) keeps the small gold star.
+                if (cardRating != null && cardRating.isImdb) {
+                    androidx.compose.foundation.layout.Spacer(Modifier.width(6.dp))
+                    androidx.compose.foundation.layout.Box(Modifier.testTag("media_card_rating")) {
+                        ImdbSvgRatingBadge(
+                            rating = cardRating.value,
+                            imageLoader = LocalContext.current.imageLoader,
+                            ratingFontSize = 11,
+                            logoWidth = 22.dp,
+                            logoHeight = 11.dp,
+                        )
+                    }
+                } else if (cardRating != null) {
                     Text(
-                        text = "  \u2605 $cardRating",
+                        text = "  \u2605 ${cardRating.value}",
                         style = ArvioSkin.typography.caption,
                         color = androidx.compose.ui.graphics.Color(0xFFF5C518),
                         maxLines = 1,
