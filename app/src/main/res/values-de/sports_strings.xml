@@ -37,4 +37,6 @@
     <string name="sports_alert_score">Spielstand</string>
     <string name="sports_alert_final">Abpfiff</string>
     <string name="sports_failover_switching">Sender gestört. Versuche %1$s…</string>
+    <string name="sports_pick_day">Tag wählen</string>
+    <string name="sports_pick_sport">Sportart wählen</string>
 </resources>
