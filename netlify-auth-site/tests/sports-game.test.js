@@ -34,6 +34,12 @@ test('form is told from the team\'s own side and never includes this game', () =
   assert.deepEqual(formFrom(rows, '1', 'x'), ['W', 'L', 'D']);
 });
 
+test('form counts a repeated game once and lists the newest first', () => {
+  const win = { idEvent: '5', dateEvent: '2026-11-01', idHomeTeam: '1', idAwayTeam: '2', intHomeScore: '2', intAwayScore: '0' };
+  const loss = { idEvent: '4', dateEvent: '2026-11-08', idHomeTeam: '1', idAwayTeam: '3', intHomeScore: '0', intAwayScore: '1' };
+  assert.deepEqual(formFrom([win, win, win, loss, win], '1', 'x'), ['L', 'W']);
+});
+
 test('TheSportsDB game: standings, form and head-to-head, without this game', async () => {
   const calls = [];
   const fetcher = async url => {
