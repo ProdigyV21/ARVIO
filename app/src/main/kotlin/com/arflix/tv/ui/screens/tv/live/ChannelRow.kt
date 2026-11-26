@@ -111,6 +111,7 @@ fun ChannelRow(
     val secondary = if (visuallyFocused) Color.Black.copy(alpha = .7f) else LiveColors.FgDim
     val now = nowNext?.now
     val animatedBorderWidth = if (visuallyFocused) LiveDims.FocusBorder else 0.dp
+    val playingMark = liveAccent()
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -133,6 +134,18 @@ fun ChannelRow(
                     cornerRadius = CornerRadius(radius),
                 )
                 drawContent()
+                // The channel that is playing keeps an accent bar on its start edge, so it
+                // stays easy to find while browsing other rows.
+                if (isActive && !visuallyFocused) {
+                    val barWidth = 3.dp.toPx()
+                    val barX = if (isRtl) size.width - inset - barWidth else inset
+                    drawRoundRect(
+                        color = playingMark,
+                        topLeft = Offset(barX, inset + 6.dp.toPx()),
+                        size = Size(barWidth, (surfaceSize.height - 12.dp.toPx()).coerceAtLeast(0f)),
+                        cornerRadius = CornerRadius(barWidth / 2f),
+                    )
+                }
                 val stroke = if (visuallyFocused) animatedBorderWidth.toPx() else 0f
                 if (stroke > 0f) {
                     drawRoundRect(

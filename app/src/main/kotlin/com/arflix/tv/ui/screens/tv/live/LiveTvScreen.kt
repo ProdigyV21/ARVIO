@@ -2414,7 +2414,12 @@ fun LiveTvScreen(
     val liveSubtitleChoices = remember { mutableStateMapOf<String, String>() }
     var subtitlePickerOpen by remember { mutableStateOf(false) }
     // Audio choices made on a channel this session, by channel id (a language or track key).
-    val liveAudioChoices = remember { mutableStateMapOf<String, String>() }
+    // Remembered on this device, so a channel keeps its second language or 5.1 track next time.
+    val liveAudioChoices = remember { mutableStateMapOf<String, String>().apply { putAll(LivePlayerPrefs.audioChoices(context)) } }
+    var livePictureMode by remember { mutableStateOf(LivePlayerPrefs.pictureMode(context)) }
+    /** Sleep timer: minutes chosen on the play bar (0 = off) and when it ends. */
+    var liveSleepMinutes by remember { mutableIntStateOf(0) }
+    var liveSleepAtMs by remember { mutableStateOf<Long?>(null) }
     var audioPickerOpen by remember { mutableStateOf(false) }
     var sourcesLoading by remember { mutableStateOf(false) }
     var sourcesFailed by remember { mutableStateOf(false) }
@@ -3651,6 +3656,14 @@ fun LiveTvScreen(
     var lastPreparedCatchupOffsetMs by remember { mutableLongStateOf(-1L) }
     var playerRetryCount by remember { mutableIntStateOf(0) }
     var playbackDiagnostic by remember { mutableStateOf<PlaybackDiagnostic?>(null) }
+    LaunchedEffect(liveSleepAtMs) {
+        val at = liveSleepAtMs ?: return@LaunchedEffect
+        delay((at - System.currentTimeMillis()).coerceAtLeast(0L))
+        liveSleepAtMs = null
+        liveSleepMinutes = 0
+        exoPlayer.pause()
+        if (isFullScreen) exitFullScreenPlayback()
+    }
     LaunchedEffect(playbackDiagnostic) {
         val failed = playbackDiagnostic?.takeIf { it.severity == PlaybackDiagnosticSeverity.Error } ?: return@LaunchedEffect
         val failedId = playingChannelId
@@ -5257,6 +5270,7 @@ fun LiveTvScreen(
                         if (view.player !== exoPlayer) {
                             view.player = exoPlayer
                         }
+                        if (view.resizeMode != livePictureMode.resizeMode) view.resizeMode = livePictureMode.resizeMode
                         // With AI subtitles the stream's own subtitles are only read, not shown.
                         view.subtitleView?.visibility =
                             if (liveAiShows) android.view.View.INVISIBLE else android.view.View.VISIBLE
@@ -5302,6 +5316,24 @@ fun LiveTvScreen(
                             null
                         },
                         onGuideClick = { openFullscreenGuide() },
+                        pictureLabel = stringResource(
+                            when (livePictureMode) {
+                                LivePictureMode.Fit -> R.string.live_picture_fit
+                                LivePictureMode.Fill -> R.string.live_picture_fill
+                                LivePictureMode.Stretch -> R.string.live_picture_stretch
+                            }
+                        ),
+                        onPictureClick = {
+                            livePictureMode = livePictureMode.next()
+                            LivePlayerPrefs.savePictureMode(context, livePictureMode)
+                        },
+                        sleepLabel = if (liveSleepMinutes == 0) stringResource(R.string.live_sleep_off)
+                            else stringResource(R.string.live_sleep_minutes, liveSleepMinutes),
+                        onSleepClick = {
+                            liveSleepMinutes = nextSleepStep(liveSleepMinutes)
+                            liveSleepAtMs = if (liveSleepMinutes == 0) null
+                                else System.currentTimeMillis() + liveSleepMinutes * 60_000L
+                        },
                         onSubtitlesClick = { subtitlePickerOpen = true }
                             .takeIf {
                                 withAiSubtitlesOption(
@@ -5621,6 +5653,7 @@ fun LiveTvScreen(
                 },
                 onPick = { key ->
                     playingChannelId?.let { liveAudioChoices[it] = key }
+                    LivePlayerPrefs.saveAudioChoices(context, liveAudioChoices.toMap())
                     applyLiveAudioChoice(exoPlayer, key)
                 },
             )
