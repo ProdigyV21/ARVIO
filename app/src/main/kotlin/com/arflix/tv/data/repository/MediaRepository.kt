@@ -2170,10 +2170,24 @@ class MediaRepository @Inject constructor(
     private suspend fun resolveVodSeedToItem(seed: IptvRepository.VodCatalogSeed): MediaItem? {
         val tmdbId = seed.tmdbId?.takeIf { it > 0 }
             ?: seed.imdbId?.let { resolveImdbToTmdbRef(it, seed.mediaType)?.second }
-            ?: IptvTitleNormalizer.normalize(seed.title).takeIf { it.isNotBlank() }
-                ?.let { normalized -> resolveTitleToTmdbRef(normalized, seed.mediaType)?.second }
+            ?: resolveVodTitleToTmdbId(seed.title, seed.mediaType)
             ?: return null
         return catalogItemFor(seed.mediaType, tmdbId)
+    }
+
+    /**
+     * Title lookup for a provider entry without ids. The original letters go
+     * first (a Greek or Cyrillic title folds to nothing, and TMDB matches
+     * accented titles best as written), then the ASCII-folded form.
+     */
+    private suspend fun resolveVodTitleToTmdbId(title: String, mediaType: MediaType): Int? {
+        val queries = listOf(IptvTitleNormalizer.searchQuery(title), IptvTitleNormalizer.normalize(title))
+            .filter { it.isNotBlank() }
+            .distinctBy { it.lowercase(Locale.ROOT) }
+        for (query in queries) {
+            resolveTitleToTmdbRef(query, mediaType)?.second?.let { return it }
+        }
+        return null
     }
 
     private suspend fun delegatedHomeSource(request: ClientCatalogRequest, catalog: CatalogConfig): String? {
