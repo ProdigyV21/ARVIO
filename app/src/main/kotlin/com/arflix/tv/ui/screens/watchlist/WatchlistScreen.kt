@@ -23,6 +23,7 @@ import androidx.compose.runtime.saveable.mapSaver
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.KeyboardArrowDown
 import androidx.compose.material.icons.outlined.Search
@@ -773,7 +774,17 @@ fun WatchlistScreen(
                 }
             }
             Spacer(Modifier.height(16.dp))
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (touch) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (mediaFilter != null || sort != HomeServerLibrarySort.RECENTLY_ADDED) {
+                    com.arflix.tv.ui.components.MobilePillButton(tr("Reset"), filled = false, modifier = Modifier.weight(1f), onClick = {
+                        sort = HomeServerLibrarySort.RECENTLY_ADDED
+                        mediaFilter = null
+                    })
+                }
+                com.arflix.tv.ui.components.MobilePillButton(tr("Refresh"), filled = false, modifier = Modifier.weight(1f),
+                    leadingIcon = Icons.Default.Refresh,
+                    onClick = { if(serverMode) viewModel.refreshLibrary() else viewModel.refresh() })
+            } else Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (mediaFilter != null || sort != HomeServerLibrarySort.RECENTLY_ADDED) {
                     OledControl(
                         tr("Reset"),
@@ -846,7 +857,8 @@ internal fun OledControl(
                     modifier = if (touch && (trailingIcon != null || hasActiveBadge)) Modifier.weight(1f, fill = false) else Modifier,
                     color = foreground,
                     fontSize = if(compact) 13.sp else 14.sp,
-                    fontWeight = if(selected || focused) FontWeight.SemiBold else FontWeight.Normal,
+                    // Phones keep one weight so chips don't shift width when the selection moves.
+                    fontWeight = if (touch && compact) FontWeight.Medium else if(selected || focused) FontWeight.SemiBold else FontWeight.Normal,
                     maxLines = maxLines,
                     overflow = TextOverflow.Ellipsis
                 )

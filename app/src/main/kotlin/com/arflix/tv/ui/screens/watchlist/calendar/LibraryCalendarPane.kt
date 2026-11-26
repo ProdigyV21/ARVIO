@@ -31,6 +31,7 @@ import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.*
 import androidx.compose.ui.text.font.FontWeight
@@ -170,7 +171,7 @@ fun LibraryCalendarPane(
                         textAlign = androidx.compose.ui.text.style.TextAlign.Center, maxLines = 1)
                 }
             }
-            val gridHeight = if (touch) (dates.size / 7 * 56).dp else if (compact) (dates.size / 7 * 64).dp else (dates.size / 7 * 52).dp
+            val gridHeight = if (touch) (dates.size / 7 * (if (LocalConfiguration.current.screenHeightDp < 500) 40 else 56)).dp else if (compact) (dates.size / 7 * 64).dp else (dates.size / 7 * 52).dp
             Column(Modifier.fillMaxWidth().then(if (scrollable) Modifier.height(gridHeight) else Modifier.weight(1f))
                 .testTag("calendar-month-grid"), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 dates.chunked(7).forEach { week ->
@@ -356,6 +357,7 @@ private fun CalendarToolbar(state: ReleaseCalendarUiState, locale: Locale, compa
                 .onPreviewKeyEvent { if (it.type == KeyEventType.KeyDown && it.key == Key.DirectionUp) { onExitUp(); true } else false }) { onMonth(-1) }
             Text(state.month.format(DateTimeFormatter.ofPattern("MMMM yyyy", locale)), color = Color.White,
                 fontSize = if (touch) 16.sp else 13.sp, maxLines = 1, fontWeight = FontWeight.SemiBold,
+                textAlign = if (compactToolbar) androidx.compose.ui.text.style.TextAlign.Center else null,
                 modifier = Modifier.testTag("calendar-month-label").then(if (compactToolbar) Modifier.weight(1f) else Modifier))
             CalendarArrow(true, Modifier.testTag("calendar-next-month")) { onMonth(1) }
             if (!compactToolbar) {

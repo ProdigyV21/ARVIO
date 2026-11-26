@@ -1842,8 +1842,12 @@ fun HomeScreen(
 
         // Not compiled with the baseline profile yet: warn that scrolling may be slow.
         Box(modifier = Modifier.fillMaxSize().zIndex(122f)) {
+            // Phones: float it above the tab bar so it never covers the wordmark or avatar.
             HomeOptimizingNotice(
-                Modifier
+                if (LocalDeviceType.current.isTouchDevice()) Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(start = 16.dp, end = 16.dp, bottom = LocalBottomBarInset.current + 12.dp)
+                else Modifier
                     .align(Alignment.TopEnd)
                     .padding(top = com.arflix.tv.ui.components.AppTopBarHeight + 4.dp, end = 48.dp)
             )
