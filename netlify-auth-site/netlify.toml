@@ -1,8 +1,10 @@
 [build]
-  # The partner pilot build reads ../web, so web changes still rebuild this site.
-  # Exit 0 = skip. Deploy previews are never built (owner request, Nov 2026), and
-  # production skips commits that leave this site's sources unchanged.
-  ignore = 'if [ "$CONTEXT" = "deploy-preview" ]; then exit 0; fi; git diff --quiet "$CACHED_COMMIT_REF" "$COMMIT_REF" -- . ../web'
+  # The partner pilot bundle reads a few files from ../web, so only those rebuild
+  # this site (tests/build-ignore.test.js fails when the bundle gains an input
+  # this list misses). Exit 0 = skip. Deploy previews are never built (owner
+  # request, Nov 2026), and production skips commits that leave this site's
+  # sources unchanged.
+  ignore = 'if [ "$CONTEXT" = "deploy-preview" ]; then exit 0; fi; git diff --quiet "$CACHED_COMMIT_REF" "$COMMIT_REF" -- . ../web/partner-pilot ../web/components/partner ../web/app/partner ../web/lib/selfhostRuntimeConfig.ts ../web/lib/config.ts ../web/lib/http.ts ../web/lib/storage.ts ../web/lib/auth.ts ../web/lib/partnerManagement.ts ../web/package.json ../web/package-lock.json ../web/tsconfig.json ../web/public/arvio-icon-192.png'
   command = "npm --prefix ../web ci --include=dev && node scripts/build-partner-pilot.mjs --site"
   publish = "public-build"
 

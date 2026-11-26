@@ -43,12 +43,48 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # Android-only pushes reach this workflow through strings.xml, but most of
+      # those strings are not used by the web app. Every production deploy costs
+      # Netlify credits, so skip it when nothing under web/ changed since the
+      # commit that is live now and the generated web translations come out
+      # identical to the committed ones. Any doubt (manual run, API or fetch
+      # failure) deploys as before. Comparing with the live commit, not the
+      # previous push, keeps a web change whose run was cancelled from being lost.
+      - name: Decide whether web output changed
+        id: decide
+        shell: bash
+        env:
+          EVENT: ${{ github.event_name }}
+        run: |
+          deploy=true
+          live=""
+          if [[ "$EVENT" == "push" ]]; then
+            live=$(curl --silent --fail --max-time 20 -H "Authorization: Bearer $NETLIFY_AUTH_TOKEN" \
+              "https://api.netlify.com/api/v1/sites/$NETLIFY_SITE_ID/deploys?production=true&state=ready&per_page=30" \
+              | jq -r '[.[] | select((.title // "") | test("^GitHub [0-9a-f]{40}$"))][0].title // "" | sub("^GitHub "; "")' || true)
+          fi
+          if [[ "$live" =~ ^[0-9a-f]{40}$ ]] && git fetch --quiet --depth=1 origin "$live"; then
+            changed=$(git diff --name-only "$live" "$GITHUB_SHA" --)
+            echo "Changed since live commit $live:"
+            echo "$changed"
+            if [[ -n "$changed" ]] && ! grep -qvE '^app/src/main/res/[^/]+/strings\.xml$' <<<"$changed"; then
+              node scripts/generate-translations.mjs
+              if [[ -z "$(git status --porcelain -- public/i18n)" ]]; then
+                deploy=false
+                echo "Only Android strings changed and the web translations are unchanged; skipping the deploy."
+              fi
+            fi
+          fi
+          echo "deploy=$deploy" >> "$GITHUB_OUTPUT"
+
       - name: Run web regression tests
+        if: steps.decide.outputs.deploy == 'true'
         run: npm test
 
       # CLI builds do not reliably inherit the site's browser build variables.
       # Export only these public client values, never the OAuth client secret.
       - name: Load required public build configuration
+        if: steps.decide.outputs.deploy == 'true'
         shell: bash
         env:
           PUBLIC_TRAKT_ID: ${{ secrets.WEB_PUBLIC_TRAKT_CLIENT_ID }}
@@ -70,6 +106,7 @@ jobs:
           } >> "$GITHUB_ENV"
 
       - name: Build Netlify bundle
+        if: steps.decide.outputs.deploy == 'true'
         env:
           NEXT_PUBLIC_MDBLIST_CLIENT_ID: ${{ secrets.MDBLIST_CLIENT_ID }}
           NEXT_PUBLIC_TELEGRAM_API_ID: ${{ secrets.TELEGRAM_API_ID }}
@@ -77,6 +114,7 @@ jobs:
         run: npx --yes netlify-cli@25.6.0 build --context production
 
       - name: Record expected build stamp
+        if: steps.decide.outputs.deploy == 'true'
         shell: bash
         run: |
           expected_stamp=$(jq -er '.config.env.NEXT_PUBLIC_BUILD_STAMP' .next/required-server-files.json)
@@ -89,6 +127,7 @@ jobs:
 
       # Deploy the generated function source so Netlify preserves its /* route.
       - name: Deploy to production
+        if: steps.decide.outputs.deploy == 'true'
         run: >-
           npx --yes netlify-cli@25.6.0 deploy
           --prod
@@ -99,6 +138,7 @@ jobs:
           --timeout 900
 
       - name: Verify production deployment
+        if: steps.decide.outputs.deploy == 'true'
         shell: bash
         run: |
           for attempt in {1..20}; do

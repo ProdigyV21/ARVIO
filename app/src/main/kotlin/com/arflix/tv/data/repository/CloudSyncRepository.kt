@@ -239,6 +239,31 @@ class CloudSyncRepository @Inject constructor(
     private val remoteRevision = RemoteRevisionTracker()
 
     /**
+     * The account document as downloaded during the current push or pull. One push used to
+     * download it twice and one pull up to three times (payload, local rank check, settings
+     * merge), which made account-sync-pull the largest server cost by far. Only touched under
+     * [cloudSyncMutex]; every push and pull clears it when it starts, and a successful upload
+     * clears it, so nothing older than the running operation is ever reused.
+     */
+    private var operationRemotePayload: String? = null
+    private var operationRemotePayloadLoaded = false
+
+    private fun forgetOperationRemotePayload() {
+        operationRemotePayload = null
+        operationRemotePayloadLoaded = false
+    }
+
+    private suspend fun loadRemotePayloadForOperation(): Result<String?> {
+        if (operationRemotePayloadLoaded) return Result.success(operationRemotePayload)
+        val result = authRepository.loadAccountSyncPayload()
+        result.onSuccess {
+            operationRemotePayload = it
+            operationRemotePayloadLoaded = true
+        }
+        return result
+    }
+
+    /**
      * True when another device saved the account document since the last check. Costs one tiny
      * request and downloads nothing; a failed read is never reported as a change.
      */
@@ -875,7 +900,7 @@ class CloudSyncRepository @Inject constructor(
 
         root.put("activeProfileId", profileRepository.getActiveProfileId() ?: JSONObject.NULL)
         root.put("profiles", JSONArray(gson.toJson(profiles)))
-        val existingAvatarImagesById = authRepository.loadAccountSyncPayload()
+        val existingAvatarImagesById = loadRemotePayloadForOperation()
             .getOrNull()
             ?.takeIf { it.isNotBlank() }
             ?.let { payload ->
@@ -1109,10 +1134,12 @@ class CloudSyncRepository @Inject constructor(
     // ══════════════════════════════════════════════════════════
 
     suspend fun pushToCloud(force: Boolean = false): Result<Unit> = cloudSyncMutex.withLock {
+        forgetOperationRemotePayload()
         pushToCloudLocked(force = force, allowRemoteRestoreBeforePush = !force)
     }
 
     suspend fun pushLocalSnapshotToCloud(): Result<Unit> = cloudSyncMutex.withLock {
+        forgetOperationRemotePayload()
         pushToCloudLocked(force = true, allowRemoteRestoreBeforePush = false)
     }
 
@@ -1162,7 +1189,7 @@ class CloudSyncRepository @Inject constructor(
             return Result.failure(it)
         }
 
-        val existingRemotePayload = authRepository.loadAccountSyncPayload()
+        val existingRemotePayload = loadRemotePayloadForOperation()
             .getOrNull()
             ?.takeIf { it.isNotBlank() }
         if (
@@ -1245,6 +1272,8 @@ class CloudSyncRepository @Inject constructor(
         }
 
         val result = authRepository.saveAccountSyncPayload(effectivePayload)
+        // The server copy changed (or may have); a later read in this operation must download it.
+        forgetOperationRemotePayload()
         if (result.isSuccess) {
             clearLocalDirtyAfterSuccessfulPush(uploadedVersion)
             lastPushedPayloadHash = payloadHash
@@ -1459,6 +1488,7 @@ class CloudSyncRepository @Inject constructor(
      * Returns [RestoreResult] indicating what happened.
      */
     suspend fun pullFromCloud(pushPendingLocalFirst: Boolean = true): RestoreResult = cloudSyncMutex.withLock {
+        forgetOperationRemotePayload()
         val hasPendingLocalChanges = hasPendingLocalChanges()
         if (pushPendingLocalFirst && hasPendingLocalChanges) {
             AppLogger.breadcrumb(
@@ -1485,7 +1515,7 @@ class CloudSyncRepository @Inject constructor(
             )
         }
 
-        val payloadResult = authRepository.loadAccountSyncPayload()
+        val payloadResult = loadRemotePayloadForOperation()
         if (payloadResult.isFailure) {
             AppLogger.recordException(
                 throwable = payloadResult.exceptionOrNull() ?: IllegalStateException("Cloud pull failed"),
