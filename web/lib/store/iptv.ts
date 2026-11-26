@@ -2,7 +2,8 @@
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { accessibleChannels, iptvPlaylistSignature, loadIptvChannelIdentities, loadIptvGuideForChannels, loadIptvSnapshot } from "../iptv";
 import { cachedFavoriteChannels, favoriteCopyIsStale, resolveFavoriteChannels, saveFavoriteChannels } from "../favoriteTv";
-import { isCurrentIptvSnapshot } from "../iptvSession";
+import { isCurrentIptvSnapshot, normalizeTvSession } from "../iptvSession";
+import { shouldStartInLastChannel } from "../liveTvStartup";
 import { createIptvRefresher } from "../iptvRefresh";
 import { hasStalkerPortals, liveTvStalkerPortals, stalkerSourceSignature } from "../stalkerPortals";
 import type { AppSettings, IptvChannel, IptvSnapshot } from "../types";
@@ -23,7 +24,13 @@ export const emptyIptv: IptvSnapshot = {
 };
 
 export function useIptvState(store: StoreCore) {
-  const { activeProfileId, activeProfileIdRef, auth, guideRetryAfter, iptvGuideInFlightRef, iptvSnapshot, section, setBusy, setIptvSnapshot, setToast, settings, settingsRef, view } = store;
+  const { activeProfileId, activeProfileIdRef, auth, guideRetryAfter, iptvGuideInFlightRef, iptvSnapshot, section, setBusy, setIptvSnapshot, setSection, setToast, settings, settingsRef, view } = store;
+  // Settings > Live TV > Start in last channel: the first Home of this page load opens Live TV.
+  const startupLastChannelId = normalizeTvSession(settings.iptvTvSession).lastChannelId;
+  useEffect(() => {
+    if (view !== "app") return;
+    if (shouldStartInLastChannel(settings.iptvStartLastChannel, startupLastChannelId, section)) setSection("tv");
+  }, [view, section, settings.iptvStartLastChannel, startupLastChannelId, setSection]);
   // `quiet` is the Home background load for the Favorite TV row: no status text, no
   // error toast — Live TV reports playlist problems when the user opens it.
   const iptvRefresher = useRef<ReturnType<typeof createIptvRefresher<AppSettings, IptvSnapshot>> | null>(null);

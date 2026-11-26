@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="live_menu_fix_guide">Gids regmaak</string>
+    <string name="live_guide_fix_title">Gids regmaak</string>
+    <string name="live_guide_fix_source_heading">Gebruik die gids van</string>
+    <string name="live_guide_fix_automatic">Outomaties</string>
+    <string name="live_guide_fix_automatic_desc">Die gids wat jou verskaffer gekoppel het</string>
+    <string name="live_guide_fix_none">Geen gids</string>
+    <string name="live_guide_fix_none_desc">Versteek ’n gids wat verkeerd is</string>
+    <string name="live_guide_fix_search_hint">Soek ’n kanaal</string>
+    <string name="live_guide_fix_no_suggestions">Geen soortgelyke kanale nie. Soek een op naam.</string>
+    <string name="live_guide_fix_no_results">Geen kanale gevind nie</string>
+    <string name="live_guide_fix_offset_title">Gidstye</string>
+    <string name="live_guide_fix_offset_desc">Skuif elke program van %1$s. Gebruik dit wanneer programme vroeër of later begin as aangedui.</string>
+    <string name="live_guide_fix_earlier">Vroeër</string>
+    <string name="live_guide_fix_later">Later</string>
+    <string name="settings_iptv_start_last_channel">Begin in laaste kanaal</string>
+    <string name="settings_iptv_start_last_channel_desc">Die app speel die kanaal wat jy laaste gekyk het, volskerm</string>
+</resources>

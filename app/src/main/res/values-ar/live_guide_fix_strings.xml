@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="live_menu_fix_guide">إصلاح الدليل</string>
+    <string name="live_guide_fix_title">إصلاح الدليل</string>
+    <string name="live_guide_fix_source_heading">استخدم دليل</string>
+    <string name="live_guide_fix_automatic">تلقائي</string>
+    <string name="live_guide_fix_automatic_desc">الدليل الذي طابقه مزوّدك</string>
+    <string name="live_guide_fix_none">بلا دليل</string>
+    <string name="live_guide_fix_none_desc">إخفاء دليل غير صحيح</string>
+    <string name="live_guide_fix_search_hint">ابحث عن قناة</string>
+    <string name="live_guide_fix_no_suggestions">لا توجد قنوات مشابهة. ابحث عن قناة بالاسم.</string>
+    <string name="live_guide_fix_no_results">لم يتم العثور على قنوات</string>
+    <string name="live_guide_fix_offset_title">أوقات الدليل</string>
+    <string name="live_guide_fix_offset_desc">ينقل كل برنامج في %1$s. استخدمه عندما تبدأ البرامج قبل أو بعد الموعد المذكور.</string>
+    <string name="live_guide_fix_earlier">أبكر</string>
+    <string name="live_guide_fix_later">لاحقًا</string>
+    <string name="settings_iptv_start_last_channel">البدء في آخر قناة</string>
+    <string name="settings_iptv_start_last_channel_desc">فتح التطبيق يشغّل آخر قناة شاهدتها بملء الشاشة</string>
+</resources>

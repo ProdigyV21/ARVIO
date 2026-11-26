@@ -327,6 +327,9 @@ export function LiveTvSection() {
         <Row id="iptv-favorites-home" label="Favorite channels on Home" hint="Pin your starred channels to the top of Home." scope="all">
           <Toggle label="Favorite channels on Home" value={settings.iptvFavoritesOnHome !== false} onChange={(v) => updateSettings({ iptvFavoritesOnHome: v })} />
         </Row>
+        <Row id="iptv-start-last-channel" label="Start in last channel" hint="Opening the app plays the channel you watched last, full screen" scope="all">
+          <Toggle label="Start in last channel" value={settings.iptvStartLastChannel === true} onChange={(v) => updateSettings({ iptvStartLastChannel: v })} />
+        </Row>
         <Row id="guide-rows" label="Guide rows" hint="Channel rows shown in the TV guide." scope="android">
           <Select label="Guide rows" value={String(settings.guideRowCount ?? 0)} onChange={(v) => updateSettings({ guideRowCount: Number(v) })}
             options={[["0", "Automatic"], ["6", "6"], ["7", "7"], ["8", "8"], ["9", "9"], ["10", "10"]]} />

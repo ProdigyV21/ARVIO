@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="live_menu_fix_guide">গাইড ঠিক করুন</string>
+    <string name="live_guide_fix_title">গাইড ঠিক করুন</string>
+    <string name="live_guide_fix_source_heading">এর গাইড ব্যবহার করুন</string>
+    <string name="live_guide_fix_automatic">স্বয়ংক্রিয়</string>
+    <string name="live_guide_fix_automatic_desc">আপনার প্রদানকারীর মেলানো গাইড</string>
+    <string name="live_guide_fix_none">কোনো গাইড নেই</string>
+    <string name="live_guide_fix_none_desc">ভুল গাইড লুকান</string>
+    <string name="live_guide_fix_search_hint">একটি চ্যানেল খুঁজুন</string>
+    <string name="live_guide_fix_no_suggestions">কোনো মিল থাকা চ্যানেল নেই। নাম দিয়ে খুঁজুন।</string>
+    <string name="live_guide_fix_no_results">কোনো চ্যানেল পাওয়া যায়নি</string>
+    <string name="live_guide_fix_offset_title">গাইডের সময়</string>
+    <string name="live_guide_fix_offset_desc">%1$s-এর প্রতিটি অনুষ্ঠান সরায়। অনুষ্ঠান তালিকার চেয়ে আগে বা পরে শুরু হলে এটি ব্যবহার করুন।</string>
+    <string name="live_guide_fix_earlier">আগে</string>
+    <string name="live_guide_fix_later">পরে</string>
+    <string name="settings_iptv_start_last_channel">শেষ চ্যানেলে শুরু করুন</string>
+    <string name="settings_iptv_start_last_channel_desc">অ্যাপ খুললে আপনার শেষ দেখা চ্যানেল পূর্ণ স্ক্রিনে চলে</string>
+</resources>

@@ -2367,6 +2367,22 @@ class TvViewModel @Inject constructor(
         )
     }
 
+    /** Channel menu > Fix guide: take another channel's guide (or none, or back to automatic). */
+    fun setGuideSource(channelId: String, sourceChannelId: String?) {
+        viewModelScope.launch(Dispatchers.IO) {
+            iptvRepository.setGuideSource(channelId, sourceChannelId)
+            scheduleIptvCloudSync()
+        }
+    }
+
+    /** Channel menu > Fix guide: move a playlist's guide times by [minutes]. */
+    fun setGuideOffset(playlistId: String, minutes: Int) {
+        viewModelScope.launch(Dispatchers.IO) {
+            iptvRepository.setGuideOffset(playlistId, minutes)
+            scheduleIptvCloudSync()
+        }
+    }
+
     private fun scheduleIptvCloudSync() {
         iptvCloudSyncJob?.cancel()
         iptvCloudSyncJob = viewModelScope.launch(Dispatchers.IO) {

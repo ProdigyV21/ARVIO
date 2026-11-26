@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="live_menu_fix_guide">Műsorújság javítása</string>
+    <string name="live_guide_fix_title">Műsorújság javítása</string>
+    <string name="live_guide_fix_source_heading">Ennek a műsorújságját használja</string>
+    <string name="live_guide_fix_automatic">Automatikus</string>
+    <string name="live_guide_fix_automatic_desc">A szolgáltató által párosított műsorújság</string>
+    <string name="live_guide_fix_none">Nincs műsorújság</string>
+    <string name="live_guide_fix_none_desc">Hibás műsorújság elrejtése</string>
+    <string name="live_guide_fix_search_hint">Csatorna keresése</string>
+    <string name="live_guide_fix_no_suggestions">Nincs hasonló csatorna. Keress név szerint.</string>
+    <string name="live_guide_fix_no_results">Nem található csatorna</string>
+    <string name="live_guide_fix_offset_title">Műsoridők</string>
+    <string name="live_guide_fix_offset_desc">Eltolja a(z) %1$s minden műsorát. Akkor használd, ha a műsorok a jelzettnél korábban vagy később kezdődnek.</string>
+    <string name="live_guide_fix_earlier">Korábban</string>
+    <string name="live_guide_fix_later">Később</string>
+    <string name="settings_iptv_start_last_channel">Indítás az utolsó csatornán</string>
+    <string name="settings_iptv_start_last_channel_desc">Az alkalmazás megnyitásakor a legutóbb nézett csatorna teljes képernyőn indul</string>
+</resources>

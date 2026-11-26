@@ -1,6 +1,6 @@
 "use client";
 import { useTranslation } from "@/lib/i18n";
-import { ArrowDown, ArrowUp, Bell, EyeOff, Play, Star, X } from "lucide-react";
+import { ArrowDown, ArrowUp, Bell, CalendarClock, EyeOff, Play, Star, X } from "lucide-react";
 import { useEffect, useRef } from "react";
 import type { IptvChannel } from "@/lib/types";
 
@@ -10,7 +10,7 @@ export type ChannelMenuState = { channel: IptvChannel; anchor: HTMLElement | nul
  * Channel context menu (long-press / right-click / menu key), like Android's
  * ChannelContextMenu: favourite, reorder favourites, hide the channel's group.
  */
-export function ChannelMenu({ state, groupName, favorite, canMoveUp, canMoveDown, nextShowTitle, onNextShow, onPlay, onToggleFavorite, onMove, onHideGroup, onClose }: {
+export function ChannelMenu({ state, groupName, favorite, canMoveUp, canMoveDown, nextShowTitle, onNextShow, onPlay, onToggleFavorite, onMove, onHideGroup, onFixGuide, onClose }: {
   state: ChannelMenuState;
   /** The channel's category as shown on the Live TV page (the user's own name when set). */
   groupName?: string;
@@ -24,6 +24,8 @@ export function ChannelMenu({ state, groupName, favorite, canMoveUp, canMoveDown
   onToggleFavorite: () => void;
   onMove: (direction: -1 | 1) => void;
   onHideGroup: () => void;
+  /** Opens "Fix guide": another channel's guide, none, or a time correction. */
+  onFixGuide?: () => void;
   onClose: () => void;
 }) {
   const translateUi = useTranslation();
@@ -49,6 +51,7 @@ export function ChannelMenu({ state, groupName, favorite, canMoveUp, canMoveDown
         <button type="button" role="menuitem" onClick={run(onToggleFavorite)}><Star size={17} fill={favorite ? "currentColor" : "none"} />{favorite ? translateUi("Remove favorite") : translateUi("Add favorite")}</button>
         {favorite && <button type="button" role="menuitem" disabled={!canMoveUp} onClick={run(() => onMove(-1))}><ArrowUp size={17} />{translateUi("Move favorite up")}</button>}
         {favorite && <button type="button" role="menuitem" disabled={!canMoveDown} onClick={run(() => onMove(1))}><ArrowDown size={17} />{translateUi("Move favorite down")}</button>}
+        {onFixGuide && <button type="button" role="menuitem" onClick={() => { onClose(); onFixGuide(); }}><CalendarClock size={17} />{translateUi("Fix guide")}</button>}
         <button type="button" role="menuitem" onClick={run(onHideGroup)}><EyeOff size={17} />{translateUi("Hide category {value0}", { value0: group })}</button>
       </div>
     </dialog>

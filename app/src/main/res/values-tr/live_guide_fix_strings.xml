@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="live_menu_fix_guide">Rehberi düzelt</string>
+    <string name="live_guide_fix_title">Rehberi düzelt</string>
+    <string name="live_guide_fix_source_heading">Şu kanalın rehberini kullan</string>
+    <string name="live_guide_fix_automatic">Otomatik</string>
+    <string name="live_guide_fix_automatic_desc">Sağlayıcınızın eşleştirdiği rehber</string>
+    <string name="live_guide_fix_none">Rehber yok</string>
+    <string name="live_guide_fix_none_desc">Yanlış rehberi gizle</string>
+    <string name="live_guide_fix_search_hint">Kanal ara</string>
+    <string name="live_guide_fix_no_suggestions">Benzer kanal yok. Adıyla arayın.</string>
+    <string name="live_guide_fix_no_results">Kanal bulunamadı</string>
+    <string name="live_guide_fix_offset_title">Rehber saatleri</string>
+    <string name="live_guide_fix_offset_desc">%1$s içindeki her programı kaydırır. Programlar belirtilenden erken veya geç başladığında kullanın.</string>
+    <string name="live_guide_fix_earlier">Daha erken</string>
+    <string name="live_guide_fix_later">Daha sonra</string>
+    <string name="settings_iptv_start_last_channel">Son kanalda başlat</string>
+    <string name="settings_iptv_start_last_channel_desc">Uygulama açıldığında en son izlediğiniz kanal tam ekran oynatılır</string>
+</resources>

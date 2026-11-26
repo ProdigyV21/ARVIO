@@ -1175,3 +1175,36 @@ html.is-tv .livetv-search:focus-within { box-shadow: 0 0 0 3px var(--accent, #ff
 .livetv-guide-block.is-reminded::after { content: ""; position: absolute; top: 6px; right: 6px; width: 6px; height: 6px; border-radius: 50%; background: var(--accent, #e50914); }
 [dir="rtl"] .livetv-guide-block.is-reminded::after { left: 6px; right: auto; }
 .livetv-menu-next { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Fix guide (channel menu): pick another channel's guide, or move a playlist's times. */
+.livetv-guidefix { width: min(520px, 94vw); padding: 10px; }
+.livetv-guidefix-title { flex: 1; min-width: 0; display: grid; gap: 2px; }
+.livetv-guidefix-title strong, .livetv-guidefix-title small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.livetv-guidefix-title small, .livetv-guidefix-text small { color: #9ea3a9; font-size: 13px; }
+.livetv-guidefix-text { flex: 1; min-width: 0; display: grid; gap: 2px; }
+.livetv-guidefix-text strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.livetv-guidefix-text small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.livetv-guidefix-offset { display: flex; align-items: center; gap: 10px; margin: 0 2px 10px; padding: 10px 12px; border-radius: 8px; background: #1d2024; border: 1px solid #2c2f34; }
+.livetv-guidefix-offset .livetv-guidefix-text small { white-space: normal; }
+.livetv-guidefix-offset button { width: 36px; height: 36px; flex: none; display: grid; place-items: center; border: 0; border-radius: 50%; background: #ffffff14; color: #eee; transition: background-color 120ms ease, transform 120ms ease; }
+.livetv-guidefix-offset button:focus-visible { outline: 2px solid #56d8c5; outline-offset: 2px; }
+.livetv-guidefix-offset button:active:not(:disabled) { transform: scale(0.94); }
+.livetv-guidefix-offset button:disabled { opacity: 0.35; }
+.livetv-guidefix-offset output { min-width: 52px; text-align: center; font-variant-numeric: tabular-nums; font-weight: 600; }
+.livetv-guidefix-offset output.is-zero { color: #9ea3a9; }
+.livetv-guidefix-heading { margin: 4px 10px 6px; color: #9ea3a9; font-size: 13px; }
+.livetv-guidefix-search { display: flex; align-items: center; gap: 8px; margin: 0 2px 8px; padding: 0 12px; height: 42px; border-radius: 8px; background: #1d2024; border: 1px solid #2c2f34; color: #9ea3a9; }
+.livetv-guidefix-search:focus-within { border-color: #56d8c5; }
+.livetv-guidefix-search input { flex: 1; min-width: 0; height: 100%; border: 0; background: transparent; color: #eee; font-size: 15px; outline: none; }
+.livetv-guidefix-list { display: grid; gap: 2px; max-height: min(46vh, 380px); overflow-y: auto; overscroll-behavior: contain; }
+.livetv-guidefix-option { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 52px; padding: 8px 12px; border: 0; border-radius: 6px; background: transparent; color: #eee; font-size: 15px; text-align: start; transition: background-color 120ms ease; }
+.livetv-guidefix-option:focus-visible { background: #2a2d31; outline: none; }
+.livetv-guidefix-option[aria-selected="true"] .livetv-guidefix-check { color: #56d8c5; }
+.livetv-guidefix-check { width: 18px; flex: none; display: grid; place-items: center; }
+.livetv-guidefix-empty { margin: 8px 12px; color: #9ea3a9; font-size: 14px; }
+@media (hover: hover) and (pointer: fine) {
+  .livetv-guidefix-option:hover, .livetv-guidefix-offset button:hover:not(:disabled) { background: #2a2d31; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .livetv-guidefix-option, .livetv-guidefix-offset button { transition: none; }
+}

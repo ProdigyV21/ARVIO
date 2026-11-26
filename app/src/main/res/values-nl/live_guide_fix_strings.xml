@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="live_menu_fix_guide">Gids aanpassen</string>
+    <string name="live_guide_fix_title">Gids aanpassen</string>
+    <string name="live_guide_fix_source_heading">Gebruik de gids van</string>
+    <string name="live_guide_fix_automatic">Automatisch</string>
+    <string name="live_guide_fix_automatic_desc">De gids die je provider koppelde</string>
+    <string name="live_guide_fix_none">Geen gids</string>
+    <string name="live_guide_fix_none_desc">Verberg een gids die niet klopt</string>
+    <string name="live_guide_fix_search_hint">Zoek een zender</string>
+    <string name="live_guide_fix_no_suggestions">Geen vergelijkbare zenders. Zoek er een op naam.</string>
+    <string name="live_guide_fix_no_results">Geen zenders gevonden</string>
+    <string name="live_guide_fix_offset_title">Tijden in de gids</string>
+    <string name="live_guide_fix_offset_desc">Verschuift elk programma van %1$s. Gebruik dit als programma\'s eerder of later beginnen dan vermeld.</string>
+    <string name="live_guide_fix_earlier">Eerder</string>
+    <string name="live_guide_fix_later">Later</string>
+    <string name="settings_iptv_start_last_channel">Starten in laatste zender</string>
+    <string name="settings_iptv_start_last_channel_desc">De app opent direct schermvullend op de zender die je het laatst keek</string>
+</resources>

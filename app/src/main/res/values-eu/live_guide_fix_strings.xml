@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="live_menu_fix_guide">Zuzendu gida</string>
+    <string name="live_guide_fix_title">Zuzendu gida</string>
+    <string name="live_guide_fix_source_heading">Erabili honen gida</string>
+    <string name="live_guide_fix_automatic">Automatikoa</string>
+    <string name="live_guide_fix_automatic_desc">Hornitzaileak lotutako gida</string>
+    <string name="live_guide_fix_none">Gidarik ez</string>
+    <string name="live_guide_fix_none_desc">Ezkutatu gida okerra</string>
+    <string name="live_guide_fix_search_hint">Bilatu kanal bat</string>
+    <string name="live_guide_fix_no_suggestions">Ez dago antzeko kanalik. Bilatu izenaren arabera.</string>
+    <string name="live_guide_fix_no_results">Ez da kanalik aurkitu</string>
+    <string name="live_guide_fix_offset_title">Gidaren orduak</string>
+    <string name="live_guide_fix_offset_desc">%1$s(e)ko programa guztiak mugitzen ditu. Erabili saioak adierazitakoa baino lehenago edo beranduago hasten direnean.</string>
+    <string name="live_guide_fix_earlier">Lehenago</string>
+    <string name="live_guide_fix_later">Geroago</string>
+    <string name="settings_iptv_start_last_channel">Hasi azken kanalean</string>
+    <string name="settings_iptv_start_last_channel_desc">Aplikazioa irekitzean azken ikusitako kanala pantaila osoan erreproduzitzen da</string>
+</resources>
