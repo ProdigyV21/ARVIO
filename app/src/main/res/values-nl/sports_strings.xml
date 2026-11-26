@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="sports_overview">Overzicht</string>
+    <string name="sports_yesterday">Gisteren</string>
+    <string name="sports_filter_all">Alle sporten</string>
+    <string name="sports_filter_live">Nu live</string>
+    <string name="sports_my_sports">Mijn sport</string>
+    <string name="sports_remind_me">Herinner me</string>
+    <string name="sports_reminder_on">Herinnering aan</string>
+    <string name="sports_follow">%1$s volgen</string>
+    <string name="sports_following">Je volgt %1$s</string>
+    <string name="sports_finished">Afgelopen</string>
+    <string name="sports_no_games_selection">Geen wedstrijden voor deze dag en dit filter.</string>
+    <string name="sports_loading_day">Wedstrijden laden…</string>
+    <string name="sports_reminder_kickoff">Begint over een minuut</string>
+    <string name="sports_reminder_started">Is begonnen</string>
+    <string name="sports_reminder_switching">Over %2$d s naar %1$s</string>
+    <string name="sports_reminder_no_channel">Nog geen zender gevonden voor deze wedstrijd.</string>
+    <string name="sports_reminder_watch_now">Nu kijken</string>
+    <string name="sports_reminder_cancel">Annuleren</string>
+    <string name="sports_reminder_open">Sport openen</string>
+    <string name="sports_reminder_auto_hint">Voor teams die je volgt gaan herinneringen vanzelf aan.</string>
+</resources>

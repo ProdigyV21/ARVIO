@@ -2276,6 +2276,16 @@ fun LiveTvScreen(
             }
         }
     }
+    val sportsFollows by viewModel.sportsPreferences.follows.collectAsStateWithLifecycle(initialValue = emptyList())
+    val sportsReminders by viewModel.sportsPreferences.reminders.collectAsStateWithLifecycle(initialValue = emptyList())
+    // Games of followed teams get a reminder by themselves; channels of existing
+    // reminders follow the latest catalogue.
+    LaunchedEffect(sportsDisplayEvents, sportsFollows, guideClockMillis / 600_000L) {
+        if (sportsFollows.isEmpty() && sportsReminders.isEmpty()) return@LaunchedEffect
+        val events = sportsDisplayEvents
+        val follows = sportsFollows
+        viewModel.sportsPreferences.updateReminders { it.withAutoReminders(events, follows, System.currentTimeMillis()) }
+    }
     val sportsHasVisibleEvents = remember(sportsDisplayEvents, guideClockMillis) {
         sportsDisplayEvents.any { it.isVisibleSportsResult(guideClockMillis) }
     }
@@ -2934,6 +2944,19 @@ fun LiveTvScreen(
         fullscreenGuideOpen = false
         isFullScreen = true
         hudPokeSignal++
+    }
+
+    // A kick-off reminder asked to switch: play its first channel that this playlist has.
+    val pendingSportsSwitch by viewModel.sportsPreferences.pendingSwitch.collectAsStateWithLifecycle()
+    LaunchedEffect(pendingSportsSwitch, state.snapshot.loadedAt) {
+        if (pendingSportsSwitch == null || state.snapshot.loadedAt.toEpochMilli() <= 0L) return@LaunchedEffect
+        val request = viewModel.sportsPreferences.consumeSwitch() ?: return@LaunchedEffect
+        if (System.currentTimeMillis() - request.requestedAt > 120_000L) return@LaunchedEffect
+        val found = withContext(Dispatchers.IO) {
+            runCatching { viewModel.iptvRepository.pagedChannelsByIds(request.channelIds) }.getOrDefault(emptyList())
+        }
+        val channel = request.channelIds.firstNotNullOfOrNull { id -> found.firstOrNull { it.id == id } }
+        if (channel != null) playLiveFullscreen(channel.enrich(0)) else sportsSelected = true
     }
 
     fun playAddonSource(event: com.arflix.tv.data.model.SportsAddonEvent, stream: com.arflix.tv.data.repository.SportsAddonStream) {
@@ -4621,6 +4644,14 @@ fun LiveTvScreen(
                         onPlay = { channel -> playLiveFullscreen(channel.enrich(0)) },
                         resolveAddon = viewModel.sportsAddons::resolve,
                         onPlayAddon = ::playAddonSource,
+                        follows = sportsFollows,
+                        reminders = sportsReminders,
+                        fixtures = sportsArtwork,
+                        loadDayFixtures = viewModel::loadSportsMetadataDay,
+                        onToggleFollow = { follow -> coroutineScope.launch { viewModel.sportsPreferences.toggleFollow(follow) } },
+                        onToggleReminder = { event, on ->
+                            coroutineScope.launch { viewModel.sportsPreferences.updateReminders { it.withReminder(event, on) } }
+                        },
                         sidebarOpen = false,
                         showHeader = false,
                         onOpenSearch = { searchOpen = true },
@@ -4785,6 +4816,14 @@ fun LiveTvScreen(
                         onPlay = { channel -> playLiveFullscreen(channel.enrich(0)) },
                         resolveAddon = viewModel.sportsAddons::resolve,
                         onPlayAddon = ::playAddonSource,
+                        follows = sportsFollows,
+                        reminders = sportsReminders,
+                        fixtures = sportsArtwork,
+                        loadDayFixtures = viewModel::loadSportsMetadataDay,
+                        onToggleFollow = { follow -> coroutineScope.launch { viewModel.sportsPreferences.toggleFollow(follow) } },
+                        onToggleReminder = { event, on ->
+                            coroutineScope.launch { viewModel.sportsPreferences.updateReminders { it.withReminder(event, on) } }
+                        },
                         modifier = Modifier.weight(1f),
                         sidebarOpen = sidebarExpanded,
                     ) else EpgGrid(
