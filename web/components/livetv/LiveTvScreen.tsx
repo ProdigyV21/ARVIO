@@ -17,6 +17,9 @@ import { ChannelProgramInfo } from "@/components/livetv/ChannelProgramInfo";
 import { ChannelRow, GuideGrid, type GuideCallbacks } from "@/components/livetv/GuideGrid";
 import { ChannelMenu, type ChannelMenuState } from "@/components/livetv/ChannelMenu";
 import { LiveZapOverlay } from "@/components/livetv/LiveZapOverlay";
+import { ProgrammeInfo, type ProgrammeInfoState } from "@/components/livetv/ProgrammeInfo";
+import { nextShowOf, programmeReminder, programmeReminderId, remindedProgrammeIds, withProgrammeReminder } from "@/lib/programmeReminders";
+import { useSportsPreferences } from "@/lib/sportsPreferences";
 import { PlaylistErrors, PlaylistManager, type PlaylistError } from "@/components/livetv/PlaylistManager";
 import { channelIdentityIndex, normalizeTvSession, resolveChannelReferences } from "@/lib/iptvSession";
 import { IPTV_SNAPSHOT_TTL_MS, iptvPlaylistSignature } from "@/lib/iptv";
@@ -114,6 +117,9 @@ export function LiveTvScreen() {
   const [catchup, setCatchup] = useState<{ channelId: string; programs: CatchupProgram[]; loading: boolean } | null>(null);
   const [archiveOpen, setArchiveOpen] = useState(false);
   const [menu, setMenu] = useState<ChannelMenuState | null>(null);
+  const [programmeInfo, setProgrammeInfo] = useState<ProgrammeInfoState | null>(null);
+  const { reminders, updateReminders } = useSportsPreferences(authClient, activeProfile?.id);
+  const remindedProgrammes = useMemo(() => remindedProgrammeIds(reminders), [reminders]);
   const [zapDigits, setZapDigits] = useState("");
   const [zapInfo, setZapInfo] = useState<IptvChannel | null>(null);
   const tvSession = useMemo(() => normalizeTvSession(settings.iptvTvSession), [settings.iptvTvSession]);
@@ -223,6 +229,7 @@ export function LiveTvScreen() {
   }, [activeCategory, channels, favoriteChannels, recentChannels, groups, settings.iptvSortOrder, settings.iptvChannelOrder]);
   // Search also matches the titles of programmes whose guide is loaded.
   const nowNext = iptvSnapshot.nowNext;
+  const menuNextShow = menu ? nextShowOf(nowNext[menu.channel.id]) : undefined;
   const needle = query.trim().toLowerCase();
   const visibleChannels = useMemo(() => needle
     ? categoryChannels.filter((channel) => channelMatchesQuery(channel, needle, nowNext[channel.id], hasGroupNames ? groupNames?.[groupKey(channel)] : undefined))
@@ -365,6 +372,7 @@ export function LiveTvScreen() {
     onCatchup: (channel, program) => playCatchupRef.current(channel, program),
     onToggleFavorite: (channel) => toggleFavorite(channel.id),
     onMenu: (channel, anchor) => setMenu({ channel, anchor }),
+    onProgramInfo: (channel, program, anchor) => setProgrammeInfo({ channel, program, anchor }),
     groupName: groupNameFor
   }), [requestGuide, toggleFavorite, groupNameFor]);
 
@@ -655,6 +663,7 @@ export function LiveTvScreen() {
                 clockFormat={settings.clockFormat}
                 namePrefix={channelNamePrefix}
                 callbacks={guideCallbacks}
+                reminded={remindedProgrammes}
               />
             )}
             </>}
@@ -736,11 +745,26 @@ export function LiveTvScreen() {
         favorite={favoriteIds.has(menu.channel.id)}
         canMoveUp={menuFavoriteIndex > 0}
         canMoveDown={menuFavoriteIndex >= 0 && menuFavoriteIndex < favorites.length - 1}
+        nextShowTitle={menuNextShow?.title}
+        onNextShow={() => { if (menuNextShow) setProgrammeInfo({ channel: menu.channel, program: menuNextShow, anchor: menu.anchor }); }}
         onPlay={() => watchChannel(menu.channel)}
         onToggleFavorite={() => toggleFavorite(menu.channel.id)}
         onMove={(direction) => moveFavorite(menu.channel.id, direction)}
         onHideGroup={() => hideChannelGroup(menu.channel)}
         onClose={() => setMenu(null)}
+      />}
+      {programmeInfo && <ProgrammeInfo
+        state={programmeInfo}
+        reminded={remindedProgrammes.has(programmeReminderId(programmeInfo.channel.id, programmeInfo.program))}
+        clockFormat={settings.clockFormat}
+        onToggleReminder={() => {
+          const reminder = programmeReminder([programmeInfo.channel.id], programmeInfo.program);
+          if (!reminder) return;
+          const on = !remindedProgrammes.has(reminder.eventId);
+          updateReminders(current => withProgrammeReminder(current, reminder, on));
+        }}
+        onWatch={() => watchChannel(programmeInfo.channel)}
+        onClose={() => setProgrammeInfo(null)}
       />}
       <LiveZapOverlay digits={zapDigits} digitMatch={zapDigitMatch} info={zapInfo} guide={zapInfo ? nowNext[zapInfo.id] : undefined} clockFormat={settings.clockFormat} />
     </div>

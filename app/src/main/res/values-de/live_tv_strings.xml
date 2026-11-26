@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="live_menu_watch_from_start">Von Anfang an ansehen</string>
+    <string name="live_menu_next_show">Nächste Sendung · Erinnern</string>
+</resources>

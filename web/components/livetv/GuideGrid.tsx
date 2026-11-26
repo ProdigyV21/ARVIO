@@ -5,12 +5,14 @@ import { ChevronLeft, ChevronRight, Play, Star } from "lucide-react";
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { VirtualList } from "@/components/ui/VirtualList";
 import { ChannelLogo } from "@/components/livetv/ChannelLogo";
+import { programmeReminderId } from "@/lib/programmeReminders";
 import { focusTimeForSlot, formatGuideDay, formatGuideTime, guidePrograms, slotAtFocusTime, type ClockFormat } from "@/lib/iptvGuide";
 import type { IptvChannel, IptvNowNext, IptvProgram, IptvSnapshot } from "@/lib/types";
 
 export const GUIDE_WINDOW_HOURS = 4;
 export const GUIDE_PX_PER_MIN = 6;
 const HALF_HOUR = 1_800_000;
+const DAY_MS = 86_400_000;
 const rowKey = (item: { id: string }) => item.id;
 
 export type GuideCallbacks = {
@@ -18,6 +20,8 @@ export type GuideCallbacks = {
   onVisible: (channel: IptvChannel) => void;
   onPlay: (channel: IptvChannel) => void;
   onCatchup: (channel: IptvChannel, program: IptvProgram) => void;
+  /** A later show, or one aired without catch-up: its details and Remind me. */
+  onProgramInfo?: (channel: IptvChannel, program: IptvProgram, anchor: HTMLElement) => void;
   onToggleFavorite: (channel: IptvChannel) => void;
   onMenu: (channel: IptvChannel, anchor: HTMLElement) => void;
   /** The category name to show for a channel (the user's own name when set). */
@@ -83,7 +87,7 @@ function useVisibility(ref: React.RefObject<HTMLElement | null>, id: string, onV
 
 // Timeline guide: channels down, time across (window of four hours), programme
 // blocks positioned by their real start/end times. EPG loads lazily per row.
-export function GuideGrid({ channels, favorites, nowNext, settled, selectedId, playingId, clockFormat, resetKey, namePrefix = "", callbacks }: {
+export function GuideGrid({ channels, favorites, nowNext, settled, selectedId, playingId, clockFormat, resetKey, namePrefix = "", callbacks, reminded }: {
   channels: IptvChannel[];
   favorites: Set<string>;
   nowNext: IptvSnapshot["nowNext"];
@@ -97,6 +101,8 @@ export function GuideGrid({ channels, favorites, nowNext, settled, selectedId, p
   /** Provider tag shared by the channel names, left off each row. */
   namePrefix?: string;
   callbacks: GuideCallbacks;
+  /** Guide shows with a reminder (lib/programmeReminders.ts ids). */
+  reminded?: ReadonlySet<string>;
 }) {
   const translateUi = useTranslation();
   // Right-to-left mirrors the time axis like the Android guide: programmes are
@@ -199,6 +205,7 @@ export function GuideGrid({ channels, favorites, nowNext, settled, selectedId, p
   const renderRow = useCallback((channel: IptvChannel) => (
     <GuideRow
       channel={channel}
+      remindedKey={remindedKeyFor(reminded, channel.id)}
       favorite={favorites.has(channel.id)}
       guide={nowNext[channel.id]}
       settled={settled.has(channel.id)}
@@ -222,7 +229,14 @@ export function GuideGrid({ channels, favorites, nowNext, settled, selectedId, p
         <button type="button" title={translateUi("Previous four hours")} aria-label={translateUi("Previous four hours")} disabled={windowStart <= minStart} onClick={() => shiftWindow(windowStart - 4 * 3_600_000)}><ChevronLeft size={18} /></button>
         <button type="button" className="guide-now" onClick={() => { setClock(Date.now()); setManualStart(null); focusTime.current = null; }}>{translateUi("Now")}</button>
         <button type="button" title={translateUi("Next four hours")} aria-label={translateUi("Next four hours")} disabled={windowStart >= maxStart} onClick={() => shiftWindow(windowStart + 4 * 3_600_000)}><ChevronRight size={18} /></button>
-        <span aria-live="polite">{formatGuideDay(windowStart)} · {formatGuideTime(windowStart, clockFormat)}–{formatGuideTime(windowEnd, clockFormat)}</span>
+        <select className="guide-day" aria-label={translateUi("Guide time window")} value={String(Math.max(-2, Math.min(1, Math.round((windowStart - currentStart) / DAY_MS))))}
+          onChange={(event) => { focusTime.current = null; shiftWindow(currentStart + Number(event.target.value) * DAY_MS); }}>
+          {[-2, -1, 0, 1].map(offset => {
+            const day = currentStart + offset * DAY_MS;
+            return <option key={offset} value={offset} disabled={day < minStart || day > maxStart}>{offset === 0 ? translateUi("Today") : offset === 1 ? translateUi("Tomorrow") : offset === -1 ? translateUi("Yesterday") : formatGuideDay(day)}</option>;
+          })}
+        </select>
+        <span aria-live="polite">{formatGuideTime(windowStart, clockFormat)}–{formatGuideTime(windowEnd, clockFormat)}</span>
       </div>
       <VirtualList items={channels} itemKey={rowKey} label={translateUi("Guide channels")} className="tv-guide-grid" contentWidth={`calc(${totalWidth}px + var(--guide-channel-width))`} focusTarget={focusTarget} estimate={62} header={<div className="livetv-guide-timebar" aria-hidden="true">
         <span className="livetv-guide-corner" />
@@ -240,8 +254,18 @@ export function GuideGrid({ channels, favorites, nowNext, settled, selectedId, p
   );
 }
 
-const GuideRow = memo(function GuideRow({ channel, favorite, guide, settled, selected, playing, windowStart, windowEnd, totalWidth, nowOffset, clockFormat, namePrefix = "", callbacks }: {
+/** The reminded shows of one channel as a short string, so memoised rows only redraw when theirs change. */
+function remindedKeyFor(reminded: ReadonlySet<string> | undefined, channelId: string): string {
+  if (!reminded?.size) return "";
+  const prefix = programmeReminderId(channelId, { startUtcMillis: 0 }).slice(0, -1);
+  let key = "";
+  for (const id of reminded) if (id.startsWith(prefix)) key += `,${id.slice(prefix.length)},`;
+  return key;
+}
+
+const GuideRow = memo(function GuideRow({ channel, remindedKey = "", favorite, guide, settled, selected, playing, windowStart, windowEnd, totalWidth, nowOffset, clockFormat, namePrefix = "", callbacks }: {
   channel: IptvChannel;
+  remindedKey?: string;
   favorite: boolean;
   guide?: IptvNowNext;
   settled: boolean;
@@ -296,11 +320,14 @@ const GuideRow = memo(function GuideRow({ channel, favorite, guide, settled, sel
               key={program.startUtcMillis}
               data-start={program.startUtcMillis}
               data-end={program.endUtcMillis}
-              className={`livetv-guide-block ${live ? "is-live" : ""}`}
+              className={`livetv-guide-block ${live ? "is-live" : ""} ${remindedKey.includes(`,${program.startUtcMillis},`) ? "is-reminded" : ""}`}
               style={{ [side]: `${left}px`, width: `${Math.max(14, right - left - 2)}px` }}
-              aria-disabled={!live && !archived}
               aria-label={`${program.title}, ${span}, ${status}`}
-              onClick={() => { if (live) callbacks.onPlay(channel); else if (archived) callbacks.onCatchup(channel, program); }}
+              onClick={(event) => {
+                if (live) callbacks.onPlay(channel);
+                else if (archived) callbacks.onCatchup(channel, program);
+                else callbacks.onProgramInfo?.(channel, program, event.currentTarget);
+              }}
               title={`${program.title} · ${span} · ${status}`}
             >
               <strong>{program.title}</strong><small>{span}</small>

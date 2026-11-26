@@ -25,7 +25,7 @@ class EpgGridActionTest {
     }
 
     @Test
-    fun futureProgramDoesNotLeaveGuideUntilRecordingOrReminderExists() {
+    fun futureProgramOpensItsDetails() {
         val program = IptvProgram(
             title = "Tomorrow's Movie",
             startUtcMillis = 3_000L,
@@ -38,6 +38,20 @@ class EpgGridActionTest {
                 isPast = false,
                 isLive = false,
                 isCatchupSupported = false,
+            )
+        ).isEqualTo(program)
+    }
+
+    @Test
+    fun guidePlaceholderDoesNothing() {
+        val program = IptvProgram(title = "Programming", startUtcMillis = 3_000L, endUtcMillis = 4_000L)
+        assertThat(
+            epgProgramActionTarget(
+                program = program,
+                isPast = false,
+                isLive = false,
+                isCatchupSupported = false,
+                isPlaceholder = true,
             )
         ).isNull()
     }

@@ -211,6 +211,13 @@ fun providerMatches(channel: EnrichedChannel, providerId: String, config: IptvCo
     return chPlId == providerId || chPlId == targetId
 }
 
+/** The playlist (or portal) a channel came from, or null when it cannot be told. */
+fun playlistIdOf(channel: EnrichedChannel, config: IptvConfig): String? {
+    val knownIds = (config.playlists.filter { it.enabled && it.id.isNotBlank() }.map { it.id } +
+        config.stalkerPortals.filter { it.enabled && it.id.isNotBlank() }.map { it.id }).toHashSet()
+    return channelPlaylistId(channel, knownIds)
+}
+
 fun providerMatcher(providerId: String, config: IptvConfig): (EnrichedChannel) -> Boolean {
     if (providerId == "all") return { true }
     val targetId = providerId.removePrefix("source:")
