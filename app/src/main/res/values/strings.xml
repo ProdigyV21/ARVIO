@@ -2117,6 +2117,9 @@
     <string name="clear_playback_cache_desc">Delete all cached video data. Anything playing simply downloads again.</string>
     <string name="playback_cache_cleared">Playback cache cleared</string>
     <string name="settings_help_playback_cache_desc">Cache-enabled playback saves video for local rewinds. Large or remote streams may bypass this cache for performance. The size adapts to available storage, aiming to leave 1 GB free.</string>
+    <!-- Mobile player: pill shown while the screen is held for 3x playback. -->
+    <string name="player_hold_speed">3x speed · slide up to lock</string>
+    <string name="player_hold_speed_locked">3x speed locked · slide down to unlock</string>
 
     <!-- Live TV AI subtitles -->
     <string name="live_ai_subtitles">AI subtitles</string>

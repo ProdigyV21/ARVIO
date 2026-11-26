@@ -3263,6 +3263,20 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
     LaunchedEffect(subtitleSyncOffsetMs) {
         aiRenderersFactory.syncOffsetUs.set(subtitleSyncOffsetMs * 1000L)
     }
+    // Every subtitle track has its own timing, so a manual delay tuned for one track is not
+    // carried over to another (e.g. an addon subtitle -> the embedded one). A retimed copy of the
+    // same track keeps the delay, and turning subtitles off and back on to the same track too.
+    val subtitleDelayKey = subtitleDelayTrackKey(uiState.selectedSubtitle)
+    var lastSubtitleDelayKey by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(subtitleDelayKey) {
+        if (subtitleDelayKey != null) {
+            val previous = lastSubtitleDelayKey
+            if (previous != null && previous != subtitleDelayKey && subtitleSyncOffsetMs != 0L) {
+                subtitleSyncOffsetMs = 0L
+            }
+            lastSubtitleDelayKey = subtitleDelayKey
+        }
+    }
 
     // When cast starts: keep controls permanently visible.
     LaunchedEffect(isCasting) {
@@ -7318,6 +7332,15 @@ private const val ADDON_SUB_ID_PREFIX = "arvio-addon-sub:"
  */
 private fun isSameSubtitleTrack(selected: Subtitle?, rowId: String): Boolean =
     selected != null && (selected.id == rowId || selected.id == rowId + RETIMED_SUBTITLE_ID_SUFFIX)
+
+/**
+ * Identity of the base subtitle track for the manual subtitle delay: the delay resets when this
+ * changes. A retimed copy maps to the same key as its source track; null when subtitles are off.
+ */
+internal fun subtitleDelayTrackKey(subtitle: Subtitle?): String? = subtitle?.let { sub ->
+    if (sub.isEmbedded) "embedded|${sub.id}"
+    else "${sub.provider}|${sub.id.removeSuffix(RETIMED_SUBTITLE_ID_SUFFIX)}"
+}
 
 /** True when [selected] is [rowId]'s retimed copy. */
 private fun isRetimedCopyOf(selected: Subtitle?, rowId: String): Boolean =
