@@ -3,8 +3,9 @@
     <string name="multiview_title">Multiview</string>
     <string name="multiview_add_to">Kijk in multiview</string>
     <string name="multiview_add_game">Wedstrijd toevoegen</string>
+    <string name="multiview_hint_touch">Voeg tot %1$d wedstrijden toe. Tik op een wedstrijd om hem te horen, tik nog eens voor opties.</string>
     <string name="multiview_hint">Voeg tot %1$d wedstrijden toe. Met de pijlen kies je welke je hoort, OK voor opties.</string>
-    <string name="multiview_no_connection">Geen vrije verbinding: je abonnement staat op dit apparaat %1$d stream(s) tegelijk toe. Verhoog de verbindingslimiet in de IPTV-instellingen als je abonnement meer toestaat.</string>
+    <string name="multiview_no_connection">Geen vrije verbinding: je abonnement staat %1$d stream(s) tegelijk toe op dit apparaat. Staat je abonnement meer toe, verhoog het dan in Instellingen › TV › je playlist › Bewerken › %2$s.</string>
     <string name="multiview_tile_failed">Deze zender startte niet.</string>
     <string name="multiview_fullscreen">Volledig scherm</string>
     <string name="multiview_swap_game">Andere wedstrijd</string>
@@ -40,4 +41,5 @@
     <string name="recording_cancelled_toast">Opname geannuleerd</string>
     <string name="recording_started_toast">%1$s wordt opgenomen</string>
     <string name="recording_scheduled_toast">%1$s wordt opgenomen</string>
+    <string name="recording_notification_permission">Opnemen vraagt toestemming voor meldingen, zodat je de opname ook buiten de app ziet en kunt stoppen.</string>
 </resources>

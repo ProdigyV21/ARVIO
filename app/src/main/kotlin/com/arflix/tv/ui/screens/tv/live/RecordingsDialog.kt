@@ -158,11 +158,12 @@ private fun recordingStatusLine(recording: LiveRecording, format: DateFormat): S
     val context = LocalContext.current
     val size = Formatter.formatShortFileSize(context, recording.bytes)
     val start = format.format(Date(recording.programmeStart))
+    val began = format.format(Date(recording.startedAt.takeIf { it > 0L } ?: recording.programmeStart))
     return when (recording.status) {
         LiveRecording.STATUS_SCHEDULED -> stringResource(R.string.recordings_status_scheduled, start)
         LiveRecording.STATUS_WAITING -> recording.error ?: stringResource(R.string.recording_waiting_connection)
         LiveRecording.STATUS_RECORDING -> stringResource(R.string.recordings_status_recording, size, recording.recordedChannelName.orEmpty())
-        LiveRecording.STATUS_DONE -> listOfNotNull(start, size, recording.recordedChannelName, recording.error).joinToString(" · ")
+        LiveRecording.STATUS_DONE -> listOfNotNull(began, size, recording.recordedChannelName, recording.error).joinToString(" · ")
         LiveRecording.STATUS_CANCELLED -> stringResource(R.string.recordings_status_cancelled, start)
         else -> stringResource(R.string.recordings_status_failed, recording.error.orEmpty())
     }

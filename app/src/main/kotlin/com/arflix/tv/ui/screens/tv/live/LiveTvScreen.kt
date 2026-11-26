@@ -3041,6 +3041,20 @@ fun LiveTvScreen(
     val liveRecordings by remember(context) { com.arflix.tv.recording.LiveRecordingStore.recordings(context.applicationContext) }.collectAsState()
     val recordedEventIds = remember(liveRecordings) { liveRecordings.filter { !it.isFinal }.mapNotNullTo(hashSetOf()) { it.eventId } }
     LaunchedEffect(Unit) { com.arflix.tv.recording.LiveRecordingScheduler.kick(context.applicationContext) }
+    // Android 13+: without this the recording runs but shows no notification and no Stop button.
+    val notificationPermission = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        if (!granted) android.widget.Toast.makeText(context, context.getString(R.string.recording_notification_permission), android.widget.Toast.LENGTH_LONG).show()
+    }
+    fun askNotificationPermission() {
+        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.TIRAMISU) return
+        val granted = androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.POST_NOTIFICATIONS) ==
+            android.content.pm.PackageManager.PERMISSION_GRANTED
+        if (!granted) runCatching { notificationPermission.launch(android.Manifest.permission.POST_NOTIFICATIONS) }
+    }
+    // A game opened full screen from multiview comes back to the board on Back.
+    var multiviewReturnPending by remember { mutableStateOf(false) }
 
     fun multiviewTileFor(event: SportsGuideEvent, channels: List<IptvChannel>): MultiviewTile? {
         val ordered = channels.distinctBy { it.id }
@@ -3083,6 +3097,7 @@ fun LiveTvScreen(
             eventId = event.id,
             sport = event.sport.name,
         ))
+        askNotificationPermission()
         val live = event.programme.startUtcMillis <= System.currentTimeMillis()
         android.widget.Toast.makeText(
             context,
@@ -5690,6 +5705,12 @@ fun LiveTvScreen(
             )
         }
 
+        LaunchedEffect(isFullScreen) {
+            if (!isFullScreen && multiviewReturnPending) {
+                multiviewReturnPending = false
+                if (sportsSelected && multiviewTiles.isNotEmpty()) multiviewOpen = true
+            }
+        }
         if (multiviewOpen && sportsSelected && !isFullScreen) {
             val multiviewCandidates = remember(sportsDisplayEvents, sportsChannelMemory, guideClockMillis) {
                 sportsDisplayEvents.filter { it.isOnAir(guideClockMillis) }.mapNotNull { event ->
@@ -5714,6 +5735,7 @@ fun LiveTvScreen(
                 },
                 onFullscreen = { tile ->
                     multiviewOpen = false
+                    multiviewReturnPending = true
                     playLiveFullscreen(tile.channel.enrich(0))
                 },
                 onClose = { multiviewOpen = false },

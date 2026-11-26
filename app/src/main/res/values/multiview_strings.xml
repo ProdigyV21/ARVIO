@@ -3,8 +3,9 @@
     <string name="multiview_title">Multiview</string>
     <string name="multiview_add_to">Watch in multiview</string>
     <string name="multiview_add_game">Add game</string>
+    <string name="multiview_hint_touch">Add up to %1$d games. Tap a game to hear it, tap it again for options.</string>
     <string name="multiview_hint">Add up to %1$d games. Arrows pick the game you hear, OK for options.</string>
-    <string name="multiview_no_connection">No free connection: your subscription allows %1$d stream(s) at a time on this device. Raise the connection limit in IPTV settings if your plan allows more.</string>
+    <string name="multiview_no_connection">No free connection: your subscription allows %1$d stream(s) at a time on this device. If your plan allows more, raise it in Settings › TV › your playlist › Edit › %2$s.</string>
     <string name="multiview_tile_failed">This channel did not start.</string>
     <string name="multiview_fullscreen">Watch full screen</string>
     <string name="multiview_swap_game">Swap game</string>
@@ -40,4 +41,5 @@
     <string name="recording_cancelled_toast">Recording cancelled</string>
     <string name="recording_started_toast">Recording %1$s</string>
     <string name="recording_scheduled_toast">%1$s will be recorded</string>
+    <string name="recording_notification_permission">Recording needs permission to show notifications, so you can see and stop it outside the app.</string>
 </resources>

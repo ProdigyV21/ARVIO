@@ -3,8 +3,9 @@
     <string name="multiview_title">Multiview</string>
     <string name="multiview_add_to">In Multiview ansehen</string>
     <string name="multiview_add_game">Spiel hinzufügen</string>
+    <string name="multiview_hint_touch">Bis zu %1$d Spiele hinzufügen. Tippe auf ein Spiel, um es zu hören, und noch einmal für Optionen.</string>
     <string name="multiview_hint">Bis zu %1$d Spiele hinzufügen. Mit den Pfeilen wählst du den Ton, OK für Optionen.</string>
-    <string name="multiview_no_connection">Keine freie Verbindung: Dein Abo erlaubt auf diesem Gerät %1$d Stream(s) gleichzeitig. Erhöhe das Verbindungslimit in den IPTV-Einstellungen, wenn dein Abo mehr erlaubt.</string>
+    <string name="multiview_no_connection">Keine freie Verbindung: Dein Abo erlaubt %1$d Stream(s) gleichzeitig auf diesem Gerät. Erlaubt dein Abo mehr, erhöhe es unter Einstellungen › TV › deine Playlist › Bearbeiten › %2$s.</string>
     <string name="multiview_tile_failed">Dieser Sender ist nicht gestartet.</string>
     <string name="multiview_fullscreen">Vollbild</string>
     <string name="multiview_swap_game">Anderes Spiel</string>
@@ -40,4 +41,5 @@
     <string name="recording_cancelled_toast">Aufnahme abgebrochen</string>
     <string name="recording_started_toast">%1$s wird aufgenommen</string>
     <string name="recording_scheduled_toast">%1$s wird aufgenommen</string>
+    <string name="recording_notification_permission">Die Aufnahme braucht die Berechtigung für Benachrichtigungen, damit du sie auch außerhalb der App siehst und stoppen kannst.</string>
 </resources>

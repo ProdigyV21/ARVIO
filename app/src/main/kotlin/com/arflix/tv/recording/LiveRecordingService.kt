@@ -152,7 +152,8 @@ class LiveRecordingService : Service() {
                 continue
             }
             LiveRecordingStore.modify(this, id) {
-                it.copy(status = LiveRecording.STATUS_RECORDING, error = null, recordedChannelName = channel.name)
+                it.copy(status = LiveRecording.STATUS_RECORDING, error = null, recordedChannelName = channel.name,
+                    startedAt = it.startedAt.takeIf { started -> started > 0L } ?: System.currentTimeMillis())
             }
             updateNotification()
             val outcome = try {

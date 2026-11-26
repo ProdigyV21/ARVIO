@@ -172,6 +172,10 @@ internal fun MultiviewOverlay(
     }
 
     BackHandler(enabled = menuFor == null && pickerFor == null) { onClose() }
+    val configuration = androidx.compose.ui.platform.LocalConfiguration.current
+    val portrait = configuration.orientation == android.content.res.Configuration.ORIENTATION_PORTRAIT
+    val overlayContext = LocalContext.current
+    val touchOnly = remember(overlayContext) { com.arflix.tv.util.detectDeviceType(overlayContext) != com.arflix.tv.util.DeviceType.TV }
 
     fun select(index: Int) {
         focusIndex = index
@@ -192,7 +196,7 @@ internal fun MultiviewOverlay(
                 }
                 when {
                     direction != null -> {
-                        select(multiviewNeighbour(focusIndex, direction, cellCount))
+                        select(multiviewNeighbour(focusIndex, direction, cellCount, portrait))
                         true
                     }
                     event.key == Key.DirectionCenter || event.key == Key.Enter || event.key == Key.NumPadEnter -> {
@@ -204,7 +208,7 @@ internal fun MultiviewOverlay(
             }
             .focusable(),
     ) {
-        val cells = multiviewCells(cellCount)
+        val cells = multiviewCells(cellCount, portrait)
         val areaW = maxWidth
         val areaH = maxHeight
         cells.forEachIndexed { index, cell ->
@@ -253,7 +257,7 @@ internal fun MultiviewOverlay(
             }
         }
         if (tiles.size <= 1 && focusIndex == 0) Text(
-            stringResource(R.string.multiview_hint, capacity),
+            stringResource(if (touchOnly) R.string.multiview_hint_touch else R.string.multiview_hint, capacity),
             color = LiveColors.FgDim, fontSize = 12.sp,
             modifier = Modifier.align(Alignment.BottomCenter).padding(10.dp)
                 .background(Color.Black.copy(alpha = .6f), RoundedCornerShape(4.dp)).padding(horizontal = 10.dp, vertical = 5.dp),
@@ -441,7 +445,7 @@ private fun MultiviewTilePlayer(
         when (val current = status) {
             TileStatus.Loading -> CircularProgressIndicator(Modifier.align(Alignment.Center).size(28.dp), color = Color.White, strokeWidth = 2.dp)
             TileStatus.Playing -> Unit
-            is TileStatus.NoConnection -> TileMessage(stringResource(R.string.multiview_no_connection, current.limit), Modifier.align(Alignment.Center))
+            is TileStatus.NoConnection -> TileMessage(stringResource(R.string.multiview_no_connection, current.limit, stringResource(R.string.iptv_connection_limit_title)), Modifier.align(Alignment.Center))
             is TileStatus.Failed -> TileMessage(stringResource(R.string.multiview_tile_failed), Modifier.align(Alignment.Center))
         }
     }

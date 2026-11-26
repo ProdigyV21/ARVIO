@@ -28,6 +28,8 @@ data class LiveRecording(
     val createdAt: Long = 0L,
     val eventId: String? = null,
     val sport: String? = null,
+    /** When the recording actually began writing; 0 until then. */
+    val startedAt: Long = 0L,
 ) {
     val recordFrom: Long get() = recordingWindowStart(programmeStart)
     val recordUntil: Long get() = recordingWindowEnd(programmeStart, programmeEnd)

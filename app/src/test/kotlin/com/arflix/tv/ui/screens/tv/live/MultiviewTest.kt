@@ -82,4 +82,13 @@ class MultiviewTest {
         assertEquals("c", t.nextChannelAfter("b", setOf("a", "b"))?.id)
         assertNull(t.nextChannelAfter("c", setOf("a", "b", "c")))
     }
+
+    @Test
+    fun portraitStacksFullWidthGames() {
+        val cells = multiviewCells(3, portrait = true)
+        assertEquals(3, cells.size)
+        assertTrue(cells.all { it.x == 0f && it.width == 1f })
+        assertEquals(1, multiviewNeighbour(0, MultiviewDirection.Down, 3, portrait = true))
+        assertEquals(0, multiviewNeighbour(0, MultiviewDirection.Right, 3, portrait = true))
+    }
 }
