@@ -21,6 +21,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -50,6 +51,7 @@ import com.arflix.tv.data.model.MediaItem
 import com.arflix.tv.data.model.MediaType
 import com.arflix.tv.ui.theme.TextSecondary
 import com.arflix.tv.ui.theme.appBackgroundDark
+import com.arflix.tv.ui.components.CardRatings
 import com.arflix.tv.ui.components.ImdbSvgRatingBadge
 import java.text.NumberFormat
 import java.util.Currency
@@ -71,6 +73,22 @@ internal fun collectionRating(item: MediaItem?): String? {
         !item.isHomeServer && valid(item.tmdbRating) -> "TMDB ${item.tmdbRating}"
         else -> null
     }
+}
+
+/**
+ * The spotlight's score: IMDb's, looked up when the card came without it (folder rows load
+ * light cards). The TMDB vote shows only once IMDb is known to have none, so it never flips.
+ */
+@Composable
+private fun rememberCollectionRating(item: MediaItem?): String? {
+    val needsLookup = item != null && item.id > 0 && !item.isHomeServer &&
+        item.imdbRating.toDoubleOrNull()?.let { it.isFinite() && it > 0 && it <= 10 } != true
+    LaunchedEffect(item?.mediaType, item?.id, needsLookup) {
+        if (needsLookup && item != null) CardRatings.request(item.mediaType, item.id)
+    }
+    if (!needsLookup || item == null) return collectionRating(item)
+    val shared = CardRatings.imdb[CardRatings.key(item.mediaType, item.id)] ?: return null
+    return collectionRating(item.copy(imdbRating = shared))
 }
 
 internal fun collectionCompactBudget(item: MediaItem?, locale: Locale = Locale.getDefault()): String? {
@@ -178,7 +196,7 @@ internal fun CollectionSpotlight(
             Text(facts, modifier = Modifier.fillMaxWidth(textWidth).testTag("collection_spotlight_facts"),
                 color = TextSecondary, fontSize = 12.sp, letterSpacing = 0.sp,
                 maxLines = 1, overflow = TextOverflow.Ellipsis)
-            val rating = collectionRating(item)
+            val rating = rememberCollectionRating(item)
             val budget = remember(item?.budget, item?.mediaType) { collectionCompactBudget(item) }
             FlowRow(Modifier.fillMaxWidth(textWidth).testTag("collection_spotlight_brands"),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),

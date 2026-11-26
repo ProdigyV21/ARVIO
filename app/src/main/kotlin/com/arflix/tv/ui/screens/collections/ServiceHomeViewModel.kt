@@ -1,5 +1,6 @@
 package com.arflix.tv.ui.screens.collections
 
+import com.arflix.tv.data.model.cleanCatalogTitle
 import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -156,7 +157,7 @@ internal class ServiceHomeViewModel @Inject constructor(
             .take(row.limit)
         val title = row.title ?: if (row.kind == ServiceHome.RowKind.CATALOG) {
             row.catalog.collectionSources.singleOrNull()?.let { source ->
-                runCatching { mediaRepository.collectionSourceName(source) }
+                runCatching { cleanCatalogTitle(mediaRepository.collectionSourceName(source)) }
                     .onFailure { if (it is CancellationException) throw it }
                     .getOrNull()
             }

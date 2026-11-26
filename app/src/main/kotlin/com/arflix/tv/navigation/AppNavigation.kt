@@ -610,7 +610,15 @@ fun AppNavigation(
                 navArgument("catalogId") { type = NavType.StringType },
                 navArgument("serviceRow") { type = NavType.StringType; nullable = true; defaultValue = null },
                 navArgument("serviceFilter") { type = NavType.StringType; nullable = true; defaultValue = null }
-            )
+            ),
+            // Opening a collection zooms it up out of its tile (TV and phones), and going back
+            // settles it into the page underneath, so the folder feels like it opens.
+            enterTransition = {
+                fadeIn(navTween(280)) + androidx.compose.animation.scaleIn(navTween(420), initialScale = 0.9f)
+            },
+            popExitTransition = {
+                fadeOut(navTween(220)) + androidx.compose.animation.scaleOut(navTween(300), targetScale = 0.92f)
+            }
         ) { backStackEntry ->
             val catalogId = backStackEntry.arguments?.getString("catalogId").orEmpty()
             val gridArgs = backStackEntry.arguments
