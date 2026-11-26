@@ -9,4 +9,5 @@
     <string name="mobile_connection_help">Connection help</string>
     <string name="mobile_expand_preview">Expand preview</string>
     <string name="mobile_collapse_preview">Collapse preview</string>
+    <string name="search_top_results">Top results</string>
 </resources>

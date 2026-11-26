@@ -181,7 +181,8 @@ fun SearchScreen(
     val hasSearchResults = uiState.movieResults.isNotEmpty() || uiState.tvResults.isNotEmpty() || uiState.personResults.isNotEmpty()
     val hasAiResults = uiState.isAiSearch && uiState.aiResults.isNotEmpty()
     val searchTopResults = uiState.results
-    // The on-demand YouTube row goes first; it also shows when nothing else was found.
+    // The on-demand YouTube row goes first on TV; it also shows when nothing else was found.
+    // On phones and tablets the real results come first and YouTube follows them.
     val youTubeRow = youTubeSearchCategory(
         state = uiState,
         available = viewModel.youTubeSearchAvailable,
@@ -193,11 +194,14 @@ fun SearchScreen(
     val activeCategories: List<Category> = when {
         hasSearchResults || youTubeRow != null -> {
             val list = mutableListOf<Category>()
-            youTubeRow?.let(list::add)
-            if (searchTopResults.isNotEmpty()) list.add(Category("s_all", "${stringResource(R.string.search)} (${searchTopResults.size})", searchTopResults))
+            if (!isTouchDevice) youTubeRow?.let(list::add)
+            val topResultsTitle = if (isTouchDevice) stringResource(R.string.search_top_results)
+                else "${stringResource(R.string.search)} (${searchTopResults.size})"
+            if (searchTopResults.isNotEmpty()) list.add(Category("s_all", topResultsTitle, searchTopResults))
             if (uiState.movieResults.isNotEmpty()) list.add(Category("s_m", "${stringResource(R.string.movies)} (${uiState.movieResults.size})", uiState.movieResults))
             if (uiState.tvResults.isNotEmpty()) list.add(Category("s_t", "${stringResource(R.string.tv_shows)} (${uiState.tvResults.size})", uiState.tvResults))
             list.addAll(uiState.personResults)
+            if (isTouchDevice) youTubeRow?.let(list::add)
             list
         }
         uiState.query.isEmpty() -> uiState.discoverCategories.filter { it.items.isNotEmpty() }
@@ -1411,14 +1415,12 @@ private fun RowsLayer(
                             Text(
                                 localizedDiscoverRowTitle(category),
                                 style = if (isTouchDevice) {
+                                    // Same row title as the phone Home screen.
                                     ArflixTypography.sectionTitle.copy(
-                                        fontSize = 16.sp,
+                                        fontSize = 20.sp,
+                                        lineHeight = 26.sp,
                                         fontWeight = FontWeight.Bold,
-                                        shadow = Shadow(
-                                            color = Color.Black.copy(alpha = 0.8f),
-                                            offset = Offset(1f, 1f),
-                                            blurRadius = 4f
-                                        )
+                                        letterSpacing = (-0.2).sp
                                     )
                                 } else {
                                     ArvioSkin.typography.sectionTitle.copy(fontSize = 15.sp)

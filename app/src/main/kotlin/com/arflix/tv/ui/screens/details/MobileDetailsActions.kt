@@ -12,6 +12,8 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.border
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
@@ -22,6 +24,10 @@ import androidx.compose.material.icons.outlined.Layers
 import androidx.compose.material.icons.outlined.Movie
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material3.Icon
+import androidx.compose.material3.ripple
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.runtime.remember
+import com.arflix.tv.ui.components.mobilePressScale
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -117,10 +123,13 @@ private fun PrimaryDetailsAction(
     modifier: Modifier,
 ) {
     val foreground = if (primary) Color(0xFF111214) else Color.White
+    val source = remember { MutableInteractionSource() }
     Row(
-        modifier.clip(RoundedCornerShape(16.dp))
+        // Pill shape, matching the Home hero buttons.
+        modifier.mobilePressScale(source).clip(CircleShape)
             .background(if (primary) Color(0xFFF5F5F7) else Color(0xFF1D1E21))
-            .clickable(role = Role.Button, onClick = onClick)
+            .then(if (primary) Modifier else Modifier.border(1.dp, Color.White.copy(alpha = 0.10f), CircleShape))
+            .clickable(interactionSource = source, indication = ripple(), role = Role.Button, onClick = onClick)
             .padding(horizontal = 12.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
         verticalAlignment = Alignment.CenterVertically,
@@ -148,16 +157,27 @@ private fun SecondaryDetailsAction(
     enabled: Boolean = true,
     onClick: () -> Unit,
 ) {
-    val foreground = Color.White.copy(alpha = if (!enabled) 0.35f else if (active) 1f else 0.75f)
+    val foreground = Color.White.copy(alpha = if (!enabled) 0.35f else if (active) 1f else 0.80f)
+    // A round icon chip gives each action a clear touch target; an active action fills in.
+    val chip = when {
+        active -> Color.White
+        else -> Color.White.copy(alpha = if (enabled) 0.09f else 0.04f)
+    }
     Column(
-        modifier.heightIn(min = 56.dp).clip(RoundedCornerShape(8.dp))
+        modifier.heightIn(min = 72.dp).clip(RoundedCornerShape(12.dp))
             .semantics { selected = active }
             .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
             .padding(horizontal = 4.dp, vertical = 6.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterVertically),
     ) {
-        Icon(icon, contentDescription = null, tint = foreground, modifier = Modifier.size(22.dp))
+        Box(
+            Modifier.size(44.dp).clip(CircleShape).background(chip),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(icon, contentDescription = null, tint = if (active) Color(0xFF111214) else foreground,
+                modifier = Modifier.size(22.dp))
+        }
         Text(text = label, color = foreground, fontSize = 12.sp, lineHeight = 16.sp,
             minLines = 2, maxLines = 2, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center)
     }

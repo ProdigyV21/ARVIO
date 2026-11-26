@@ -267,11 +267,15 @@ fun MobileSettingsCategory(
             text = title,
             style = ArflixTypography.caption.copy(fontSize = 13.sp, letterSpacing = 0.sp),
             color = TextSecondary,
-            modifier = Modifier.padding(bottom = 8.dp)
+            modifier = Modifier.padding(start = 4.dp, bottom = 8.dp)
         )
+        // Grouped card, as in the phone's own settings: one rounded surface per section.
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .clip(androidx.compose.foundation.shape.RoundedCornerShape(16.dp))
+                .background(Color.White.copy(alpha = 0.045f))
+                .padding(horizontal = 12.dp, vertical = 4.dp)
         ) {
             content()
         }

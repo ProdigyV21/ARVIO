@@ -515,13 +515,11 @@ fun MediaCard(
 
             Text(
                 text = item.title,
+                // Phone cards sit on a solid background, so the title needs no shadow.
                 style = if (isMobile) ArvioSkin.typography.cardTitle.copy(
                     fontSize = 14.sp,
-                    shadow = androidx.compose.ui.graphics.Shadow(
-                        color = androidx.compose.ui.graphics.Color.Black,
-                        offset = androidx.compose.ui.geometry.Offset(2f, 2f),
-                        blurRadius = 6f
-                    )
+                    lineHeight = 18.sp,
+                    fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
                 ) else ArvioSkin.typography.cardTitle.copy(
                     shadow = androidx.compose.ui.graphics.Shadow(
                         color = androidx.compose.ui.graphics.Color.Black,
@@ -554,7 +552,8 @@ fun MediaCard(
                     val year = item.releaseDate?.takeIf { it.isNotBlank() }
                         ?: item.year.takeIf { it.isNotBlank() }
                     val dateLabel = if (isMobile && year != null) formatEpisodeAirDateLabel(year) ?: year else year
-                    if (dateLabel != null) mediaCardSubtitle(typeLabel, dateLabel)
+                    // Rows already say "Movies" or "Shows", so phones show only the date there.
+                    if (dateLabel != null) mobileAwareCardSubtitle(isMobile, typeLabel, dateLabel)
                     else item.subtitle.ifBlank { typeLabel }
                 }
                 Text(
@@ -584,6 +583,10 @@ fun MediaCard(
  * and left-to-right languages are unaffected.
  */
 internal fun mediaCardSubtitle(typeLabel: String, dateLabel: String): String = "$typeLabel · \u200E$dateLabel"
+
+/** Phones drop the type and keep the quieter date line; TV keeps "{type} · {date}". */
+internal fun mobileAwareCardSubtitle(isMobile: Boolean, typeLabel: String, dateLabel: String): String =
+    if (isMobile) dateLabel else mediaCardSubtitle(typeLabel, dateLabel)
 
 /** Narrower posters show the short Continue Watching badges ("Neu", "25 Min."); the full ones overlap there. */
 private val CONTINUE_WATCHING_FULL_BADGE_MIN_WIDTH = 140.dp

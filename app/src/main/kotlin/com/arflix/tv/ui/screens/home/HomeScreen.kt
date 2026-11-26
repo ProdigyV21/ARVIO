@@ -65,6 +65,9 @@ import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -2550,25 +2553,27 @@ private fun MobileHeroOverlay(
 private fun MobileHomeHeader(
     currentProfile: com.arflix.tv.data.model.Profile?,
     onSwitchProfile: () -> Unit,
-    onNavigateToSearch: () -> Unit,
+    onNavigateToSettings: () -> Unit,
 ) {
+    // Wordmark left, profile avatar right (Switch profile, News, Settings), like the web app.
+    // Search has its own tab, so the header no longer repeats it.
     Row(
         Modifier.fillMaxWidth().statusBarsPadding()
-            .padding(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 8.dp),
+            .padding(start = 20.dp, end = 12.dp, top = 6.dp, bottom = 6.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(Modifier.size(48.dp).clip(CircleShape).clickable(onClick = onSwitchProfile)
-            .padding(5.dp).clip(CircleShape)) {
-            if (currentProfile != null) ProfileAvatarVisual(
-                profile = currentProfile, letterFontSize = 15.sp, iconPadding = 5.dp)
-        }
-        Box(Modifier.size(48.dp).clip(CircleShape).clickable(onClick = onNavigateToSearch)
-            .padding(5.dp).background(Color.Black.copy(alpha = 0.32f), CircleShape),
-            contentAlignment = Alignment.Center) {
-            Icon(Icons.Filled.Search, stringResource(R.string.search), tint = Color.White,
-                modifier = Modifier.size(26.dp))
-        }
+        Icon(
+            painter = painterResource(R.drawable.ic_arvio_wordmark),
+            contentDescription = "ARVIO",
+            tint = Color.White,
+            modifier = Modifier.height(16.dp).testTag("mobile_home_wordmark"),
+        )
+        com.arflix.tv.ui.components.MobileAccountButton(
+            profile = currentProfile,
+            onSwitchProfile = onSwitchProfile,
+            onOpenSettings = onNavigateToSettings,
+        )
     }
 }
 
@@ -2584,6 +2589,8 @@ internal fun MobileHeroCarousel(
     currentProfile: com.arflix.tv.data.model.Profile? = null,
     onNavigateToSearch: () -> Unit = {},
     onSwitchProfile: () -> Unit = {},
+    onNavigateToSettings: () -> Unit = {},
+    onHeroOpen: (item: MediaItem, play: Boolean) -> Unit = { _, _ -> },
     onNavigateToDetails: (MediaType, Int, Int?, Int?) -> Unit,
     onPreloadHeroImdbRatings: (List<MediaItem>) -> Unit = {},
 ) {
@@ -2600,7 +2607,7 @@ internal fun MobileHeroCarousel(
     if (heroItems.isEmpty()) {
         LaunchedEffect(incomingItems) { heroItems = incomingItems }
         Column(modifier = Modifier.fillMaxWidth()) {
-            if (posterStyle) MobileHomeHeader(currentProfile, onSwitchProfile, onNavigateToSearch)
+            if (posterStyle) MobileHomeHeader(currentProfile, onSwitchProfile, onNavigateToSettings)
 
             Box(
                 modifier = Modifier
@@ -2616,7 +2623,7 @@ internal fun MobileHeroCarousel(
                     ),
                 )
                 if (!posterStyle) Box(Modifier.align(Alignment.TopCenter)) {
-                    MobileHomeHeader(currentProfile, onSwitchProfile, onNavigateToSearch)
+                    MobileHomeHeader(currentProfile, onSwitchProfile, onNavigateToSettings)
                 }
             }
         }
@@ -2658,7 +2665,7 @@ internal fun MobileHeroCarousel(
     }
 
     Column(modifier = Modifier.fillMaxWidth()) {
-        if (posterStyle) MobileHomeHeader(currentProfile, onSwitchProfile, onNavigateToSearch)
+        if (posterStyle) MobileHomeHeader(currentProfile, onSwitchProfile, onNavigateToSettings)
 
         // Banner card pager — circular, peeks at adjacent cards on both sides
         Box(Modifier.fillMaxWidth().height(heroLayout.cardHeightDp.dp).testTag("mobile_hero_pager")) {
@@ -2720,6 +2727,8 @@ internal fun MobileHeroCarousel(
                     rating = rating,
                     logoUrl = logoUrl,
                     onClick = { onNavigateToDetails(item.mediaType, item.id, null, null) },
+                    onPlay = { onHeroOpen(item, true) },
+                    onMoreInfo = { onHeroOpen(item, false) },
                     compactContent = heroLayout.compactContent,
                     immersive = !posterStyle,
                     showPageIndicators = heroItems.size > 1,
@@ -2732,7 +2741,7 @@ internal fun MobileHeroCarousel(
                 )
             }
         }
-        if (!posterStyle) MobileHomeHeader(currentProfile, onSwitchProfile, onNavigateToSearch)
+        if (!posterStyle) MobileHomeHeader(currentProfile, onSwitchProfile, onNavigateToSettings)
 
         // Keep pagination on the artwork, without adding a separate strip below the hero.
         if (heroItems.size > 1) {
@@ -3291,6 +3300,8 @@ internal fun HomeInputLayer(
             currentProfile = currentProfile,
             onNavigateToSearch = onNavigateToSearch,
             onSwitchProfile = onSwitchProfile,
+            onNavigateToSettings = onNavigateToSettings,
+            onHeroOpen = onBillboardOpen,
             onNavigateToDetails = onNavigateToDetails,
             onMobileCategoryVisiblePosition = onMobileCategoryVisiblePosition,
             onViewAllCategory = onNavigateToCategory,
@@ -3363,6 +3374,8 @@ private fun HomeRowsLayer(
     currentProfile: com.arflix.tv.data.model.Profile? = null,
     onNavigateToSearch: () -> Unit = {},
     onSwitchProfile: () -> Unit = {},
+    onNavigateToSettings: () -> Unit = {},
+    onHeroOpen: (item: MediaItem, play: Boolean) -> Unit = { _, _ -> },
     onNavigateToDetails: (MediaType, Int, Int?, Int?) -> Unit = { _, _, _, _ -> },
     onMobileCategoryVisiblePosition: (String, Int) -> Unit = { _, _ -> },
     onViewAllCategory: (String) -> Unit = {},
@@ -3427,6 +3440,8 @@ private fun HomeRowsLayer(
                     currentProfile = currentProfile,
                     onNavigateToSearch = onNavigateToSearch,
                     onSwitchProfile = onSwitchProfile,
+                    onNavigateToSettings = onNavigateToSettings,
+                    onHeroOpen = onHeroOpen,
                     usePosterCards = usePosterCards,
                     categoryHasMoreMap = categoryHasMoreMap,
                     isSlowLoading = isSlowLoading,
@@ -3471,6 +3486,37 @@ private fun HomeRowsLayer(
     }
 }
 
+private val MobileRankInsetDp = 40.dp
+
+/** Outlined rank numeral for phone Top 10 rows; the card that follows overlaps its right edge. */
+@Composable
+private fun MobileRankNumber(rank: Int, modifier: Modifier = Modifier) {
+    val label = stringResource(R.string.home_cd_rank, rank)
+    val style = androidx.compose.ui.text.TextStyle(
+        fontSize = 76.sp,
+        lineHeight = 76.sp,
+        fontWeight = FontWeight.Black,
+        letterSpacing = (-6).sp,
+        platformStyle = androidx.compose.ui.text.PlatformTextStyle(includeFontPadding = false),
+    )
+    Box(
+        modifier = modifier
+            .width(MobileRankInsetDp + 40.dp)
+            .semantics { contentDescription = label }
+            .testTag("mobile_rank_$rank"),
+        contentAlignment = Alignment.BottomStart
+    ) {
+        Text(rank.toString(), style = style, color = Color(0xFF0B0B0D), maxLines = 1, softWrap = false)
+        Text(
+            rank.toString(),
+            style = style.copy(drawStyle = androidx.compose.ui.graphics.drawscope.Stroke(width = 5f)),
+            color = Color.White.copy(alpha = 0.85f),
+            maxLines = 1,
+            softWrap = false
+        )
+    }
+}
+
 /** Mobile-optimized rows: free-scrolling LazyColumn with smaller cards, no viewport constraint. */
 @Composable
 private fun MobileHomeRowsLayer(
@@ -3483,6 +3529,8 @@ private fun MobileHomeRowsLayer(
     currentProfile: com.arflix.tv.data.model.Profile? = null,
     onNavigateToSearch: () -> Unit = {},
     onSwitchProfile: () -> Unit = {},
+    onNavigateToSettings: () -> Unit = {},
+    onHeroOpen: (item: MediaItem, play: Boolean) -> Unit = { _, _ -> },
     categoryHasMoreMap: Map<String, Boolean> = emptyMap(),
     isSlowLoading: Boolean = false,
     onRetry: () -> Unit = {},
@@ -3525,6 +3573,8 @@ private fun MobileHomeRowsLayer(
                 currentProfile = currentProfile,
                 onNavigateToSearch = onNavigateToSearch,
                 onSwitchProfile = onSwitchProfile,
+                onNavigateToSettings = onNavigateToSettings,
+                onHeroOpen = onHeroOpen,
                 onNavigateToDetails = onNavigateToDetails,
                 onPreloadHeroImdbRatings = onPreloadHeroImdbRatings
             )
@@ -3584,27 +3634,34 @@ private fun MobileHomeRowsLayer(
                     Text(
                         text = localizedCategoryTitle(category),
                         style = ArflixTypography.sectionTitle.copy(
-                            fontSize = 16.sp,
+                            fontSize = 20.sp,
+                            lineHeight = 26.sp,
                             fontWeight = FontWeight.Bold,
-                            shadow = Shadow(
-                                color = Color.Black.copy(alpha = 0.8f),
-                                offset = androidx.compose.ui.geometry.Offset(1f, 1f),
-                                blurRadius = 4f
-                            )
+                            letterSpacing = (-0.2).sp,
                         ),
-                        color = Color.White
+                        color = Color.White,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f)
                     )
                     if (showViewAll) {
-                        Spacer(modifier = Modifier.weight(1f))
-                        Text(
-                            text = stringResource(R.string.home_view_all),
-                            style = ArflixTypography.label,
-                            color = TextSecondary,
+                        Row(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(50))
                                 .clickable { onViewAllCategory(category.id) }
-                                .padding(horizontal = 8.dp, vertical = 4.dp)
-                        )
+                                .padding(start = 10.dp, end = 4.dp, top = 6.dp, bottom = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = stringResource(R.string.home_view_all),
+                                style = ArflixTypography.label.copy(fontSize = 13.sp, fontWeight = FontWeight.Medium),
+                                color = TextSecondary
+                            )
+                            Icon(
+                                Icons.AutoMirrored.Filled.KeyboardArrowRight, null,
+                                tint = TextSecondary, modifier = Modifier.size(18.dp)
+                            )
+                        }
                     }
                 }
 
@@ -3672,9 +3729,15 @@ private fun MobileHomeRowsLayer(
                             } else null
 
                             if (isRanked && index < 10) {
+                                // A large outlined rank number beside the artwork, instead of a small ribbon.
+                                val artworkHeight = if (isPortrait) rowMobileItemWidth * 1.5f else rowMobileItemWidth * (9f / 16f)
                                 Box(
-                                    modifier = Modifier.width(rowMobileItemWidth)
+                                    modifier = Modifier.width(rowMobileItemWidth + MobileRankInsetDp)
                                 ) {
+                                    MobileRankNumber(
+                                        rank = index + 1,
+                                        modifier = Modifier.height(artworkHeight)
+                                    )
                                     val cardLogoUrl = if (isCollectionRow) null else cardLogoUrls["${item.mediaType}_${item.id}"]
                                     ArvioMediaCard(
                                         item = item,
@@ -3688,15 +3751,7 @@ private fun MobileHomeRowsLayer(
                                         onFocused = {},
                                         onClick = onCardClick,
                                         onLongClick = onCardLongClick,
-                                    )
-                                    TopRankRibbon(
-                                        rank = index + 1,
-                                        isFocused = false,
-                                        compact = true,
-                                        modifier = Modifier
-                                            .align(Alignment.TopStart)
-                                            .zIndex(2f)
-                                            .padding(start = 6.dp)
+                                        modifier = Modifier.padding(start = MobileRankInsetDp)
                                     )
                                 }
                             } else {
@@ -3764,15 +3819,17 @@ private fun MobileHomeRowsLayer(
             }
         }
         }
-        Spacer(Modifier.align(Alignment.TopCenter).fillMaxWidth()
+        // Rows scroll under the status bar: a solid band as tall as the bar, then a short fade.
+        Column(Modifier.align(Alignment.TopCenter).fillMaxWidth()
             .graphicsLayer {
                 val progress = if (mobileListState.firstVisibleItemIndex > 0) 1f
                     else (mobileListState.firstVisibleItemScrollOffset / statusScrimScrollDistance).coerceIn(0f, 1f)
                 alpha = 0.35f + progress * 0.65f
-            }
-            .background(Brush.verticalGradient(0f to Color.Black.copy(alpha = 0.65f),
-                0.75f to Color.Black.copy(alpha = 0.55f), 1f to Color.Transparent))
-            .statusBarsPadding().height(12.dp))
+            }) {
+            Spacer(Modifier.fillMaxWidth().background(Color.Black).statusBarsPadding())
+            Spacer(Modifier.fillMaxWidth().height(14.dp)
+                .background(Brush.verticalGradient(0f to Color.Black, 1f to Color.Transparent)))
+        }
     }
 }
 

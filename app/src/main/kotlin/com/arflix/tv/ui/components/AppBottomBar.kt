@@ -27,6 +27,7 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.only
@@ -48,6 +49,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -209,15 +212,20 @@ data class BottomBarItem(
     val route: String
 )
 
+/**
+ * Phone tabs. News and Settings moved behind the profile avatar ([MobileAccountButton]), so the
+ * bar keeps five readable tabs, like the web app.
+ */
 val bottomBarItems = listOf(
     BottomBarItem(R.string.home, Icons.Default.Home, "home"),
     BottomBarItem(R.string.search, Icons.Default.Search, "search"),
     BottomBarItem(R.string.nav_library, Icons.Default.Bookmark, "watchlist"),
     BottomBarItem(R.string.topbar_tv, Icons.Default.LiveTv, "tv"),
-    BottomBarItem(R.string.nav_news, Icons.Default.Newspaper, "news"),
     BottomBarItem(R.string.nav_music, Icons.Default.LibraryMusic, "music"),
-    BottomBarItem(R.string.settings, Icons.Default.Settings, "settings")
 )
+
+/** The landscape rail has the height for Settings, pinned below the tabs. */
+internal val railSettingsItem = BottomBarItem(R.string.settings, Icons.Default.Settings, "settings")
 
 /** Bottom clearance applied inside scrolling content rather than to its viewport. */
 val LocalBottomBarInset = staticCompositionLocalOf { 0.dp }
@@ -285,21 +293,27 @@ fun AppBottomBar(
                         }
                     }
                 }
-                items.filter { it.route != "settings" }.forEach { item ->
+                items.forEach { item ->
                     BottomBarItemButton(item, currentRoute, onNavigate, spec, accent, Modifier.height(48.dp))
                 }
             }
-            items.firstOrNull { it.route == "settings" }?.let { item ->
-                BottomBarItemButton(item, currentRoute, onNavigate, spec, accent, Modifier.height(48.dp))
-            }
+            BottomBarItemButton(railSettingsItem, currentRoute, onNavigate, spec, accent, Modifier.height(48.dp))
         }
     } else {
+        // Floating, rounded bar over a soft fade, so artwork stays visible beside it.
         Column(
-            modifier = baseModifier.fillMaxWidth()
+            modifier = modifier.fillMaxWidth()
+                .background(Brush.verticalGradient(0f to Color.Transparent, 0.45f to Color.Black.copy(alpha = 0.7f), 1f to Color.Black.copy(alpha = 0.92f)))
                 .navigationBarsPadding()
+                .padding(start = 12.dp, end = 12.dp, top = 6.dp, bottom = 8.dp)
         ) {
             Row(
-                modifier = Modifier.fillMaxWidth().height(barHeight),
+                modifier = Modifier.fillMaxWidth().height(barHeight)
+                    .shadow(16.dp, FloatingBarShape, clip = false)
+                    .clip(FloatingBarShape)
+                    .background(Color(0xFF17171A))
+                    .border(1.dp, Color.White.copy(alpha = 0.08f), FloatingBarShape)
+                    .padding(horizontal = 6.dp),
                 horizontalArrangement = Arrangement.SpaceEvenly,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -310,6 +324,8 @@ fun AppBottomBar(
         }
     }
 }
+
+private val FloatingBarShape = RoundedCornerShape(28.dp)
 
 @Composable
 private fun BottomBarItemButton(
@@ -328,6 +344,20 @@ private fun BottomBarItemButton(
         targetValue = if (isSelected || isFocused) accent else Color.White.copy(alpha = 0.55f),
         animationSpec = tween(180),
         label = "navigation_icon_color"
+    )
+    // The selected icon springs up a touch, so a tab change is felt as well as seen.
+    val iconScale by androidx.compose.animation.core.animateFloatAsState(
+        targetValue = if (isSelected) 1f else 0.92f,
+        animationSpec = androidx.compose.animation.core.spring(
+            dampingRatio = androidx.compose.animation.core.Spring.DampingRatioMediumBouncy,
+            stiffness = androidx.compose.animation.core.Spring.StiffnessMediumLow,
+        ),
+        label = "navigation_icon_scale"
+    )
+    val indicatorColor by animateColorAsState(
+        targetValue = if (isSelected) accent.copy(alpha = 0.16f) else Color.Transparent,
+        animationSpec = tween(200),
+        label = "navigation_indicator"
     )
 
     Box(
@@ -351,16 +381,26 @@ private fun BottomBarItemButton(
             .then(if (isFocused) Modifier.border(1.dp, accent, CircleShape) else Modifier),
         contentAlignment = Alignment.Center
     ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(3.dp)) {
-        Icon(
-            imageVector = item.icon,
-            contentDescription = null,
-            tint = iconColor,
-            modifier = Modifier.size(spec.iconSizeDp.dp)
-        )
-        androidx.compose.material3.Text(label, color = iconColor, fontSize = spec.labelFontSizeSp.sp,
-            lineHeight = 14.sp, maxLines = 2, textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-            modifier = Modifier.padding(horizontal = 2.dp))
+        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            // Selected tab: a soft pill behind the icon (Material 3 style) instead of colour alone.
+            Box(
+                Modifier.widthIn(max = 52.dp).fillMaxWidth().height(28.dp).clip(CircleShape)
+                    .background(indicatorColor),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = item.icon,
+                    contentDescription = null,
+                    tint = iconColor,
+                    modifier = Modifier.size(24.dp).graphicsLayer { scaleX = iconScale; scaleY = iconScale }
+                )
+            }
+            androidx.compose.material3.Text(label, color = iconColor, fontSize = spec.labelFontSizeSp.sp,
+                fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium,
+                lineHeight = 14.sp, maxLines = 1, softWrap = false,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                modifier = Modifier.padding(horizontal = 2.dp))
         }
     }
 }

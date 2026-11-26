@@ -44,6 +44,26 @@ class AppBottomBarResponsiveLayoutTest {
         assertThat(navigationRailCutoutInsetPx(0, 44, 0, 0, LayoutDirection.Rtl)).isEqualTo(0)
     }
 
+    @Test fun phoneBarKeepsFiveTabsAndMovesNewsAndSettingsBehindTheAvatar() {
+        assertThat(bottomBarItems.map { it.route })
+            .containsExactly("home", "search", "watchlist", "tv", "music").inOrder()
+        assertThat(railSettingsItem.route).isEqualTo("settings")
+        assertThat(mobileAccountActions(emptySet(), isKids = false)).containsExactly(
+            MobileAccountAction.SWITCH_PROFILE, MobileAccountAction.NEWS, MobileAccountAction.SETTINGS).inOrder()
+    }
+
+    @Test fun accountMenuHidesNewsWhenTheProfileHidesItOrIsAKid() {
+        assertThat(mobileAccountActions(setOf("news"), isKids = false))
+            .containsExactly(MobileAccountAction.SWITCH_PROFILE, MobileAccountAction.SETTINGS).inOrder()
+        assertThat(mobileAccountActions(emptySet(), isKids = true))
+            .containsExactly(MobileAccountAction.SWITCH_PROFILE, MobileAccountAction.SETTINGS).inOrder()
+    }
+
+    @Test fun settingsAndNewsStillShowTheBarAfterLeavingTheTabs() {
+        assertThat(shouldShowBottomBar(true, "settings", false)).isTrue()
+        assertThat(shouldShowBottomBar(true, "news", false)).isTrue()
+    }
+
     @Test fun subscreenFlagsOnlyAffectTheirOwnDestination() {
         assertThat(shouldShowBottomBar(true, "home", false, true, true)).isTrue()
         assertThat(shouldShowBottomBar(true, "settings", false, true, false)).isFalse()
