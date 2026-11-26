@@ -104,6 +104,7 @@ export const SETTINGS_INDEX: SettingsIndexEntry[] = [
   { section: "appearance", label: "Show Search", id: "navigation-search", keywords: "navigation tabs hide sections menu", scope: "all" },
   { section: "appearance", label: "Show Library", id: "navigation-library", keywords: "navigation tabs hide sections watchlist menu", scope: "all" },
   { section: "appearance", label: "Show TV Player", id: "navigation-tv", keywords: "navigation tabs hide sections iptv live tv menu", scope: "all" },
+  { section: "appearance", label: "Show Music", id: "navigation-music", keywords: "navigation tabs hide sections music songs menu", scope: "all" },
   { section: "appearance", label: "Blur episode spoilers", id: "spoiler-blur", scope: "all" },
   { section: "appearance", label: "Show budget and box office", id: "show-budget", keywords: "revenue", scope: "all" },
   { section: "appearance", label: "Show episode ratings", id: "episode-ratings", scope: "android" },

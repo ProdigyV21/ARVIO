@@ -2517,3 +2517,27 @@ export async function saveCloudSportsFollows(auth: AuthClient, profileId: string
     bumpFieldTs(root, `p:${profileId}:sportsFollowsJson`);
   });
 }
+
+// ── Music tab (Android parity: profileSettingsById.<id>.musicAddonsJson / musicCollectionsJson) ──
+// Both are JSON strings the Android app writes with Gson. A web change bumps the field's own
+// timestamp ("p:<profileId>:<field>"), which the app's field-level merge then adopts.
+export type CloudMusicField = "musicAddonsJson" | "musicCollectionsJson";
+
+export async function pullCloudMusic(auth: AuthClient, profileId: string): Promise<Partial<Record<CloudMusicField, string>>> {
+  const root = await pullRawPayload(auth);
+  const profile = objectRecord(scopedValue(root, "profileSettingsById", profileId));
+  const out: Partial<Record<CloudMusicField, string>> = {};
+  for (const field of ["musicAddonsJson", "musicCollectionsJson"] as const) {
+    const value = profile[field];
+    if (typeof value === "string" && value) out[field] = value;
+  }
+  return out;
+}
+
+export async function saveCloudMusic(auth: AuthClient, profileId: string, field: CloudMusicField, json: string) {
+  await mutateCloudPayload(auth, (root) => {
+    const existing = objectRecord(scopedValue(root, "profileSettingsById", profileId));
+    setScopedValue(root, "profileSettingsById", profileId, { ...existing, [field]: json });
+    bumpFieldTs(root, `p:${profileId}:${field}`);
+  });
+}
