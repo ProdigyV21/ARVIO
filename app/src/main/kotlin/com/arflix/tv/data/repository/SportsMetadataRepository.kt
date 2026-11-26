@@ -8,6 +8,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.util.concurrent.TimeUnit
@@ -33,6 +34,43 @@ class SportsMetadataRepository @Inject constructor(client: OkHttpClient, @Applic
                 if (disk.exists() && System.currentTimeMillis() - disk.lastModified() < 86_400_000 && disk.length() <= 6_000_000)
                     parseSportsMetadata(disk.readText()).also { cached = it; lastSuccess = disk.lastModified() } else emptyList()
             }.getOrDefault(emptyList())
+        }
+    }
+
+    private val dayCache = HashMap<String, Pair<Long, List<SportsEventArtwork>>>()
+    private val dayMutex = Mutex()
+
+    /**
+     * The fixtures of one UTC day ("2026-11-20") for the Sports day tabs, from a
+     * week back to a week ahead. Cached for a while; a failed request returns
+     * what was cached, or nothing.
+     */
+    suspend fun loadDay(day: String): List<SportsEventArtwork> = withContext(Dispatchers.IO) {
+        dayMutex.withLock {
+            val now = System.currentTimeMillis()
+            dayCache[day]?.let { (at, items) -> if (now - at < 20 * 60_000L) return@withLock items }
+            val endpoint = BuildConfig.SPORTS_METADATA_URL.ifBlank {
+                "${Constants.NETLIFY_BACKEND_URL.ifBlank { "https://auth.arvio.tv/.netlify/functions" }}/sports-metadata"
+            }
+            val url = endpoint.toHttpUrlOrNull()?.newBuilder()?.addQueryParameter("day", day)?.build()
+                ?: return@withLock dayCache[day]?.second.orEmpty()
+            val result = runCatching {
+                http.newCall(Request.Builder().url(url).get().build()).execute().use { response ->
+                    check(response.isSuccessful)
+                    val body = response.body ?: error("Empty sports metadata")
+                    check(!body.source().request(6_000_001L))
+                    parseSportsMetadata(body.source().readUtf8())
+                }
+            }.getOrNull()
+            if (result != null) {
+                if (dayCache.size >= 20) dayCache.remove(dayCache.minByOrNull { it.value.first }?.key)
+                dayCache[day] = now to result
+                result
+            } else {
+                // Try again soon rather than after the full cache period.
+                dayCache[day]?.let { (_, items) -> dayCache[day] = (now - 15 * 60_000L) to items }
+                dayCache[day]?.second.orEmpty()
+            }
         }
     }
 

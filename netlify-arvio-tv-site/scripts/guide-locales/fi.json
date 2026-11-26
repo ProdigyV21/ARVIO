@@ -787,6 +787,26 @@
   "web": "/fi/arvio-web/"
  },
  "standaloneLabels": {
+  "/how-arvio-works/": [
+   "Aloita tästä · Englanniksi",
+   "Näin ARVIO toimii",
+   "Mitä ARVIO on ja mitä ei, miten katalogit, lähteet ja tilit liittyvät toisiinsa, ja ensimmäiset 10 minuuttia."
+  ],
+  "/music-guide/": [
+   "Musiikki · Englanniksi",
+   "Musiikki ARVIOssa",
+   "Yhdistä Navidrome, Jellyfin tai musiikkilisäosa, tee soittolistoja ja tuo Spotify-soittolistasi."
+  ],
+  "/live-sports/": [
+   "Urheilu · Englanniksi",
+   "Suora urheilu omilla kanavillasi",
+   "Näe, mitkä ottelut omilla kanavillasi näkyvät, tulokset ilman spoilereita."
+  ],
+  "/profiles-sync-personalize/": [
+   "Profiilit · Englanniksi",
+   "Profiilit, lapsitila, synkronointi ja värit",
+   "PIN-suojatut profiilit, lasten profiilit, ARVIO Cloud ja korostusväri."
+  ],
   "/arvio-iphone-ipad/": [
    "iPhone ja iPad · Englanniksi",
    "ARVIO iPhonella ja iPadilla",

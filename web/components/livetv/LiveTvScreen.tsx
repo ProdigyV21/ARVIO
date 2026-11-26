@@ -595,7 +595,7 @@ export function LiveTvScreen() {
               if (!groupsOpen || event.key === "ArrowLeft") { event.preventDefault(); event.stopPropagation(); openCategories(); }
             }
           }}>
-            {activeCategory === "sports" ? <SportsGuidePane key={activeProfile?.id ?? "local"} clockFormat={settings.clockFormat} channels={channels} guide={nowNext} addons={addons}
+            {activeCategory === "sports" ? <SportsGuidePane key={activeProfile?.id ?? "local"} profileId={activeProfile?.id} clockFormat={settings.clockFormat} channels={channels} guide={nowNext} addons={addons}
               providerNames={Object.fromEntries([...playlists.map((playlist) => [playlist.id, playlist.name]), ...portals.map((portal) => [portal.id, portal.name])])}
               onPlay={channel => channel.id.startsWith("sports-addon:") ? void playChannel(channel) : watchChannel(channel)} onEnter={() => { if (!pointerNavigation.current && !categoriesOpenByDefault(window.innerWidth)) setGroupsOpen(false); }}
               onOpenCategories={openCategories} /> : <>

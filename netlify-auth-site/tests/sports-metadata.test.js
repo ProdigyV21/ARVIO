@@ -132,3 +132,29 @@ test('one unavailable TV day does not discard the remaining days', async () => {
   assert.equal(result.events[0].broadcasters.length, 1);
   assert.equal(result.broadcastsPartial, true);
 });
+
+test('day tabs: one shared request per day, results kept, only a week either side', async () => {
+  const { requestedDay } = require('../netlify/functions/_sports-metadata');
+  assert.equal(requestedDay('2026-09-03', now), '2026-09-03');
+  assert.equal(requestedDay('2026-09-17', now), '2026-09-17');
+  assert.equal(requestedDay('2026-08-20', now), null);
+  assert.equal(requestedDay('2026-02-30', now), null);
+  assert.equal(requestedDay('tomorrow', now), null);
+  let calls = 0;
+  const finished = { ...fixture, idEvent: '9', strTimestamp: '2026-09-05T14:00:00', strStatus: 'Match Finished', intHomeScore: '2', intAwayScore: '1' };
+  const deps = { store: store(), apiKey: 'test-only-key', now, fetcher: async url => {
+    calls++;
+    assert.match(url, /eventsday\.php\?d=2026-09-05$/);
+    return { ok: true, json: async () => ({ events: [finished] }) };
+  } };
+  const handler = createHandler(() => deps);
+  const responses = await Promise.all(Array.from({ length: 20 }, () => handler({ httpMethod: 'GET', queryStringParameters: { day: '2026-09-05' } })));
+  assert.equal(calls, 1);
+  const body = JSON.parse(responses.find(r => r.statusCode === 200).body);
+  assert.equal(body.events[0].status, 'finished');
+  assert.equal(body.events[0].homeScore, 2);
+  assert.equal(body.events[0].awayScore, 1);
+  assert.match(responses[0].headers['cache-control'], /s-maxage=900/);
+  assert.equal((await handler({ httpMethod: 'GET', queryStringParameters: { day: '2025-01-01' } })).statusCode, 400);
+  assert.equal(normalizeEvent({ ...fixture, intHomeScore: '3', intAwayScore: '0' }).homeScore, undefined, 'no score before full time');
+});

@@ -787,6 +787,26 @@
   "web": "/no/arvio-web/"
  },
  "standaloneLabels": {
+  "/how-arvio-works/": [
+   "Start her · På engelsk",
+   "Slik fungerer ARVIO",
+   "Hva ARVIO er og ikke er, hvordan kataloger, kilder og kontoer henger sammen, og dine første 10 minutter."
+  ],
+  "/music-guide/": [
+   "Musikk · På engelsk",
+   "Musikk i ARVIO",
+   "Koble til Navidrome, Jellyfin eller et musikktillegg, lag spillelister og importer Spotify-spillelister."
+  ],
+  "/live-sports/": [
+   "Sport · På engelsk",
+   "Direktesport på dine egne kanaler",
+   "Se hvilke kamper kanalene dine viser, med resultater uten spoilere."
+  ],
+  "/profiles-sync-personalize/": [
+   "Profiler · På engelsk",
+   "Profiler, barnemodus, synkronisering og farger",
+   "Profiler med PIN, barneprofiler, ARVIO Cloud og aksentfarge."
+  ],
   "/arvio-iphone-ipad/": [
    "iPhone og iPad · På engelsk",
    "ARVIO på iPhone og iPad",

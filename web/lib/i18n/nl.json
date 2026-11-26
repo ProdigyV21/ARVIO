@@ -122,5 +122,10 @@
   "Uses http://, which this secure page cannot reach.": "Gebruikt http://, dat deze beveiligde pagina niet kan bereiken.",
   "Your music server": "Je muziekserver",
   "{value0} songs": "{value0} nummers",
-  "1 song": "1 nummer"
+  "1 song": "1 nummer",
+  "Switching in {seconds} s": "Over {seconds} s overschakelen",
+  "Follow {name}": "{name} volgen",
+  "Following {name}": "Je volgt {name}",
+  "Days": "Dagen",
+  "Filter": "Filter"
 }

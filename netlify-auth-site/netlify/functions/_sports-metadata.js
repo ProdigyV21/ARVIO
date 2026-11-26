@@ -60,8 +60,52 @@ function normalizeEvent(event) {
     venue: typeof event.strVenue === 'string' ? event.strVenue.slice(0, 160) : null,
     round: event.intRound ? String(event.intRound).slice(0, 20) : null,
     status: event.strPostponed === 'yes' ? 'postponed' : eventStatus(event.strStatus),
+    ...finalScore(event),
     broadcasters: [],
   };
+}
+
+// Results for a finished game. Clients keep them behind a "show score" tap.
+function finalScore(event) {
+  if (event.strPostponed === 'yes' || eventStatus(event.strStatus) !== 'finished') return {};
+  const score = value => value !== null && value !== undefined && value !== '' && /^\d{1,3}$/.test(String(value)) ? Number(value) : null;
+  const homeScore = score(event.intHomeScore), awayScore = score(event.intAwayScore);
+  return homeScore === null || awayScore === null ? {} : { homeScore, awayScore };
+}
+
+const DAY_RANGE = 8;
+/** One calendar day (UTC) within about a week of today, or null. Anything else is not fetched. */
+function requestedDay(value, now = Date.now()) {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+  const start = Date.parse(`${value}T00:00:00Z`);
+  if (!Number.isFinite(start) || new Date(start).toISOString().slice(0, 10) !== value) return null;
+  return Math.abs(start - now) <= DAY_RANGE * DAY ? value : null;
+}
+
+async function fetchDay({ fetcher, apiKey, now }, day) {
+  const response = await fetcher(`https://www.thesportsdb.com/api/v1/json/${encodeURIComponent(apiKey)}/eventsday.php?d=${day}`, {
+    signal: AbortSignal.timeout(4_000), redirect: 'error', headers: { Accept: 'application/json' },
+  });
+  if (!response.ok) throw new Error('Sports metadata unavailable');
+  const payload = await response.json();
+  if (!payload || !Object.prototype.hasOwnProperty.call(payload, 'events') || (payload.events !== null && !Array.isArray(payload.events))) throw new Error('Invalid sports metadata');
+  const events = new Map();
+  for (const row of payload.events || []) {
+    const event = normalizeEvent(row);
+    if (event) events.set(event.id, { ...event, observedAt: now });
+  }
+  return { version: 1, catalogueEnabled: true, updatedAt: now, day, partial: (payload.events?.length ?? 0) >= 1500,
+    rankingBasis: 'competition-and-broadcast-reach', attribution: 'TheSportsDB', events: [...events.values()] };
+}
+
+/**
+ * The fixtures of one day further back or ahead than the shared window, for the
+ * day tabs. One shared upstream request per day and refresh, never per viewer.
+ */
+async function getDayMetadata(dependencies, day) {
+  const now = dependencies.now ?? Date.now();
+  const finished = Date.parse(`${day}T23:59:59Z`) + 6 * 3600_000 < now;
+  return cachedResource(dependencies, `day-v1:${day}`, finished ? 12 * 3600_000 : 3600_000, options => fetchDay(options, day));
 }
 
 async function fetchFixtures({ fetcher, apiKey, now }) {
@@ -227,12 +271,19 @@ function createHandler(dependencies) {
     if (event.httpMethod === 'OPTIONS') return { statusCode: 204, headers, body: '' };
     if (event.httpMethod !== 'GET') return { statusCode: 405, headers: { ...headers, allow: 'GET,OPTIONS' }, body: '{}' };
     let state = 'refreshing';
+    const dayParameter = event.queryStringParameters?.day;
+    let day = null;
     try {
-      const payload = await getMetadata({ ...await dependencies(event), report: value => { state = value; } });
-      if (payload) return { statusCode: 200, headers: { ...headers, 'cache-control': 'public, max-age=30, s-maxage=60' },
+      const deps = { ...await dependencies(event), report: value => { state = value; } };
+      if (dayParameter !== undefined) {
+        day = requestedDay(dayParameter, deps.now ?? Date.now());
+        if (!day) return { statusCode: 400, headers: { ...headers, 'cache-control': 'no-store' }, body: '{"error":"Unsupported day"}' };
+      }
+      const payload = day ? await getDayMetadata(deps, day) : await getMetadata(deps);
+      if (payload) return { statusCode: 200, headers: { ...headers, 'cache-control': day ? 'public, max-age=300, s-maxage=900' : 'public, max-age=30, s-maxage=60' },
         body: JSON.stringify({ ...payload, catalogueEnabled: process.env.SPORTS_CATALOGUE_ENABLED !== 'false' }) };
     } catch { state = 'cache-unavailable'; }
     return { statusCode: 503, headers: { ...headers, 'cache-control': 'no-store', 'retry-after': '60', 'x-artwork-status': state }, body: '{"error":"Sports artwork is temporarily unavailable"}' };
   };
 }
-module.exports = { normalizeEvent, eventStatus, fetchFixtures, fetchLive, getMetadata, createHandler };
+module.exports = { normalizeEvent, eventStatus, fetchFixtures, fetchLive, getMetadata, getDayMetadata, requestedDay, createHandler };

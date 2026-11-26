@@ -2499,6 +2499,25 @@ export async function markWatched(auth: AuthClient, entry: Omit<WatchHistoryEntr
   }, true, profileId);
 }
 
+/** Followed sports teams and leagues for a profile (Android's `sportsFollowsJson`), or null when never set. */
+export async function pullCloudSportsFollows(auth: AuthClient, profileId?: string | null): Promise<string | null> {
+  if (!auth.session || !profileId) return null;
+  const root = await pullRawPayload(auth);
+  const profile = scopedValue<Record<string, unknown>>(root, "profileSettingsById", profileId);
+  return typeof profile?.sportsFollowsJson === "string" ? profile.sportsFollowsJson : null;
+}
+
+/** Saves the followed teams and leagues with their own timestamp, so other devices adopt them. */
+export async function saveCloudSportsFollows(auth: AuthClient, profileId: string | null | undefined, json: string) {
+  if (!profileId) return;
+  await mutateCloudPayload(auth, root => {
+    const existing = { ...((scopedValue<Record<string, unknown>>(root, "profileSettingsById", profileId) ?? {}) as Record<string, unknown>) };
+    existing.sportsFollowsJson = json;
+    setScopedValue(root, "profileSettingsById", profileId, existing);
+    bumpFieldTs(root, `p:${profileId}:sportsFollowsJson`);
+  });
+}
+
 // ── Music tab (Android parity: profileSettingsById.<id>.musicAddonsJson / musicCollectionsJson) ──
 // Both are JSON strings the Android app writes with Gson. A web change bumps the field's own
 // timestamp ("p:<profileId>:<field>"), which the app's field-level merge then adopts.

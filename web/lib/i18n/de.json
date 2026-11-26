@@ -49,5 +49,10 @@
   "Uses http://, which this secure page cannot reach.": "Nutzt http://, das diese sichere Seite nicht erreichen kann.",
   "Your music server": "Dein Musikserver",
   "{value0} songs": "{value0} Songs",
-  "1 song": "1 Song"
+  "1 song": "1 Song",
+  "Switching in {seconds} s": "Wechsel in {seconds} s",
+  "Follow {name}": "{name} folgen",
+  "Following {name}": "Du folgst {name}",
+  "Days": "Tage",
+  "Filter": "Filter"
 }

@@ -10,6 +10,6 @@ const handler = metadata.createHandler(() => ({
 }));
 
 export default async request => {
-  const result = await handler({ httpMethod: request.method });
+  const result = await handler({ httpMethod: request.method, queryStringParameters: Object.fromEntries(new URL(request.url).searchParams) });
   return new Response(result.statusCode === 204 ? null : result.body, {status: result.statusCode, headers: result.headers});
 };

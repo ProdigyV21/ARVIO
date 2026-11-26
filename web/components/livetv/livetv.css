@@ -809,6 +809,21 @@
 .tv-sports-drawer { background: transparent; border: 0; color: inherit; width: 32px; height: 40px; display: grid; place-items: center; }
 .tv-guide-workspace:not(.groups-collapsed) .tv-sports-drawer { display: none; }
 .tv-sports-section { margin-bottom: 22px; }
+.tv-sports-chips { display: grid; gap: 8px; margin: 0 0 18px; }
+.tv-sports-chip-row { display: flex; gap: 8px; overflow-x: auto; padding: 3px 24px; scrollbar-width: none; overscroll-behavior-x: contain; }
+.tv-sports-chip-row::-webkit-scrollbar { display: none; }
+.tv-sports-chip { flex: none; width: auto; min-height: 38px; padding: 6px 16px; border-radius: 999px; border: 2px solid transparent; background: #ffffff14; color: #eee; font-size: 15px; font-weight: 500; white-space: nowrap; }
+.tv-sports-chip.is-selected { background: #fff; color: #000; font-weight: 600; }
+.tv-sports-chip:focus-visible { outline: none; border-color: #fff; }
+.tv-sports-chip.is-selected:focus-visible { box-shadow: 0 0 0 2px #000, 0 0 0 4px #fff; }
+.tv-sports-none { color: #aaa; padding: 40px 24px; text-align: center; }
+.tv-event-stamp svg, .tv-event-schedule-time svg { margin-inline-start: 5px; vertical-align: -2px; }
+.tv-event-actions { display: flex; flex-wrap: wrap; gap: 8px; padding: 6px 0 10px; }
+.tv-event-action { width: auto; display: inline-flex; align-items: center; gap: 7px; min-height: 40px; padding: 7px 14px; border-radius: 999px; border: 1px solid #ffffff33; background: #ffffff0f; color: #eee; font-size: 14px; }
+.tv-event-action.is-on { background: #ffffff26; }
+.tv-event-action.is-on svg { color: var(--accent, #2ec4b6); }
+.tv-event-action:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+@media (max-width: 600px) { .tv-sports-chip-row { padding-inline: 12px; } .tv-sports-chip { min-height: 40px; font-size: 14px; } }
 .tv-sports-row-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 0 24px 4px; min-height: 34px; }
 .tv-sports-row-heading h3 { font-size: 24px; font-weight: 500; margin: 0; }
 .tv-sports-row-heading select { width: auto; max-width: 55%; min-height: 34px; color: #eee; background: #080808; border: 0; font-size: 16px; padding: 4px; }
@@ -832,7 +847,7 @@
 .tv-event-teams img { position: static; width: 0; flex: 1; min-width: 0; height: 100%; object-fit: contain; filter: drop-shadow(0 0 1px #ffffff70); }
 .tv-event-teams strong { flex: 0 0 auto; font-size: 18px; color: white; }
 .tv-event-details { display: flex; gap: 12px; align-items: center; justify-content: space-between; color: #b9c0cb; font-size: 14px; padding: 16px 0 8px; }
-.tv-event-details button { flex-shrink: 0; min-height: 36px; padding: 6px 12px; }
+.tv-event-details button { flex-shrink: 0; width: auto; min-height: 36px; padding: 6px 12px; }
 .tv-event-no-channels { padding: 24px 0; color: #b9c0cb; }
 .tv-event-teams { transition: opacity 160ms ease-out; }
 @media (prefers-reduced-motion: reduce) {

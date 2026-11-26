@@ -122,6 +122,7 @@ class TvViewModel @Inject constructor(
     private val mediaRepository: com.arflix.tv.data.repository.MediaRepository,
     private val sportsRepository: com.arflix.tv.data.repository.SportsRepository,
     val sportsAddons: com.arflix.tv.data.repository.SportsAddonRepository,
+    val sportsPreferences: com.arflix.tv.data.repository.SportsPreferencesRepository,
     private val profileManager: com.arflix.tv.data.repository.ProfileManager,
 ) : ViewModel() {
 
@@ -219,6 +220,7 @@ class TvViewModel @Inject constructor(
             Unit
         }
     suspend fun loadSportsMetadata() = sportsRepository.loadMetadata()
+    suspend fun loadSportsMetadataDay(day: String) = sportsRepository.loadMetadataDay(day)
     suspend fun loadSportsAddonArtwork() = sportsRepository.loadAddonGuideArtwork()
     fun sportsClockFormat(profileId: String?) = context.settingsDataStore.data.map { prefs ->
         val key = profileId?.let { profileManager.profileStringKeyFor(it, "clock_format") } ?: profileManager.profileStringKey("clock_format")
