@@ -319,6 +319,7 @@ internal fun SportsGuidePane(
     val keysByRow = remember(rows) {
         rows.associate { it.id to disambiguatedLazyKeys(it.events) { event -> event.id } }
     }
+    val touchUi = com.arflix.tv.util.LocalDeviceType.current.isTouchDevice()
     // Up/Down lands on the card that is visually above/below, even when the two rows
     // are scrolled differently.
     fun alignedColumn(fromRow: Int, fromColumn: Int, toRow: Int): Int {
@@ -355,7 +356,7 @@ internal fun SportsGuidePane(
             // Scrolling may continue after focus moves; new keys replace this job.
             // On a TV the focused row moves to the top, so no half row (captions without
             // their cards) is left showing under the preview.
-            launch { if (!touch) listState.animateScrollToItem(rowIndex) else reveal(listState, rowIndex) }
+            launch { if (!touchUi) listState.animateScrollToItem(rowIndex) else reveal(listState, rowIndex) }
             if (visibleRow == null) withFrameNanos { }
             rowStates[row.id]?.let { horizontal ->
                 launch { reveal(horizontal, column) }
