@@ -5,5 +5,13 @@
   "Completed": "Imekamilika",
   "Dropped": "Imeachwa",
   "Silo: use the Jellyfin-compatible address. Optional profile: username#ProfileName. Protected profile: password#PIN.": "Silo: tumia anwani inayooana na Jellyfin. Wasifu wa hiari: username#ProfileName. Wasifu uliolindwa: password#PIN.",
-  "None of your enabled addons provide playback sources.": "Hakuna programu jalizi zako zilizowezeshwa zinazotoa vyanzo vya uchezaji."
+  "None of your enabled addons provide playback sources.": "Hakuna programu jalizi zako zilizowezeshwa zinazotoa vyanzo vya uchezaji.",
+  "Game info": "Taarifa za mechi",
+  "Standings": "Msimamo",
+  "Form": "Kiwango",
+  "Head to head": "Ana kwa ana",
+  "Score alerts": "Arifa za matokeo",
+  "League networks": "Chaneli za ligi",
+  "Score update": "Matokeo mapya",
+  "Full time": "Mwisho wa mechi"
 }

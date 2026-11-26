@@ -2190,4 +2190,6 @@
     <string name="news_topics_uncovered">אין פיד בנושאים האלה: %1$s</string>
     <string name="news_no_topic_sources">לאף מקור שלכם אין פיד בנושאים האלה</string>
     <string name="news_no_topic_sources_desc">בחרו נושאים נוספים או מקורות אחרים בהגדרות, חדשות.</string>
+    <string name="seek_thumbnails">תמונות ממוזערות בדילוג</string>
+    <string name="seek_thumbnails_desc">מציג תמונות קטנות מהסרטון בזמן דילוג. הן נוצרות במכשיר הזה ברקע במהלך הניגון ומושהות כשהניגון צריך רשת או זיכרון.</string>
 </resources>

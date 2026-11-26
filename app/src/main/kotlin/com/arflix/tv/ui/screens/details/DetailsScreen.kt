@@ -1026,6 +1026,8 @@ fun DetailsScreen(
                     DetailsContent(
                         item = item,
                         logoUrl = uiState.logoUrl,
+                        textlessPosterUrl = uiState.textlessPosterUrl,
+                        textlessBackdropUrl = uiState.textlessBackdropUrl,
                         episodes = uiState.episodes,
                         totalSeasons = uiState.totalSeasons,
                         currentSeason = uiState.currentSeason,
@@ -1319,6 +1321,8 @@ fun DetailsScreen(
 internal fun DetailsContent(
     item: MediaItem,
     logoUrl: String?,
+    textlessPosterUrl: String? = null,
+    textlessBackdropUrl: String? = null,
     episodes: List<Episode>,
     totalSeasons: Int,
     currentSeason: Int,
@@ -1390,7 +1394,13 @@ internal fun DetailsContent(
             availableWidthDp = maxWidth.value,
             availableHeightDp = (maxHeight - navigationBottomPadding).coerceAtLeast(1.dp).value,
         ).dp
-        val artwork = mobileDetailsArtworkSource(item.image, item.backdrop, maxWidth <= maxHeight)
+        // With a logo on top, use artwork that doesn't already print the title.
+        val artwork = mobileDetailsArtworkSource(
+            if (logoUrl == null) item.image
+            else textlessPosterUrl ?: if (textlessBackdropUrl != null) null else item.image,
+            (if (logoUrl != null) textlessBackdropUrl else null) ?: item.backdrop,
+            maxWidth <= maxHeight,
+        )
         var mobileLogoFailed by remember(item.id, logoUrl) { mutableStateOf(false) }
         val mobileScrollState = rememberScrollState()
         val density = LocalDensity.current

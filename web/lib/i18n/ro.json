@@ -5,5 +5,13 @@
   "Completed": "Finalizate",
   "Dropped": "Abandonate",
   "Silo: use the Jellyfin-compatible address. Optional profile: username#ProfileName. Protected profile: password#PIN.": "Silo: folosește adresa compatibilă cu Jellyfin. Profil opțional: username#ProfileName. Profil protejat: password#PIN.",
-  "None of your enabled addons provide playback sources.": "Niciunul dintre suplimentele activate nu oferă surse de redare."
+  "None of your enabled addons provide playback sources.": "Niciunul dintre suplimentele activate nu oferă surse de redare.",
+  "Game info": "Informații meci",
+  "Standings": "Clasament",
+  "Form": "Formă",
+  "Head to head": "Meciuri directe",
+  "Score alerts": "Alerte de scor",
+  "League networks": "Canalele ligii",
+  "Score update": "Actualizare scor",
+  "Full time": "Final"
 }

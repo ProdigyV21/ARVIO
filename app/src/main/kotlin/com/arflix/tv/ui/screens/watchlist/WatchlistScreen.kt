@@ -245,6 +245,7 @@ fun WatchlistScreen(
     }
     fun selectSection(next: LibrarySection) {
         section = next; openedList = null; query = ""; mediaFilter = null
+        com.arflix.tv.ui.components.MobileTabBar.reveal()
         search = false; sourcesOpen = false; filters = false
         if (next == LibrarySection.WATCHLISTS) viewModel.selectSource(WatchlistSourceItem.MyWatchlist.id)
         if (next == LibrarySection.SERVERS && servers.selectedSourceRef == null) {
@@ -509,7 +510,8 @@ fun WatchlistScreen(
                     }
                     val spotlightItem = previewItem
                     val compactSpotlight = compact || maxHeight < 440.dp
-                    val showSpotlight = !collections && items.isNotEmpty()
+                    // Landscape phones are too short for the spotlight; the grid gets the room.
+                    val showSpotlight = !collections && items.isNotEmpty() && !landscapeTouch
                     val backdropHeight = collectionSpotlightHeight(touch, compactSpotlight) + 150.dp
                     val backdropHeightPx = with(LocalDensity.current) { backdropHeight.toPx() }
                     // On phones the spotlight scrolls with the grid, so its artwork fades out with it

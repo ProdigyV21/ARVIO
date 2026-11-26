@@ -3082,6 +3082,7 @@ class MediaRepository @Inject constructor(
         val type = if (mediaType == MediaType.TV) "tv" else "movie"
         return try {
             val images = tmdbApi.getImages(type, mediaId, apiKey)
+            textlessArtCache["${mediaType}_$mediaId"] = com.arflix.tv.data.api.pickTextlessArtwork(images)
             // Quality ranking for clearlogos: prefer PNG over SVG (the app has
             // no SVG decoder), English over other locales, and among the
             // survivors pick the highest community-rated logo (vote_average
@@ -3103,6 +3104,26 @@ class MediaRepository @Inject constructor(
         } catch (e: Exception) {
             if (e is kotlinx.coroutines.CancellationException) throw e
 
+            null
+        }
+    }
+
+    private val textlessArtCache = ConcurrentHashMap<String, com.arflix.tv.data.api.TextlessArtwork>()
+
+    /**
+     * Poster and backdrop without title text, for heroes that draw a clear logo on top. Shares
+     * the logo's images request, so a hero whose logo is already loaded costs nothing extra.
+     */
+    suspend fun getTextlessArtwork(mediaType: MediaType, mediaId: Int): com.arflix.tv.data.api.TextlessArtwork? {
+        if (mediaId <= 0) return null
+        val key = "${mediaType}_$mediaId"
+        textlessArtCache[key]?.let { return it }
+        val type = if (mediaType == MediaType.TV) "tv" else "movie"
+        return try {
+            com.arflix.tv.data.api.pickTextlessArtwork(tmdbApi.getImages(type, mediaId, apiKey))
+                .also { textlessArtCache[key] = it }
+        } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
             null
         }
     }

@@ -5,5 +5,13 @@
   "Completed": "Completats",
   "Dropped": "Abandonats",
   "Silo: use the Jellyfin-compatible address. Optional profile: username#ProfileName. Protected profile: password#PIN.": "Silo: utilitza l’adreça compatible amb Jellyfin. Perfil opcional: username#ProfileName. Perfil protegit: password#PIN.",
-  "None of your enabled addons provide playback sources.": "Cap dels complements activats proporciona fonts de reproducció."
+  "None of your enabled addons provide playback sources.": "Cap dels complements activats proporciona fonts de reproducció.",
+  "Game info": "Informació del partit",
+  "Standings": "Classificació",
+  "Form": "Forma",
+  "Head to head": "Cara a cara",
+  "Score alerts": "Avisos de marcador",
+  "League networks": "Canals de la lliga",
+  "Score update": "Canvi al marcador",
+  "Full time": "Final"
 }

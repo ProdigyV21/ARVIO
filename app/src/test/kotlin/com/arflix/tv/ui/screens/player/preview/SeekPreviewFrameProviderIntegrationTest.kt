@@ -128,13 +128,21 @@ class SeekPreviewFrameProviderIntegrationTest {
             assertTrue(provider.matchesDisplayTarget(nearby, 75_000))
             assertFalse(provider.matchesTarget(nearby, 75_000))
             assertFalse(provider.matchesDisplayTarget(nearby, 85_000))
-            assertNull(provider.cachedDisplayFrameAt(90_000))
             assertEquals(60_000L, nearby.actualPositionMs)
             assertNotNull(provider.frameAt(75_000))
             assertEquals(listOf(60_000L, 75_000L), decoded)
             provider.configure(source())
             assertFalse(provider.matchesDisplayTarget(nearby, 75_000))
             assertNull(provider.cachedDisplayFrameAt(75_000))
+        }
+    }
+
+    @Test fun `distant cached frames are not shown as nearby samples`() = runBlocking {
+        provider(decode = { _, target -> SeekPreviewImage(bitmap(), actualPositionMs = target) }).use { provider ->
+            provider.configure(source().copy(durationMs = 600_000))
+            provider.frameAt(60_000)
+            assertNotNull(provider.cachedDisplayFrameAt(110_000))
+            assertNull(provider.cachedDisplayFrameAt(130_000))
         }
     }
 

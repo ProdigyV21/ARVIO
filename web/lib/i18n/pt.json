@@ -6,5 +6,13 @@
   "Dropped": "Abandonados",
   "Channel categories": "Categorias de canais",
   "Silo: use the Jellyfin-compatible address. Optional profile: username#ProfileName. Protected profile: password#PIN.": "Silo: use o endereço compatível com Jellyfin. Perfil opcional: username#ProfileName. Perfil protegido: password#PIN.",
-  "None of your enabled addons provide playback sources.": "Nenhum dos seus complementos ativados fornece fontes de reprodução."
+  "None of your enabled addons provide playback sources.": "Nenhum dos seus complementos ativados fornece fontes de reprodução.",
+  "Game info": "Informação do jogo",
+  "Standings": "Classificação",
+  "Form": "Forma",
+  "Head to head": "Confronto direto",
+  "Score alerts": "Alertas de resultado",
+  "League networks": "Canais da liga",
+  "Score update": "Atualização do resultado",
+  "Full time": "Final"
 }

@@ -556,6 +556,10 @@ fun MediaCard(
                     if (dateLabel != null) mobileAwareCardSubtitle(isMobile, typeLabel, dateLabel)
                     else item.subtitle.ifBlank { typeLabel }
                 }
+                val cardRating = remember(item.imdbRating, item.tmdbRating, item.rating, isMobile) {
+                    if (isMobile) mobileCardRating(item.imdbRating, item.tmdbRating, item.rating) else null
+                }
+                androidx.compose.foundation.layout.Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     text = subtitle,
                     style = ArvioSkin.typography.caption.copy(
@@ -568,7 +572,19 @@ fun MediaCard(
                     color = ArvioSkin.colors.textMuted.copy(alpha = 0.85f),
                     maxLines = subtitleMaxLines,
                     overflow = TextOverflow.Ellipsis,
+                    modifier = if (cardRating != null) Modifier.weight(1f, fill = false) else Modifier,
                 )
+                // Phones: the score sits next to the date, a small gold star like the web cards.
+                if (cardRating != null) {
+                    Text(
+                        text = "  \u2605 $cardRating",
+                        style = ArvioSkin.typography.caption,
+                        color = androidx.compose.ui.graphics.Color(0xFFF5C518),
+                        maxLines = 1,
+                        modifier = Modifier.testTag("media_card_rating"),
+                    )
+                }
+                }
             }
         }
     }
@@ -585,6 +601,12 @@ fun MediaCard(
 internal fun mediaCardSubtitle(typeLabel: String, dateLabel: String): String = "$typeLabel · \u200E$dateLabel"
 
 /** Phones drop the type and keep the quieter date line; TV keeps "{type} · {date}". */
+/** The best score a card already carries (IMDb, else TMDB), as "7.4"; null when it has none. */
+internal fun mobileCardRating(vararg candidates: String?): String? = candidates.asSequence()
+    .mapNotNull { it?.trim()?.substringBefore('/')?.replace(',', '.')?.toFloatOrNull() }
+    .firstOrNull { it > 0f && it <= 10f }
+    ?.let { String.format(java.util.Locale.US, "%.1f", it) }
+
 internal fun mobileAwareCardSubtitle(isMobile: Boolean, typeLabel: String, dateLabel: String): String =
     if (isMobile) dateLabel else mediaCardSubtitle(typeLabel, dateLabel)
 

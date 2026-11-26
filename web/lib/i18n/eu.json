@@ -5,5 +5,13 @@
   "Completed": "Amaituta",
   "Dropped": "Utzita",
   "Silo: use the Jellyfin-compatible address. Optional profile: username#ProfileName. Protected profile: password#PIN.": "Silo: erabili Jellyfin-ekin bateragarria den helbidea. Aukerako profila: username#ProfileName. Babestutako profila: password#PIN.",
-  "None of your enabled addons provide playback sources.": "Gaituta dituzun gehigarrietako batek ere ez du erreprodukzio-iturririk eskaintzen."
+  "None of your enabled addons provide playback sources.": "Gaituta dituzun gehigarrietako batek ere ez du erreprodukzio-iturririk eskaintzen.",
+  "Game info": "Partidaren informazioa",
+  "Standings": "Sailkapena",
+  "Form": "Forma",
+  "Head to head": "Aurrez aurre",
+  "Score alerts": "Emaitza-abisuak",
+  "League networks": "Ligako kanalak",
+  "Score update": "Emaitza aldatu da",
+  "Full time": "Amaiera"
 }

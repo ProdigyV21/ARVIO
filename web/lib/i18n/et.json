@@ -6,5 +6,13 @@
   "Completed": "Lõpetatud",
   "Dropped": "Pooleli jäetud",
   "Silo: use the Jellyfin-compatible address. Optional profile: username#ProfileName. Protected profile: password#PIN.": "Silo: kasuta Jellyfiniga ühilduvat aadressi. Valikuline profiil: username#ProfileName. Kaitstud profiil: password#PIN.",
-  "None of your enabled addons provide playback sources.": "Ükski teie lubatud lisandmoodul ei paku taasesitusallikaid."
+  "None of your enabled addons provide playback sources.": "Ükski teie lubatud lisandmoodul ei paku taasesitusallikaid.",
+  "Game info": "Mängu info",
+  "Standings": "Tabel",
+  "Form": "Vorm",
+  "Head to head": "Omavahelised mängud",
+  "Score alerts": "Skoori teavitused",
+  "League networks": "Liiga kanalid",
+  "Score update": "Skoori muutus",
+  "Full time": "Lõpptulemus"
 }

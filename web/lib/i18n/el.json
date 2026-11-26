@@ -6,5 +6,13 @@
   "Completed": "Ολοκληρωμένα",
   "Dropped": "Εγκαταλείφθηκαν",
   "Silo: use the Jellyfin-compatible address. Optional profile: username#ProfileName. Protected profile: password#PIN.": "Silo: χρησιμοποιήστε τη διεύθυνση συμβατή με Jellyfin. Προαιρετικό προφίλ: username#ProfileName. Προστατευμένο προφίλ: password#PIN.",
-  "None of your enabled addons provide playback sources.": "Κανένα από τα ενεργοποιημένα πρόσθετά σας δεν παρέχει πηγές αναπαραγωγής."
+  "None of your enabled addons provide playback sources.": "Κανένα από τα ενεργοποιημένα πρόσθετά σας δεν παρέχει πηγές αναπαραγωγής.",
+  "Game info": "Πληροφορίες αγώνα",
+  "Standings": "Βαθμολογία",
+  "Form": "Φόρμα",
+  "Head to head": "Αλληλοσυγκρούσεις",
+  "Score alerts": "Ειδοποιήσεις σκορ",
+  "League networks": "Κανάλια πρωταθλήματος",
+  "Score update": "Ενημέρωση σκορ",
+  "Full time": "Τελικό"
 }

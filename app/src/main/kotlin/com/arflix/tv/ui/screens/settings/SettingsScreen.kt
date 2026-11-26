@@ -128,6 +128,7 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.TextFields
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Speaker
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Extension
@@ -349,6 +350,8 @@ private val tvGeneralSectionIds = setOf(
 
 /** Row id of the News tab switch; 56..58 are the other optional tabs, in OPTIONAL_NAVIGATION_SECTIONS order. */
 internal const val NEWS_TAB_ROW = 61
+/** Settings > Playback: seek-bar thumbnails on/off. */
+internal const val SEEK_THUMBNAILS_ROW = 64
 
 /** The optional tab a navigation switch row controls. */
 internal fun navigationSectionForRow(rowId: Int): String =
@@ -362,7 +365,7 @@ internal fun tvGeneralRowsForSection(section: String): List<Int> {
             (if (BuildConfig.AUDIO_SYNC_AVAILABLE) listOf(48) else emptyList()) +
             listOf(39, 9, 45)
         "ai_subtitles" -> listOf(28, 29, 30, 31, 32, 33) + LIVE_AI_SUBS_ROWS
-        "playback" -> listOf(10, 11, 12, 43, 44, 55, 13, 14, 34, 37, 16, 15, 40, 27, 53, 54, 60)
+        "playback" -> listOf(10, 11, 12, 43, 44, 55, SEEK_THUMBNAILS_ROW, 13, 14, 34, 37, 16, 15, 40, 27, 53, 54, 60)
         "appearance" -> listOf(17, 49, 50, 18, 20, 21, 24, 23, 22, 41, 46, 36, 47, 56, 57) +
             (if (com.arflix.tv.ui.components.KidsNavigation.hideLiveTv) emptyList() else listOf(58)) + 59
         // News: the tab switch, then what the tab shows. Kids profiles never get the section.
@@ -1550,6 +1553,7 @@ fun SettingsScreen(
                                                 54 -> viewModel.clearPlaybackCache()
                                                 60 -> showPlaybackCompatibility = true
                                                 55 -> viewModel.setShowAddonStreamDetails(!uiState.showAddonStreamDetails)
+                                                SEEK_THUMBNAILS_ROW -> viewModel.setSeekThumbnailsEnabled(!uiState.seekThumbnailsEnabled)
                                                 62 -> newsDialog = com.arflix.tv.ui.screens.news.NewsSettingsDialog.TOPICS
                                                 63 -> newsDialog = com.arflix.tv.ui.screens.news.NewsSettingsDialog.SOURCES
                                                 in 56..58, NEWS_TAB_ROW -> {
@@ -2253,6 +2257,8 @@ fun SettingsScreen(
                             onPlaybackCompatibilityClick = { showPlaybackCompatibility = true },
                             showAddonStreamDetails = uiState.showAddonStreamDetails,
                             onShowAddonStreamDetailsToggle = { viewModel.setShowAddonStreamDetails(it) },
+                            seekThumbnailsEnabled = uiState.seekThumbnailsEnabled,
+                            onSeekThumbnailsToggle = { viewModel.setSeekThumbnailsEnabled(it) },
                             hiddenNavigationSections = uiState.hiddenNavigationSections,
                             onNavigationSectionVisibleChange = viewModel::setNavigationSectionVisible,
                             newsTopicsSummary = com.arflix.tv.ui.screens.news.newsTopicsSummary(newsSelection),
@@ -5404,6 +5410,15 @@ private fun MobileSettingsSubPage(
                         onClick = { viewModel.setAutoPlayNext(!uiState.autoPlayNext) }
                     )
                     MobileSettingsRow(
+                        icon = Icons.Default.Image,
+                        title = stringResource(R.string.seek_thumbnails),
+                        subtitle = stringResource(R.string.seek_thumbnails_desc),
+                        value = stringResource(if (uiState.seekThumbnailsEnabled) R.string.on else R.string.off),
+                        toggleChecked = uiState.seekThumbnailsEnabled,
+                        isFocused = false,
+                        onClick = { viewModel.setSeekThumbnailsEnabled(!uiState.seekThumbnailsEnabled) }
+                    )
+                    MobileSettingsRow(
                         icon = Icons.Default.PlayArrow,
                         title = stringResource(R.string.autoplay),
                         value = stringResource(if (uiState.autoPlaySingleSource) R.string.on else R.string.off),
@@ -6918,12 +6933,14 @@ private fun tvSettingsFocusedHelp(section: String, focusedIndex: Int): TvSetting
             else -> TvSettingsHelp(stringResource(R.string.settings_help_subtitle_pref), stringResource(R.string.settings_help_subtitle_pref_desc))
         }
         "ai_subtitles" -> TvSettingsHelp(stringResource(R.string.ai_subtitles_section), stringResource(R.string.settings_help_ai_subtitles_desc))
-        "playback" -> when (focusedIndex) {
-            0 -> TvSettingsHelp(stringResource(R.string.settings_help_next_autoplay), stringResource(R.string.settings_help_next_autoplay_desc))
-            1 -> TvSettingsHelp(stringResource(R.string.settings_help_source_autoplay), stringResource(R.string.settings_help_source_autoplay_desc))
-            in 5..8 -> TvSettingsHelp(stringResource(R.string.settings_help_trailers), stringResource(R.string.settings_help_trailers_desc))
-            12 -> TvSettingsHelp(stringResource(R.string.volume_boost), stringResource(R.string.settings_help_volume_boost_desc))
-            13, 14 -> TvSettingsHelp(stringResource(R.string.playback_cache_size), stringResource(R.string.settings_help_playback_cache_desc))
+        // By row id, so inserting a row never shifts the help of the rows after it.
+        "playback" -> when (tvGeneralRowsForSection(section).getOrNull(focusedIndex)) {
+            10 -> TvSettingsHelp(stringResource(R.string.settings_help_next_autoplay), stringResource(R.string.settings_help_next_autoplay_desc))
+            11 -> TvSettingsHelp(stringResource(R.string.settings_help_source_autoplay), stringResource(R.string.settings_help_source_autoplay_desc))
+            13, 14, 34, 37 -> TvSettingsHelp(stringResource(R.string.settings_help_trailers), stringResource(R.string.settings_help_trailers_desc))
+            SEEK_THUMBNAILS_ROW -> TvSettingsHelp(stringResource(R.string.seek_thumbnails), stringResource(R.string.seek_thumbnails_desc))
+            27 -> TvSettingsHelp(stringResource(R.string.volume_boost), stringResource(R.string.settings_help_volume_boost_desc))
+            53, 54 -> TvSettingsHelp(stringResource(R.string.playback_cache_size), stringResource(R.string.settings_help_playback_cache_desc))
             else -> TvSettingsHelp(stringResource(R.string.playback), stringResource(R.string.settings_help_playback_desc))
         }
         "appearance" -> TvSettingsHelp(stringResource(R.string.interface_label), stringResource(R.string.settings_help_interface_desc))
@@ -7121,6 +7138,8 @@ private fun TvGeneralSettingsRows(
     onPlaybackCompatibilityClick: () -> Unit = {},
     showAddonStreamDetails: Boolean = false,
     onShowAddonStreamDetailsToggle: (Boolean) -> Unit = {},
+    seekThumbnailsEnabled: Boolean = true,
+    onSeekThumbnailsToggle: (Boolean) -> Unit = {},
     hiddenNavigationSections: Set<String> = emptySet(),
     onNavigationSectionVisibleChange: (String, Boolean) -> Unit = { _, _ -> },
     newsTopicsSummary: String = "",
@@ -7147,6 +7166,9 @@ private fun TvGeneralSettingsRows(
                 55 -> SettingsToggleRow(stringResource(R.string.show_addon_stream_details),
                     stringResource(R.string.show_addon_stream_details_desc), showAddonStreamDetails,
                     focusedIndex == localIndex, onShowAddonStreamDetailsToggle, Modifier.settingsFocusSlot(localIndex))
+                SEEK_THUMBNAILS_ROW -> SettingsToggleRow(stringResource(R.string.seek_thumbnails),
+                    stringResource(R.string.seek_thumbnails_desc), seekThumbnailsEnabled,
+                    focusedIndex == localIndex, onSeekThumbnailsToggle, Modifier.settingsFocusSlot(localIndex))
                 0 -> SettingsRow(
                     icon = Icons.Default.Language,
                     title = stringResource(R.string.app_language),
@@ -8955,7 +8977,7 @@ internal fun CatalogDiscoveryModal(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.86f))
+                    .background(Color.Black.copy(alpha = 0.96f))
                     .padding(
                         horizontal = if (isCompact) 10.dp else 48.dp,
                         vertical = if (isCompact) 10.dp else 34.dp
@@ -8966,7 +8988,7 @@ internal fun CatalogDiscoveryModal(
                 modifier = Modifier
                     .fillMaxSize()
                     .clip(RoundedCornerShape(if (isCompact) 12.dp else 18.dp))
-                    .background(Color.Black.copy(alpha = 0.34f), RoundedCornerShape(if (isCompact) 12.dp else 18.dp))
+                    .background(Color(0xFF0E0E10), RoundedCornerShape(if (isCompact) 12.dp else 18.dp))
                     .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(if (isCompact) 12.dp else 18.dp))
                     .padding(if (isCompact) 10.dp else 18.dp)
             ) {

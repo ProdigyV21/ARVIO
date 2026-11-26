@@ -5,5 +5,13 @@
   "Completed": "Dovršeno",
   "Dropped": "Odustao",
   "Silo: use the Jellyfin-compatible address. Optional profile: username#ProfileName. Protected profile: password#PIN.": "Silo: koristite adresu kompatibilnu s Jellyfinom. Neobavezan profil: username#ProfileName. Zaštićen profil: password#PIN.",
-  "None of your enabled addons provide playback sources.": "Nijedan od vaših omogućenih dodataka ne pruža izvore za reprodukciju."
+  "None of your enabled addons provide playback sources.": "Nijedan od vaših omogućenih dodataka ne pruža izvore za reprodukciju.",
+  "Game info": "Informacije o utakmici",
+  "Standings": "Poredak",
+  "Form": "Forma",
+  "Head to head": "Međusobni susreti",
+  "Score alerts": "Obavijesti o rezultatu",
+  "League networks": "Kanali lige",
+  "Score update": "Promjena rezultata",
+  "Full time": "Kraj utakmice"
 }

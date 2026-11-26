@@ -55,6 +55,10 @@ export function AppearanceSection() {
           <Toggle label="Show TV Player" value={navigationSectionVisible("tv", settings.hiddenNavigationSections)}
             onChange={(visible) => set({ hiddenNavigationSections: withNavigationSectionVisible(settings.hiddenNavigationSections, "tv", visible) })} />
         </Row>}
+        {!kidsLevelOf(activeProfile) && <Row id="navigation-music" label="Show Music" scope="all">
+          <Toggle label="Show Music" value={navigationSectionVisible("music", settings.hiddenNavigationSections)}
+            onChange={(visible) => set({ hiddenNavigationSections: withNavigationSectionVisible(settings.hiddenNavigationSections, "music", visible) })} />
+        </Row>}
       </Group>
       <Group title="Title pages">
         <Row id="spoiler-blur" label="Blur episode spoilers" hint="Blur thumbnails and descriptions of episodes you haven't watched." scope="all">

@@ -1,5 +1,6 @@
 package com.arflix.tv.ui.screens.player
 
+import com.arflix.tv.ui.screens.player.preview.SEEK_THUMBNAILS_PREF
 import android.content.Context
 import android.util.Log
 import androidx.annotation.StringRes
@@ -243,6 +244,8 @@ data class PlayerUiState(
     // "auto_play_next" DataStore setting so the player can respect the toggle
     // and so the post-episode overlay can show a Continue/Cancel prompt.
     val autoPlayNext: Boolean = true,
+    // Seek-bar thumbnail previews (profile setting "seek_thumbnails", synced to the cloud).
+    val seekThumbnailsEnabled: Boolean = true,
     // Volume boost in decibels. 0 = disabled, up to 15 dB. The player observes this
     // and attaches a LoudnessEnhancer to the ExoPlayer audio session. Issue #88.
     val volumeBoostDb: Int = 0,
@@ -690,6 +693,7 @@ class PlayerViewModel @Inject constructor(
     private val subtitleMenuCandidates = linkedMapOf<String, Subtitle>()
     private fun frameRateMatchingModeKey() = profileManager.profileStringKey("frame_rate_matching_mode")
     private fun autoPlayNextKey() = profileManager.profileBooleanKey("auto_play_next")
+    private fun seekThumbnailsKey() = profileManager.profileBooleanKey(SEEK_THUMBNAILS_PREF)
     private fun showLoadingStatsKey() = profileManager.profileBooleanKey("show_loading_stats")
     private val gson = Gson()
     private val knownLanguageCodes = setOf(
@@ -926,6 +930,7 @@ class PlayerViewModel @Inject constructor(
             val removeHi = prefs[profileManager.profileBooleanKey("subtitle_remove_hearing_impaired")] ?: false
             translationManager.removeSubtitleHearingImpaired = removeHi
             val autoPlayNext = prefs[autoPlayNextKey()] ?: true
+            val seekThumbnailsEnabled = prefs[seekThumbnailsKey()] ?: true
             val showLoadingStats = prefs[showLoadingStatsKey()] ?: true
             val volumeBoostDb = prefs[profileManager.profileStringKey("volume_boost_db")]
                 ?.toIntOrNull()?.coerceIn(0, 15) ?: 0
@@ -1003,6 +1008,7 @@ class PlayerViewModel @Inject constructor(
                 useForcedSubtitles = useForcedSubs,
                 subtitleRemoveHearingImpaired = removeHi,
                 autoPlayNext = autoPlayNext,
+                seekThumbnailsEnabled = seekThumbnailsEnabled,
                 autoSkipIntro = autoSkipIntro,
                 autoSkipOutro = autoSkipOutro,
                 audioDelayMs = audioDelayMs,
