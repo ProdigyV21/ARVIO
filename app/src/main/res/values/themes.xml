@@ -2,7 +2,7 @@
 <resources>
     <!-- ARVIO TV Splash Theme - Shows immediately on app launch -->
     <style name="Theme.ArflixTV.Splash" parent="Theme.SplashScreen">
-        <item name="windowSplashScreenBackground">@color/background_dark</item>
+        <item name="windowSplashScreenBackground">@color/ic_launcher_background</item>
         <item name="windowSplashScreenAnimatedIcon">@mipmap/ic_launcher</item>
         <item name="windowSplashScreenAnimationDuration">0</item>
         <!-- Post-splash transitions to Mobile theme (no fullscreen).
