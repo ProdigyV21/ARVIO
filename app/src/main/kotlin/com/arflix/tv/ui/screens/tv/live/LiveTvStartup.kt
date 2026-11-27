@@ -84,11 +84,24 @@ object LiveTvStartup {
         return firstAvailableChannelId
     }
 
-    fun resumeCategoryId(lastGroupName: String?, availableCategoryIds: Set<String>): String {
+    /**
+     * Category Live TV opens on. Favorites come first whenever the profile has any;
+     * otherwise the last group used, falling back to All channels.
+     */
+    fun resumeCategoryId(
+        lastGroupName: String?,
+        availableCategoryIds: Set<String>,
+        hasFavorites: Boolean = false,
+    ): String {
+        if (hasFavorites) return "fav"
         val remembered = lastGroupName?.trim().orEmpty()
         return remembered.takeIf { it.isNotBlank() && (it == "all" || it in availableCategoryIds) }
             ?: "all"
     }
+
+    /** First guess before the category tree is loaded; [resumeCategoryId] settles it. */
+    fun startupCategoryHint(lastGroupName: String?, hasFavorites: Boolean): String =
+        if (hasFavorites) "fav" else lastGroupName?.trim()?.takeIf { it.isNotBlank() } ?: "all"
 
     fun guideBackAction(
         isTouchDevice: Boolean,

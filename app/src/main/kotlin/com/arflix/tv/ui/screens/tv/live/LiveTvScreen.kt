@@ -616,11 +616,15 @@ fun LiveTvScreen(
         }
     }
     var selectedCategoryId by rememberSaveable {
-        mutableStateOf(state.tvSession.lastGroupName.takeIf { it.isNotBlank() } ?: "all")
+        mutableStateOf(
+            LiveTvStartup.startupCategoryHint(
+                lastGroupName = state.tvSession.lastGroupName,
+                hasFavorites = state.snapshot.favoriteChannels.isNotEmpty(),
+            )
+        )
     }
     var currentMode by rememberSaveable {
-        mutableStateOf(LiveSportsMemory.startupMode(isTouchDevice, initialChannelId, initialStreamUrl,
-            LiveSportsMemory.reopen(context, currentProfile?.id, initialChannelId, initialStreamUrl)))
+        mutableStateOf(LiveTvStartup.initialMode(isTouchDevice, initialChannelId, initialStreamUrl))
     }
     var startupCategoryApplied by rememberSaveable { mutableStateOf(false) }
     var selectedProviderId by rememberSaveable { mutableStateOf("all") }
@@ -1979,7 +1983,8 @@ fun LiveTvScreen(
 
     var categoryDrawerOpen by rememberSaveable { mutableStateOf(true) }
     var sportsSelected by rememberSaveable(currentProfile?.id) {
-        mutableStateOf(LiveSportsMemory.reopen(context, currentProfile?.id, initialChannelId, initialStreamUrl))
+        // Live TV always opens on the channel guide (Favorites first); Sports is one tap away.
+        mutableStateOf(false)
     }
     val latestSportsSelected by rememberUpdatedState(sportsSelected)
     // Background sports enrichment waits until the guide and player have settled, or
@@ -2028,8 +2033,6 @@ fun LiveTvScreen(
     var sportsRetryOnOpen by remember(sportsScope) { mutableIntStateOf(0) }
     LaunchedEffect(sportsSelected) {
         if (sportsSelected && sportsError && !sportsLoading) sportsRetryOnOpen++
-        // Leaving Live TV on Sports opens Sports again next time (see LiveSportsMemory).
-        LiveSportsMemory.save(context, currentProfile?.id, sportsSelected)
         if (sportsSelected && isTouchDevice) currentMode = LiveTvStartup.LiveTvMode.Guide
     }
     // Keyed by which add-ons (and versions) are installed, not by the list instance: the
@@ -2727,13 +2730,14 @@ fun LiveTvScreen(
         return list.distinct()
     }
 
-    LaunchedEffect(state.tvSessionLoaded, state.tvSession.lastGroupName, visibleEnrichedState.value.tree, playlistCategorySections, startupCategoryApplied) {
+    LaunchedEffect(state.tvSessionLoaded, state.tvSession.lastGroupName, visibleEnrichedState.value.tree, playlistCategorySections, startupCategoryApplied, favSet.isNotEmpty()) {
         if (startupCategoryApplied || !state.tvSessionLoaded) return@LaunchedEffect
         val tree = visibleEnrichedState.value.tree
         if (tree.top.isEmpty() && tree.global.categories.isEmpty() && playlistCategorySections.isEmpty()) return@LaunchedEffect
         selectedCategoryId = LiveTvStartup.resumeCategoryId(
             lastGroupName = state.tvSession.lastGroupName,
             availableCategoryIds = getAvailableCategoryIds(tree).toSet(),
+            hasFavorites = favSet.isNotEmpty(),
         )
         startupCategoryApplied = true
     }

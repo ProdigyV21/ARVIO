@@ -124,6 +124,16 @@ class LiveTvStartupTest {
     }
 
     @Test
+    fun favoritesComeFirstWhenTheProfileHasAny() {
+        assertThat(LiveTvStartup.resumeCategoryId("grp:list_1:news", setOf("grp:list_1:news"), hasFavorites = true))
+            .isEqualTo("fav")
+        assertThat(LiveTvStartup.resumeCategoryId("grp:list_1:news", setOf("grp:list_1:news"), hasFavorites = false))
+            .isEqualTo("grp:list_1:news")
+        assertThat(LiveTvStartup.startupCategoryHint("grp:list_1:news", hasFavorites = true)).isEqualTo("fav")
+        assertThat(LiveTvStartup.startupCategoryHint("", hasFavorites = false)).isEqualTo("all")
+    }
+
+    @Test
     fun backOpensHiddenCategoryDrawerBeforeLeavingTv() {
         assertThat(LiveTvStartup.guideBackAction(isTouchDevice = false, categoryDrawerOpen = false))
             .isEqualTo(LiveTvStartup.GuideBackAction.OPEN_CATEGORIES)
