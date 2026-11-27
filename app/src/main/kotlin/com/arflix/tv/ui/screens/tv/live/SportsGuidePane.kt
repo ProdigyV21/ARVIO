@@ -120,6 +120,12 @@ internal object SportsPresentationCache {
 }
 internal const val SPORTS_CHANNEL_CATEGORY = "g-sports"
 
+/** The Sports filter and day, kept while a game plays full screen (the page leaves composition). */
+internal object SportsPaneMemory {
+    @Volatile var filter: String = SPORTS_FILTER_ALL
+    @Volatile var dayOffset: Int? = null
+}
+
 /** How much the focused Sports card grows (spacing between cards leaves room for it). */
 internal const val SPORTS_CARD_FOCUS_SCALE = 1.07f
 
@@ -221,8 +227,11 @@ internal fun SportsGuidePane(
     // The events the rows were last built from (identity), to tell "not built yet" from "empty".
     var builtFor by remember { mutableStateOf<List<SportsGuideEvent>?>(null) }
     // null = the overview; otherwise days from today (-7..7).
-    var dayOffset by rememberSaveable { mutableStateOf<Int?>(null) }
-    var sportsFilter by rememberSaveable { mutableStateOf(SPORTS_FILTER_ALL) }
+    // Kept in the process too: watching a game leaves this screen, and coming back must
+    // show the same filter and day.
+    var dayOffset by rememberSaveable { mutableStateOf(SportsPaneMemory.dayOffset) }
+    var sportsFilter by rememberSaveable { mutableStateOf(SportsPaneMemory.filter) }
+    SideEffect { SportsPaneMemory.dayOffset = dayOffset; SportsPaneMemory.filter = sportsFilter }
     val zone = remember { ZoneId.systemDefault() }
     val todayDate = Instant.ofEpochMilli(now).atZone(zone).toLocalDate()
     val selectedDate = dayOffset?.let { todayDate.plusDays(it.toLong()) }
@@ -335,6 +344,10 @@ internal fun SportsGuidePane(
     // The card focus was last on (row, column), to come back to from the rail and the game panel.
     val lastCard = remember { intArrayOf(-1, -1) }
     var activeRowId by remember { mutableStateOf<String?>(null) }
+    // After a new filter or day: start at the top of the new rows (and, from the empty
+    // state's button, put focus on them).
+    var scrollTopPending by remember { mutableStateOf(false) }
+    var focusFirstPending by remember { mutableStateOf(false) }
     val railFocus = remember { FocusRequester() }
     val jumpFocus = remember { FocusRequester() }
     val heroFocus = remember { FocusRequester() }
@@ -441,7 +454,20 @@ internal fun SportsGuidePane(
     LaunchedEffect(selected) {
         if (!touch && selected == null) returnFocus?.let { runCatching { it.requestFocus() } }
     }
+    LaunchedEffect(rows) {
+        if (scrollTopPending) {
+            scrollTopPending = false
+            runCatching { listState.scrollToItem(0) }
+            rowStates.values.forEach { runCatching { it.scrollToItem(0) } }
+        }
+        if (focusFirstPending && rows.isNotEmpty()) {
+            focusFirstPending = false
+            if (!touch) moveTo(0, 0)
+        }
+    }
     val railLayout = !touch && !narrow
+    // The drawer takes the rail's place while it is open.
+    val showRail = railLayout && !sidebarOpen
     listOffset[0] = 0
     // ---- The game panel: what it says and what its buttons do --------------------------
     val labelLiveStatus = stringResource(R.string.sports_live_status)
@@ -463,8 +489,18 @@ internal fun SportsGuidePane(
         val sources = heroSources(event)
         if (canWatch && (sources.isNotEmpty() || event.addonSources.isNotEmpty())) add(SportsHeroAction("watch", labelWatch, Icons.Default.PlayArrow, primary = true) {
             val channel = sources.firstOrNull()
-            if (channel == null) openSheet(event, from)
-            else if (onPlayFromEvent != null) onPlayFromEvent(event, channel, sources) else onPlay(channel)
+            if (channel != null) {
+                if (onPlayFromEvent != null) onPlayFromEvent(event, channel, sources) else onPlay(channel)
+            } else scope.launch {
+                // Add-on only: play its first stream straight away; the sheet only when none plays here.
+                val found = event.addonSources.filter { it.isLive(now) || it.startsAt == null || it.startsAt <= now }
+                    .ifEmpty { event.addonSources }
+                    .firstNotNullOfOrNull { source ->
+                        val streams = try { resolveAddon(source) } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (_: Exception) { emptyList() }
+                        streams.firstOrNull { !it.external }?.let { source to it }
+                    }
+                if (found != null) onPlayAddon(found.first, found.second) else openSheet(event, from)
+            }
         })
         if (!event.isNetwork) {
             val canRemind = !event.isFinished() && !event.isOnAir(now) && event.programme.startUtcMillis > now
@@ -500,11 +536,16 @@ internal fun SportsGuidePane(
         val start = event.programme.startUtcMillis
         val end = event.programme.endUtcMillis
         val ends = if (end > start) context.getString(R.string.sports_ends_about, timeFormat.format(Date(end))) else null
-        return if (event.isOnAir(now) && now >= start) listOfNotNull(
-            context.getString(R.string.sports_started_at, timeFormat.format(Date(start))),
-            context.getString(R.string.sports_minutes_in, ((now - start) / 60_000L).toInt()),
-            ends,
-        ).joinToString(" · ")
+        // Add-on only games have no real end time (end == start), and their "start" can be
+        // when the add-on was read; then only the live status is shown.
+        return if (event.isOnAir(now) || event.isScheduledNow(now)) {
+            if (end <= start || now < start) null
+            else listOfNotNull(
+                context.getString(R.string.sports_started_at, timeFormat.format(Date(start))),
+                context.getString(R.string.sports_minutes_in, ((now - start) / 60_000L).toInt()),
+                ends,
+            ).joinToString(" · ")
+        }
         else if (event.isFinished()) null
         else listOfNotNull(context.getString(R.string.sports_starts_at, eventTime(event)), ends).joinToString(" · ")
     }
@@ -513,7 +554,10 @@ internal fun SportsGuidePane(
     fun heroCompetition(event: SportsGuideEvent): String =
         event.competition?.takeIf { it.isNotBlank() } ?: event.fixture?.league?.takeIf { it.isNotBlank() } ?: event.sport.title
     // ---- Filters, as rail entries (TV) or pills (phone) ---------------------------------
-    val railCounts = remember(events, now) { sportsRailCounts(events, now) }
+    val railCounts = remember(events, now, selectedDate, dayExtra, fixtures) {
+        if (selectedDate == null) sportsRailCounts(events, now)
+        else sportsRailCounts(sportsEventsForDay(events, fixtures + dayExtra, selectedDate, zone), now, wholeDay = true)
+    }
     val mineCount = remember(events, follows, now) { mySportsEvents(events, follows, now).size }
     val labelAllSports = stringResource(R.string.sports_filter_all)
     val labelYourTeams = stringResource(R.string.sports_your_teams)
@@ -538,6 +582,7 @@ internal fun SportsGuidePane(
     }.let { entries -> if (entries.none { it.selected }) entries.map { if (it.key == SPORTS_FILTER_ALL) it.copy(selected = true) else it } else entries }
         .map { if (it.selected) it.copy(focus = railFocus) else it }
     fun pickFilter(key: String) {
+        if (key != sportsFilter) scrollTopPending = true
         sportsFilter = key
         // Live means now, so it always shows the overview, whatever day was picked.
         if (key == SPORTS_FILTER_LIVE) dayOffset = null
@@ -581,7 +626,7 @@ internal fun SportsGuidePane(
         androidx.compose.ui.unit.DpSize(width, width * 9f / 16f)
     }
     Row(Modifier.fillMaxSize()) {
-    if (railLayout) SportsRail(
+    if (showRail) SportsRail(
         title = stringResource(R.string.live_quick_sports),
         filters = filterEntries,
         tools = buildList {
@@ -770,7 +815,7 @@ internal fun SportsGuidePane(
                 if (railLayout) SportsPill(labelAllSports, Icons.Default.SportsSoccer, touch = touch,
                     modifier = Modifier.focusRequester(firstFocus).onPreviewKeyEvent { key ->
                         if (key.type == KeyEventType.KeyDown && key.key.mirrorHorizontalForRtl(isRtl) == Key.DirectionLeft) { focusRail(); true } else false
-                    }) { pickFilter(SPORTS_FILTER_ALL); dayOffset = null }
+                    }) { pickFilter(SPORTS_FILTER_ALL); dayOffset = null; scrollTopPending = true; focusFirstPending = true }
             } else {
             // The phone's featured game sits at the top of the list and scrolls away with it.
             val phoneHero = if (touch && !railLayout && selectedDate == null) rows.firstOrNull()?.events?.firstOrNull() else null
@@ -888,7 +933,9 @@ internal fun SportsGuidePane(
                                     // Team cards already name both teams, so their caption is the competition.
                                     if (split) Box(Modifier.padding(end = 6.dp).size(6.dp).clip(androidx.compose.foundation.shape.CircleShape)
                                         .background(if (event.isOnAir(now)) LiveColors.LiveRed else LiveColors.FgMute))
-                                    Text(if (split) heroCompetition(event) else event.displayTitle(),
+                                    // In a competition's own row the competition is the heading; show the day and time.
+                                    val competitionRow = row.id.startsWith("competition-")
+                                    Text(if (split) (if (competitionRow) eventTime(event) else heroCompetition(event)) else event.displayTitle(),
                                         color = if (split) LiveColors.FgDim else LiveColors.Fg,
                                         fontSize = if (touch) 13.sp else 12.sp, lineHeight = 16.sp,
                                         fontWeight = if (split) FontWeight.Medium else FontWeight.SemiBold,
@@ -921,7 +968,9 @@ internal fun SportsGuidePane(
             options = sportsDayOptions(todayDate),
             selectedKey = dayOffset?.toString() ?: SPORTS_DAY_OVERVIEW,
             onPick = { key ->
+                if (key.toIntOrNull() != dayOffset) scrollTopPending = true
                 dayOffset = key.toIntOrNull()
+                lastCard[0] = -1; lastCard[1] = -1
                 if (dayOffset != null && sportsFilter == SPORTS_FILTER_LIVE) sportsFilter = SPORTS_FILTER_ALL
                 focusedOrder[0] = null
                 picker = null
@@ -964,6 +1013,8 @@ internal fun SportsGuidePane(
         SideEffect {
             window?.addFlags(android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND)
             window?.setDimAmount(.65f)
+            // Phones: a bottom sheet, where the thumb is.
+            if (touch && narrow) window?.setGravity(android.view.Gravity.BOTTOM)
         }
         val onAir = event?.isOnAir(now) == true
         val canOpenChannel = onAir || event?.isScheduledNow(now) == true

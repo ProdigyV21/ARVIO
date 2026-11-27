@@ -136,8 +136,9 @@ internal fun sportsHubRows(
 /** Games per sport for the rail: how many, and how many of those are on now. */
 internal data class SportsRailCount(val games: Int, val live: Int)
 
-internal fun sportsRailCounts(events: List<SportsGuideEvent>, now: Long): Map<GuideSport?, SportsRailCount> {
-    val visible = events.filter { it.hasChannels(now) && !it.isFinished() &&
+internal fun sportsRailCounts(events: List<SportsGuideEvent>, now: Long, wholeDay: Boolean = false): Map<GuideSport?, SportsRailCount> {
+    // A picked day counts every game of that day, also finished ones and fixtures without a channel.
+    val visible = if (wholeDay) events.filterNot { it.channelOnly } else events.filter { it.hasChannels(now) && !it.isFinished() &&
         (it.isOnAir(now) || it.isScheduledNow(now) || it.programme.startUtcMillis > now) && !it.channelOnly }
     val result = HashMap<GuideSport?, SportsRailCount>()
     result[null] = SportsRailCount(visible.size, visible.count { it.isOnAir(now) })
@@ -216,6 +217,12 @@ internal fun sportsTeamFallbackColor(name: String, avoid: Color? = null): Color 
 /** The badge colours found so far, by badge URL. 0 means the badge had no usable colour. */
 internal object SportsTeamColors {
     private val cache = java.util.concurrent.ConcurrentHashMap<String, Int>()
+    // The colour a team got from its badge, so a game that arrives without badge art
+    // (cached schedule, add-on only) keeps the same colours instead of flipping.
+    private val byTeam = java.util.concurrent.ConcurrentHashMap<String, Int>()
+
+    fun forTeam(name: String): Color? = byTeam[name.trim().lowercase(Locale.ROOT)]?.let { Color(it) }
+    fun store(name: String, color: Color) { byTeam[name.trim().lowercase(Locale.ROOT)] = color.toArgbInt() }
 
     fun cached(url: String?): Color? = url?.let { cache[it] }?.takeIf { it != 0 }?.let { Color(it) }
     fun known(url: String?): Boolean = url != null && cache.containsKey(url)
@@ -247,8 +254,13 @@ internal fun rememberSportsTeamColor(name: String, badge: String?, avoid: Color?
     }
     // Very dark or washed-out badge colours read as a black or grey card; keep the fallback then.
     val usable = found?.takeIf { it.luminance() in 0.025f..0.8f }
-    return animateColorAsState(usable ?: fallback, tween(320), label = "sports-team-colour")
+    LaunchedEffect(usable, name) { usable?.let { SportsTeamColors.store(name, it) } }
+    val known = remember(name, badge) { SportsTeamColors.forTeam(name) }
+    val target = usable ?: known ?: fallback
+    return animateColorAsState(target, tween(320), label = "sports-team-colour")
 }
+
+private fun Color.toArgbInt(): Int = android.graphics.Color.argb((alpha * 255).toInt(), (red * 255).toInt(), (green * 255).toInt(), (blue * 255).toInt())
 
 private fun Color.readableText(): Color = if (luminance() > 0.5f) Color(0xFF0B0B0D) else Color.White
 
@@ -301,7 +313,7 @@ internal fun SportsSplitArt(
         Text(mark, color = Color.White, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, maxLines = 1,
             fontSize = if (score != null) (if (large) 22.sp else 13.sp) else (if (large) 14.sp else 10.sp),
             lineHeight = if (large) 26.sp else 14.sp,
-            modifier = Modifier.align(Alignment.Center).padding(top = if (large) 22.dp else 12.dp)
+            modifier = Modifier.align(Alignment.TopCenter).padding(top = if (large) 22.dp else 12.dp)
                 .clip(RoundedCornerShape(if (large) 8.dp else 5.dp)).background(Color.Black.copy(alpha = .62f))
                 .padding(horizontal = if (large) 10.dp else 6.dp, vertical = if (large) 4.dp else 2.dp)
                 .testTag(if (score != null) "sports-split-score" else "sports-split-versus"))
@@ -314,14 +326,14 @@ private fun SportsTeamTag(name: String, badge: String?, color: Color, large: Boo
     Column(modifier, horizontalAlignment = if (start) Alignment.Start else Alignment.End) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             if (large && badge != null && start) {
-                SportsTeamBadge(name, badge, 34.dp, 96)
-                Spacer(Modifier.width(8.dp))
+                SportsTeamBadge(name, badge, 26.dp, 96)
+                Spacer(Modifier.width(6.dp))
             }
-            Text(code, color = color, fontWeight = FontWeight.Bold, maxLines = 1, letterSpacing = (-0.5).sp,
-                fontSize = if (large) 40.sp else 22.sp, lineHeight = if (large) 42.sp else 24.sp)
+            Text(code, color = color, fontWeight = FontWeight.Bold, maxLines = 1, softWrap = false, letterSpacing = (-0.5).sp,
+                fontSize = if (large) 30.sp else 21.sp, lineHeight = if (large) 34.sp else 24.sp)
             if (large && badge != null && !start) {
-                Spacer(Modifier.width(8.dp))
-                SportsTeamBadge(name, badge, 34.dp, 96)
+                Spacer(Modifier.width(6.dp))
+                SportsTeamBadge(name, badge, 26.dp, 96)
             }
         }
         // A short underline in the text colour, like a kit stripe.
@@ -459,7 +471,8 @@ private fun SportsRailItem(entry: SportsRailEntry, modifier: Modifier, onClick: 
             Text(entry.label, color = fg, fontSize = 14.sp, lineHeight = 17.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
                 fontWeight = if (entry.selected || focused) FontWeight.SemiBold else FontWeight.Medium)
             if (entry.detail != null || entry.liveDetail != null) Row {
-                entry.detail?.let { Text(it, color = dim, fontSize = 11.sp, lineHeight = 14.sp, maxLines = 1) }
+                entry.detail?.let { Text(it, color = dim, fontSize = 11.sp, lineHeight = 14.sp, maxLines = 1,
+                    overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false)) }
                 entry.liveDetail?.let {
                     Text((if (entry.detail != null) " · " else "") + it, color = if (focused) Color(0xFFC62828) else Color(0xFFFF6B60),
                         fontSize = 11.sp, lineHeight = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
@@ -491,14 +504,14 @@ internal fun SportsJumpChips(
     modifier: Modifier = Modifier,
 ) {
     val isRtl = LocalLayoutDirection.current == LayoutDirection.Rtl
-    val state = rememberLazyListState()
     Row(modifier.fillMaxWidth().padding(start = 18.dp, top = 6.dp, bottom = 2.dp).testTag("sports-jump"),
         verticalAlignment = Alignment.CenterVertically) {
         Text(label.uppercase(Locale.getDefault()), color = LiveColors.FgMute, fontSize = 10.sp, letterSpacing = 1.2.sp,
             fontWeight = FontWeight.SemiBold, maxLines = 1, modifier = Modifier.padding(end = 10.dp))
-        LazyRow(state = state, contentPadding = PaddingValues(horizontal = 6.dp, vertical = 4.dp),
+        // Not lazy: there are only a few chips, and the first must always be there to take focus.
+        Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 6.dp, vertical = 4.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            itemsIndexed(chips, key = { _, chip -> chip.rowId }) { index, chip ->
+            chips.forEachIndexed { index, chip -> key(chip.rowId) {
                 SportsJumpChipView(chip, active = chip.rowId == activeRowId,
                     modifier = Modifier.then(if (index == 0) Modifier.focusRequester(firstFocus) else Modifier)
                         .onPreviewKeyEvent { key ->
@@ -511,7 +524,7 @@ internal fun SportsJumpChips(
                                 else -> false
                             }
                         }.testTag("sports-jump-${chip.rowId}")) { onJump(chip.rowId) }
-            }
+            } }
         }
     }
 }
@@ -663,7 +676,7 @@ private fun SportsHeroButton(action: SportsHeroAction, modifier: Modifier) {
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
         Icon(action.icon, if (action.iconOnly) action.label else null, tint = fg, modifier = Modifier.size(18.dp))
         if (!action.iconOnly) Text(action.label, color = fg, fontSize = 13.sp, lineHeight = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
-            fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(start = 7.dp).widthIn(max = 200.dp))
+            fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(start = 7.dp).widthIn(max = 180.dp))
     }
 }
 
@@ -776,6 +789,7 @@ internal fun SportsPhoneFilters(
 }
 
 /** The featured game on a phone: big team art, then what it is and its actions. */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 internal fun SportsHeroCompact(
     event: SportsGuideEvent,
@@ -809,8 +823,9 @@ internal fun SportsHeroCompact(
                 maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 8.dp).testTag("sports-focus-preview-title"))
             timeLine?.let { Text(it, color = LiveColors.FgDim, fontSize = 12.sp, lineHeight = 15.sp, maxLines = 1,
                 overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 3.dp)) }
-            Row(Modifier.padding(top = 12.dp).horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            // Wraps, so a longer label (Following ...) never pushes a button off the card.
+            FlowRow(Modifier.padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 actions.forEach { action -> SportsHeroButton(action, Modifier.testTag("sports-hero-${action.key}")) }
             }
         }
