@@ -356,7 +356,16 @@ internal fun SportsGuidePane(
             // Scrolling may continue after focus moves; new keys replace this job.
             // On a TV the focused row moves to the top, so no half row (captions without
             // their cards) is left showing under the preview.
-            launch { if (!touchUi) listState.animateScrollToItem(rowIndex) else reveal(listState, rowIndex) }
+            launch {
+                if (touchUi) reveal(listState, rowIndex)
+                else {
+                    // After focus has moved: focus's own bring-into-view scroll would
+                    // otherwise cancel this one and leave a half row on top.
+                    withFrameNanos { }
+                    withFrameNanos { }
+                    listState.animateScrollToItem(rowIndex)
+                }
+            }
             if (visibleRow == null) withFrameNanos { }
             rowStates[row.id]?.let { horizontal ->
                 launch { reveal(horizontal, column) }
@@ -393,7 +402,7 @@ internal fun SportsGuidePane(
     fun eventTime(event: SportsGuideEvent): String {
         if (event.isFinished()) return labelFinished
         if (event.isConfirmedLive(now) || (event.channelOnly && event.isOnAir(now))) return labelLive
-        if (event.isOnAir(now)) return labelOnAir
+        if (event.isOnAir(now)) return labelLive
         if (event.isScheduledNow(now)) return labelScheduledNow
         val date = Instant.ofEpochMilli(event.programme.startUtcMillis).atZone(ZoneId.systemDefault())
         val day = when (date.toLocalDate()) {

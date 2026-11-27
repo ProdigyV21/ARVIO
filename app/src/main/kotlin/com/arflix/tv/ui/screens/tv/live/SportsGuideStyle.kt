@@ -380,7 +380,9 @@ internal fun SportsPickerDialog(
             window?.setDimAmount(.6f)
         }
         val selectedIndex = options.indexOfFirst { it.key == selectedKey }.coerceAtLeast(0)
-        val listState = rememberLazyListState(initialFirstVisibleItemIndex = (selectedIndex - 3).coerceAtLeast(0))
+        // Open on the choice, or on Today when the choice is the first row (Overview).
+        val anchor = if (selectedIndex == 0) options.indexOfFirst { it.key == "0" }.takeIf { it > 0 } ?: 0 else selectedIndex
+        val listState = rememberLazyListState(initialFirstVisibleItemIndex = (anchor - 2).coerceAtLeast(0))
         val initial = remember { FocusRequester() }
         LaunchedEffect(Unit) {
             if (touch) return@LaunchedEffect
