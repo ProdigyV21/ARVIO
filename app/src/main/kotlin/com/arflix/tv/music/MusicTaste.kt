@@ -16,6 +16,8 @@ data class MusicTasteSearch(val query: String, val at: Long = 0)
 data class MusicTaste(
     val artists: List<MusicTasteArtist> = emptyList(),
     val searches: List<MusicTasteSearch> = emptyList(),
+    /** The songs heard last, newest first, for the home's "Recently played" row. */
+    val recent: List<MusicTrack> = emptyList(),
 ) {
     val isEmpty: Boolean get() = artists.isEmpty() && searches.isEmpty()
 
@@ -30,6 +32,10 @@ data class MusicTaste(
         val kept = (listOf(updated) + rest).sortedByDescending { score(it, now) }.take(MAX_ARTISTS)
         return copy(artists = kept)
     }
+
+    /** A song was heard: its artist counts a play, and the song moves to the front of [recent]. */
+    fun recordPlay(track: MusicTrack, now: Long): MusicTaste =
+        recordPlay(track.artist, now).copy(recent = (listOf(track) + recent.filter { it.id != track.id }).take(MAX_RECENT))
 
     fun recordSearch(query: String, now: Long): MusicTaste {
         val trimmed = query.trim().replace(Regex("\\s+"), " ")
@@ -55,11 +61,13 @@ data class MusicTaste(
     fun sanitized(): MusicTaste = MusicTaste(
         artists = (artists ?: emptyList()).filter { it != null && !it.name.isNullOrBlank() },
         searches = (searches ?: emptyList()).filter { it != null && !it.query.isNullOrBlank() },
+        recent = (recent ?: emptyList()).filter { it != null && it.id != null && it.streamUrl != null },
     )
 
     companion object {
         private const val MAX_ARTISTS = 40
         private const val MAX_SEARCHES = 15
+        const val MAX_RECENT = 30
         private const val MIN_QUERY = 3
         private const val ROTATION_POOL = 5
         private const val HALF_LIFE_DAYS = 21.0

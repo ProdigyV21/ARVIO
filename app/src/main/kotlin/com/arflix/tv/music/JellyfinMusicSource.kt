@@ -107,6 +107,15 @@ class JellyfinMusicSource(
         )
     }
 
+    /** Jellyfin's Instant Mix: songs from the same genres and artists as the seed. */
+    override suspend fun radio(seed: MusicTrack): List<MusicTrack> {
+        val url = base().addPathSegment("Items").addPathSegment(seed.id).addPathSegment("InstantMix")
+            .addQueryParameter("UserId", config.userId)
+            .addQueryParameter("Limit", "50")
+            .build()
+        return get(url).list("Items").map { parseTrack(it) }
+    }
+
     override suspend fun reportPlayed(trackId: String) {
         withContext(Dispatchers.IO) {
             val url = base().addPathSegment("Users").addPathSegment(config.userId)

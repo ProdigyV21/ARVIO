@@ -68,7 +68,8 @@ export function parseCollections(json: string | null | undefined): MusicCollecti
       playlists: arr(raw.playlists).filter((p) => p && typeof (p as MusicPlaylist).id === "string").map((p) => {
         const playlist = p as Partial<MusicPlaylist>;
         return { id: playlist.id!, name: playlist.name || "Playlist", tracks: arr(playlist.tracks).map(sanitizeTrack).filter((t): t is MusicTrack => Boolean(t)), origin: playlist.origin ?? null };
-      })
+      }),
+      ...(Array.isArray(raw.pins) ? { pins: raw.pins } : {})
     };
   } catch {
     return emptyCollections();

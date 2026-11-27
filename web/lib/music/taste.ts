@@ -6,7 +6,12 @@ import { normalizeMusicText } from "./text";
 
 export interface MusicTasteArtist { name: string; plays: number; lastPlayed: number }
 export interface MusicTasteSearch { query: string; at: number }
-export interface MusicTaste { artists: MusicTasteArtist[]; searches: MusicTasteSearch[] }
+export interface MusicTaste {
+  artists: MusicTasteArtist[];
+  searches: MusicTasteSearch[];
+  /** The Android app's recently played songs; kept as read so a change made here does not drop them. */
+  recent?: unknown[];
+}
 
 const MAX_ARTISTS = 40;
 const MAX_SEARCHES = 15;
@@ -90,7 +95,8 @@ export function parseTaste(json: string | null | undefined): MusicTaste {
       artists: arr(raw.artists).filter((a) => a && typeof a.name === "string" && a.name.trim())
         .map((a) => ({ name: a.name as string, plays: Number(a.plays) || 1, lastPlayed: Number(a.lastPlayed) || 0 })),
       searches: arr(raw.searches).filter((s) => s && typeof s.query === "string" && s.query.trim())
-        .map((s) => ({ query: s.query as string, at: Number(s.at) || 0 }))
+        .map((s) => ({ query: s.query as string, at: Number(s.at) || 0 })),
+      ...(Array.isArray(raw.recent) ? { recent: raw.recent } : {})
     };
   } catch {
     return emptyTaste();

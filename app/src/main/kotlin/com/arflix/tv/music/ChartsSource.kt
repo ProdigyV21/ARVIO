@@ -210,6 +210,18 @@ class ChartsSource(
         return MusicSearchResult(playlists = playlists)
     }
 
+    /** Deezer's radio of the seed's artist, without the seed itself; played from the user's sources. */
+    override suspend fun radio(seed: MusicTrack): List<MusicTrack> {
+        val name = MusicTaste.primaryArtist(seed.artist).ifBlank { return emptyList() }
+        val wanted = SpotifyImport.normalize(name)
+        val found = get(url("search", "artist", query = mapOf("q" to name, "limit" to "5"))).list("data")
+        val artist = found.firstOrNull { SpotifyImport.normalize(it.str("name").orEmpty()) == wanted } ?: return emptyList()
+        val title = SpotifyImport.normalize(seed.title)
+        return mixTracks(artist.str("id") ?: return emptyList())
+            .filter { SpotifyImport.normalize(it.title) != title }
+            .take(RADIO_SIZE)
+    }
+
     override suspend fun reportPlayed(trackId: String) = Unit
 
     internal fun parsePlaylist(o: JsonObject) = MusicAlbum(
@@ -259,6 +271,7 @@ class ChartsSource(
         private const val MIN_TRACKS = 8
         private const val MAX_PER_ROW = 20
         private const val MAX_TRACKS = 300
+        private const val RADIO_SIZE = 25
 
         /** Whether a composite shelf key ("2/charts:top") is one of these rows. */
         fun isChartShelf(key: String) = key.substringAfter('/').startsWith(SHELF_PREFIX)

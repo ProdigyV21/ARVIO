@@ -94,6 +94,8 @@ export interface MusicCollections {
   favoriteTracks: MusicTrack[];
   favoriteAlbums: MusicAlbum[];
   playlists: MusicPlaylist[];
+  /** The Android app's pinned albums, playlists and artists; kept as read so a change made here does not drop them. */
+  pins?: unknown[];
 }
 
 export const emptyCollections = (): MusicCollections => ({ favoriteTracks: [], favoriteAlbums: [], playlists: [] });

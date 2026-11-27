@@ -93,6 +93,12 @@ interface MusicSource {
     suspend fun albumTracks(albumId: String): List<MusicTrack>
     suspend fun search(query: String): MusicSearchResult
 
+    /**
+     * Songs like [seed], to keep the music going after a song played on its own: the server's
+     * similar songs or instant mix, or an artist radio from the charts. Empty when there are none.
+     */
+    suspend fun radio(seed: MusicTrack): List<MusicTrack> = emptyList()
+
     /** Tells the server a track was listened to, so its play counts (and any scrobbling it does) stay right. */
     suspend fun reportPlayed(trackId: String)
 }
