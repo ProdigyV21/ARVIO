@@ -42,7 +42,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
@@ -225,6 +228,11 @@ fun TvMusicScreen(
     val cardFocus = remember { mutableStateMapOf<String, FocusRequester>() }
     var openedFrom by rememberSaveable { mutableStateOf<String?>(null) }
     val nowPlayingFocus = remember { FocusRequester() }
+    // The selected library tab; the top bar's Down lands here instead of the nearest chip.
+    val contentEntry = remember { FocusRequester() }
+    val enterContent = {
+        if (runCatching { contentEntry.requestFocus() }.isFailure) focusManager.moveFocus(FocusDirection.Down)
+    }
 
     val current = playback.current
     val playerOpen = state.playerOpen && current != null
@@ -264,7 +272,7 @@ fun TvMusicScreen(
                     if (event.type != KeyEventType.KeyDown) false else when (event.key.mirrorHorizontalForRtl(isRtl)) {
                         Key.DirectionLeft -> { topIndex = (topIndex - 1).coerceAtLeast(0); true }
                         Key.DirectionRight -> { topIndex = (topIndex + 1).coerceAtMost(topBarMaxIndex(hasProfile)); true }
-                        Key.DirectionDown -> { focusManager.moveFocus(FocusDirection.Down); true }
+                        Key.DirectionDown -> { enterContent(); true }
                         Key.Enter, Key.DirectionCenter, Key.NumPadEnter -> {
                             when (topBarFocusedItem(topIndex, hasProfile)) {
                                 SidebarItem.HOME -> onNavigateToHome()
@@ -273,7 +281,7 @@ fun TvMusicScreen(
                                 SidebarItem.TV -> onNavigateToTv()
                                 SidebarItem.NEWS -> com.arflix.tv.ui.components.NewsNavigation.open()
                                 SidebarItem.SETTINGS -> onNavigateToSettings()
-                                SidebarItem.MUSIC -> focusManager.moveFocus(FocusDirection.Down)
+                                SidebarItem.MUSIC -> enterContent()
                                 null -> onSwitchProfile()
                             }; true
                         }
@@ -308,6 +316,7 @@ fun TvMusicScreen(
                     openedFrom = openedFrom,
                     onOpenFrom = { openedFrom = it },
                     nowPlayingFocus = nowPlayingFocus,
+                    tabFocus = contentEntry,
                     onSources = { sourcesDialog = true },
                     onTrackMenu = openTrackMenu,
                 )
@@ -406,6 +415,7 @@ private fun TvMusicPages(
     openedFrom: String?,
     onOpenFrom: (String?) -> Unit,
     nowPlayingFocus: FocusRequester,
+    tabFocus: FocusRequester,
     onSources: () -> Unit,
     onTrackMenu: (MusicTrack, List<TvChoice>) -> Unit,
 ) {
@@ -429,7 +439,7 @@ private fun TvMusicPages(
         val key = shown?.let(::pageKey) ?: "library"
         saveable.SaveableStateProvider(key) {
             when (shown) {
-                null -> TvLibrary(state, playback, accent, tab, onTab, viewModel, cardFocus, openedFrom, onOpenFrom, nowPlayingFocus, onSources, onTrackMenu)
+                null -> TvLibrary(state, playback, accent, tab, onTab, viewModel, cardFocus, openedFrom, onOpenFrom, nowPlayingFocus, tabFocus, onSources, onTrackMenu)
                 is MusicPage.Album -> TvAlbumPage(shown, state.collections, playback, accent, viewModel, nowPlayingFocus, onTrackMenu)
                 is MusicPage.Artist -> TvArtistPage(shown, state.collections, playback, accent, viewModel, nowPlayingFocus)
                 is MusicPage.Playlist -> TvPlaylistPage(shown, state.collections, playback, accent, viewModel, nowPlayingFocus, onTrackMenu)
@@ -456,10 +466,10 @@ private fun TvLibrary(
     openedFrom: String?,
     onOpenFrom: (String?) -> Unit,
     nowPlayingFocus: FocusRequester,
+    tabFocus: FocusRequester,
     onSources: () -> Unit,
     onTrackMenu: (MusicTrack, List<TvChoice>) -> Unit,
 ) {
-    val tabFocus = remember { FocusRequester() }
     // Back from a page lands on the card that opened it; otherwise focus starts on the tabs.
     LaunchedEffect(Unit) {
         delay(80)
@@ -927,7 +937,10 @@ private fun PageHeader(
     onShuffle: (() -> Unit)?,
     actions: @Composable () -> Unit,
 ) {
-    Column(Modifier.width(340.dp).fillMaxHeight().padding(start = TvGutter, top = 12.dp)) {
+    Column(
+        Modifier.width(340.dp).fillMaxHeight().verticalScroll(rememberScrollState())
+            .padding(start = TvGutter, top = 12.dp, bottom = 32.dp),
+    ) {
         cover()
         Spacer(Modifier.height(18.dp))
         Text(title, color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis, lineHeight = 31.sp)
@@ -984,7 +997,7 @@ private fun TvAlbumPage(
         Row(Modifier.fillMaxSize()) {
             val count = page.tracks.size.takeIf { it > 0 } ?: album.trackCount
             PageHeader(
-                cover = { Cover(album.coverUrl, Modifier.size(260.dp), shape = RoundedCornerShape(14.dp), icon = Icons.Default.Album) },
+                cover = { Cover(album.coverUrl, Modifier.size(220.dp), shape = RoundedCornerShape(14.dp), icon = Icons.Default.Album) },
                 title = album.name,
                 subtitle = album.artist.takeIf { it.isNotBlank() },
                 onSubtitle = if (album.artistId != null) ({ viewModel.openArtist(album.artistId, album.artist) }) else null,
@@ -1042,7 +1055,7 @@ private fun TvArtistPage(
         PageBackdrop(page.artist.coverUrl)
         Row(Modifier.fillMaxSize()) {
             PageHeader(
-                cover = { Cover(page.artist.coverUrl, Modifier.size(220.dp), shape = CircleShape, icon = Icons.Default.Person) },
+                cover = { Cover(page.artist.coverUrl, Modifier.size(200.dp), shape = CircleShape, icon = Icons.Default.Person) },
                 title = page.artist.name,
                 subtitle = null, onSubtitle = null,
                 meta = page.albums.size.takeIf { it > 0 }?.let { "$it " + stringResource(R.string.music_tab_albums).lowercase() },
@@ -1098,12 +1111,12 @@ private fun TvPlaylistPage(
                 cover = {
                     if (liked) {
                         Box(
-                            Modifier.size(260.dp).clip(RoundedCornerShape(14.dp))
+                            Modifier.size(220.dp).clip(RoundedCornerShape(14.dp))
                                 .background(Brush.linearGradient(listOf(accent.copy(alpha = 0.6f), Surface))),
                             contentAlignment = Alignment.Center,
                         ) { Icon(Icons.Default.Favorite, null, tint = Color.White, modifier = Modifier.size(84.dp)) }
                     } else {
-                        Cover(coverUrl, Modifier.size(260.dp), shape = RoundedCornerShape(14.dp), icon = Icons.AutoMirrored.Filled.QueueMusic)
+                        Cover(coverUrl, Modifier.size(220.dp), shape = RoundedCornerShape(14.dp), icon = Icons.AutoMirrored.Filled.QueueMusic)
                     }
                 },
                 title = name,
@@ -1192,6 +1205,11 @@ private fun TvPlayer(
     var queueOpen by remember { mutableStateOf(false) }
     var sleepDialog by remember { mutableStateOf(false) }
     val playFocus = remember { FocusRequester() }
+    val queueChipFocus = remember { FocusRequester() }
+    val closeQueue = {
+        queueOpen = false
+        runCatching { queueChipFocus.requestFocus() }
+    }
     LaunchedEffect(lyricsOn, track.id) { if (lyricsOn) viewModel.loadLyrics(track) }
     LaunchedEffect(Unit) {
         delay(150)
@@ -1217,7 +1235,7 @@ private fun TvPlayer(
                 when (event.key) {
                     Key.Back, Key.Escape -> {
                         if (event.type == KeyEventType.KeyUp) {
-                            if (queueOpen) queueOpen = false else viewModel.setPlayerOpen(false)
+                            if (queueOpen) closeQueue() else viewModel.setPlayerOpen(false)
                         }
                         true
                     }
@@ -1286,12 +1304,17 @@ private fun TvPlayer(
                     ) { viewModel.cycleRepeat() }
                 }
                 Spacer(Modifier.height(16.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    Modifier.horizontalScroll(rememberScrollState()).padding(vertical = 6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
                     val liked = state.collections.isFavorite(track)
                     TvChip(stringResource(if (liked) R.string.music_unlike else R.string.music_like),
                         if (liked) Icons.Default.Favorite else Icons.Default.FavoriteBorder, selected = liked, accent = accent) { viewModel.toggleFavorite(track) }
                     TvChip(stringResource(R.string.music_lyrics), Icons.Default.Lyrics, selected = lyricsOn, accent = accent, tag = "tv-music-lyrics") { lyricsOn = !lyricsOn }
-                    TvChip(stringResource(R.string.music_queue), Icons.AutoMirrored.Filled.QueueMusic, selected = false, accent = accent, tag = "tv-music-queue") { queueOpen = true }
+                    TvChip(stringResource(R.string.music_queue), Icons.AutoMirrored.Filled.QueueMusic, selected = false, accent = accent,
+                        modifier = Modifier.focusRequester(queueChipFocus), tag = "tv-music-queue") { queueOpen = true }
                     TvChip(sleepLabel(playback) ?: stringResource(R.string.music_sleep_timer), Icons.Default.Bedtime,
                         selected = playback.sleepTimerOn, accent = accent, tag = "tv-music-sleep") { sleepDialog = true }
                     TvIconButton(Icons.Default.MoreVert, stringResource(R.string.music_more), accent) { onTrackMenu(track, emptyList()) }
@@ -1319,7 +1342,7 @@ private fun TvPlayer(
             exit = slideOutHorizontally(tween(240)) { it } + fadeOut(tween(200)),
             modifier = Modifier.align(Alignment.CenterEnd),
         ) {
-            TvQueuePanel(playback, accent, viewModel) { queueOpen = false }
+            TvQueuePanel(playback, accent, viewModel) { closeQueue() }
         }
         if (sleepDialog) {
             val choices = buildList {
@@ -1409,6 +1432,11 @@ private fun TvSeekBar(playback: MusicPlaybackState, accent: Color, onSeek: (Long
         ) {
             Box(Modifier.fillMaxWidth().height(height.dp).clip(RoundedCornerShape(4.dp)).background(Color(0x33EDEDED)))
             Box(Modifier.fillMaxWidth(progress).height(height.dp).clip(RoundedCornerShape(4.dp)).background(if (focused) Color.White else accent))
+            if (focused) {
+                Box(Modifier.fillMaxWidth(progress), contentAlignment = Alignment.CenterEnd) {
+                    Box(Modifier.size(18.dp).clip(CircleShape).background(Color.White))
+                }
+            }
         }
         Row(Modifier.fillMaxWidth()) {
             Text(formatTime(playback.positionMs), color = Faint, fontSize = 14.sp, modifier = Modifier.weight(1f))
@@ -1664,15 +1692,20 @@ private fun TvChip(
     ) { focused ->
         val background = when {
             focused -> Color.White
-            selected -> accent.copy(alpha = 0.22f)
-            else -> Color(0x1FFFFFFF)
+            selected -> Color.White.copy(alpha = 0.26f)
+            else -> Color.Transparent
         }
         val content = when {
             focused -> Color.Black
-            selected -> if (accent == Color.White) Color.White else accent
-            else -> Color.White.copy(alpha = 0.85f)
+            selected -> Color.White
+            else -> Color.White.copy(alpha = 0.62f)
         }
-        Row(Modifier.background(background).padding(horizontal = 18.dp, vertical = 9.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            Modifier.background(background)
+                .then(if (!focused && !selected) Modifier.border(1.dp, Color.White.copy(alpha = 0.18f), RoundedCornerShape(22.dp)) else Modifier)
+                .padding(horizontal = 18.dp, vertical = 9.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
             if (icon != null) {
                 Icon(icon, null, tint = content, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(6.dp))
@@ -1935,10 +1968,19 @@ private fun TvTextField(
     val labelContent: (@Composable () -> Unit)? = if (label.isNotEmpty()) ({ Text(label) }) else null
     val placeholderContent: (@Composable () -> Unit)? = if (placeholder != null) ({ Text(placeholder, color = Faint) }) else null
     val leadingContent: (@Composable () -> Unit)? = if (leading != null) ({ Icon(leading, null, tint = Muted) }) else null
+    val focusManager = LocalFocusManager.current
     OutlinedTextField(
         value = value,
         onValueChange = onValue,
-        modifier = modifier,
+        // A text field keeps the D-pad for its cursor; Up and Down must still move on, or a remote
+        // can never reach the button under it.
+        modifier = modifier.onPreviewKeyEvent { event ->
+            when (event.key) {
+                Key.DirectionDown -> { if (event.type == KeyEventType.KeyDown) focusManager.moveFocus(FocusDirection.Down); true }
+                Key.DirectionUp -> { if (event.type == KeyEventType.KeyDown) focusManager.moveFocus(FocusDirection.Up); true }
+                else -> false
+            }
+        },
         singleLine = true,
         label = labelContent,
         placeholder = placeholderContent,
