@@ -359,10 +359,16 @@ internal const val SECONDARY_AUDIO_ROW = 65
 internal const val AUTO_SOURCE_FAILOVER_ROW = 66
 /** Settings > Playback: open streams in another video app. */
 internal const val EXTERNAL_PLAYER_ROW = 67
+/** Settings > Appearance: show or hide the Music tab. */
+internal const val MUSIC_TAB_ROW = 68
 
 /** The optional tab a navigation switch row controls. */
 internal fun navigationSectionForRow(rowId: Int): String =
-    if (rowId == NEWS_TAB_ROW) "news" else com.arflix.tv.util.OPTIONAL_NAVIGATION_SECTIONS[rowId - 56]
+    when (rowId) {
+        NEWS_TAB_ROW -> "news"
+        MUSIC_TAB_ROW -> "music"
+        else -> com.arflix.tv.util.OPTIONAL_NAVIGATION_SECTIONS[rowId - 56]
+    }
 
 internal fun tvGeneralRowsForSection(section: String): List<Int> {
     return when (section) {
@@ -374,7 +380,8 @@ internal fun tvGeneralRowsForSection(section: String): List<Int> {
         "ai_subtitles" -> listOf(28, 29, 30, 31, 32, 33) + LIVE_AI_SUBS_ROWS
         "playback" -> listOf(10, 11, AUTO_SOURCE_FAILOVER_ROW, EXTERNAL_PLAYER_ROW, 12, 43, 44, 55, SEEK_THUMBNAILS_ROW, 13, 14, 34, 37, 16, 15, 40, 27, 53, 54, 60)
         "appearance" -> listOf(17, 49, 50, 18, 20, 21, 24, 23, 22, 41, 46, 36, 47, 56, 57) +
-            (if (com.arflix.tv.ui.components.KidsNavigation.hideLiveTv) emptyList() else listOf(58)) + 59
+            (if (com.arflix.tv.ui.components.KidsNavigation.hideLiveTv) emptyList() else listOf(58)) + 59 +
+            (if (com.arflix.tv.ui.components.KidsNavigation.hideLiveTv) emptyList() else listOf(MUSIC_TAB_ROW))
         // News: the tab switch, then what the tab shows. Kids profiles never get the section.
         "news" -> if (com.arflix.tv.ui.components.KidsNavigation.hideLiveTv) emptyList() else listOf(NEWS_TAB_ROW, 62, 63)
         "profiles" -> listOf(19)
@@ -1501,7 +1508,7 @@ fun SettingsScreen(
                                             SidebarItem.HOME -> onNavigateToHome()
                                             SidebarItem.TV -> onNavigateToTv()
                                             SidebarItem.WATCHLIST -> onNavigateToWatchlist()
-                                            SidebarItem.NEWS -> com.arflix.tv.ui.components.NewsNavigation.open()
+                                            SidebarItem.NEWS -> com.arflix.tv.ui.components.NewsNavigation.open(); SidebarItem.MUSIC -> com.arflix.tv.ui.components.MusicNavigation.open()
                                             SidebarItem.SETTINGS -> { /* Already here */ }
                                             null -> Unit
                                         }
@@ -1575,7 +1582,7 @@ fun SettingsScreen(
                                                 SEEK_THUMBNAILS_ROW -> viewModel.setSeekThumbnailsEnabled(!uiState.seekThumbnailsEnabled)
                                                 62 -> newsDialog = com.arflix.tv.ui.screens.news.NewsSettingsDialog.TOPICS
                                                 63 -> newsDialog = com.arflix.tv.ui.screens.news.NewsSettingsDialog.SOURCES
-                                                in 56..58, NEWS_TAB_ROW -> {
+                                                in 56..58, NEWS_TAB_ROW, MUSIC_TAB_ROW -> {
                                                     val section = navigationSectionForRow(
                                                         tvGeneralRowsForSection(currentSection)[contentFocusIndex])
                                                     viewModel.setNavigationSectionVisible(section, section in uiState.hiddenNavigationSections)
@@ -7239,7 +7246,7 @@ private fun TvGeneralSettingsRows(
         tvGeneralRowsForSection(section).forEachIndexed { localIndex, rowId ->
             if (localIndex > 0) Spacer(modifier = Modifier.height(10.dp))
             when (rowId) {
-                in 56..58, NEWS_TAB_ROW -> {
+                in 56..58, NEWS_TAB_ROW, MUSIC_TAB_ROW -> {
                     val section = navigationSectionForRow(rowId)
                     SettingsToggleRow(navigationVisibilityTitle(section), stringResource(R.string.settings_profile_scoped),
                         section !in hiddenNavigationSections, focusedIndex == localIndex,

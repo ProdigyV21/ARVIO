@@ -57,6 +57,7 @@ import com.arflix.tv.ui.screens.tv.live.LiveTvScreen
 import com.arflix.tv.ui.screens.watchlist.WatchlistScreen
 import com.arflix.tv.ui.screens.news.NewsScreen
 import com.arflix.tv.ui.screens.music.MusicScreen
+import com.arflix.tv.ui.screens.music.TvMusicScreen
 import com.arflix.tv.ui.screens.watchlist.calendar.ReleaseCalendarViewModel
 import com.arflix.tv.ui.screens.home.HOME_COMING_UP_ROW_ID
 import com.arflix.tv.ui.screens.profile.ProfileSelectionScreen
@@ -268,6 +269,7 @@ fun AppNavigation(
     }
 
     SideEffect { com.arflix.tv.ui.components.NewsNavigation.open = { navigateTopLevel(Screen.News.route) } }
+    SideEffect { com.arflix.tv.ui.components.MusicNavigation.open = { navigateTopLevel(Screen.Music.route) } }
 
     val navigateHome: () -> Unit = {
         // Pop back to the EXISTING Home entry rather than replacing it.
@@ -449,10 +451,26 @@ fun AppNavigation(
             }
         }
 
-        // Music: the user's own music server. A touch-only tab; TV has no entry to it.
+        // Music: the user's own sources. Phones get the touch tab, TV a D-pad layout under the top bar.
         composable(Screen.Music.route) {
             NavigationRailScreen(navigationRailInset, bottomInset = navigationRailBottomInset) {
-                MusicScreen(onFullscreenChanged = onOverlayFullscreenChanged, onBack = { navigateHome() })
+                if (touchNav) {
+                    MusicScreen(onFullscreenChanged = onOverlayFullscreenChanged, onBack = { navigateHome() })
+                } else {
+                    TvMusicScreen(
+                        currentProfile = currentProfile,
+                        onNavigateToHome = { navigateHome() },
+                        onNavigateToSearch = { navigateTopLevel(Screen.Search.route) },
+                        onNavigateToWatchlist = { navigateTopLevel(Screen.Watchlist.route) },
+                        onNavigateToTv = { navigateTopLevel(Screen.Tv.createRoute()) },
+                        onNavigateToSettings = { navigateTopLevel(Screen.Settings.route) },
+                        onSwitchProfile = {
+                            onSwitchProfile()
+                            navController.navigateToProfileSelection()
+                        },
+                        onBack = { navigateHome() },
+                    )
+                }
             }
         }
 

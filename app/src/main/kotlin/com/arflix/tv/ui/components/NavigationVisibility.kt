@@ -24,6 +24,11 @@ object NewsNavigation {
     var open: () -> Unit = {}
 }
 
+/** Opens the Music tab from a TV top bar, like [NewsNavigation]. */
+object MusicNavigation {
+    var open: () -> Unit = {}
+}
+
 /** Brings the phone tab bar back after it slid away on scroll, e.g. when a page switches tab. */
 object MobileTabBar {
     var reveal: () -> Unit = {}
@@ -54,6 +59,7 @@ fun SidebarItem.navigationSection(): String = when (this) {
     SidebarItem.WATCHLIST -> "watchlist"
     SidebarItem.TV -> "tv"
     SidebarItem.NEWS -> "news"
+    SidebarItem.MUSIC -> "music"
     SidebarItem.SETTINGS -> "settings"
 }
 
