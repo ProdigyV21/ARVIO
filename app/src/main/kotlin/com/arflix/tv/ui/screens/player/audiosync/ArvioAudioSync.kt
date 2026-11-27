@@ -76,6 +76,12 @@ internal class ArvioAudioSync(
     /** True while the audio works behind AI translation and has not taken the screen yet. */
     val holdingForConfirmation: Boolean get() = hold
 
+    /** The mapping on screen, once the audio has confirmed it for the subtitle being synced. */
+    val confirmedModel: SubtitleSyncModel? get() = if (confirmed && sessionKey != null) appliedModel else null
+
+    /** The subtitle (its addon url) this session syncs, if any. */
+    val currentSessionKey: String? get() = sessionKey
+
     /** What reaches the screen, and when (see SteadyMapping). */
     private val steady = SteadyMapping()
     private var listeningShown = false
