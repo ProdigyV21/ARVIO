@@ -142,6 +142,40 @@ internal fun sportsHubRows(
     }
 }
 
+/**
+ * A refresh keeps the games already on screen in the order they were shown, and adds
+ * new ones after them. Re-sorting a row under the remote moved the focused card away
+ * (or out of the row) every time the schedule refreshed.
+ */
+internal fun stabilizeSportsRows(previous: List<SportsGuideRow>, next: List<SportsGuideRow>): List<SportsGuideRow> {
+    if (previous.isEmpty()) return next
+    val old = previous.associateBy { it.id }
+    return next.map { row ->
+        val before = old[row.id] ?: return@map row
+        val rank = HashMap<String, Int>(before.events.size * 2)
+        before.events.forEachIndexed { index, event -> rank.putIfAbsent(event.id, index) }
+        val kept = row.events.filter { it.id in rank }.sortedBy { rank.getValue(it.id) }
+        if (kept.size == row.events.size && kept.map { it.id } == row.events.map { it.id }) row
+        else row.copy(events = kept + row.events.filter { it.id !in rank })
+    }
+}
+
+/**
+ * Scores come from a separate feed that lags behind a schedule refresh. Until it catches
+ * up, a game keeps the score it last had (for a few hours), so it doesn't flip to "v".
+ */
+internal fun carrySportsFixtures(events: List<SportsGuideEvent>, memory: MutableMap<String, com.arflix.tv.data.model.SportsFixture>,
+    now: Long): List<SportsGuideEvent> {
+    var changed = false
+    val result = events.map { event ->
+        val fixture = event.fixture
+        if (fixture != null) { memory[event.id] = fixture; event }
+        else memory[event.id]?.takeIf { now - it.observedAt < 4 * 60 * 60_000L }?.let { changed = true; event.copy(fixture = it) } ?: event
+    }
+    if (memory.size > 4000) memory.keys.toList().take(memory.size - 4000).forEach(memory::remove)
+    return if (changed) result else events
+}
+
 /** Games per sport for the rail: how many, and how many of those are on now. */
 internal data class SportsRailCount(val games: Int, val live: Int)
 

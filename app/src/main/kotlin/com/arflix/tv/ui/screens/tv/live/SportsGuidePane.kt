@@ -217,6 +217,10 @@ internal fun SportsGuidePane(
     onOpenMultiview: (() -> Unit)? = null,
     onOpenRecordings: (() -> Unit)? = null,
 ) {
+    // Scores stay on their games while the score feed catches up after a refresh.
+    val fixtureMemory = remember { HashMap<String, com.arflix.tv.data.model.SportsFixture>() }
+    @Suppress("NAME_SHADOWING")
+    val events = remember(events, now) { carrySportsFixtures(events, fixtureMemory, now) }
     // Only a schedule refresh consumes this order. Focus alone must not rebuild
     // every catalogue and invalidate all visible lazy rows.
     val focusedOrder = remember { arrayOfNulls<Pair<String, List<String>>>(1) }
@@ -227,6 +231,8 @@ internal fun SportsGuidePane(
     var presentationLoading by remember { mutableStateOf(cachedPresentation == null) }
     // The events the rows were last built from (identity), to tell "not built yet" from "empty".
     var builtFor by remember { mutableStateOf<List<SportsGuideEvent>?>(null) }
+    // The filter and day the shown rows were built for.
+    var builtView by remember { mutableStateOf<Pair<String, java.time.LocalDate?>?>(null) }
     // null = the overview; otherwise days from today (-7..7).
     // Kept in the process too: watching a game leaves this screen, and coming back must
     // show the same filter and day.
@@ -286,7 +292,11 @@ internal fun SportsGuidePane(
                         } }
                 }
             }
-            if (built != presentationRows) presentationRows = built
+            // The same view refreshed: keep cards where they were. A new filter or day starts fresh.
+            val view = sportsFilter to selectedDate
+            val shown = if (builtView == view) stabilizeSportsRows(presentationRows, built) else built
+            builtView = view
+            if (shown != presentationRows) presentationRows = shown
             builtFor = events
         } finally {
             presentationLoading = false
