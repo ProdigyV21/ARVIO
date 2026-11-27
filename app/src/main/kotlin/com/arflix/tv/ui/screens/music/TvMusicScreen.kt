@@ -92,6 +92,8 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
@@ -179,6 +181,9 @@ import kotlinx.coroutines.delay
 
 private val TvGutter = 48.dp
 private val FocusRing = Color.White
+
+/** False where focus targets must step aside, e.g. the player controls under the queue panel. */
+private val LocalTvFocusEnabled = compositionLocalOf { true }
 
 /** Where the TV Music tab is: the library tabs, plus a search tab the phone keeps in its header. */
 private enum class TvMusicTab { HOME, MINE, ALBUMS, ARTISTS, SEARCH }
@@ -1206,9 +1211,15 @@ private fun TvPlayer(
     var sleepDialog by remember { mutableStateOf(false) }
     val playFocus = remember { FocusRequester() }
     val queueChipFocus = remember { FocusRequester() }
-    val closeQueue = {
-        queueOpen = false
-        runCatching { queueChipFocus.requestFocus() }
+    val closeQueue = { queueOpen = false }
+    // Once the controls can take focus again, it goes back to the Queue chip.
+    var queueWasOpen by remember { mutableStateOf(false) }
+    LaunchedEffect(queueOpen) {
+        if (queueWasOpen && !queueOpen) {
+            delay(50)
+            runCatching { queueChipFocus.requestFocus() }
+        }
+        queueWasOpen = queueOpen
     }
     LaunchedEffect(lyricsOn, track.id) { if (lyricsOn) viewModel.loadLyrics(track) }
     LaunchedEffect(Unit) {
@@ -1216,6 +1227,9 @@ private fun TvPlayer(
         runCatching { playFocus.requestFocus() }
     }
     val appear = remember { MutableTransitionState(false) }.apply { targetState = true }
+    // A BackHandler, not a key handler: with predictive back (Android 13+) the Back key never
+    // reaches compose key events. Back closes the queue first, then the player.
+    BackHandler { if (queueOpen) closeQueue() else viewModel.setPlayerOpen(false) }
 
     // The cover breathes a little while the music plays.
     val coverScale by animateFloatAsState(
@@ -1231,14 +1245,8 @@ private fun TvPlayer(
     Box(
         Modifier.fillMaxSize().background(Color.Black).testTag("tv-music-player")
             .onPreviewKeyEvent { event ->
-                // Back closes the queue first, then the player; the media keys work here as well.
+                // The media keys work here as well (Back is handled by the BackHandler above).
                 when (event.key) {
-                    Key.Back, Key.Escape -> {
-                        if (event.type == KeyEventType.KeyUp) {
-                            if (queueOpen) closeQueue() else viewModel.setPlayerOpen(false)
-                        }
-                        true
-                    }
                     Key.MediaPlayPause, Key.MediaPlay, Key.MediaPause -> { if (event.type == KeyEventType.KeyDown) viewModel.togglePlay(); true }
                     Key.MediaNext, Key.MediaFastForward -> { if (event.type == KeyEventType.KeyDown) viewModel.next(); true }
                     Key.MediaPrevious, Key.MediaRewind -> { if (event.type == KeyEventType.KeyDown) viewModel.previous(); true }
@@ -1252,6 +1260,8 @@ private fun TvPlayer(
                 Brush.horizontalGradient(listOf(tint.copy(alpha = 0.55f), tint.copy(alpha = 0.8f), Color.Black.copy(alpha = 0.92f)))
             )
         )
+        // While the queue is open the controls behind it take no focus, so the remote stays in the panel.
+        CompositionLocalProvider(LocalTvFocusEnabled provides !queueOpen) {
         Row(
             Modifier.fillMaxSize().padding(horizontal = 72.dp, vertical = 56.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -1334,6 +1344,8 @@ private fun TvPlayer(
                     }
                 }
             }
+        }
+
         }
 
         AnimatedVisibility(
@@ -1426,7 +1438,7 @@ private fun TvSeekBar(playback: MusicPlaybackState, accent: Color, onSeek: (Long
                         else -> false
                     }
                 }
-                .focusable()
+                .focusable(enabled = LocalTvFocusEnabled.current)
                 .testTag("tv-music-seek"),
             contentAlignment = Alignment.CenterStart,
         ) {
@@ -1505,7 +1517,7 @@ private fun TvFocusBox(
             .focusRequester(requester)
             .onFocusChanged { if (focused != it.isFocused) { focused = it.isFocused; onFocus(it.isFocused) } }
             .clickable(
-                enabled = enabled,
+                enabled = enabled && LocalTvFocusEnabled.current,
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
                 onClick = onClick,
