@@ -23,14 +23,16 @@ internal data class SportsScanRequest(
     val refresh: Int,
     val retryOnOpen: Int,
 ) {
-    // The guide is the whole in-memory EPG. It is compared on every Live TV
-    // recomposition (is the shown scan current?), so compare it by reference: a new
-    // guide snapshot simply means a new scan request.
+    // The guide is the whole in-memory EPG, and a big playlist hands over a new copy
+    // every time a page of it arrives. Rescanning for each copy kept a TV busy scanning
+    // about half of the time. The key already changes when the guide grows a lot
+    // (guideCoverage), when the backfill ends, and every ten minutes (window), so a new
+    // copy alone is not a new request; the next request carries the newest guide.
     override fun equals(other: Any?): Boolean = this === other || other is SportsScanRequest &&
-        key == other.key && guide === other.guide && refresh == other.refresh && retryOnOpen == other.retryOnOpen
+        key == other.key && refresh == other.refresh && retryOnOpen == other.retryOnOpen
 
     override fun hashCode(): Int =
-        ((key.hashCode() * 31 + System.identityHashCode(guide)) * 31 + refresh) * 31 + retryOnOpen
+        (key.hashCode() * 31 + refresh) * 31 + retryOnOpen
 }
 internal data class SportsScanResult(val request: SportsScanRequest, val events: List<SportsGuideEvent>)
 
@@ -186,7 +188,7 @@ internal enum class GuideSport(val title: String, val asset: String, val terms: 
  * "Next | ...", "- NO EVENT STREAMING -", "24/7 ...". Those are not games.
  */
 internal val guidePlaceholder = Regex(
-    "^\\W*(ended|finished|full ?time|next|up ?next|coming up|upcoming|starts? (at|soon)|no event|offline|closed)\\b|\\bno (live )?events?\\b|\\b24/7\\b|\\bevent (starts|begins)\\b",
+    "^\\W*(ended?|finished|full ?time|next|up ?next|coming up|upcoming|starts? (at|soon)|no event|offline|closed)\\b|\\bno (live )?events?\\b|\\b24/7\\b|\\bevent (starts|begins)\\b|@\\s*(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\\.?\\s+\\d{1,2}\\b",
     RegexOption.IGNORE_CASE)
 
 internal val nonEvent = Regex("\\b(highlights?|hoogtepunten|samenvatting|resumen|replay|re-?run|classic|news|magazine|review|preview|cancelled|canceled|postponed|abandoned|sendepause|off air|no signal|best of|teleshopping|infomercial|documentary)\\b", RegexOption.IGNORE_CASE)
@@ -269,7 +271,15 @@ internal class SportsProgrammeResolver {
     }
     fun resolve(programme: IptvProgram, fallback: GuideSport?): Metadata? {
         val key = Key(programme.title, programme.category, fallback)
-        if (cache.containsKey(key)) return cache[key]
+        val metadata = if (cache.containsKey(key)) cache[key] else classify(programme, fallback).also { cache[key] = it }
+        // A team game is over in a few hours. A guide block of half a day or more with a
+        // matchup title is an event channel's placeholder, not a game on now.
+        return metadata?.takeUnless {
+            (it.sport in timedTeamSports || (it.sport == GuideSport.OTHER && eventMatchup.containsMatchIn(programme.title))) &&
+                programme.endUtcMillis - programme.startUtcMillis > 6 * 60 * 60_000L
+        }
+    }
+    private fun classify(programme: IptvProgram, fallback: GuideSport?): Metadata? {
         val metadata = if (nonEvent.containsMatchIn(programme.title) || guidePlaceholder.containsMatchIn(programme.title)) null else {
             val text = "${programme.category.orEmpty()} ${programme.title}"
             // Channel genre alone does not make advertising or downtime a sporting event.
@@ -279,8 +289,11 @@ internal class SportsProgrammeResolver {
             })
                 ?.let { Metadata(it, sportsEventIdentity(programme.title), competition(text)) }
         }
-        cache[key] = metadata
         return metadata
+    }
+    private companion object {
+        val timedTeamSports = setOf(GuideSport.FOOTBALL, GuideSport.BASKETBALL, GuideSport.AMERICAN_FOOTBALL, GuideSport.BASEBALL,
+            GuideSport.HOCKEY, GuideSport.RUGBY, GuideSport.AUSTRALIAN_FOOTBALL, GuideSport.VOLLEYBALL, GuideSport.HANDBALL)
     }
 }
 
