@@ -131,4 +131,22 @@ class SportsHubTest {
         assertEquals(150, live.total)
         assertEquals(150, sportsRailCounts(many, now)[null]?.live)
     }
+
+    @Test fun endedTitlesDatedReplaysAndAllDayBlocksAreNotGames() {
+        assertTrue(guidePlaceholder.containsMatchIn("End | Cardinals - Cubs | Major League Baseball 2026"))
+        assertTrue(guidePlaceholder.containsMatchIn("Eagles @ Cowboys @ Nov 26 22:29 :TeliaPlay SE 59"))
+        assertFalse(guidePlaceholder.containsMatchIn("Endurance: Le Mans 24h"))
+        val resolver = SportsProgrammeResolver()
+        val block = IptvProgram("Sunderland - Jagiellonia", startUtcMillis = now - 17 * hour, endUtcMillis = now + hour)
+        assertEquals(null, resolver.resolve(block, GuideSport.FOOTBALL))
+        assertEquals(null, resolver.resolve(block, GuideSport.OTHER))
+        val game = IptvProgram("Sunderland - Jagiellonia", startUtcMillis = now - hour, endUtcMillis = now + hour)
+        assertEquals(GuideSport.FOOTBALL, resolver.resolve(game, GuideSport.FOOTBALL)?.sport)
+    }
+
+    @Test fun aNewGuideCopyIsNotANewScan() {
+        val key = SportsScheduleKey("p", "all", 1L, emptySet(), false, 1L, 3)
+        assertEquals(SportsScanRequest(key, emptyMap(), 0, 0), SportsScanRequest(key, mapOf("a" to com.arflix.tv.data.model.IptvNowNext()), 0, 0))
+        assertNotEquals(SportsScanRequest(key, emptyMap(), 0, 0), SportsScanRequest(key.copy(window = 2L), emptyMap(), 0, 0))
+    }
 }
