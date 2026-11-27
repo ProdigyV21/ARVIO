@@ -262,6 +262,8 @@ fun DetailsScreen(
     initialEpisode: Int? = null,
     autoPlay: Boolean = false,
     onAutoPlayHandled: () -> Unit = {},
+    /** The top-level tab this page was opened from; its top bar highlights that tab. */
+    originTab: SidebarItem = SidebarItem.HOME,
     viewModel: DetailsViewModel = hiltViewModel(),
     currentProfile: com.arflix.tv.data.model.Profile? = null,
     onNavigateToPlayer: (MediaType, Int, EpisodeIdentity?, String?, String?, String?, String?, Long?, String?) -> Unit,
@@ -332,7 +334,7 @@ fun DetailsScreen(
     var isSidebarFocused by remember { mutableStateOf(false) }
     val hasProfile = currentProfile != null
     val maxSidebarIndex = topBarMaxIndex(hasProfile)
-    var sidebarFocusIndex by remember { mutableIntStateOf(com.arflix.tv.ui.components.topBarSelectedIndex(SidebarItem.HOME, hasProfile)) }
+    var sidebarFocusIndex by remember { mutableIntStateOf(com.arflix.tv.ui.components.topBarSelectedIndex(originTab, hasProfile).takeIf { it >= 0 } ?: com.arflix.tv.ui.components.topBarSelectedIndex(SidebarItem.HOME, hasProfile)) }
     com.arflix.tv.ui.components.ReconcileTopBarFocus(sidebarFocusIndex, hasProfile) { sidebarFocusIndex = it }
 
     // Stream Selector state
@@ -1082,7 +1084,7 @@ fun DetailsScreen(
 
         if (!LocalDeviceType.current.isTouchDevice()) {
             AppTopBar(
-                selectedItem = SidebarItem.HOME,
+                selectedItem = originTab,
                 isFocused = isSidebarFocused,
                 focusedIndex = sidebarFocusIndex,
                 profile = currentProfile
@@ -2843,9 +2845,21 @@ private fun DetailsSeasonRail(
 ) {
     val seasonRowState = rememberLazyListState()
     val seasonItems = remember(totalSeasons) { (1..totalSeasons).toList() }
+    // When every season tab already fits on screen, keep the row still: pinning the focused tab
+    // to the left scrolled Season 1 out of view although there was room on the right.
+    val allSeasonsFit by remember {
+        derivedStateOf {
+            val info = seasonRowState.layoutInfo
+            val last = info.visibleItemsInfo.lastOrNull()
+            info.totalItemsCount > 0 && seasonRowState.firstVisibleItemIndex == 0 &&
+                seasonRowState.firstVisibleItemScrollOffset == 0 && last != null &&
+                last.index == info.totalItemsCount - 1 &&
+                last.offset + last.size <= info.viewportEndOffset
+        }
+    }
     HomeStyleRowAutoScroll(
         rowState = seasonRowState,
-        isCurrentRow = focusSectionForUi == FocusSection.SEASONS,
+        isCurrentRow = focusSectionForUi == FocusSection.SEASONS && !allSeasonsFit,
         focusedItemIndex = seasonIndex,
         totalItems = totalSeasons,
         itemWidth = 96.dp,

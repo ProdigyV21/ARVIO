@@ -250,6 +250,12 @@ fun AppNavigation(
     // Live TV carries no age ratings: a kids profile loses the tab and every way into it.
     val isKidsProfile = currentProfile?.isKidsProfile == true
     SideEffect { KidsNavigation.hideLiveTv = isKidsProfile }
+    // The tab a Details page was opened from, so its top bar highlights that tab, not Home.
+    val topLevelRoute = navController.currentBackStackEntryAsState().value?.destination?.route?.substringBefore('?')
+    var lastTopLevelTab by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(Screen.Home.route) }
+    if (topLevelRoute != null && topLevelRoute in DETAILS_ORIGIN_TABS && topLevelRoute != lastTopLevelTab) {
+        lastTopLevelTab = topLevelRoute
+    }
     val navigateTopLevel: (String) -> Unit = navigate@{ route ->
         if (isKidsProfile && route.substringBefore('?') in com.arflix.tv.util.KIDS_HIDDEN_NAVIGATION_SECTIONS) return@navigate
         navController.navigate(route) {
@@ -720,6 +726,7 @@ fun AppNavigation(
             val mediaType = if (mediaTypeStr == "tv") MediaType.TV else MediaType.MOVIE
 
             DetailsScreen(
+                originTab = detailsOriginTab(lastTopLevelTab),
                 onFullscreenChanged = onOverlayFullscreenChanged,
                 mediaType = mediaType,
                 mediaId = mediaId,
@@ -938,3 +945,14 @@ private val TopLevelRoutes = setOf("home", "search", "watchlist", "tv", "music",
 
 internal fun isTopLevelRoute(route: String?): Boolean =
     route == null || route.substringBefore('?').substringBefore('/') in TopLevelRoutes
+
+/** Top-level routes a Details page can be opened from (and highlights in its top bar). */
+private val DETAILS_ORIGIN_TABS = setOf("home", "search", "watchlist", "tv", "news")
+
+private fun detailsOriginTab(route: String): com.arflix.tv.ui.components.SidebarItem = when (route) {
+    "search" -> com.arflix.tv.ui.components.SidebarItem.SEARCH
+    "watchlist" -> com.arflix.tv.ui.components.SidebarItem.WATCHLIST
+    "tv" -> com.arflix.tv.ui.components.SidebarItem.TV
+    "news" -> com.arflix.tv.ui.components.SidebarItem.NEWS
+    else -> com.arflix.tv.ui.components.SidebarItem.HOME
+}
