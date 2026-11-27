@@ -213,4 +213,20 @@ class SportsHubTest {
         assertEquals(GuideSport.FOOTBALL, sport("Arsenal vs Chelsea"))
         assertEquals(GuideSport.BASKETBALL, GuideSport.fromText("College Basketball: Louisville vs Kentucky"))
     }
+
+    @Test
+    fun kickboxingAndReplaysStayOutOfBoxing() {
+        assertEquals(GuideSport.MMA, GuideSport.fromText("Eleven Sport Fighting Kick Boxing"))
+        assertEquals(GuideSport.MMA, GuideSport.fromText("Glory Kickboxing 99"))
+        assertEquals(GuideSport.BOXING, GuideSport.fromText("Boxing: Usyk vs Fury"))
+        assertTrue(nonEvent.containsMatchIn("IT: Eleven Sport Fighting Kick Boxing Live + Replica"))
+    }
+
+    @Test
+    fun eventChannelNamedAfterAnotherGameIsNotOffered() {
+        assertTrue(sportsChannelNamesOtherEvent("Sharjah vs Dubai", "US: VTSU_Castleton vs Eastern Nazarene"))
+        assertFalse(sportsChannelNamesOtherEvent("Castleton vs Eastern Nazarene", "US: VTSU_Castleton vs Eastern Nazarene"))
+        assertFalse(sportsChannelNamesOtherEvent("Sharjah vs Dubai", "UK: Sky Sports - Cricket"))
+        assertFalse(sportsChannelNamesOtherEvent("Arsenal vs Chelsea", "Sky Sports Main Event"))
+    }
 }
