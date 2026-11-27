@@ -151,12 +151,12 @@ internal fun attachSportsArtwork(events: List<SportsGuideEvent>, artwork: List<S
 
 internal enum class GuideSport(val title: String, val asset: String, val terms: Regex) {
     FOOTBALL("Football", "football", Regex("\\b(football|soccer|premier league|champions league|la liga|eredivisie|bundesliga)\\b")),
-    BASKETBALL("Basketball", "basketball", Regex("\\b(basketball|nba|wnba|euroleague)\\b")),
+    BASKETBALL("Basketball", "basketball", Regex("\\b(basketball|nba|wnba|euroleague|ncaab|ncaam|ncaaw|college basketball|march madness)\\b")),
     F1("Formula 1", "motor_sports", Regex("\\b(f1|formula 1|formula one)\\b")),
     TENNIS("Tennis", "tennis", Regex("\\b(tennis|atp|wta|wimbledon)\\b")),
     MMA("MMA", "fight", Regex("\\b(mma|ufc|bellator|pfl)\\b")),
     BOXING("Boxing", "fight", Regex("\\b(boxing|boxen)\\b")),
-    AMERICAN_FOOTBALL("American football", "american_football", Regex("\\b(american football|nfl|ncaa football)\\b")),
+    AMERICAN_FOOTBALL("American football", "american_football", Regex("\\b(american football|nfl|ncaa football|ncaaf|college football|cfb)\\b")),
     CRICKET("Cricket", "cricket", Regex("\\b(cricket|t20|t20i|odi|ipl|big bash|bbl|rcb|csk|kkr|srh|pbks|lsg)\\b")),
     BASEBALL("Baseball", "baseball", Regex("\\b(baseball|mlb)\\b")),
     HOCKEY("Ice hockey", "hockey", Regex("\\b(ice hockey|hockey|nhl)\\b")),
@@ -217,6 +217,7 @@ internal fun sportsTitleIsChannelName(title: String, channelName: String): Boole
 }
 
 internal val nonEvent = Regex("\\b(highlights?|hoogtepunten|samenvatting|resumen|replay|re-?run|classic|news|magazine|review|preview|cancelled|canceled|postponed|abandoned|sendepause|off air|no signal|best of|teleshopping|infomercial|documentary)\\b", RegexOption.IGNORE_CASE)
+private val collegeRanking = Regex("(^|[\\s|:])#\\d{1,2}\\s+\\p{L}")
 private val eventMatchup = Regex("\\s+(?:vs?\\.?|versus|at|[-–—])\\s+", RegexOption.IGNORE_CASE)
 private val liveEventCue = Regex("\\b(live|on air|match|game|race|grand prix|qualifying|tournament|coverage|championship|event)\\b", RegexOption.IGNORE_CASE)
 private val genericSportsChannel = Regex("\\b(sports?|espn|eurosport|dazn|bein sports?|sky sports?|bt sports?|tnt sports?|fox sports?|supersports?|sportsnet|star sports?|eleven sports?|willow)\\b", RegexOption.IGNORE_CASE)
@@ -294,7 +295,7 @@ internal class SportsProgrammeResolver {
     data class Metadata(val sport: GuideSport, val identity: String, val competition: String?)
     private data class Key(val title: String, val category: String?, val fallback: GuideSport?)
     private val cache = object : LinkedHashMap<Key, Metadata?>(512, .75f, true) {
-        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Key, Metadata?>?) = size > 4096
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Key, Metadata?>?) = size > 32_768
     }
     fun resolve(programme: IptvProgram, fallback: GuideSport?): Metadata? {
         val key = Key(programme.title, programme.category, fallback)
@@ -313,6 +314,10 @@ internal class SportsProgrammeResolver {
             (GuideSport.fromText(text) ?: fallback?.takeIf {
                 eventMatchup.containsMatchIn(programme.title) ||
                     (it == GuideSport.OTHER && liveEventCue.containsMatchIn(programme.title))
+            }?.let { sport ->
+                // "#8 Tennessee vs #1 Ohio State": poll rankings are US college sport, not
+                // soccer, even on a channel filed under Football.
+                if (sport == GuideSport.FOOTBALL && collegeRanking.containsMatchIn(programme.title)) GuideSport.AMERICAN_FOOTBALL else sport
             })
                 ?.let { Metadata(it, sportsEventIdentity(programme.title), competition(text)) }
         }

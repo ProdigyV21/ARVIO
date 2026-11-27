@@ -201,4 +201,13 @@ class SportsHubTest {
         assertEquals(null, sportsCountryFlag("Alanyaspor"))
         assertTrue(sportsCountryFlag("England")!!.startsWith("\uD83C\uDFF4"))
     }
+
+    @Test fun rankedCollegeGamesAreNotSoccer() {
+        val resolver = SportsProgrammeResolver()
+        fun sport(title: String) = resolver.resolve(IptvProgram(title, startUtcMillis = now, endUtcMillis = now + 3 * hour), GuideSport.FOOTBALL)?.sport
+        assertEquals(GuideSport.AMERICAN_FOOTBALL, sport("#8 Tennessee vs #1 Ohio State"))
+        assertEquals(GuideSport.AMERICAN_FOOTBALL, sport("NCAAF: #4 Findlay vs #1 Ferris St"))
+        assertEquals(GuideSport.FOOTBALL, sport("Arsenal vs Chelsea"))
+        assertEquals(GuideSport.BASKETBALL, GuideSport.fromText("College Basketball: Louisville vs Kentucky"))
+    }
 }
