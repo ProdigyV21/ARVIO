@@ -1316,10 +1316,13 @@ private fun TvPlayer(
                     ) { viewModel.cycleRepeat() }
                 }
                 Spacer(Modifier.height(16.dp))
-                Row(
-                    Modifier.horizontalScroll(rememberScrollState()).padding(vertical = 6.dp),
+                // Wraps instead of scrolling: in a scrolled row the last chip sat cut off at the
+                // column edge ("Sleep tin") until it was focused.
+                @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+                androidx.compose.foundation.layout.FlowRow(
+                    Modifier.padding(vertical = 6.dp),
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    verticalAlignment = Alignment.CenterVertically,
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
                     val liked = state.collections.isFavorite(track)
                     TvIconButton(if (liked) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
