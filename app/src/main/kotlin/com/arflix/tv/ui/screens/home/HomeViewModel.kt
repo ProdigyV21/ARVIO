@@ -586,6 +586,7 @@ class HomeViewModel @Inject constructor(
         const val FAVORITE_TV_CATEGORY_ID = "favorite_tv"
         /** Unfiltered titles a kids top-up may load for one grid before it gives up. */
         private const val MAX_KIDS_TOP_UP_ITEMS = 600
+        internal const val HOME_RAIL_MAX_ITEMS = 60
         /** Prefix used in MediaItem.status to identify IPTV items. */
         const val IPTV_STATUS_PREFIX = "iptv:"
         private const val TOP_10_ITEM_LIMIT = 10
@@ -4310,8 +4311,14 @@ class HomeViewModel @Inject constructor(
         loadNextHomeRowPage(categoryId)
     }
 
-    /** Next page for a home rail: rails page endlessly while the catalog has more. */
+    /**
+     * Next page for a home rail. A rail stops growing at [HOME_RAIL_MAX_ITEMS] titles so its
+     * trailing "View all" card stays reachable: with endless paging the card kept moving away
+     * as new posters arrived. The "View all" grid itself still pages through the whole catalog.
+     */
     fun loadNextHomeRowPage(categoryId: String) {
+        val category = _uiState.value.categories.firstOrNull { it.id == categoryId } ?: return
+        if (category.items.count { !it.isPlaceholder } >= HOME_RAIL_MAX_ITEMS) return
         loadNextPageForCategory(categoryId)
     }
 
