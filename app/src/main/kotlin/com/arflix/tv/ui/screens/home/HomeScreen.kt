@@ -2682,7 +2682,7 @@ internal fun MobileHeroCarousel(
                 if (!rd.isNullOrBlank()) {
                     runCatching {
                         val parsed = java.text.SimpleDateFormat("d MMM yyyy", java.util.Locale.ENGLISH).parse(rd)
-                        parsed?.let { java.text.SimpleDateFormat("d MMM", java.util.Locale.ENGLISH).format(it) }
+                        parsed?.let { java.text.SimpleDateFormat("d MMM", java.util.Locale.getDefault()).format(it) }
                     }.getOrNull() ?: item.year
                 } else {
                     item.year

@@ -888,7 +888,13 @@ class DetailsViewModel @Inject constructor(
 
                 // Map genre IDs to names
                 val genreMap = if (mediaType == MediaType.TV) tvGenres else movieGenres
-                val genreNames = mergedItem.genreIds.mapNotNull { genreMap[it] }.take(4)
+                // In the app's language, as the Home hero shows them; the English map only for
+                // ids without a translated name.
+                val genreNames = mergedItem.genreIds.mapNotNull { id ->
+                    val res = if (mediaType == MediaType.TV) com.arflix.tv.ui.components.tvGenreNameRes(id)
+                        else com.arflix.tv.ui.components.movieGenreNameRes(id)
+                    res?.let { youTubeText(it) } ?: genreMap[id]
+                }.take(4)
 
                 // Get language name
                 val languageName = mergedItem.originalLanguage?.let { languages[it] ?: it.uppercase() }

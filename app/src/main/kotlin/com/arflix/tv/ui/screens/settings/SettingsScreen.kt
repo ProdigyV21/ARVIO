@@ -3344,7 +3344,7 @@ fun SettingsScreen(
 
         if (showContentLanguagePicker) {
             SubtitlePickerModal(
-                title = stringResource(R.string.content_language),
+                title = stringResource(R.string.app_language),
                 options = TMDB_LANGUAGES.map { it.second },
                 selected = TMDB_LANGUAGES.firstOrNull { it.first == uiState.contentLanguage }?.second ?: "English",
                 focusedIndex = contentLanguagePickerIndex,
@@ -5139,7 +5139,7 @@ private fun MobileSettingsMainPage(
             MobileSettingsCategory(title = stringResource(R.string.settings_section_languages)) {
                 MobileSettingsRow(
                     icon = Icons.Default.Language,
-                    title = stringResource(R.string.content_language),
+                    title = stringResource(R.string.app_language),
                     value = TMDB_LANGUAGES.firstOrNull { it.first == uiState.contentLanguage }?.second ?: uiState.contentLanguage,
                     isToggle = false,
                     isFocused = false,

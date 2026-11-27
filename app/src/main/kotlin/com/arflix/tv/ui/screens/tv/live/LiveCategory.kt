@@ -422,7 +422,8 @@ internal fun tidyPlaylistGroupName(raw: String): String =
 /** "%d channels" with a singular for one channel, in the languages whose wording we know. */
 @Composable
 fun liveChannelsLabel(count: Int): String =
-    singularChannelLabel(stringResource(R.string.live_channels_count, count), count)
+    if (count == 1) stringResource(R.string.live_channel_count_one, count)
+    else singularChannelLabel(stringResource(R.string.live_channels_count, count), count)
 
 internal fun singularChannelLabel(label: String, count: Int): String =
     if (count != 1) label else when (label) {

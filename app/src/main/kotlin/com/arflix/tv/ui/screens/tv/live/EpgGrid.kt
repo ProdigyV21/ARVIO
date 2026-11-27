@@ -161,7 +161,7 @@ fun EpgGrid(
     onVisibleChannelRange: (Int, Int) -> Unit = { _, _ -> },
     channelColumnWidthOverride: Dp? = null,
     playbackQuality: LivePlaybackQuality? = null,
-    categoryTitle: String = "All channels",
+    categoryTitle: String = "All Channels",
     sidebarOpen: Boolean = false,
     onBackToGroups: (() -> Unit)? = null,
     onOpenSearch: (() -> Unit)? = null,

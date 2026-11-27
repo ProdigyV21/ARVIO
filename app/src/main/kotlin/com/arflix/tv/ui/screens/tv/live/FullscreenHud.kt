@@ -185,6 +185,7 @@ fun FullscreenHud(
     }
 
     var clockMillis by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    val appClockFormat = rememberAppClockFormat()
     LaunchedEffect(Unit) {
         while (true) {
             clockMillis = System.currentTimeMillis()
@@ -354,7 +355,7 @@ fun FullscreenHud(
                 }
 
                 Text(
-                    text = formatPlayerHeaderClock(context, clockMillis),
+                    text = formatPlayerHeaderClock(context, clockMillis, appClockFormat),
                     style = LiveType.TimeMono.copy(
                         color = Color.White.copy(alpha = 0.9f),
                         fontSize = 16.sp,

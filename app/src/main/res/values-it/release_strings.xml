@@ -369,7 +369,7 @@
     <string name="filter_subtitles_desc">Mostra solo i sottotitoli nella tua lingua preferita</string>
     <string name="use_forced_subtitles">Sottotitoli forzati</string>
     <string name="use_forced_subtitles_desc">Preferisci i sottotitoli forzati quando l\'audio corrisponde alla lingua dei sottotitoli; se non ce ne sono, non seleziona nulla</string>
-    <string name="auto_play_next">Riproduzione automatica successivo</string>
+    <string name="auto_play_next">Riproduzione automatica dell\'episodio successivo</string>
     <string name="next_episode">Prossimo episodio</string>
     <string name="search_discover_load_failed">Impossibile caricare i titoli</string>
     <string name="partner_link_loading">Apertura dei dettagli del titolo…</string>
@@ -387,7 +387,7 @@
     <string name="subtitle_style">Stile sottotitoli</string>
     <string name="subtitle_font">Carattere sottotitoli</string>
     <string name="subtitle_offset">Posizione sottotitoli</string>
-    <string name="auto_play_next_title">Riproduzione automatica successivo</string>
+    <string name="auto_play_next_title">Riproduzione automatica dell\'episodio successivo</string>
     <string name="autoplay">Riproduzione automatica</string>
     <string name="auto_play_min_quality">Qualità minima riproduzione automatica</string>
     <string name="auto_play_max_quality">Qualità massima riproduzione automatica</string>

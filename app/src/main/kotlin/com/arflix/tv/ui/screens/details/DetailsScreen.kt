@@ -4312,7 +4312,9 @@ internal fun EpisodeCard(
     }
 }
 
-private val episodeAirDateFormatter = DateTimeFormatter.ofPattern("d MMM yyyy", Locale.US)
+/** "13 okt. 2026" in the app's language (Locale.getDefault() follows the app language). */
+private val episodeAirDateFormatter: DateTimeFormatter
+    get() = DateTimeFormatter.ofPattern("d MMM yyyy", Locale.getDefault())
 
 /**
  * Dates ("15 Feb 2015") and runtimes ("1h 42m", "42m") are written in English. In a right-to-left
@@ -4344,11 +4346,15 @@ internal fun formatEpisodeAirDateLabel(rawDate: String): String? {
         return localDate.format(episodeAirDateFormatter)
     }
 
+    // Release dates are stored as English "13 Oct 2026" (MediaRepository.formatDate).
+    runCatching { LocalDate.parse(value, DateTimeFormatter.ofPattern("d MMM yyyy", Locale.ENGLISH)) }
+        .getOrNull()?.let { return it.format(episodeAirDateFormatter) }
+
     return try {
         val parser = SimpleDateFormat("yyyy-MM-dd", Locale.US)
         parser.isLenient = false
         val date = parser.parse(value) ?: return value
-        SimpleDateFormat("d MMM yyyy", Locale.US).format(date)
+        SimpleDateFormat("d MMM yyyy", Locale.getDefault()).format(date)
     } catch (_: Exception) {
         value
     }

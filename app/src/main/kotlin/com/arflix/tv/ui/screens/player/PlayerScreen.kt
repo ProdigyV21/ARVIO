@@ -401,7 +401,9 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
         val previewBlock = com.arflix.tv.ui.components.TrailerPlaybackPool.fullPlayback()
         onDispose { previewBlock.close() }
     }
-    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val rawUiState by viewModel.uiState.collectAsStateWithLifecycle()
+    // A YouTube clip from a title's sources shows its own title and tracks (see asYouTubeClipView).
+    val uiState = remember(rawUiState) { rawUiState.asYouTubeClipView() }
     val latestUiState by rememberUpdatedState(uiState)
     val startupTrace = remember { com.arflix.tv.ui.screens.player.engine.exoplayer.PlaybackStartupTrace() }
     val clockFormat = rememberPlayerClockFormat()
