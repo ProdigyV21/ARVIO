@@ -235,8 +235,10 @@ fun TvMusicScreen(
     val nowPlayingFocus = remember { FocusRequester() }
     // The selected library tab; the top bar's Down lands here instead of the nearest chip.
     val contentEntry = remember { FocusRequester() }
+    // Only the library has a tab row; pages, the source form and the empty state use the nearest target.
+    val libraryShown = state.hasSources && !addingSource && state.pages.isEmpty()
     val enterContent = {
-        if (runCatching { contentEntry.requestFocus() }.isFailure) focusManager.moveFocus(FocusDirection.Down)
+        if (!libraryShown || runCatching { contentEntry.requestFocus() }.isFailure) focusManager.moveFocus(FocusDirection.Down)
     }
 
     val current = playback.current
