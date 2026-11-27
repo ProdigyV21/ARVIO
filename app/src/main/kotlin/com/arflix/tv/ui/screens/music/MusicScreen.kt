@@ -45,6 +45,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
+import androidx.compose.material.icons.automirrored.filled.PlaylistPlay
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
@@ -117,6 +118,8 @@ import com.arflix.tv.music.SearchSection
 import com.arflix.tv.music.MusicArtist
 import com.arflix.tv.music.MusicCollections
 import com.arflix.tv.music.MusicPlaylist
+import com.arflix.tv.music.MusicPin
+import com.arflix.tv.music.MusicPinType
 import com.arflix.tv.music.MusicPlaybackState
 import com.arflix.tv.music.MusicServerType
 import com.arflix.tv.music.MusicTrack
@@ -124,9 +127,9 @@ import com.arflix.tv.ui.components.LocalBottomBarInset
 import com.arflix.tv.ui.skin.resolveAccentColor
 import com.arflix.tv.ui.theme.BackgroundElevated
 
-private val Surface = Color(0xFF141414)
-private val Muted = Color(0xB3EDEDED)
-private val Faint = Color(0x80EDEDED)
+internal val Surface = Color(0xFF141414)
+internal val Muted = Color(0xB3EDEDED)
+internal val Faint = Color(0x80EDEDED)
 private val MiniPlayerHeight = 64.dp
 
 /**
@@ -183,7 +186,7 @@ internal fun MusicContent(
                     (if (playback.current != null) MiniPlayerHeight + 8.dp else 0.dp) + 16.dp
                 when (val page = state.pages.lastOrNull()) {
                     is MusicPage.Album -> AlbumPageView(page, state.collections, playback, accent, bottomPadding, viewModel)
-                    is MusicPage.Artist -> ArtistPageView(page, accent, bottomPadding, viewModel)
+                    is MusicPage.Artist -> ArtistPageView(page, state.collections, accent, bottomPadding, viewModel)
                     is MusicPage.Playlist -> PlaylistPageView(page, state.collections, playback, accent, bottomPadding, viewModel)
                     null -> LibraryView(state, playback, accent, bottomPadding, viewModel) { addingSource = true }
                 }
@@ -210,7 +213,7 @@ internal fun MusicContent(
             enter = slideInVertically { it },
             exit = slideOutVertically { it },
         ) {
-            if (current != null) FullPlayer(current, playback, state.collections, accent, viewModel)
+            if (current != null) FullPlayer(current, playback, state, accent, viewModel)
         }
 
         state.addingToPlaylist?.let { tracks -> AddToPlaylistDialog(tracks, state.collections, viewModel) }
@@ -559,6 +562,8 @@ private fun HomeShelves(state: MusicUiState, accent: Color, bottomPadding: Dp, v
             Modifier.fillMaxSize(),
             contentPadding = PaddingValues(top = 8.dp, bottom = bottomPadding),
         ) {
+            item(key = "speed-dial") { SpeedDial(state.collections, accent, viewModel) }
+            if (state.taste.recent.isNotEmpty()) item(key = "jump-back-in") { JumpBackInRow(state.taste.recent, viewModel) }
             if (state.collections.favoriteAlbums.isNotEmpty()) item(key = "favorites") {
                 Text(
                     stringResource(R.string.music_shelf_favorites),
@@ -718,6 +723,7 @@ private fun AlbumPageView(
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     BackRow(viewModel) {
+                        PinButton(collections.isPinned(MusicPinType.ALBUM, album.id), accent) { viewModel.togglePin(MusicPin.of(album)) }
                         FavoriteButton(collections.isFavorite(album), accent) { viewModel.toggleFavorite(album) }
                         IconButton(onClick = { viewModel.showAddToPlaylist(page.tracks) }, enabled = page.tracks.isNotEmpty()) {
                             Icon(Icons.AutoMirrored.Filled.PlaylistAdd, stringResource(R.string.music_add_to_playlist), tint = Color.White)
@@ -770,9 +776,11 @@ private fun AlbumPageView(
 }
 
 @Composable
-private fun ArtistPageView(page: MusicPage.Artist, accent: Color, bottomPadding: Dp, viewModel: MusicActions) {
+private fun ArtistPageView(page: MusicPage.Artist, collections: MusicCollections, accent: Color, bottomPadding: Dp, viewModel: MusicActions) {
     Column(Modifier.fillMaxSize().statusBarsPadding()) {
-        BackRow(viewModel)
+        BackRow(viewModel) {
+            PinButton(collections.isPinned(MusicPinType.ARTIST, page.artist.id), accent) { viewModel.togglePin(MusicPin.of(page.artist)) }
+        }
         Row(
             Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -954,6 +962,8 @@ private fun trackActions(track: MusicTrack, collections: MusicCollections, viewM
         MenuAction(stringResource(R.string.music_add_to_playlist), Icons.AutoMirrored.Filled.PlaylistAdd) {
             viewModel.showAddToPlaylist(listOf(track))
         },
+        MenuAction(stringResource(R.string.music_play_next), Icons.AutoMirrored.Filled.PlaylistPlay) { viewModel.playNext(track) },
+        MenuAction(stringResource(R.string.music_add_to_queue), Icons.AutoMirrored.Filled.QueueMusic) { viewModel.addToQueue(track) },
     )
 }
 
@@ -966,7 +976,7 @@ private fun SectionTitle(text: String) {
 }
 
 @Composable
-private fun Cover(url: String?, modifier: Modifier, shape: androidx.compose.ui.graphics.Shape, icon: ImageVector) {
+internal fun Cover(url: String?, modifier: Modifier, shape: androidx.compose.ui.graphics.Shape, icon: ImageVector) {
     Box(modifier.clip(shape).background(Surface), contentAlignment = Alignment.Center) {
         Icon(icon, null, tint = Color(0x33EDEDED), modifier = Modifier.fillMaxSize(0.4f))
         if (url != null) {
@@ -976,7 +986,7 @@ private fun Cover(url: String?, modifier: Modifier, shape: androidx.compose.ui.g
 }
 
 @Composable
-private fun LoadingBox(modifier: Modifier = Modifier.fillMaxSize()) {
+internal fun LoadingBox(modifier: Modifier = Modifier.fillMaxSize()) {
     Box(modifier, contentAlignment = Alignment.Center) {
         CircularProgressIndicator(color = Color.White, strokeWidth = 2.dp, modifier = Modifier.size(28.dp))
     }
@@ -1053,12 +1063,25 @@ private fun PlayPauseIcon(playback: MusicPlaybackState, tint: Color, onClick: ()
 }
 
 @Composable
-private fun FullPlayer(track: MusicTrack, playback: MusicPlaybackState, collections: MusicCollections, accent: Color, viewModel: MusicActions) {
+private fun FullPlayer(track: MusicTrack, playback: MusicPlaybackState, state: MusicUiState, appAccent: Color, viewModel: MusicActions) {
+    val collections = state.collections
+    // The player takes its colours from the cover: a dark tint behind, a bright one for the controls.
+    val coverColors = rememberCoverColors(track.coverUrl)
+    val accent = coverColors?.accent ?: appAccent
+    val tint = coverColors?.background ?: Color.Black
+    var panel by rememberSaveable { mutableStateOf(PlayerPanel.COVER) }
+    var queueOpen by rememberSaveable { mutableStateOf(false) }
+    var sleepDialog by remember { mutableStateOf(false) }
+    LaunchedEffect(panel, track.id) { if (panel == PlayerPanel.LYRICS) viewModel.loadLyrics(track) }
+    BackHandler(enabled = queueOpen || panel == PlayerPanel.LYRICS) {
+        if (queueOpen) queueOpen = false else panel = PlayerPanel.COVER
+    }
+
     Box(Modifier.fillMaxSize().background(Color.Black).clickable(enabled = false) {}.testTag("music-player")) {
         Cover(track.coverUrl, Modifier.fillMaxSize().blur(80.dp), shape = RoundedCornerShape(0.dp), icon = Icons.Default.MusicNote)
         Box(
             Modifier.fillMaxSize().background(
-                Brush.verticalGradient(listOf(Color.Black.copy(alpha = 0.55f), Color.Black.copy(alpha = 0.8f), Color.Black))
+                Brush.verticalGradient(listOf(tint.copy(alpha = 0.6f), tint.copy(alpha = 0.85f), Color.Black))
             )
         )
         Column(
@@ -1078,14 +1101,25 @@ private fun FullPlayer(track: MusicTrack, playback: MusicPlaybackState, collecti
                     Icon(Icons.AutoMirrored.Filled.PlaylistAdd, stringResource(R.string.music_add_to_playlist), tint = Color.White)
                 }
             }
-            Spacer(Modifier.weight(0.6f))
-            Cover(
-                track.coverUrl,
-                Modifier.fillMaxWidth().widthIn(max = 420.dp).aspectRatio(1f),
-                shape = RoundedCornerShape(18.dp),
-                icon = Icons.Default.MusicNote,
-            )
-            Spacer(Modifier.weight(0.5f))
+            if (panel == PlayerPanel.LYRICS) {
+                LyricsPanel(
+                    lyrics = state.lyrics?.takeIf { it.trackId == track.id },
+                    positionMs = playback.positionMs,
+                    accent = accent,
+                    onSeek = viewModel::seekTo,
+                    modifier = Modifier.weight(1f).fillMaxWidth().widthIn(max = 560.dp),
+                )
+            } else {
+                Spacer(Modifier.weight(0.6f))
+                Cover(
+                    track.coverUrl,
+                    Modifier.fillMaxWidth().widthIn(max = 420.dp).aspectRatio(1f)
+                        .clickable { panel = PlayerPanel.LYRICS },
+                    shape = RoundedCornerShape(18.dp),
+                    icon = Icons.Default.MusicNote,
+                )
+                Spacer(Modifier.weight(0.5f))
+            }
             Column(Modifier.fillMaxWidth().widthIn(max = 520.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
@@ -1149,14 +1183,27 @@ private fun FullPlayer(track: MusicTrack, playback: MusicPlaybackState, collecti
                         )
                     }
                 }
+                PlayerExtrasRow(
+                    panel = panel,
+                    playback = playback,
+                    accent = accent,
+                    onLyrics = { panel = if (panel == PlayerPanel.LYRICS) PlayerPanel.COVER else PlayerPanel.LYRICS },
+                    onSleep = { sleepDialog = true },
+                    onQueue = { queueOpen = true },
+                )
             }
-            Spacer(Modifier.weight(0.6f))
+            Spacer(Modifier.weight(if (panel == PlayerPanel.LYRICS) 0.05f else 0.4f))
         }
+
+        AnimatedVisibility(visible = queueOpen, enter = slideInVertically { it }, exit = slideOutVertically { it }) {
+            QueueOverlay(playback, background = Color(0xFF0B0B0B), accent = accent, viewModel = viewModel) { queueOpen = false }
+        }
+        if (sleepDialog) SleepTimerDialog(playback, accent, viewModel) { sleepDialog = false }
     }
 }
 
 /** Black text on a light accent (the default white), white text on a dark one. */
-private fun contentOn(color: Color): Color =
+internal fun contentOn(color: Color): Color =
     if (color.red * 0.299f + color.green * 0.587f + color.blue * 0.114f > 0.6f) Color.Black else Color.White
 
 internal fun formatTime(ms: Long): String {
@@ -1343,6 +1390,9 @@ private fun PlaylistPageView(
     LazyColumn(Modifier.fillMaxSize().statusBarsPadding(), contentPadding = PaddingValues(bottom = bottomPadding)) {
         item {
             BackRow(viewModel) {
+                PinButton(collections.isPinned(MusicPinType.PLAYLIST, page.id), accent) {
+                    viewModel.togglePin(playlist?.let { MusicPin.of(it) } ?: MusicPin(MusicPinType.PLAYLIST, page.id, name))
+                }
                 if (playlist != null) {
                     var menu by remember { mutableStateOf(false) }
                     Box {

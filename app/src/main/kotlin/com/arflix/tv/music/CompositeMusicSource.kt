@@ -72,6 +72,19 @@ class CompositeMusicSource(
         )
     }
 
+    /** The seed's own source first (a server knows its own songs best), then the others in order. */
+    override suspend fun radio(seed: MusicTrack): List<MusicTrack> {
+        val owner = route(seed.id)
+        val order = listOfNotNull(owner?.first) + sources.indices.filter { it != owner?.first }
+        for (i in order) {
+            val own = if (owner != null && i == owner.first) seed.copy(id = owner.second) else seed
+            val tracks = runCatching { sources[i].radio(own) }.getOrDefault(emptyList())
+                .filter { it.id != own.id }
+            if (tracks.isNotEmpty()) return tracks.map { it.tagged(i) }
+        }
+        return emptyList()
+    }
+
     override suspend fun reportPlayed(trackId: String) {
         val (index, id) = route(trackId) ?: return
         sources[index].reportPlayed(id)

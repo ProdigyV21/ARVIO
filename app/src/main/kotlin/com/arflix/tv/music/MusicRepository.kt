@@ -172,7 +172,10 @@ class MusicRepository @Inject constructor(
     }
 
     /** A song was listened to (half of it, or four minutes). */
-    suspend fun recordPlay(artist: String) = updateTaste("music history") { it.recordPlay(artist, System.currentTimeMillis()) }
+    suspend fun recordPlay(track: MusicTrack) = updateTaste("music history") { it.recordPlay(track, System.currentTimeMillis()) }
+
+    /** Synced lyrics for the player, from LRCLIB. */
+    val lyrics: LyricsSource by lazy { LyricsSource(http) }
 
     /** A music search the user stayed on. */
     suspend fun recordSearch(query: String) = updateTaste("music search") { it.recordSearch(query, System.currentTimeMillis()) }

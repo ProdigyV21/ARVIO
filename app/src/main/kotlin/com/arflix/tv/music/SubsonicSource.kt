@@ -74,6 +74,10 @@ class SubsonicSource(
         )
     }
 
+    /** Navidrome and others answer from Last.fm's similar artists when that is set up; otherwise empty. */
+    override suspend fun radio(seed: MusicTrack): List<MusicTrack> =
+        call("getSimilarSongs", "id" to seed.id, "count" to "50").obj("similarSongs").list("song").map { parseTrack(it) }
+
     override suspend fun reportPlayed(trackId: String) {
         call("scrobble", "id" to trackId, "submission" to "true")
     }
