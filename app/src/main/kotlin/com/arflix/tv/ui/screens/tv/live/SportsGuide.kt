@@ -22,7 +22,16 @@ internal data class SportsScanRequest(
     val guide: Map<String, IptvNowNext>,
     val refresh: Int,
     val retryOnOpen: Int,
-)
+) {
+    // The guide is the whole in-memory EPG. It is compared on every Live TV
+    // recomposition (is the shown scan current?), so compare it by reference: a new
+    // guide snapshot simply means a new scan request.
+    override fun equals(other: Any?): Boolean = this === other || other is SportsScanRequest &&
+        key == other.key && guide === other.guide && refresh == other.refresh && retryOnOpen == other.retryOnOpen
+
+    override fun hashCode(): Int =
+        ((key.hashCode() * 31 + System.identityHashCode(guide)) * 31 + refresh) * 31 + retryOnOpen
+}
 internal data class SportsScanResult(val request: SportsScanRequest, val events: List<SportsGuideEvent>)
 
 internal fun SportsScheduleKey.sameCatalogueScope(other: SportsScheduleKey): Boolean =

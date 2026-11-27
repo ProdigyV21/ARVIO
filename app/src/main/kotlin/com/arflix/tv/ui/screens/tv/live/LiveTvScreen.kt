@@ -1679,7 +1679,7 @@ fun LiveTvScreen(
     val indexedGuideNowNext = remember(rawIndexedGuideNowNext, guideFixes) {
         guideFixes.applyTo(rawIndexedGuideNowNext)
     }
-    val effectiveGuideNowNext = remember(state.snapshot.nowNext, indexedGuideNowNext, guideQueryIds, guideClockMillis, guideFixes) {
+    val effectiveGuideNowNext = remember(ByReference(state.snapshot.nowNext), indexedGuideNowNext, guideQueryIds, guideClockMillis, guideFixes) {
         HashMap(indexedGuideNowNext).apply {
             guideQueryIds.forEach { id ->
                 val snapshotGuide = if (guideFixes.isEmpty) state.snapshot.nowNext[id]
@@ -1709,7 +1709,7 @@ fun LiveTvScreen(
             else effectiveGuideNowNext[channel.id]?.atTime(guideClockMillis)
         return channel to guide
     }
-    val actionGuideNowNext = remember(state.snapshot.nowNext, effectiveGuideNowNext, guideFixes) {
+    val actionGuideNowNext = remember(ByReference(state.snapshot.nowNext), effectiveGuideNowNext, guideFixes) {
         HashMap(state.snapshot.nowNext).apply {
             guideFixes.sources.keys.forEach(::remove)
             putAll(effectiveGuideNowNext)
@@ -2063,7 +2063,9 @@ fun LiveTvScreen(
                 }
                 // A load that failed outright (slow network, timeouts) keeps what is on
                 // screen, and a much smaller result is not written over the disk copy.
-                addonEvents = if (refreshed.isNotEmpty() || previous.isEmpty()) refreshed else previous
+                val next = if (refreshed.isNotEmpty() || previous.isEmpty()) refreshed else previous
+                // An unchanged refresh keeps the same list, so the sports keys stay cheap to compare.
+                addonEvents = withContext(LiveSportsWorkPolicy.dispatcher) { next.reuseIfEqual(previous) }
                 addonReady = true
                 if (refreshed.isNotEmpty() && refreshed.size * 2 >= previous.size) viewModel.saveSportsAddonEvents(installations, refreshed)
             } finally { addonLoading = false }
@@ -2082,7 +2084,9 @@ fun LiveTvScreen(
             try {
                 val cached = viewModel.cachedSportsMetadata()
                 if (cached.isNotEmpty()) sportsArtwork = cached
-                sportsArtwork = viewModel.loadSportsMetadata()
+                val previousArtwork = sportsArtwork
+                val loadedArtwork = viewModel.loadSportsMetadata()
+                sportsArtwork = withContext(LiveSportsWorkPolicy.dispatcher) { loadedArtwork.reuseIfEqual(previousArtwork) }
                 completedMetadataRequest = metadataRequest
             } catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
             catch (_: Exception) { }
@@ -2104,11 +2108,13 @@ fun LiveTvScreen(
                 sportsArtwork.asSequence().flatMap { it.fixture?.broadcasters.orEmpty().asSequence() }
                     .distinctBy { it.name to it.country }.flatMap { sportsBroadcasterKeys(it.name, it.country).asSequence() }.toSet()
             }
+            val previousCandidates = broadcastCandidates
             broadcastCandidates = if (broadcasterKeys.isEmpty()) emptyList() else {
                 val index = viewModel.sportsBroadcasterIndex(broadcasterIndexKey)
                 withContext(Dispatchers.IO) {
                     val ids = index.matchingIds(broadcasterKeys)
                     viewModel.iptvRepository.pagedChannelsByIds(ids).filter { !it.enrichForFastStartup(0).isAdult }
+                        .reuseIfEqual(previousCandidates)
                 }
             }
             completedBroadcastRequest = broadcastRequest
@@ -2142,8 +2148,10 @@ fun LiveTvScreen(
         awaitSportsWorkSlot()
         fixtureLoading = true
         try {
+            val previousCatalogue = fixtureResult?.second
             val catalogue = withContext(LiveSportsWorkPolicy.dispatcher) {
                 buildSportsCatalogue(sportsEvents, fixtureArtwork, fixtureChannels, guideClockMillis)
+                    .reuseIfEqual(previousCatalogue)
             }
             fixtureResult = fixtureRequest to catalogue
         } catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
@@ -2158,8 +2166,10 @@ fun LiveTvScreen(
         awaitSportsWorkSlot()
         sportsCatalogueLoading = true
         try {
+            val previousDecorated = decoratedResult?.second
             val decorated = withContext(LiveSportsWorkPolicy.dispatcher) {
                 attachSportsAddonSources(baseForDecoration, addonSnapshot, guideClockMillis, fixtureArtwork)
+                    .reuseIfEqual(previousDecorated)
             }
             decoratedResult = decoratedRequest to decorated
         } catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
@@ -2175,7 +2185,7 @@ fun LiveTvScreen(
             quickGuideRows[category.id]?.let { category.copy(count = it.size) } ?: category
         })
     }
-    val sportsScanRequest = remember(sportsScheduleKey, state.snapshot.nowNext, sportsRefresh, sportsRetryOnOpen) {
+    val sportsScanRequest = remember(sportsScheduleKey, ByReference(state.snapshot.nowNext), sportsRefresh, sportsRetryOnOpen) {
         SportsScanRequest(sportsScheduleKey, state.snapshot.nowNext, sportsRefresh, sportsRetryOnOpen)
     }
     val latestSportsScanRequest by rememberUpdatedState(sportsScanRequest)
@@ -2190,7 +2200,7 @@ fun LiveTvScreen(
         // While Sports is off screen, wait until zapping/opening has settled (see
         // LiveSportsWorkPolicy); opening Sports releases the newest request at once.
         snapshotFlow { latestSportsScanRequest to latestSportsSelected }
-            .debounce { (_, onScreen) -> LiveSportsWorkPolicy.settleMs(onScreen) }
+            .debounce { (_, onScreen) -> LiveSportsWorkPolicy.rescanSettleMs(onScreen, sportsScan != null) }
             .map { it.first }
             .conflate().collect { request ->
             if (sportsScan?.request == request) return@collect
@@ -2308,7 +2318,11 @@ fun LiveTvScreen(
                     sportsError = true
                     return@collect
                 }
-                val completed = SportsScanResult(request, retainSportsEventOrder(sportsScan?.events.orEmpty(), result))
+                val previousEvents = sportsScan?.events.orEmpty()
+                val retained = withContext(LiveSportsWorkPolicy.dispatcher) {
+                    retainSportsEventOrder(previousEvents, result).reuseIfEqual(previousEvents)
+                }
+                val completed = SportsScanResult(request, retained)
                 sportsScan = completed
                 viewModel.cachedSportsSchedule = completed
             } catch (cancelled: kotlinx.coroutines.CancellationException) {
@@ -4949,6 +4963,7 @@ fun LiveTvScreen(
                         favorites = favSet, onSelect = { selectChannel(it) },
                         onToggleFavorite = { viewModel.toggleFavoriteChannel(it) },
                         onLongPress = { openChannelMenu(it, false) }, onVisibleRange = ::onGuideVisibleRange,
+                        guideLoadedIds = indexedGuideLoadedIds, hasGuideSource = state.hasPotentialGuideSource,
                         modifier = Modifier.weight(1f))
                     else if (sportsSelected) SportsGuidePane(
                         events = sportsDisplayEvents, now = guideClockMillis, loading = sportsDisplayLoading, clockFormat = sportsClockFormat,
