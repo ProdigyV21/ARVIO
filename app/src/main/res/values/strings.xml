@@ -2146,7 +2146,7 @@
     <string name="youtube_search_row_title">YouTube</string>
     <string name="youtube_search_button">Search YouTube</string>
     <string name="youtube_kids_search_button">Search YouTube Kids</string>
-    <string name="youtube_search_for">for "%1$s"</string>
+    <string name="youtube_search_for">for \"%1$s\"</string>
     <string name="youtube_search_loading">Searching YouTube…</string>
     <string name="youtube_search_no_results">No YouTube videos</string>
     <string name="youtube_search_failed">YouTube didn\'t answer</string>

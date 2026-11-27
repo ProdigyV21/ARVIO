@@ -90,6 +90,33 @@ fun tr(text: String): String {
     if (text.isBlank()) return text
     @StringRes val resId: Int? = when (text.trim()) {
         "Homeserver" -> R.string.library_homeserver_tab
+        // Library / watchlist
+        "Choose a source or add titles to your watchlist." -> R.string.lib_choose_source_hint
+        "Choose library" -> R.string.lib_choose_library
+        "Clear search" -> R.string.search_clear_query
+        "Connect server" -> R.string.mobile_connect_server
+        "Could not update this source. Retry" -> R.string.lib_source_update_failed
+        "Done" -> R.string.done
+        "Episode" -> R.string.lib_episode
+        "Filters" -> R.string.lib_filters
+        "Library unavailable" -> R.string.lib_unavailable
+        "Lists" -> R.string.lib_lists
+        "My lists" -> R.string.lib_my_lists
+        "New list" -> R.string.lib_new_list
+        "No lists yet" -> R.string.lib_no_lists
+        "No matching lists" -> R.string.lib_no_matching_lists
+        "No titles found" -> R.string.lib_no_titles
+        "Personal list" -> R.string.lib_personal_list
+        "Reset" -> R.string.mplayer_reset
+        "Saved" -> R.string.lib_saved
+        "Search library" -> R.string.lib_search
+        "Search library…" -> R.string.lib_search_hint
+        "Sort" -> R.string.search_filter_sort
+        "Type" -> R.string.lib_type
+        "Watchlists" -> R.string.lib_watchlists
+        "Your custom catalogs and personal lists appear here." -> R.string.lib_empty_lists_hint
+        "lists" -> R.string.lib_count_lists
+        "titles" -> R.string.lib_count_titles
         "Calendar" -> R.string.library_calendar
         "All watchlists" -> R.string.calendar_all_watchlists
         "ARVIO watchlist" -> R.string.calendar_arvio_watchlist

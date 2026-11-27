@@ -2152,7 +2152,7 @@ private fun DelayAdjusterContent(
                     )
                 }
                 DelayStepChip(
-                    label = "Reset",
+                    label = stringResource(R.string.mplayer_reset),
                     enabled = delayMs != 0L,
                     onClick = { onUpdateDelay(0L) }
                 )
