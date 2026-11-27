@@ -2,6 +2,9 @@ package com.arflix.tv.ui.screens.music
 
 import android.graphics.drawable.BitmapDrawable
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
@@ -294,6 +297,7 @@ internal fun LyricsPanel(
     accent: Color,
     onSeek: (Long) -> Unit,
     modifier: Modifier = Modifier,
+    tv: Boolean = false,
 ) {
     Box(modifier.testTag("music-lyrics"), contentAlignment = Alignment.Center) {
         val found = lyrics?.lyrics
@@ -301,7 +305,7 @@ internal fun LyricsPanel(
             lyrics == null || lyrics.loading -> CircularProgressIndicator(color = Color.White, strokeWidth = 2.dp, modifier = Modifier.size(28.dp))
             lyrics.failed -> LyricsMessage(stringResource(R.string.music_lyrics_failed))
             found == null || found.isEmpty -> LyricsMessage(stringResource(R.string.music_lyrics_none))
-            found.synced.isNotEmpty() -> SyncedLyrics(found.synced, found.activeIndex(positionMs), accent, onSeek)
+            found.synced.isNotEmpty() -> SyncedLyrics(found.synced, found.activeIndex(positionMs), accent, onSeek, tv)
             !found.plain.isNullOrBlank() -> Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(vertical = 12.dp)) {
                 Text(found.plain, color = Color.White, fontSize = 20.sp, lineHeight = 30.sp, fontWeight = FontWeight.SemiBold)
                 LyricsCredit()
@@ -312,11 +316,21 @@ internal fun LyricsPanel(
 }
 
 @Composable
-private fun SyncedLyrics(lines: List<com.arflix.tv.music.LyricLine>, active: Int, accent: Color, onSeek: (Long) -> Unit) {
+private fun SyncedLyrics(lines: List<com.arflix.tv.music.LyricLine>, active: Int, accent: Color, onSeek: (Long) -> Unit, tv: Boolean = false) {
     val listState = rememberLazyListState()
+    val lineGuessPx = with(androidx.compose.ui.platform.LocalDensity.current) { 48.dp.roundToPx() }
     LaunchedEffect(active) {
-        // Keeps the sung line a little below the top, unless the user is scrolling themselves.
-        if (active >= 0 && !listState.isScrollInProgress) listState.animateScrollToItem(max(0, active - 2))
+        if (active < 0 || listState.isScrollInProgress) return@LaunchedEffect
+        if (tv) {
+            // The TV lyrics area is only a few lines tall, so the sung line sits in the middle of it.
+            val info = listState.layoutInfo
+            val viewport = info.viewportSize.height
+            val line = info.visibleItemsInfo.firstOrNull { it.index == active }?.size ?: lineGuessPx
+            listState.animateScrollToItem(active, -(viewport / 2 - line / 2))
+        } else {
+            // Keeps the sung line a little below the top, unless the user is scrolling themselves.
+            listState.animateScrollToItem(max(0, active - 2))
+        }
     }
     // The lines fade out at the top and bottom edges instead of running into the title below.
     LazyColumn(
@@ -330,10 +344,14 @@ private fun SyncedLyrics(lines: List<com.arflix.tv.music.LyricLine>, active: Int
                 )
             },
         state = listState,
-        contentPadding = PaddingValues(top = 24.dp, bottom = 48.dp),
+        contentPadding = if (tv) PaddingValues(bottom = 160.dp) else PaddingValues(top = 24.dp, bottom = 48.dp),
     ) {
         itemsIndexed(lines, key = { i, _ -> i }) { i, line ->
             val past = i < active
+            if (tv) {
+                TvLyricLine(line.text.ifEmpty { "\u266A" }, current = i == active, past = past, accent = accent)
+                return@itemsIndexed
+            }
             Text(
                 line.text.ifEmpty { "♪" },
                 color = when {
@@ -351,6 +369,35 @@ private fun SyncedLyrics(lines: List<com.arflix.tv.music.LyricLine>, active: Int
         }
         item { LyricsCredit() }
     }
+}
+
+/**
+ * One line of synced lyrics on TV: seen from the sofa, so the sung line grows, turns full white and sits on a
+ * soft accent band, while the other lines step back.
+ */
+@Composable
+private fun TvLyricLine(text: String, current: Boolean, past: Boolean, accent: Color) {
+    val color by animateColorAsState(
+        when {
+            current -> Color.White
+            past -> Color.White.copy(alpha = 0.28f)
+            else -> Color.White.copy(alpha = 0.42f)
+        },
+        tween(280), label = "tv-lyric-color",
+    )
+    val band by animateFloatAsState(if (current) 0.30f else 0f, tween(280), label = "tv-lyric-band")
+    Text(
+        text,
+        color = color,
+        // A larger font rather than a scale, so a long sung line wraps instead of running past the edge.
+        fontSize = if (current) 26.sp else 23.sp,
+        lineHeight = 32.sp,
+        fontWeight = if (current) FontWeight.ExtraBold else FontWeight.Bold,
+        modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp)
+            .clip(RoundedCornerShape(10.dp))
+            .background(accent.copy(alpha = band))
+            .padding(vertical = 7.dp, horizontal = 12.dp),
+    )
 }
 
 @Composable
