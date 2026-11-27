@@ -1,5 +1,13 @@
 package com.arflix.tv.ui.screens.tv.live
 
+import androidx.compose.animation.core.keyframes
+import androidx.compose.ui.composed
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.drawscope.translate
+import androidx.compose.ui.layout.onPlaced
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
@@ -448,28 +456,164 @@ private fun SportsPickerRow(option: SportsPickerOption, selected: Boolean, touch
 // Loading
 // ---------------------------------------------------------------------------------------
 
-/** Placeholder rows shaped like the real ones, shown while the schedule loads. */
+/**
+ * One band of light that sweeps across every placeholder on the page at once, so the
+ * loading page reads as a single surface instead of many blinking boxes.
+ * Only the draw phase reads the sweep, so nothing recomposes while it runs.
+ */
+@Stable
+private class SportsShimmer(val progress: State<Float>, val sweepWidth: Float)
+
+private val LocalSportsShimmer = staticCompositionLocalOf<SportsShimmer?> { null }
+
+private fun Modifier.sportsShimmer(shape: Shape, base: Float = .055f): Modifier = composed {
+    val shimmer = LocalSportsShimmer.current
+    val origin = remember { floatArrayOf(0f) }
+    clip(shape)
+        .onPlaced { origin[0] = it.positionInRoot().x }
+        .drawWithCache {
+            val band = 320.dp.toPx()
+            val highlight = Brush.horizontalGradient(
+                0f to Color.Transparent, .5f to Color.White.copy(alpha = .085f), 1f to Color.Transparent,
+                startX = 0f, endX = band,
+            )
+            onDrawBehind {
+                drawRect(Color.White.copy(alpha = base))
+                if (shimmer != null) {
+                    val x = -band + (shimmer.sweepWidth + band * 2) * shimmer.progress.value - origin[0]
+                    if (x < size.width && x + band > 0f) {
+                        translate(left = x) { drawRect(highlight, size = androidx.compose.ui.geometry.Size(band, size.height)) }
+                    }
+                }
+            }
+        }
+}
+
+/** The loading page: shaped like the page that is coming, with a soft light sweep. */
 @Composable
-internal fun SportsSkeletonRows(cardWidth: Dp, modifier: Modifier = Modifier, rows: Int = 3, cards: Int = 6) {
-    val pulse = rememberInfiniteTransition(label = "sports-skeleton")
-    val alpha by pulse.animateFloat(.05f, .12f, infiniteRepeatable(tween(850, easing = LinearEasing), RepeatMode.Reverse), label = "sports-skeleton-alpha")
-    Column(modifier.fillMaxWidth().testTag("sports-skeleton"), verticalArrangement = Arrangement.spacedBy(18.dp)) {
-        repeat(rows) {
-            Column(Modifier.padding(horizontal = 18.dp)) {
-                Box(Modifier.width(140.dp).height(14.dp).clip(RoundedCornerShape(4.dp)).graphicsLayer { this.alpha = 1f }
-                    .background(Color.White.copy(alpha = alpha)))
-                Row(Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    repeat(cards) {
-                        Column(Modifier.width(cardWidth)) {
-                            Box(Modifier.fillMaxWidth().aspectRatio(16f / 9f).clip(RoundedCornerShape(10.dp))
-                                .background(Color.White.copy(alpha = alpha)))
-                            Box(Modifier.padding(top = 8.dp).fillMaxWidth(.8f).height(10.dp).clip(RoundedCornerShape(3.dp))
-                                .background(Color.White.copy(alpha = alpha)))
-                            Box(Modifier.padding(top = 6.dp).fillMaxWidth(.5f).height(8.dp).clip(RoundedCornerShape(3.dp))
-                                .background(Color.White.copy(alpha = alpha * .8f)))
+internal fun SportsSkeletonRows(
+    cardWidth: Dp,
+    modifier: Modifier = Modifier,
+    rows: Int = 3,
+    cards: Int = 6,
+    hub: Boolean = false,
+    label: String? = null,
+) {
+    val sweep = rememberInfiniteTransition(label = "sports-skeleton")
+    // A sweep, then a short rest: the page stays calm and a slow TV gets frames back.
+    val progress = sweep.animateFloat(
+        initialValue = 0f, targetValue = 1f,
+        animationSpec = infiniteRepeatable(keyframes {
+            durationMillis = 1900
+            0f at 0 using FastOutSlowInEasing
+            1f at 1250
+            1f at 1900
+        }, RepeatMode.Restart),
+        label = "sports-skeleton-sweep",
+    )
+    val screenWidth = with(androidx.compose.ui.platform.LocalDensity.current) {
+        androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp.dp.toPx()
+    }
+    val shimmer = remember(progress, screenWidth) { SportsShimmer(progress, screenWidth) }
+    // Fades in after a beat, so a quick load never flashes the placeholders.
+    val appear = remember { androidx.compose.animation.core.Animatable(0f) }
+    LaunchedEffect(Unit) { appear.animateTo(1f, tween(700, delayMillis = 120, easing = LinearEasing)) }
+    fun Modifier.stagger(step: Int): Modifier = graphicsLayer {
+        val t = ((appear.value * 1.6f - step * .18f) / .7f).coerceIn(0f, 1f)
+        val eased = 1f - (1f - t) * (1f - t)
+        alpha = eased
+        translationY = (1f - eased) * 10.dp.toPx()
+    }
+    CompositionLocalProvider(LocalSportsShimmer provides shimmer) {
+        Column(modifier.fillMaxWidth().clipToBounds().testTag("sports-skeleton")) {
+            if (label != null) SportsLoadingLabel(label, Modifier.stagger(0).padding(start = 18.dp, top = 8.dp, bottom = 4.dp))
+            var step = 1
+            if (hub) {
+                // Jump-to chips.
+                Row(Modifier.stagger(step++).padding(start = 18.dp, top = 8.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.width(52.dp).height(8.dp).sportsShimmer(RoundedCornerShape(3.dp), .045f))
+                    Spacer(Modifier.width(16.dp))
+                    listOf(70.dp, 96.dp, 82.dp, 108.dp, 74.dp).forEach { width ->
+                        Box(Modifier.padding(end = 8.dp).width(width).height(30.dp).sportsShimmer(RoundedCornerShape(50)))
+                    }
+                }
+                // The focused-game panel.
+                Row(Modifier.stagger(step++).fillMaxWidth().height(SportsHeroHeight).padding(horizontal = 18.dp, vertical = 6.dp)
+                    .clip(RoundedCornerShape(14.dp)).background(LiveColors.Panel), verticalAlignment = Alignment.CenterVertically) {
+                    val artHeight = SportsHeroHeight - 12.dp
+                    SportsSkeletonMatchArt(Modifier.fillMaxHeight().width(artHeight * 16f / 9f), badge = 46.dp,
+                        shape = RoundedCornerShape(topStart = 14.dp, bottomStart = 14.dp))
+                    Column(Modifier.weight(1f).padding(start = 18.dp, end = 16.dp)) {
+                        Box(Modifier.width(120.dp).height(10.dp).sportsShimmer(RoundedCornerShape(3.dp)))
+                        Box(Modifier.padding(top = 12.dp).fillMaxWidth(.62f).height(20.dp).sportsShimmer(RoundedCornerShape(5.dp), .07f))
+                        Box(Modifier.padding(top = 9.dp).fillMaxWidth(.38f).height(11.dp).sportsShimmer(RoundedCornerShape(3.dp)))
+                        Row(Modifier.padding(top = 16.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Box(Modifier.width(112.dp).height(34.dp).sportsShimmer(RoundedCornerShape(50), .07f))
+                            Box(Modifier.width(92.dp).height(34.dp).sportsShimmer(RoundedCornerShape(50)))
+                            Box(Modifier.size(34.dp).sportsShimmer(CircleShape))
                         }
                     }
                 }
+            }
+            Column(Modifier.padding(top = if (hub) 10.dp else 4.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
+                repeat(rows) { row ->
+                    Column(Modifier.stagger(step + row)) {
+                        Box(Modifier.padding(horizontal = 18.dp).width(if (row % 2 == 0) 150.dp else 112.dp).height(13.dp)
+                            .sportsShimmer(RoundedCornerShape(4.dp), .07f))
+                        // Not lazy and never focusable: just wide enough to run off the edge like a real row.
+                        Row(Modifier.padding(top = 10.dp).horizontalScroll(rememberScrollState(), enabled = false).padding(horizontal = 18.dp),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            repeat(cards) {
+                                Column(Modifier.width(cardWidth)) {
+                                    SportsSkeletonMatchArt(Modifier.fillMaxWidth().aspectRatio(16f / 9f), badge = 30.dp,
+                                        shape = RoundedCornerShape(10.dp))
+                                    Box(Modifier.padding(top = 8.dp).fillMaxWidth(.78f).height(10.dp).sportsShimmer(RoundedCornerShape(3.dp)))
+                                    Box(Modifier.padding(top = 6.dp).fillMaxWidth(.46f).height(8.dp).sportsShimmer(RoundedCornerShape(3.dp), .04f))
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** A match card in waiting: two team halves with a badge each, like the real split art. */
+@Composable
+private fun SportsSkeletonMatchArt(modifier: Modifier, badge: Dp, shape: Shape) {
+    Box(modifier.sportsShimmer(shape, .045f)) {
+        Row(Modifier.fillMaxSize()) {
+            Box(Modifier.weight(1f).fillMaxHeight().background(Color.White.copy(alpha = .018f)), contentAlignment = Alignment.Center) {
+                Box(Modifier.size(badge).clip(CircleShape).background(Color.White.copy(alpha = .06f)))
+            }
+            Box(Modifier.width(1.dp).fillMaxHeight().background(Color.White.copy(alpha = .05f)))
+            Box(Modifier.weight(1f).fillMaxHeight(), contentAlignment = Alignment.Center) {
+                Box(Modifier.size(badge).clip(CircleShape).background(Color.White.copy(alpha = .06f)))
+            }
+        }
+        Box(Modifier.align(Alignment.Center).size(badge * .62f).clip(CircleShape).background(LiveColors.Bg.copy(alpha = .55f)),
+            contentAlignment = Alignment.Center) {
+            Box(Modifier.width(badge * .26f).height(3.dp).clip(RoundedCornerShape(2.dp)).background(Color.White.copy(alpha = .12f)))
+        }
+    }
+}
+
+/** "Reading sports schedule" with three dots that breathe in turn. */
+@Composable
+private fun SportsLoadingLabel(text: String, modifier: Modifier = Modifier) {
+    val dots = rememberInfiniteTransition(label = "sports-loading-dots")
+    val phase = dots.animateFloat(0f, 3f, infiniteRepeatable(tween(1200, easing = LinearEasing)), label = "sports-loading-phase")
+    Row(modifier, verticalAlignment = Alignment.CenterVertically) {
+        Text(text, color = LiveColors.FgDim, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+        Row(Modifier.padding(start = 6.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            repeat(3) { index ->
+                Box(Modifier.size(5.dp).graphicsLayer {
+                    val d = ((phase.value - index + 3f) % 3f)
+                    val lift = if (d < 1f) 1f - kotlin.math.abs(d - .5f) * 2f else 0f
+                    alpha = .3f + .7f * lift
+                    translationY = -lift * 3.dp.toPx()
+                }.background(LiveColors.Fg, CircleShape))
             }
         }
     }
