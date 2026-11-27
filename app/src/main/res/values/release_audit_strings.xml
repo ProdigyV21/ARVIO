@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Library / watchlist texts that used to be English-only tr() literals -->
+    <string name="lib_choose_source_hint">Choose a source or add titles to your watchlist.</string>
+    <string name="lib_choose_library">Choose library</string>
+    <string name="lib_source_update_failed">Could not update this source. Retry</string>
+    <string name="lib_episode">Episode</string>
+    <string name="lib_filters">Filters</string>
+    <string name="lib_unavailable">Library unavailable</string>
+    <string name="lib_lists">Lists</string>
+    <string name="lib_my_lists">My lists</string>
+    <string name="lib_new_list">New list</string>
+    <string name="lib_no_lists">No lists yet</string>
+    <string name="lib_no_matching_lists">No matching lists</string>
+    <string name="lib_no_titles">No titles found</string>
+    <string name="lib_personal_list">Personal list</string>
+    <string name="lib_saved">Saved</string>
+    <string name="lib_search">Search library</string>
+    <string name="lib_search_hint">Search library…</string>
+    <string name="lib_type">Type</string>
+    <string name="lib_watchlists">Watchlists</string>
+    <string name="lib_empty_lists_hint">Your custom catalogs and personal lists appear here.</string>
+    <string name="lib_count_lists">lists</string>
+    <string name="lib_count_titles">titles</string>
+    <!-- YouTube trailer fallback -->
+    <string name="trailer_embed_blocked">This trailer cannot be embedded directly by YouTube.</string>
+    <string name="trailer_watch_on_youtube">Watch on YouTube</string>
+</resources>

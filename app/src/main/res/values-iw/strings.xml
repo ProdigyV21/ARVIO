@@ -2118,7 +2118,7 @@
     <string name="youtube_search_row_title">YouTube</string>
     <string name="youtube_search_button">חיפוש ביוטיוב</string>
     <string name="youtube_kids_search_button">חיפוש ב-YouTube Kids</string>
-    <string name="youtube_search_for">עבור "%1$s"</string>
+    <string name="youtube_search_for">עבור \"%1$s\"</string>
     <string name="youtube_search_loading">מחפש ביוטיוב…</string>
     <string name="youtube_search_no_results">לא נמצאו סרטונים ביוטיוב</string>
     <string name="youtube_search_failed">יוטיוב לא הגיב</string>

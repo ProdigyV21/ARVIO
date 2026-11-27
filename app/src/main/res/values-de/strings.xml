@@ -658,7 +658,7 @@
     <string name="settings_section_playlists">PLAYLISTS</string>
     <string name="settings_section_options">OPTIONEN</string>
     <string name="settings_epg_vod_actions">Streaming-Optionen des TV-Guides</string>
-    <string name="settings_epg_vod_actions_desc">Bei einem zweiten Klick "Jetzt streamen" für übereinstimmende Filme und Serien anbieten; andernfalls Live-TV-Vollbild öffnen</string>
+    <string name="settings_epg_vod_actions_desc">Bei einem zweiten Klick \"Jetzt streamen\" für übereinstimmende Filme und Serien anbieten; andernfalls Live-TV-Vollbild öffnen</string>
     <string name="settings_add_tv_lists_hint">Bis zu 10 M3U-/Xtream-TV-Listen hinzufügen</string>
     <string name="settings_create_another_tv">Weitere TV-Liste erstellen</string>
     <string name="settings_badge_full_short">Voll</string>
