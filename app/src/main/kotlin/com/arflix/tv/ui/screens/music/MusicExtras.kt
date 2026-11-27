@@ -56,6 +56,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -314,7 +318,20 @@ private fun SyncedLyrics(lines: List<com.arflix.tv.music.LyricLine>, active: Int
         // Keeps the sung line a little below the top, unless the user is scrolling themselves.
         if (active >= 0 && !listState.isScrollInProgress) listState.animateScrollToItem(max(0, active - 2))
     }
-    LazyColumn(Modifier.fillMaxSize(), state = listState, contentPadding = PaddingValues(vertical = 24.dp)) {
+    // The lines fade out at the top and bottom edges instead of running into the title below.
+    LazyColumn(
+        Modifier.fillMaxSize()
+            .graphicsLayer(compositingStrategy = CompositingStrategy.Offscreen)
+            .drawWithContent {
+                drawContent()
+                drawRect(
+                    Brush.verticalGradient(0f to Color.Transparent, 0.08f to Color.Black, 0.85f to Color.Black, 1f to Color.Transparent),
+                    blendMode = BlendMode.DstIn,
+                )
+            },
+        state = listState,
+        contentPadding = PaddingValues(top = 24.dp, bottom = 48.dp),
+    ) {
         itemsIndexed(lines, key = { i, _ -> i }) { i, line ->
             val past = i < active
             Text(

@@ -163,21 +163,30 @@ class MusicExtrasTest {
 
     // -- Surprise me -------------------------------------------------------------------------------
 
-    @Test fun surpriseMePlaysTheUsersOwnSongsOrAMix() {
+    @Test fun surpriseMePrefersWhatTheUsersSourcesCanPlay() {
         val liked = (1..10).map { track("l$it") }
         val collections = liked.fold(MusicCollections()) { c, t -> c.toggleFavorite(t) }
+        val addonAlbum = MusicAlbum("addon~a1", "Addon album", "X", null, null)
         val mix = MusicAlbum("charts~mix:1", "Mix", "Mix", null, null)
+        val chart = MusicAlbum("charts~playlist:9", "Top", "Deezer", null, null)
         val shelves = listOf(
-            MusicShelf("0/charts:top", listOf(MusicAlbum("charts~playlist:9", "Top", "Deezer", null, null)), title = "Top"),
+            MusicShelf("0/charts:top", listOf(chart), title = "Top"),
             MusicShelf("0/charts:you:artist:1", listOf(mix), title = "Because"),
+            MusicShelf("1/addon/hits", listOf(addonAlbum), title = "Hits"),
         )
         val picks = (0 until 20).map { MusicLucky.pick(collections, MusicTaste(), shelves, Random(it)) }
         assertTrue(picks.any { it is MusicLucky.Pick.Tracks })
-        assertTrue(picks.any { it == MusicLucky.Pick.Album(mix) })
+        assertTrue(picks.any { it == MusicLucky.Pick.Album(addonAlbum) })
+        assertFalse(picks.any { it == MusicLucky.Pick.Album(mix) || it == MusicLucky.Pick.Album(chart) })
         picks.filterIsInstance<MusicLucky.Pick.Tracks>().forEach { assertEquals(liked.toSet(), it.tracks.toSet()) }
 
-        // Someone new gets a playlist from the home rows; with nothing at all, nothing happens.
-        assertEquals(MusicLucky.Pick.Album(shelves[0].albums[0]), MusicLucky.pick(MusicCollections(), MusicTaste(), shelves.take(1), Random(1)))
+        // Only an addon album and charts: always the addon album, never a chart playlist.
+        repeat(10) { assertEquals(MusicLucky.Pick.Album(addonAlbum), MusicLucky.pick(MusicCollections(), MusicTaste(), shelves, Random(it))) }
+        // A few own songs beat the charts; with only charts, a mix before a chart playlist.
+        val few = MusicCollections().toggleFavorite(track("x"))
+        assertEquals(MusicLucky.Pick.Tracks(listOf(track("x"))), MusicLucky.pick(few, MusicTaste(), shelves.take(2), Random(1)))
+        assertEquals(MusicLucky.Pick.Album(mix), MusicLucky.pick(MusicCollections(), MusicTaste(), shelves.take(2), Random(1)))
+        assertEquals(MusicLucky.Pick.Album(chart), MusicLucky.pick(MusicCollections(), MusicTaste(), shelves.take(1), Random(1)))
         assertNull(MusicLucky.pick(MusicCollections(), MusicTaste(), emptyList()))
     }
 
