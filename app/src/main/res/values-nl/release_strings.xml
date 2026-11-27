@@ -2105,4 +2105,5 @@
     <string name="external_player_missing">Geen video-app gevonden om deze stream te openen. Hier afspelen.</string>
     <string name="auto_source_failover">Bron automatisch wisselen</string>
     <string name="auto_source_failover_desc">Als een bron niet start of stopt, probeer dan de volgende. Uit: blijf op de bron en toon de fout, zodat je opnieuw kunt proberen of een andere kiest.</string>
+    <string name="subtitle_track_number">Track %1$d</string>
 </resources>

@@ -2357,4 +2357,5 @@
     <string name="external_player_missing">لم يتم العثور على تطبيق فيديو لفتح هذا البث. يتم تشغيله هنا.</string>
     <string name="auto_source_failover">تبديل المصدر تلقائيًا</string>
     <string name="auto_source_failover_desc">عند فشل بدء مصدر أو توقفه، جرّب التالي. معطّل: ابقَ على المصدر وأظهر الخطأ لتعيد المحاولة أو تختار آخر.</string>
+    <string name="subtitle_track_number">المسار %1$d</string>
 </resources>

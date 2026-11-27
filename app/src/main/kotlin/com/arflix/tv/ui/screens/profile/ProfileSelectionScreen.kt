@@ -818,7 +818,14 @@ private fun AddProfileButton(
     val isTouchDevice = LocalDeviceType.current.isTouchDevice()
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = modifier
+        // On touch the caption under the tile opens the dialog too.
+        modifier = modifier.then(
+            if (isTouchDevice) Modifier.clickable(
+                interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                indication = null,
+                onClick = onClick
+            ) else Modifier
+        )
     ) {
         val addContent: @Composable () -> Unit = {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {

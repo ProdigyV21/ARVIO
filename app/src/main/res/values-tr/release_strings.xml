@@ -2359,4 +2359,5 @@
     <string name="external_player_missing">Bu yayını açacak video uygulaması bulunamadı. Burada oynatılıyor.</string>
     <string name="auto_source_failover">Kaynağı otomatik değiştir</string>
     <string name="auto_source_failover_desc">Bir kaynak başlamadığında veya durduğunda sıradakini dene. Kapalıyken: kaynakta kal ve hatayı göster; böylece tekrar deneyebilir veya başka birini seçebilirsiniz.</string>
+    <string name="subtitle_track_number">Parça %1$d</string>
 </resources>

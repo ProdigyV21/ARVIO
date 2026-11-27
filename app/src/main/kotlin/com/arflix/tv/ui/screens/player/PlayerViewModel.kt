@@ -1952,6 +1952,19 @@ class PlayerViewModel @Inject constructor(
     private fun isYouTubeVideo(): Boolean =
         mediaRepository.addonNativeCard(currentMediaType, currentMediaId)?.addonNativeAddonId == YouTubeCollection.ADDON_ID
 
+    /**
+     * A YouTube result picked from a movie's or episode's source list that is clearly not the
+     * title itself (a trailer, review or clip). It must not write progress, watched state or
+     * scrobbles onto that title.
+     */
+    private fun isYouTubeClipOnTitle(durationMs: Long): Boolean {
+        if (_uiState.value.selectedStream?.addonId != YouTubeCollection.ADDON_ID) return false
+        if (isYouTubeVideo()) return false
+        if (durationMs <= 0L) return true
+        val expected = _uiState.value.expectedDurationMs
+        return if (expected > 0L) durationMs < expected / 2 else durationMs < 40 * 60_000L
+    }
+
     private suspend fun fetchMediaMetadata(mediaType: MediaType, mediaId: Int) {
         val season = currentSeason
         val episode = currentEpisode
@@ -8154,7 +8167,7 @@ class PlayerViewModel @Inject constructor(
                 isLiveStream = currentIsLiveStreamPlayback,
                 addons = currentInstalledAddons,
                 isAddonNative = mediaRepository.isAddonNative(currentMediaId)
-            )
+            ) || isYouTubeClipOnTitle(duration)
 
             // Scrobble start/pause/updates with debounce
             if (!isLiveStreamOrSports && closing) {
@@ -8703,9 +8716,13 @@ class PlayerViewModel @Inject constructor(
                 }
 
             val existingVod = _uiState.value.streams.filter(::isSupplementalStream)
+            // The "Direct" stand-in is only for a player opened with a bare URL: next to a known
+            // selected source it showed up as a second "current" entry ("Direct / Direct / Direct").
             val activeStreamList = listOfNotNull(
                 _uiState.value.selectedStream,
-                if (playbackUrl.isNotBlank()) StreamSource(source = "Direct", addonName = "Direct", quality = "Direct", size = "", url = playbackUrl) else null
+                if (playbackUrl.isNotBlank() && _uiState.value.selectedStream == null) {
+                    StreamSource(source = "Direct", addonName = "Direct", quality = "Direct", size = "", url = playbackUrl)
+                } else null
             )
             val mergedStreams = (allStreams + existingVod + activeStreamList)
                 .distinctBy { providerScopedStreamIdentity(it) to playbackRequestIdentity(it) }
@@ -9059,4 +9076,18 @@ private object PlayerViewModelRegexes {
     // A cue that is ONLY music notation or a bracketed sound effect — SDH decoration with no
     // counterpart in a translated file, so it can only produce false pairs when line-matching.
     val SDH_ONLY = Regex("""^[\s♪♫]*(\[[^]]*]|\([^)]*\)|[-–—\s])*[\s♪♫]*$""")
+}
+
+
+/**
+ * A YouTube result (trailer, review, clip) played from a movie's or show's source list carries
+ * the video's own title as its source label; the player chrome shows that instead of the
+ * title's logo, episode name and plot. YouTube collection videos (label "YouTube") are unchanged.
+ */
+internal fun PlayerUiState.asYouTubeClipChrome(): PlayerUiState {
+    val stream = selectedStream ?: return this
+    if (stream.addonId != YouTubeCollection.ADDON_ID) return this
+    val clipTitle = stream.source.trim()
+    if (clipTitle.isBlank() || clipTitle == YouTubeCollection.ADDON_NAME) return this
+    return copy(title = clipTitle, logoUrl = null, overview = null, episodeTitle = null)
 }

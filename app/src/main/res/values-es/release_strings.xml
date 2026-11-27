@@ -336,4 +336,5 @@
     <string name="sports_all_sources">Todas las fuentes</string>
     <string name="sports_your_teams_empty">Ahora no hay partidos de los equipos que sigues. Abre cualquier partido y elige Seguir.</string>
     <string name="sports_live_status">En directo</string>
+    <string name="subtitle_track_number">Pista %1$d</string>
 </resources>

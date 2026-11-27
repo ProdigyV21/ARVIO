@@ -3988,6 +3988,9 @@ class StreamRepository @Inject constructor(
         softDeadlineMs: Long? = null,
         onPendingAddons: ((List<String>) -> Unit)? = null
     ): List<Subtitle> = withContext(Dispatchers.IO) {
+        // A YouTube video (trailer, review, clip) is not the title's release: the title's
+        // subtitle results would be offered for the wrong video.
+        if (stream?.addonId == YouTubeCollection.ADDON_ID) return@withContext emptyList()
         val allAddons = installedAddons.first()
         // Selection is by CAPABILITY, not by AddonType. The old gate accepted only SUBTITLE, or
         // CUSTOM-with-a-`subtitles`-manifest, and silently dropped everything else — which made

@@ -71,6 +71,7 @@ import coil.compose.AsyncImage
 import com.arflix.tv.R
 import com.arflix.tv.data.model.MediaType
 import com.arflix.tv.ui.screens.player.PlayerUiState
+import com.arflix.tv.ui.screens.player.asYouTubeClipChrome
 import com.arflix.tv.ui.skin.LocalAccentColorOverride
 import com.arflix.tv.ui.theme.ArflixTypography
 import com.arflix.tv.ui.theme.TextPrimary
@@ -145,7 +146,7 @@ fun TvPlayerControls(
                 val isPaused = !isPlaying && !isBuffering
 
                 TvPlayerMetadataChrome(
-                    uiState = uiState,
+                    playerUiState = uiState,
                     mediaType = mediaType,
                     seasonNumber = seasonNumber,
                     episodeNumber = episodeNumber,
@@ -521,7 +522,7 @@ fun TvPlayerIconButton(
 
 @Composable
 fun TvPlayerMetadataChrome(
-    uiState: PlayerUiState,
+    playerUiState: PlayerUiState,
     mediaType: MediaType,
     seasonNumber: Int?,
     episodeNumber: Int?,
@@ -529,6 +530,8 @@ fun TvPlayerMetadataChrome(
     accentColor: Color,
     modifier: Modifier = Modifier
 ) {
+    // A YouTube clip picked from a title's sources shows its own name, not the title's logo and plot.
+    val uiState = playerUiState.asYouTubeClipChrome()
     val displayTitle = when {
         mediaType == MediaType.TV && !uiState.episodeTitle.isNullOrBlank() -> uiState.episodeTitle
         else -> uiState.title
