@@ -193,4 +193,12 @@ class SportsHubTest {
         val event = game("g", "A vs B", -30 * minute).copy(fixture = fixture)
         assertEquals(SportsScoreLine(0, 0, live = true), event.scoreLine(now))
     }
+
+    @Test fun nationalTeamsGetFlagsClubsDoNot() {
+        assertEquals("\uD83C\uDDF3\uD83C\uDDF4", sportsCountryFlag("Norge"))
+        assertEquals("\uD83C\uDDE7\uD83C\uDDEA", sportsCountryFlag("Belgium"))
+        assertEquals("\uD83C\uDDF3\uD83C\uDDF1", sportsCountryFlag("Netherlands U21"))
+        assertEquals(null, sportsCountryFlag("Alanyaspor"))
+        assertTrue(sportsCountryFlag("England")!!.startsWith("\uD83C\uDFF4"))
+    }
 }
