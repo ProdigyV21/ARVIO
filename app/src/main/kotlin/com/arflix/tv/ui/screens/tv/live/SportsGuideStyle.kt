@@ -217,8 +217,12 @@ internal fun teamInitials(name: String): String {
 /** Red pill with a pulsing dot, for games that are on now. */
 @Composable
 internal fun SportsLivePill(label: String, modifier: Modifier = Modifier, large: Boolean = false) {
-    val pulse = rememberInfiniteTransition(label = "sports-live")
-    val alpha by pulse.animateFloat(1f, .35f, infiniteRepeatable(tween(900, easing = LinearEasing), RepeatMode.Reverse), label = "sports-live-dot")
+    // Only the big panel pulses. A pulsing dot on every card keeps the TV drawing frames
+    // all the time, which a busy page with many live games can't afford.
+    val alpha = if (large) {
+        val pulse = rememberInfiniteTransition(label = "sports-live")
+        pulse.animateFloat(1f, .35f, infiniteRepeatable(tween(900, easing = LinearEasing), RepeatMode.Reverse), label = "sports-live-dot").value
+    } else 1f
     Row(modifier.clip(RoundedCornerShape(6.dp)).background(LiveColors.LiveRed)
         .padding(horizontal = if (large) 8.dp else 6.dp, vertical = if (large) 3.dp else 2.dp),
         verticalAlignment = Alignment.CenterVertically) {

@@ -102,4 +102,33 @@ class SportsHubTest {
         assertEquals("UK: TNT Sports 2", sportsWatchStream(streams)?.name)
         assertEquals(null, sportsWatchStream(streams.take(5)))
     }
+
+    @Test fun guidePlaceholdersAreNotGames() {
+        listOf("- NO EVENT STREAMING - | 8K EXCLUSIVE", "ENDED | Eintracht Frankfurt II vs Ulm", "Next | UK Championship",
+            "24/7 Football", "No live events", "Coming up: Arsenal vs Chelsea").forEach {
+            assertTrue(it, guidePlaceholder.containsMatchIn(it))
+        }
+        listOf("Arsenal vs Chelsea", "LIVE | #22 West Virginia vs #13 Notre Dame", "Next Gen ATP Finals Final", "Valencia GP FP1").forEach {
+            if (it.startsWith("Next Gen")) return@forEach
+            assertFalse(it, guidePlaceholder.containsMatchIn(it))
+        }
+        val resolver = SportsProgrammeResolver()
+        assertEquals(null, resolver.resolve(IptvProgram("ENDED | Ajax vs PSV", startUtcMillis = now, endUtcMillis = now + hour), GuideSport.FOOTBALL))
+        assertEquals(GuideSport.FOOTBALL, resolver.resolve(IptvProgram("Ajax vs PSV", startUtcMillis = now, endUtcMillis = now + hour), GuideSport.FOOTBALL)?.sport)
+    }
+
+    @Test fun bigGuidesRescanOnlyAFewTimes() {
+        assertEquals(0, sportsGuideSizeBucket(10))
+        assertEquals(sportsGuideSizeBucket(40_000), sportsGuideSizeBucket(45_000))
+        val buckets = (0..60_000 step 64).map(::sportsGuideSizeBucket).distinct()
+        assertTrue("${buckets.size} rescans", buckets.size < 30)
+    }
+
+    @Test fun rowsShowACapButCountEverything() {
+        val many = (1..150).map { game("$it", "Team $it vs Club $it", -minute) }
+        val live = sportsHubRows(many, now, byCompetition = false, labels).first { it.id == SPORTS_ROW_LIVE }
+        assertEquals(SPORTS_ROW_CAP, live.events.size)
+        assertEquals(150, live.total)
+        assertEquals(150, sportsRailCounts(many, now)[null]?.live)
+    }
 }

@@ -90,6 +90,12 @@ internal const val SPORTS_ROW_CHANNELS = "live-channels"
 /** Games that start within this window are "starting soon" and show a countdown. */
 internal const val SPORTS_SOON_WINDOW_MS = 3 * 60 * 60_000L
 
+/**
+ * Cards per row. A big playlist can have thousands of games on at once; a row on a TV
+ * shows the best ones and the counts still say how many there are.
+ */
+internal const val SPORTS_ROW_CAP = 60
+
 internal data class SportsHubLabels(val live: String, val soon: String, val channels: String)
 
 /**
@@ -108,7 +114,7 @@ internal fun sportsHubRows(
     val onAir = visible.filter { it.isOnAir(now) }
     val live = onAir.filterNot { it.channelOnly }
         .sortedWith(compareByDescending<SportsGuideEvent> { it.prominence }.thenBy { it.programme.startUtcMillis }.thenBy { it.id }) +
-        visible.filter { it.isScheduledNow(now) }.sortedBy { it.programme.startUtcMillis }
+        visible.filter { it.isScheduledNow(now) && !it.channelOnly }.sortedBy { it.programme.startUtcMillis }
     val channels = onAir.filter { it.channelOnly }
     val soon = visible.filter { !it.isOnAir(now) && !it.isScheduledNow(now) &&
         it.programme.startUtcMillis > now && it.programme.startUtcMillis - now <= SPORTS_SOON_WINDOW_MS }
@@ -116,21 +122,23 @@ internal fun sportsHubRows(
     val rest = visible.filterNot { it.channelOnly }
         .sortedWith(compareByDescending<SportsGuideEvent> { it.isOnAir(now) || it.isScheduledNow(now) }
             .thenBy { it.programme.startUtcMillis }.thenByDescending { it.prominence }.thenBy { it.id })
+    fun row(id: String, title: String, items: List<SportsGuideEvent>) =
+        SportsGuideRow(id, title, if (items.size > SPORTS_ROW_CAP) items.take(SPORTS_ROW_CAP) else items, items.size)
     return buildList {
-        if (live.isNotEmpty()) add(SportsGuideRow(SPORTS_ROW_LIVE, labels.live, live.distinctBy { it.id }))
-        if (soon.isNotEmpty()) add(SportsGuideRow(SPORTS_ROW_SOON, labels.soon, soon))
+        if (live.isNotEmpty()) add(row(SPORTS_ROW_LIVE, labels.live, live.distinctBy { it.id }))
+        if (soon.isNotEmpty()) add(row(SPORTS_ROW_SOON, labels.soon, soon))
         if (byCompetition) {
             rest.groupBy { it.competition?.takeIf { name -> name.isNotBlank() } ?: it.fixture?.league?.takeIf { name -> name.isNotBlank() } ?: it.sport.title }
                 .entries.sortedWith(compareByDescending<Map.Entry<String, List<SportsGuideEvent>>> { entry -> entry.value.maxOf { it.prominence } }
                     .thenBy { entry -> entry.value.minOf { it.programme.startUtcMillis } })
-                .forEach { (name, items) -> add(SportsGuideRow("competition-${name.lowercase(Locale.ROOT)}", name, items)) }
+                .forEach { (name, items) -> add(row("competition-${name.lowercase(Locale.ROOT)}", name, items)) }
         } else {
             GuideSport.entries.forEach { sport ->
                 val items = rest.filter { it.sport == sport }
-                if (items.isNotEmpty()) add(SportsGuideRow(sport.name, sport.title, items))
+                if (items.isNotEmpty()) add(row(sport.name, sport.title, items))
             }
         }
-        if (channels.isNotEmpty()) add(SportsGuideRow(SPORTS_ROW_CHANNELS, labels.channels, channels))
+        if (channels.isNotEmpty()) add(row(SPORTS_ROW_CHANNELS, labels.channels, channels))
     }
 }
 
@@ -142,9 +150,11 @@ internal fun sportsRailCounts(events: List<SportsGuideEvent>, now: Long, wholeDa
     val visible = if (wholeDay) events.filterNot { it.channelOnly } else events.filter { it.hasChannels(now) && !it.isFinished() &&
         (it.isOnAir(now) || it.isScheduledNow(now) || it.programme.startUtcMillis > now) && !it.channelOnly }
     val result = HashMap<GuideSport?, SportsRailCount>()
-    result[null] = SportsRailCount(visible.size, visible.count { it.isOnAir(now) })
+    // "Live" counts the same games as the Live now row: on air, or due to be on now.
+    fun live(e: SportsGuideEvent) = e.isOnAir(now) || (!wholeDay && e.isScheduledNow(now))
+    result[null] = SportsRailCount(visible.size, visible.count(::live))
     visible.groupBy { it.sport }.forEach { (sport, items) ->
-        result[sport] = SportsRailCount(items.size, items.count { it.isOnAir(now) })
+        result[sport] = SportsRailCount(items.size, items.count(::live))
     }
     return result
 }
@@ -638,10 +648,14 @@ internal fun SportsHero(
                         modifier = Modifier.padding(start = 6.dp))
                 }
             }
-            Column {
+            androidx.compose.foundation.layout.BoxWithConstraints {
+                // A narrow panel (the drawer open, a small screen) keeps every button in
+                // view by showing the secondary ones as icons only.
+                val compact = maxWidth < (actions.size * 150).dp
+                Column {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     actions.forEachIndexed { index, action ->
-                        SportsHeroButton(action,
+                        SportsHeroButton(if (compact && !action.primary) action.copy(iconOnly = true) else action,
                             Modifier.then(if (index == 0) Modifier.focusRequester(firstFocus) else Modifier)
                                 .onPreviewKeyEvent { key ->
                                     if (key.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
@@ -661,6 +675,7 @@ internal fun SportsHero(
                     val shownProgress by animateFloatAsState(progress.coerceIn(0f, 1f), tween(400, easing = FastOutSlowInEasing), label = "sports-hero-progress")
                     if (progress > 0f) Box(Modifier.fillMaxHeight().fillMaxWidth(shownProgress)
                         .background(Brush.horizontalGradient(listOf(Color(0xFFFF3B30), Color(0xFFFF8A65)))))
+                }
                 }
             }
         }
