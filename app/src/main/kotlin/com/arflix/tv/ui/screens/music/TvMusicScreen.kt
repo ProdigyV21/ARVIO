@@ -507,7 +507,7 @@ private fun TvLibrary(
                     accent = accent,
                     modifier = if (tab == option) Modifier.focusRequester(tabFocus) else Modifier,
                     tag = "tv-music-tab-" + option.name.lowercase(),
-                    onFocus = { if (option != TvMusicTab.SEARCH && tab != option) onTab(option) },
+                    onFocus = { if (tab != option) onTab(option) },
                     onClick = { onTab(option) },
                 )
             }
@@ -1322,8 +1322,8 @@ private fun TvPlayer(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     val liked = state.collections.isFavorite(track)
-                    TvChip(stringResource(if (liked) R.string.music_unlike else R.string.music_like),
-                        if (liked) Icons.Default.Favorite else Icons.Default.FavoriteBorder, selected = liked, accent = accent) { viewModel.toggleFavorite(track) }
+                    TvIconButton(if (liked) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                        stringResource(if (liked) R.string.music_unlike else R.string.music_like), accent, active = liked) { viewModel.toggleFavorite(track) }
                     TvChip(stringResource(R.string.music_lyrics), Icons.Default.Lyrics, selected = lyricsOn, accent = accent, tag = "tv-music-lyrics") { lyricsOn = !lyricsOn }
                     TvChip(stringResource(R.string.music_queue), Icons.AutoMirrored.Filled.QueueMusic, selected = false, accent = accent,
                         modifier = Modifier.focusRequester(queueChipFocus), tag = "tv-music-queue") { queueOpen = true }
@@ -1332,7 +1332,7 @@ private fun TvPlayer(
                     TvIconButton(Icons.Default.MoreVert, stringResource(R.string.music_more), accent) { onTrackMenu(track, emptyList()) }
                 }
                 if (!lyricsOn) {
-                    val upNext = playback.upNext.take(3).mapNotNull { playback.queue.getOrNull(it) }
+                    val upNext = playback.upNext.take(2).mapNotNull { playback.queue.getOrNull(it) }
                     if (upNext.isNotEmpty()) {
                         Spacer(Modifier.height(28.dp))
                         Text(stringResource(R.string.music_up_next), color = Faint, fontSize = 14.sp, fontWeight = FontWeight.Bold)
