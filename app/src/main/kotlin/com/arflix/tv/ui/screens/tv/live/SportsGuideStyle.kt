@@ -561,7 +561,7 @@ internal fun SportsSkeletonRows(
                         Box(Modifier.padding(horizontal = 18.dp).width(if (row % 2 == 0) 150.dp else 112.dp).height(13.dp)
                             .sportsShimmer(RoundedCornerShape(4.dp), .07f))
                         // Not lazy and never focusable: just wide enough to run off the edge like a real row.
-                        Row(Modifier.padding(top = 10.dp).horizontalScroll(rememberScrollState(), enabled = false).padding(horizontal = 18.dp),
+                        Row(Modifier.padding(top = 10.dp).horizontalScroll(androidx.compose.foundation.rememberScrollState(), enabled = false).padding(horizontal = 18.dp),
                             horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                             repeat(cards) {
                                 Column(Modifier.width(cardWidth)) {
