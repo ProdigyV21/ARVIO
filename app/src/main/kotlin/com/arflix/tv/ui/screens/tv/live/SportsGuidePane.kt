@@ -40,6 +40,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
@@ -119,7 +120,7 @@ internal object SportsPresentationCache {
 internal const val SPORTS_CHANNEL_CATEGORY = "g-sports"
 
 /** How much the focused Sports card grows (spacing between cards leaves room for it). */
-internal const val SPORTS_CARD_FOCUS_SCALE = 1.04f
+internal const val SPORTS_CARD_FOCUS_SCALE = 1.07f
 
 /**
  * Gives the match guide a home, preferring the one right next to the sport it
@@ -211,13 +212,13 @@ internal fun SportsGuidePane(
     // Only a schedule refresh consumes this order. Focus alone must not rebuild
     // every catalogue and invalidate all visible lazy rows.
     val focusedOrder = remember { arrayOfNulls<Pair<String, List<String>>>(1) }
-    var artworkRetry by remember { mutableIntStateOf(0) }
-    var failedArtwork by remember(artworkRetry) { mutableStateOf(emptySet<String>()) }
     // Reopening Sports shows the rows from the last visit straight away (when they
     // were built from the same events) instead of a spinner, then refreshes them.
     val cachedPresentation = remember(events) { SportsPresentationCache.rowsFor(events) }
     var presentationRows by remember { mutableStateOf(cachedPresentation.orEmpty()) }
     var presentationLoading by remember { mutableStateOf(cachedPresentation == null) }
+    // The events the rows were last built from (identity), to tell "not built yet" from "empty".
+    var builtFor by remember { mutableStateOf<List<SportsGuideEvent>?>(null) }
     // null = the overview; otherwise days from today (-7..7).
     var dayOffset by rememberSaveable { mutableStateOf<Int?>(null) }
     var sportsFilter by rememberSaveable { mutableStateOf(SPORTS_FILTER_ALL) }
@@ -266,6 +267,7 @@ internal fun SportsGuidePane(
                 }
             }
             if (built != presentationRows) presentationRows = built
+            builtFor = events
         } finally {
             presentationLoading = false
         }
@@ -274,6 +276,11 @@ internal fun SportsGuidePane(
     val filterSports = remember(events, selectedDate, dayExtra, fixtures) {
         if (selectedDate == null) sportsFilterOptions(events.filter { it.hasChannels(now) })
         else sportsFilterOptions(sportsEventsForDay(events, fixtures + dayExtra, selectedDate, zone))
+    }
+    val sportCounts = remember(events, selectedDate, dayExtra, fixtures, now) {
+        val source = if (selectedDate == null) events.filter { it.hasChannels(now) }
+            else sportsEventsForDay(events, fixtures + dayExtra, selectedDate, zone)
+        source.groupingBy { it.sport }.eachCount()
     }
     val rows = remember(presentationRows) {
         val focusSnapshot = focusedOrder[0]
@@ -288,12 +295,15 @@ internal fun SportsGuidePane(
     // The game the D-pad is on, shown large above the rows. Only the preview reads it.
     var previewEvent by remember { mutableStateOf<SportsGuideEvent?>(null) }
     var returnFocus by remember { mutableStateOf<FocusRequester?>(null) }
-    var showScore by remember { mutableStateOf(false) }
+    // Scores are shown everywhere on this page; the game info follows that.
+    val showScore = true
     var showDetails by remember { mutableStateOf(false) }
     val firstFocus = remember { FocusRequester() }
     val categoriesFocus = remember { FocusRequester() }
     val dayChipsFocus = remember { FocusRequester() }
-    val filterChipsFocus = remember { FocusRequester() }
+    var picker by remember { mutableStateOf<SportsPicker?>(null) }
+    val sportPillFocus = remember { FocusRequester() }
+    val liveCount = remember(events, now) { events.count { it.isOnAir(now) && it.hasChannels(now) } }
     val listState = rememberLazyListState()
     val rowStates = remember { mutableMapOf<String, LazyListState>() }
     val cardFocus = remember { mutableMapOf<Pair<String, String>, FocusRequester>() }
@@ -308,6 +318,14 @@ internal fun SportsGuidePane(
     }
     val keysByRow = remember(rows) {
         rows.associate { it.id to disambiguatedLazyKeys(it.events) { event -> event.id } }
+    }
+    val touchUi = com.arflix.tv.util.LocalDeviceType.current.isTouchDevice()
+    // Up/Down lands on the card that is visually above/below, even when the two rows
+    // are scrolled differently.
+    fun alignedColumn(fromRow: Int, fromColumn: Int, toRow: Int): Int {
+        val from = rows.getOrNull(fromRow)?.id?.let { rowStates[it] }?.firstVisibleItemIndex ?: 0
+        val to = rows.getOrNull(toRow)?.id?.let { rowStates[it] }?.firstVisibleItemIndex ?: 0
+        return (to + (fromColumn - from)).coerceAtLeast(0)
     }
     fun moveTo(rowIndex: Int, columnIndex: Int) {
         val row = rows.getOrNull(rowIndex) ?: return
@@ -336,7 +354,18 @@ internal fun SportsGuidePane(
                 }
             }
             // Scrolling may continue after focus moves; new keys replace this job.
-            launch { reveal(listState, rowIndex) }
+            // On a TV the focused row moves to the top, so no half row (captions without
+            // their cards) is left showing under the preview.
+            launch {
+                if (touchUi) reveal(listState, rowIndex)
+                else {
+                    // After focus has moved: focus's own bring-into-view scroll would
+                    // otherwise cancel this one and leave a half row on top.
+                    withFrameNanos { }
+                    withFrameNanos { }
+                    listState.animateScrollToItem(rowIndex)
+                }
+            }
             if (visibleRow == null) withFrameNanos { }
             rowStates[row.id]?.let { horizontal ->
                 launch { reveal(horizontal, column) }
@@ -373,7 +402,7 @@ internal fun SportsGuidePane(
     fun eventTime(event: SportsGuideEvent): String {
         if (event.isFinished()) return labelFinished
         if (event.isConfirmedLive(now) || (event.channelOnly && event.isOnAir(now))) return labelLive
-        if (event.isOnAir(now)) return labelOnAir
+        if (event.isOnAir(now)) return labelLive
         if (event.isScheduledNow(now)) return labelScheduledNow
         val date = Instant.ofEpochMilli(event.programme.startUtcMillis).atZone(ZoneId.systemDefault())
         val day = when (date.toLocalDate()) {
@@ -384,7 +413,7 @@ internal fun SportsGuidePane(
         return "$day ${timeFormat.format(Date(event.programme.startUtcMillis))}"
     }
     LaunchedEffect(focusSignal, rows.isEmpty(), sidebarOpen) {
-        if (!touch && focusSignal > handledFocusSignal && rows.isNotEmpty() && !sidebarOpen) {
+        if (!touch && focusSignal > handledFocusSignal && !sidebarOpen) {
             // Lazy cards are attached after the drawer starts its layout transition.
             withFrameNanos { }
             withFrameNanos { }
@@ -422,21 +451,23 @@ internal fun SportsGuidePane(
                         .padding(horizontal = 24.dp, vertical = 16.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = stringResource(R.string.back),
-                        tint = TextPrimary,
+                    SportsHeaderIcon(
+                        icon = Icons.AutoMirrored.Filled.ArrowBack,
+                        description = stringResource(R.string.back),
                         modifier = Modifier
                             .focusRequester(categoriesFocus)
                             .onPreviewKeyEvent { key ->
                                 if (key.key == Key.DirectionDown && key.type == KeyEventType.KeyDown) {
-                                    if (runCatching { dayChipsFocus.requestFocus() }.isFailure) moveTo(0, 0); true
+                                    // Toolbar first; on the empty page its Retry button.
+                                    if (runCatching { dayChipsFocus.requestFocus() }.isFailure &&
+                                        runCatching { firstFocus.requestFocus() }.isFailure) moveTo(0, 0)
+                                    true
                                 } else false
                             }
-                            .clickable(onClick = onOpenCategories)
-                            .padding(end = 16.dp)
-                            .size(28.dp),
+                            .padding(end = 0.dp),
+                        onClick = onOpenCategories,
                     )
+                    Spacer(Modifier.width(12.dp))
                     Text(
                         text = stringResource(R.string.live_quick_sports),
                         style = ArflixTypography.heroTitle.copy(fontSize = 24.sp),
@@ -446,14 +477,7 @@ internal fun SportsGuidePane(
                         overflow = TextOverflow.Ellipsis,
                     )
                     if (onOpenSearch != null) {
-                        Icon(
-                            imageVector = Icons.Default.Search,
-                            contentDescription = stringResource(R.string.search),
-                            tint = TextPrimary,
-                            modifier = Modifier
-                                .size(28.dp)
-                                .clickable(onClick = onOpenSearch),
-                        )
+                        SportsHeaderIcon(Icons.Default.Search, stringResource(R.string.search), onClick = onOpenSearch)
                     }
                 }
             } else {
@@ -466,19 +490,21 @@ internal fun SportsGuidePane(
                 }
             }
         }
-        val isProcessing = loading || presentationLoading
+        // Rows are built a frame after new events arrive; never flash an empty state then.
+        val isProcessing = loading || presentationLoading ||
+            (rows.isEmpty() && builtFor !== events)
         val browsing = dayOffset != null || sportsFilter != SPORTS_FILTER_ALL
-        if (rows.isEmpty() && !browsing) {
+        if (rows.isEmpty() && !browsing && isProcessing) {
+            // Shaped like the page that is coming, so it does not jump when rows arrive.
+            Column(Modifier.fillMaxSize().padding(top = 8.dp)) {
+                Text(stringResource(R.string.live_sports_reading_schedule), color = LiveColors.FgDim, fontSize = 13.sp,
+                    modifier = Modifier.padding(horizontal = 18.dp, vertical = 10.dp))
+                SportsSkeletonRows(cardWidth)
+            }
+        } else if (rows.isEmpty() && !browsing) {
             Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.Center,
                 horizontalAlignment = Alignment.CenterHorizontally) {
-                if (isProcessing) {
-                    CircularProgressIndicator(color = liveAccent(), modifier = Modifier.size(28.dp))
-                    Text(
-                        text = stringResource(R.string.live_sports_reading_schedule),
-                        color = LiveColors.FgDim,
-                        modifier = Modifier.padding(14.dp),
-                    )
-                } else {
+                run {
                     Icon(Icons.Default.SportsSoccer, null, tint = LiveColors.FgDim, modifier = Modifier.size(36.dp))
                     Text(
                         text = if (failed) stringResource(R.string.live_sports_schedule_unavailable)
@@ -487,52 +513,43 @@ internal fun SportsGuidePane(
                         color = LiveColors.FgDim,
                         modifier = Modifier.padding(14.dp),
                     )
-                    Text(
-                        text = stringResource(R.string.retry),
-                        color = LiveColors.Fg,
-                        modifier = Modifier.clickable { artworkRetry++; onRetry() }.padding(16.dp),
-                    )
-                    Text(
-                        text = stringResource(R.string.live_groups_title),
-                        color = LiveColors.Fg,
-                        modifier = Modifier.focusRequester(firstFocus)
-                            .clickable(onClick = onOpenCategories).padding(16.dp),
-                    )
+                    Row(Modifier.padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        SportsPill(stringResource(R.string.retry), null, touch = touch,
+                            modifier = Modifier.focusRequester(firstFocus)) { onRetry() }
+                        SportsPill(stringResource(R.string.live_groups_title), null, touch = touch, onClick = onOpenCategories)
+                    }
                 }
             }
         } else Column(Modifier.fillMaxSize()) {
-            SportsDayAndFilterChips(
-                today = todayDate,
-                dayOffset = dayOffset,
-                filter = sportsFilter,
-                sports = filterSports,
+            SportsToolbar(
+                dayLabel = sportsDayLabel(dayOffset, todayDate),
+                dayActive = dayOffset != null,
+                sportLabel = filterSports.firstOrNull { it.name == sportsFilter }?.title ?: stringResource(R.string.sports_filter_all),
+                sport = filterSports.firstOrNull { it.name == sportsFilter },
+                liveOn = sportsFilter == SPORTS_FILTER_LIVE,
+                liveCount = liveCount,
                 touch = touch,
-                dayFocus = dayChipsFocus,
-                filterFocus = filterChipsFocus,
-                onDay = { dayOffset = it; focusedOrder[0] = null },
-                onFilter = { sportsFilter = it; focusedOrder[0] = null },
-                onUpFromDays = {
-                    if (showHeader && !sidebarOpen) runCatching { categoriesFocus.requestFocus() }
+                firstFocus = dayChipsFocus,
+                sportFocus = sportPillFocus,
+                onPickDay = { picker = SportsPicker.Day },
+                onPickSport = { picker = SportsPicker.Sport },
+                onToggleLive = {
+                    sportsFilter = if (sportsFilter == SPORTS_FILTER_LIVE) SPORTS_FILTER_ALL else SPORTS_FILTER_LIVE
+                    // Live means now, so it always shows the overview, whatever day was picked.
+                    if (sportsFilter == SPORTS_FILTER_LIVE) dayOffset = null
+                    focusedOrder[0] = null
                 },
-                onDownFromFilters = { if (rows.isNotEmpty()) moveTo(0, 0) },
+                onUp = { if (showHeader && !sidebarOpen) runCatching { categoriesFocus.requestFocus() } },
+                onDown = { if (rows.isNotEmpty()) moveTo(0, 0) },
                 onLeaveStart = ::leaveCards,
-                tools = listOfNotNull(
-                    onOpenMultiview?.let { SPORTS_TOOL_MULTIVIEW to stringResource(R.string.multiview_title) },
-                    onOpenRecordings?.let { SPORTS_TOOL_RECORDINGS to stringResource(R.string.recordings_title) },
-                ),
-                onTool = { tool ->
-                    when (tool) {
-                        SPORTS_TOOL_MULTIVIEW -> onOpenMultiview?.invoke()
-                        SPORTS_TOOL_RECORDINGS -> onOpenRecordings?.invoke()
-                    }
-                },
+                onMultiview = onOpenMultiview,
+                onRecordings = onOpenRecordings,
             )
-            if (rows.isEmpty()) Column(Modifier.fillMaxWidth().weight(1f), verticalArrangement = Arrangement.Center,
+            if (rows.isEmpty() && (dayLoading || isProcessing)) SportsSkeletonRows(cardWidth, Modifier.weight(1f).padding(top = 8.dp))
+            else if (rows.isEmpty()) Column(Modifier.fillMaxWidth().weight(1f), verticalArrangement = Arrangement.Center,
                 horizontalAlignment = Alignment.CenterHorizontally) {
-                if (dayLoading || isProcessing) {
-                    CircularProgressIndicator(color = liveAccent(), modifier = Modifier.size(28.dp))
-                    Text(stringResource(R.string.sports_loading_day), color = LiveColors.FgDim, modifier = Modifier.padding(14.dp))
-                } else Text(stringResource(R.string.sports_no_games_selection), color = LiveColors.FgDim, modifier = Modifier.padding(14.dp))
+                Icon(Icons.Default.SportsSoccer, null, tint = LiveColors.FgMute, modifier = Modifier.size(32.dp))
+                Text(stringResource(R.string.sports_no_games_selection), color = LiveColors.FgDim, modifier = Modifier.padding(14.dp))
             } else {
             if (!touch && !narrow) SportsFocusPreview(
                 eventProvider = {
@@ -541,13 +558,21 @@ internal fun SportsGuidePane(
                         ?: rows.firstOrNull()?.events?.firstOrNull()
                 },
                 timeLabel = ::eventTime,
-                isLive = { it.isOnAir(now) },
+                isLive = { it.isOnAir(now) && !it.isFinished() },
+                scoreOf = { it.scoreLine(now) },
+                liveLabel = labelLive,
                 channelNames = { event ->
                     ((if (event.isOnAir(now)) event.availableChannels(now) else event.channels) + event.possibleChannels)
                         .distinctBy { it.id }.map { it.name }
                 },
             )
-            LazyColumn(Modifier.weight(1f).fillMaxWidth().testTag("sports-guide-list"), state = listState, contentPadding = PaddingValues(bottom = 24.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()),
+            // TV: rows and cards are scrolled by moveTo(); focus's own bring-into-view
+            // would fight it and leave half a row showing under the preview.
+            @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+            val bringIntoView = if (touch) androidx.compose.foundation.gestures.LocalBringIntoViewSpec.current else SportsNoBringIntoView
+            @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+            CompositionLocalProvider(androidx.compose.foundation.gestures.LocalBringIntoViewSpec provides bringIntoView) {
+            LazyColumn(Modifier.weight(1f).fillMaxWidth().clipToBounds().testTag("sports-guide-list"), state = listState, contentPadding = PaddingValues(bottom = 24.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()),
             verticalArrangement = Arrangement.spacedBy(2.dp)) {
             val rowKeys = disambiguatedLazyKeys(rows) { it.id }
             itemsIndexed(rows, key = { index, _ -> rowKeys[index] }, contentType = { _, _ -> "sports-row" }) { rowIndex, row ->
@@ -557,14 +582,11 @@ internal fun SportsGuidePane(
                     onDispose { rowStates.remove(row.id) }
                 }
                 Column {
-                    Row(Modifier.fillMaxWidth().height(if (narrow) 44.dp else 20.dp).padding(horizontal = 18.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text(row.title, color = LiveColors.Fg, fontWeight = FontWeight.Medium, fontSize = 15.sp, lineHeight = 18.sp,
-                            modifier = Modifier.weight(1f))
-                    }
+                    SportsRowTitle(row.title, row.events.size, touch)
                     val eventKeys = keysByRow.getValue(row.id)
                     // Inner padding leaves room for the focused card's lift without clipping;
                     // the outer padding shrinks by the same amount so cards stay aligned.
-                    LazyRow(Modifier.padding(horizontal = 10.dp), state = rowState, contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp),
+                    LazyRow(Modifier.padding(horizontal = 8.dp), state = rowState, contentPadding = PaddingValues(horizontal = 10.dp, vertical = 10.dp),
                         horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         itemsIndexed(row.events, key = { index, _ -> eventKeys[index] }, contentType = { _, _ -> "sports-card" }) { index, event ->
                             val scheduleOnly = row.id.endsWith("-schedule")
@@ -580,7 +602,7 @@ internal fun SportsGuidePane(
                             // so the animation redraws the card without recomposing or relayout.
                             val focusScale by androidx.compose.animation.core.animateFloatAsState(
                                 targetValue = if (focused && !touch) SPORTS_CARD_FOCUS_SCALE else 1f,
-                                animationSpec = tween(140),
+                                animationSpec = tween(180, easing = androidx.compose.animation.core.FastOutSlowInEasing),
                                 label = "sportsCardFocusScale",
                             )
                             Column(Modifier.width(cardWidth).testTag("sports-event-card")
@@ -603,14 +625,20 @@ internal fun SportsGuidePane(
                                     if (direction !in listOf(Key.DirectionUp, Key.DirectionDown, Key.DirectionLeft, Key.DirectionRight)) false
                                     else {
                                         if (key.type == KeyEventType.KeyDown) when (direction) {
-                                            Key.DirectionUp -> if ((navigationTarget?.first ?: rowIndex) > 0) moveTo((navigationTarget?.first ?: rowIndex) - 1, navigationTarget?.second ?: index)
+                                            Key.DirectionUp -> if ((navigationTarget?.first ?: rowIndex) > 0) {
+                                                    val fromRow = navigationTarget?.first ?: rowIndex
+                                                    moveTo(fromRow - 1, alignedColumn(fromRow, navigationTarget?.second ?: index, fromRow - 1))
+                                                }
                                                 else {
                                                     navigationJob?.cancel(); navigationTarget = null
-                                                    if (runCatching { filterChipsFocus.requestFocus() }.isFailure) {
+                                                    if (runCatching { dayChipsFocus.requestFocus() }.isFailure) {
                                                         if (sidebarOpen) leaveCards() else runCatching { categoriesFocus.requestFocus() }
                                                     }
                                                 }
-                                            Key.DirectionDown -> moveTo((navigationTarget?.first ?: rowIndex) + 1, navigationTarget?.second ?: index)
+                                            Key.DirectionDown -> {
+                                                val fromRow = navigationTarget?.first ?: rowIndex
+                                                moveTo(fromRow + 1, alignedColumn(fromRow, navigationTarget?.second ?: index, fromRow + 1))
+                                            }
                                             Key.DirectionLeft -> if ((navigationTarget?.second ?: index) == 0) leaveCards() else moveTo(navigationTarget?.first ?: rowIndex, (navigationTarget?.second ?: index) - 1)
                                             Key.DirectionRight -> moveTo(navigationTarget?.first ?: rowIndex, (navigationTarget?.second ?: index) + 1)
                                         }
@@ -619,49 +647,45 @@ internal fun SportsGuidePane(
                                 }
                                 .clickable {
                                     navigationJob?.cancel(); navigationTarget = null
-                                    returnFocus = requester; showScore = false; showDetails = false; selected = event
+                                    returnFocus = requester; showDetails = false; selected = event
                                 }
                                 .padding(2.dp)) {
+                                val score = event.scoreLine(now)
                                 if (scheduleOnly) Row(Modifier.fillMaxWidth().height(36.dp)
-                                    .border(2.dp, if (focused) Color.White else LiveColors.DividerStrong, RoundedCornerShape(8.dp))
-                                    .padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                                    Text(eventTime(event), color = LiveColors.Fg, fontSize = 11.sp)
-                                    if (event.id in remindedIds) Icon(Icons.Default.NotificationsActive, null, tint = LiveColors.Fg,
+                                    .clip(SportsCardShape).background(Color.White.copy(alpha = if (focused) 1f else .07f))
+                                    .padding(horizontal = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    Text(eventTime(event), color = if (focused) Color(0xFF0B0B0D) else LiveColors.Fg, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                                    if (event.id in remindedIds) Icon(Icons.Default.NotificationsActive, null, tint = if (focused) Color(0xFF0B0B0D) else LiveColors.Fg,
                                         modifier = Modifier.padding(start = 6.dp).size(12.dp))
-                                } else Box(Modifier.fillMaxWidth().aspectRatio(16f / 9f).testTag("sports-event-art").clip(RoundedCornerShape(8.dp))) {
-                                    if (event.id !in failedArtwork) {
-                                        EventArtwork(event, Modifier.fillMaxSize(), knownSize = cardArtSize) { failedArtwork = failedArtwork + event.id }
-                                    } else {
-                                        // Keep the focused card in place when an image fails.
-                                        Box(Modifier.fillMaxSize().background(LiveColors.Panel), contentAlignment = Alignment.Center) {
-                                            Text(event.title, color = LiveColors.FgDim, maxLines = 3,
-                                                overflow = TextOverflow.Ellipsis, fontSize = 12.sp, modifier = Modifier.padding(12.dp))
-                                        }
-                                    }
-                                    Row(Modifier.padding(6.dp).background(Color.Black.copy(alpha = .85f), RoundedCornerShape(8.dp))
-                                        .padding(horizontal = 5.dp, vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
-                                        if (event.isOnAir(now)) Box(Modifier.padding(end = 4.dp).size(7.dp).background(LiveColors.LiveRed, RoundedCornerShape(50)))
-                                        Text(eventTime(event), color = Color.White, fontSize = 10.sp, lineHeight = 12.sp)
+                                } else Box(Modifier.fillMaxWidth().aspectRatio(16f / 9f).testTag("sports-event-art").clip(SportsCardShape)) {
+                                    EventArtwork(event, Modifier.fillMaxSize(), knownSize = cardArtSize)
+                                    // Status top-left: LIVE, Finished or the kick-off time.
+                                    Row(Modifier.padding(7.dp), verticalAlignment = Alignment.CenterVertically) {
+                                        if (event.isOnAir(now) && !event.isFinished()) SportsLivePill(labelLive)
+                                        else SportsInfoPill(eventTime(event))
                                         if (event.id in remindedIds) Icon(Icons.Default.NotificationsActive, null, tint = Color.White,
-                                            modifier = Modifier.padding(start = 4.dp).size(10.dp))
+                                            modifier = Modifier.padding(start = 5.dp).size(13.dp))
                                     }
-                                    Box(Modifier.matchParentSize().liveFocusOutline(focused, 4.dp))
+                                    // Score bottom-right, always visible for live and finished games.
+                                    if (score != null) SportsInfoPill(score.text(), strong = true,
+                                        modifier = Modifier.align(Alignment.BottomEnd).padding(7.dp).testTag("sports-card-score"))
+                                    Box(Modifier.matchParentSize().liveFocusOutline(focused, 10.dp))
                                 }
-                                Text(event.title, color = LiveColors.Fg, fontSize = if (touch) 14.sp else 11.sp, lineHeight = if (touch) 18.sp else 14.sp, fontWeight = FontWeight.Medium,
-                                    minLines = 2, maxLines = 2, overflow = TextOverflow.Ellipsis,
-                                    modifier = Modifier.padding(top = 4.dp))
-                                if (touch) Text(listOfNotNull(event.sport.title, event.competition).joinToString(" · "),
-                                    color = LiveColors.FgDim, fontSize = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                                Row(Modifier.fillMaxWidth().height(if (touch) 24.dp else 14.dp), verticalAlignment = Alignment.CenterVertically) {
-                                    if (!touch) Text(listOfNotNull(event.sport.title, event.competition).joinToString(" · "), color = LiveColors.FgDim, fontSize = 10.sp, lineHeight = 13.sp,
+                                Text(event.displayTitle(), color = LiveColors.Fg, fontSize = if (touch) 14.sp else SportsTitleSize,
+                                    lineHeight = if (touch) 18.sp else 16.sp, fontWeight = FontWeight.SemiBold,
+                                    maxLines = 1, overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.padding(top = 7.dp, start = 2.dp, end = 2.dp))
+                                Row(Modifier.fillMaxWidth().padding(top = 2.dp, start = 2.dp, end = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    Text(listOfNotNull(event.competition ?: event.sport.title).joinToString(" · "), color = LiveColors.FgDim,
+                                        fontSize = if (touch) 12.sp else 11.sp, lineHeight = 14.sp,
                                         maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
                                     val count = remember(event, now) {
                                         ((if (event.isOnAir(now)) event.availableChannels(now) else event.channels) + event.possibleChannels).distinctBy { it.id }.size + event.addonSources.size
                                     }
                                     if (count > 0) {
-                                        Icon(Icons.Default.Tv, null, tint = LiveColors.FgDim, modifier = Modifier.size(13.dp))
-                                        Text(if (event.addonSources.isEmpty()) channelCount(count) else stringResource(R.string.live_sports_source_count, count), color = LiveColors.FgDim, fontSize = if (touch) 12.sp else 9.sp, lineHeight = if (touch) 16.sp else 12.sp,
-                                            modifier = Modifier.padding(start = 6.dp))
+                                        Icon(Icons.Default.Tv, null, tint = LiveColors.FgMute, modifier = Modifier.padding(start = 6.dp).size(12.dp))
+                                        Text(count.toString(), color = LiveColors.FgMute, fontSize = 11.sp, lineHeight = 14.sp,
+                                            modifier = Modifier.padding(start = 3.dp))
                                     }
                                 }
                             }
@@ -671,8 +695,47 @@ internal fun SportsGuidePane(
             }
         }
             }
+            }
         }
     }
+    }
+    when (picker) {
+        SportsPicker.Day -> SportsPickerDialog(
+            title = stringResource(R.string.sports_pick_day),
+            options = sportsDayOptions(todayDate),
+            selectedKey = dayOffset?.toString() ?: SPORTS_DAY_OVERVIEW,
+            onPick = { key ->
+                dayOffset = key.toIntOrNull()
+                if (dayOffset != null && sportsFilter == SPORTS_FILTER_LIVE) sportsFilter = SPORTS_FILTER_ALL
+                focusedOrder[0] = null
+                picker = null
+            },
+            onDismiss = { picker = null },
+        )
+        SportsPicker.Sport -> SportsPickerDialog(
+            title = stringResource(R.string.sports_pick_sport),
+            options = listOf(SportsPickerOption(SPORTS_FILTER_ALL, stringResource(R.string.sports_filter_all))) +
+                filterSports.map { SportsPickerOption(it.name, it.title, sportCounts[it]?.toString(), sport = it) },
+            selectedKey = if (sportsFilter == SPORTS_FILTER_LIVE) SPORTS_FILTER_ALL else sportsFilter,
+            onPick = { key ->
+                sportsFilter = key
+                focusedOrder[0] = null
+                picker = null
+            },
+            onDismiss = { picker = null },
+        )
+        null -> Unit
+    }
+    // Back on the pill that opened the picker once it closes.
+    var lastPicker by remember { mutableStateOf<SportsPicker?>(null) }
+    LaunchedEffect(picker) {
+        val closed = lastPicker
+        lastPicker = picker
+        if (picker == null && closed != null && !touch) {
+            withFrameNanos { }
+            withFrameNanos { }
+            runCatching { (if (closed == SportsPicker.Sport) sportPillFocus else dayChipsFocus).requestFocus() }
+        }
     }
     val selection = selected
     val event = selection?.let { snapshot -> events.firstOrNull { it.id == snapshot.id }
@@ -703,11 +766,11 @@ internal fun SportsGuidePane(
             runCatching { initialFocus.requestFocus() }
         }
         Column(Modifier.widthIn(max = 586.dp).fillMaxWidth().heightIn(max = configuration.screenHeightDp.dp * .82f)
-            .border(1.dp, LiveColors.DividerStrong, RoundedCornerShape(8.dp))
-            .clip(RoundedCornerShape(8.dp)).background(LiveColors.Panel).padding(18.dp)) {
+            .border(1.dp, LiveColors.DividerStrong, RoundedCornerShape(16.dp))
+            .clip(RoundedCornerShape(16.dp)).background(LiveColors.Panel).padding(20.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                if ((event ?: selection).hasEventArtwork && (event ?: selection).id !in failedArtwork)
-                    EventArtwork(event ?: selection, Modifier.width(if (narrow) 84.dp else 132.dp).aspectRatio(16f / 9f).clip(RoundedCornerShape(8.dp)))
+                EventArtwork(event ?: selection, Modifier.width(if (narrow) 104.dp else 160.dp).aspectRatio(16f / 9f).clip(SportsCardShape),
+                    score = (event ?: selection).scoreLine(now))
                 Column(Modifier.weight(1f).padding(start = 14.dp)) {
                     Text(listOfNotNull(event?.let(::eventTime), event?.sport?.title).joinToString("  ·  "),
                         color = LiveColors.FgDim, fontSize = 11.sp)
@@ -724,18 +787,12 @@ internal fun SportsGuidePane(
                         .clickable(onClick = ::dismiss).padding(10.dp))
             }
             event?.fixture?.let { fixture ->
-                Text(listOfNotNull(event.competition, fixture.venue, fixture.round?.let { stringResource(R.string.live_sports_round, it) }).joinToString(" · "),
+                Text(listOfNotNull(event.competition, fixture.venue, fixture.round?.takeIf { it.isNotBlank() && it != "0" }?.let { stringResource(R.string.live_sports_round, it) }).joinToString(" · "),
                     color = LiveColors.FgDim, fontSize = 11.sp, maxLines = 2, overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.padding(top = 10.dp))
-                val hasScore = fixture.homeScore != null && fixture.awayScore != null && (event.isConfirmedLive(now) || event.isFinished())
                 // Chips, not plain text: on a TV each needs a visible focus state.
                 Row(Modifier.padding(top = 10.dp).horizontalScroll(androidx.compose.foundation.rememberScrollState()),
                     verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    if (hasScore) SportsActionChip(
-                        label = if (showScore) "${fixture.homeScore} : ${fixture.awayScore}" else stringResource(R.string.live_sports_show_score),
-                        icon = if (showScore) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                        active = showScore,
-                    ) { showScore = !showScore }
                     if (!event.isNetwork) {
                         SportsActionChip(stringResource(R.string.sports_channels_tab), Icons.Default.Tv, active = !showDetails,
                             modifier = Modifier.testTag("sports-channels-tab")) { showDetails = false }
@@ -785,8 +842,8 @@ internal fun SportsGuidePane(
                     var focused by remember { mutableStateOf(false) }
                     Row(Modifier.fillMaxWidth().heightIn(min = if (narrow) 48.dp else 40.dp).clip(RoundedCornerShape(8.dp))
                         .then(if (index == 0) Modifier.focusRequester(initialFocus) else Modifier)
-                        .border(1.dp, if (focused) Color.White else Color.Transparent, RoundedCornerShape(8.dp))
-                        .background(if (focused) LiveColors.FocusBg else Color.Transparent)
+                        .border(2.dp, if (focused) Color.White else Color.Transparent, RoundedCornerShape(8.dp))
+                        .background(if (focused) Color.White.copy(alpha = .12f) else Color.Transparent)
                         .onFocusChanged { focused = it.isFocused }
                         // Scheduled channels are browsable with a remote, but cannot play early.
                         .focusable(enabled = !canOpenChannel)
@@ -892,6 +949,10 @@ private fun channelCount(count: Int) =
     if (count == 1) stringResource(R.string.live_channel_count_one, count)
     else liveChannelsLabel(count)
 
+/**
+ * A game's picture. The generated match art (sport photo + teams) is always drawn, and a
+ * real banner fades in over it once it has loaded, so a card is never empty or grey.
+ */
 @Composable
 private fun EventArtwork(
     event: SportsGuideEvent,
@@ -899,27 +960,18 @@ private fun EventArtwork(
     // The card's art size when the caller already knows it. Skips BoxWithConstraints,
     // whose extra subcomposition per card showed up while scrolling Sports rows.
     knownSize: androidx.compose.ui.unit.DpSize? = null,
-    onUnavailable: () -> Unit = {},
+    large: Boolean = false,
+    score: SportsScoreLine? = null,
 ) {
-    var loaded by remember(event.artwork) { mutableStateOf(false) }
-    var bannerFailed by remember(event.artwork) { mutableStateOf(event.artwork.isNullOrBlank()) }
-    val pair = event.teamArtwork
-    // A null model previously errored immediately in Coil; with remembered
-    // requests a missing badge URL must still count as a failed pair so the
-    // onUnavailable fallback behaves exactly as before.
-    var pairFailed by remember(pair) { mutableStateOf(pair == null || (pair.homeBadge == null && pair.awayBadge == null)) }
-    var homeLoaded by remember(pair?.homeBadge) { mutableStateOf(false) }
-    var awayLoaded by remember(pair?.awayBadge) { mutableStateOf(false) }
-    LaunchedEffect(bannerFailed, pairFailed) { if (bannerFailed && pairFailed) onUnavailable() }
     val context = LocalContext.current
     val density = LocalDensity.current
-    // Decode once per URL at card size and keep the request anchored across
-    // recompositions (clock ticks, D-Pad focus) via remember + key(), mirroring
-    // ChannelLogo. The previous raw-String models re-decoded full-res art on
-    // every pass and retried failures on each recomposition.
+    val bannerUrl = event.artwork?.takeIf { it.isNotBlank() }
+    var loaded by remember(bannerUrl) { mutableStateOf(false) }
+    val bannerAlpha by androidx.compose.animation.core.animateFloatAsState(if (loaded) 1f else 0f, tween(220), label = "sports-banner-fade")
     val boxModifier = modifier.background(LiveColors.Panel).testTag(if (loaded) "sports-artwork-loaded" else "sports-artwork-pending")
     val layers: @Composable (Int, Int) -> Unit = { artW, artH ->
-        val bannerUrl = event.artwork
+        // Decode once per URL at card size and keep the request anchored across
+        // recompositions (clock ticks, D-pad focus) via remember + key().
         val bannerRequest = remember(bannerUrl, artW, artH) {
             bannerUrl?.let { url ->
                 ImageRequest.Builder(context)
@@ -933,59 +985,12 @@ private fun EventArtwork(
                     .build()
             }
         }
-        val homeRequest = remember(pair?.homeBadge, artW, artH) {
-            pair?.homeBadge?.let { url ->
-                ImageRequest.Builder(context)
-                    .data(url)
-                    .size(artW, artH)
-                    .precision(Precision.INEXACT)
-                    .allowHardware(true)
-                    .crossfade(false)
-                    .memoryCacheKey("sports-badge|$url|${artW}x$artH")
-                    .placeholderMemoryCacheKey("sports-badge|$url|${artW}x$artH")
-                    .build()
-            }
-        }
-        val awayRequest = remember(pair?.awayBadge, artW, artH) {
-            pair?.awayBadge?.let { url ->
-                ImageRequest.Builder(context)
-                    .data(url)
-                    .size(artW, artH)
-                    .precision(Precision.INEXACT)
-                    .allowHardware(true)
-                    .crossfade(false)
-                    .memoryCacheKey("sports-badge|$url|${artW}x$artH")
-                    .placeholderMemoryCacheKey("sports-badge|$url|${artW}x$artH")
-                    .build()
-            }
-        }
+        if (!loaded || bannerAlpha < 1f) SportsMatchupArt(event, artW, artH, Modifier.fillMaxSize(), large = large, score = score)
         bannerRequest?.let { request ->
             key(bannerUrl) {
-                AsyncImage(request, null, contentScale = ContentScale.Fit,
-                    onSuccess = { loaded = true }, onError = { loaded = false; bannerFailed = true },
-                    modifier = Modifier.fillMaxSize())
-            }
-        }
-        if (!loaded && pair != null) {
-            Row(Modifier.fillMaxSize().background(if (homeLoaded && awayLoaded) Color(0xFF20262C) else Color.Transparent)
-                .padding(8.dp), verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                homeRequest?.let { request ->
-                    key(pair.homeBadge) {
-                        AsyncImage(request, pair.homeTeam, contentScale = ContentScale.Fit,
-                            onSuccess = { homeLoaded = true }, onError = { homeLoaded = false; pairFailed = true },
-                            modifier = Modifier.weight(1f).fillMaxHeight().graphicsLayer { alpha = if (homeLoaded && awayLoaded) 1f else 0f })
-                    }
-                }
-                Text("VS", color = if (homeLoaded && awayLoaded) LiveColors.Fg else Color.Transparent,
-                    fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
-                awayRequest?.let { request ->
-                    key(pair.awayBadge) {
-                        AsyncImage(request, pair.awayTeam, contentScale = ContentScale.Fit,
-                            onSuccess = { awayLoaded = true }, onError = { awayLoaded = false; pairFailed = true },
-                            modifier = Modifier.weight(1f).fillMaxHeight().graphicsLayer { alpha = if (homeLoaded && awayLoaded) 1f else 0f })
-                    }
-                }
+                AsyncImage(request, null, contentScale = ContentScale.Crop,
+                    onSuccess = { loaded = true }, onError = { loaded = false },
+                    modifier = Modifier.fillMaxSize().graphicsLayer { alpha = bannerAlpha })
             }
         }
     }
@@ -1010,16 +1015,19 @@ private fun SportsFocusPreview(
     isLive: (SportsGuideEvent) -> Boolean,
     channelNames: (SportsGuideEvent) -> List<String>,
     modifier: Modifier = Modifier,
+    scoreOf: (SportsGuideEvent) -> SportsScoreLine? = { null },
+    liveLabel: String = "LIVE",
 ) {
     val event = eventProvider()
     Row(
-        modifier.fillMaxWidth().height(SportsPreviewHeight).padding(horizontal = 18.dp, vertical = 8.dp)
+        modifier.fillMaxWidth().zIndex(1f).background(LiveColors.Bg).height(SportsPreviewHeight).padding(horizontal = 18.dp, vertical = 8.dp)
             .testTag("sports-focus-preview"),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(18.dp),
+        horizontalArrangement = Arrangement.spacedBy(20.dp),
     ) {
         if (event == null) return@Row
-        Box(Modifier.width(SportsPreviewArtWidth).aspectRatio(16f / 9f).clip(RoundedCornerShape(10.dp))) {
+        val score = scoreOf(event)
+        Box(Modifier.width(SportsPreviewArtWidth).aspectRatio(16f / 9f).clip(SportsCardShape)) {
             key(event.id) {
                 EventArtwork(event, Modifier.fillMaxSize(),
                     knownSize = androidx.compose.ui.unit.DpSize(SportsPreviewArtWidth, SportsPreviewArtWidth * 9f / 16f))
@@ -1028,15 +1036,14 @@ private fun SportsFocusPreview(
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(listOfNotNull(event.sport.title, event.competition).joinToString(" · "),
                 color = LiveColors.FgDim, fontSize = 13.sp, lineHeight = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(event.title, color = LiveColors.Fg, fontSize = 24.sp, lineHeight = 28.sp, fontWeight = FontWeight.SemiBold,
-                maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.testTag("sports-focus-preview-title"))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(event.displayTitle(), color = LiveColors.Fg, fontSize = 24.sp, lineHeight = 28.sp, fontWeight = FontWeight.SemiBold,
+                    maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false).testTag("sports-focus-preview-title"))
+                if (score != null) Text(score.text(), color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(start = 16.dp).testTag("sports-focus-preview-score"))
+            }
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                val live = isLive(event)
-                Row(Modifier.background(if (live) LiveColors.LiveRed.copy(alpha = 0.18f) else Color.White.copy(alpha = 0.08f), RoundedCornerShape(6.dp))
-                    .padding(horizontal = 8.dp, vertical = 3.dp), verticalAlignment = Alignment.CenterVertically) {
-                    if (live) Box(Modifier.padding(end = 6.dp).size(7.dp).background(LiveColors.LiveRed, RoundedCornerShape(50)))
-                    Text(timeLabel(event), color = LiveColors.Fg, fontSize = 12.sp, lineHeight = 15.sp, fontWeight = FontWeight.Medium)
-                }
+                if (isLive(event)) SportsLivePill(liveLabel, large = true) else SportsInfoPill(timeLabel(event), large = true)
                 val names = channelNames(event)
                 if (names.isNotEmpty()) {
                     Icon(Icons.Default.Tv, null, tint = LiveColors.FgDim, modifier = Modifier.size(14.dp))
@@ -1048,8 +1055,8 @@ private fun SportsFocusPreview(
     }
 }
 
-private val SportsPreviewHeight = 140.dp
-private val SportsPreviewArtWidth = 220.dp
+private val SportsPreviewHeight = 124.dp
+private val SportsPreviewArtWidth = 192.dp
 
 @Composable
 private fun PickerBadge(label: String) {
@@ -1059,103 +1066,8 @@ private fun PickerBadge(label: String) {
 }
 
 
-/** Day tabs (overview, a week back, a week ahead) above sport filter chips. */
-@Composable
-private fun SportsDayAndFilterChips(
-    today: java.time.LocalDate,
-    dayOffset: Int?,
-    filter: String,
-    sports: List<GuideSport>,
-    touch: Boolean,
-    dayFocus: FocusRequester,
-    filterFocus: FocusRequester,
-    onDay: (Int?) -> Unit,
-    onFilter: (String) -> Unit,
-    onUpFromDays: () -> Unit,
-    onDownFromFilters: () -> Unit,
-    onLeaveStart: () -> Unit,
-    // Shortcuts (Multiview, Recordings) at the start of the filter row; never "selected".
-    tools: List<Pair<String, String>> = emptyList(),
-    onTool: (String) -> Unit = {},
-) {
-    val labelOverview = stringResource(R.string.sports_overview)
-    val labelToday = stringResource(R.string.live_label_today)
-    val labelTomorrow = stringResource(R.string.live_label_tomorrow)
-    val labelYesterday = stringResource(R.string.sports_yesterday)
-    val dayFormat = remember { DateTimeFormatter.ofPattern("EEE d", java.util.Locale.getDefault()) }
-    val days: List<Pair<Int?, String>> = remember(today, labelOverview) {
-        listOf<Pair<Int?, String>>(null to labelOverview) + SPORTS_DAY_OFFSETS.map { offset ->
-            offset to when (offset) {
-                0 -> labelToday
-                1 -> labelTomorrow
-                -1 -> labelYesterday
-                else -> today.plusDays(offset.toLong()).format(dayFormat)
-            }
-        }
-    }
-    val filters: List<Pair<String, String>> = tools + listOf(
-        SPORTS_FILTER_ALL to stringResource(R.string.sports_filter_all),
-        SPORTS_FILTER_LIVE to stringResource(R.string.sports_filter_live),
-    ) + sports.map { it.name to it.title }
-    val selectedDayIndex = days.indexOfFirst { it.first == dayOffset }.coerceAtLeast(0)
-    val selectedFilterIndex = (tools.size + filters.drop(tools.size).indexOfFirst { it.first == filter }.coerceAtLeast(0))
-    val dayState = rememberLazyListState(initialFirstVisibleItemIndex = (selectedDayIndex - 2).coerceAtLeast(0))
-    val filterState = rememberLazyListState()
-    Column(Modifier.fillMaxWidth().padding(bottom = 4.dp)) {
-        SportsChipRow(days, selectedDayIndex, dayState, touch, dayFocus,
-            onUp = onUpFromDays, onDown = { runCatching { filterFocus.requestFocus() } }, onLeaveStart = onLeaveStart,
-            onSelect = { onDay(days[it].first) })
-        SportsChipRow(filters, selectedFilterIndex, filterState, touch, filterFocus,
-            onUp = { runCatching { dayFocus.requestFocus() } }, onDown = onDownFromFilters, onLeaveStart = onLeaveStart,
-            onSelect = { index -> if (index < tools.size) onTool(filters[index].first) else onFilter(filters[index].first) })
-    }
-}
-
-internal const val SPORTS_TOOL_MULTIVIEW = "tool:multiview"
-internal const val SPORTS_TOOL_RECORDINGS = "tool:recordings"
-
-@Composable
-private fun <T> SportsChipRow(
-    items: List<Pair<T, String>>,
-    selectedIndex: Int,
-    state: LazyListState,
-    touch: Boolean,
-    selectedFocus: FocusRequester,
-    onUp: () -> Unit,
-    onDown: () -> Unit,
-    onLeaveStart: () -> Unit,
-    onSelect: (Int) -> Unit,
-) {
-    val isRtl = LocalLayoutDirection.current == LayoutDirection.Rtl
-    LazyRow(Modifier.fillMaxWidth().padding(horizontal = 10.dp), state = state,
-        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        itemsIndexed(items, key = { index, _ -> index }) { index, (_, label) ->
-            var focused by remember { mutableStateOf(false) }
-            val selected = index == selectedIndex
-            Text(label, color = if (selected) Color.Black else LiveColors.Fg, fontSize = if (touch) 14.sp else 12.sp,
-                lineHeight = if (touch) 18.sp else 15.sp, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium, maxLines = 1,
-                modifier = Modifier
-                    .then(if (selected) Modifier.focusRequester(selectedFocus) else Modifier)
-                    .onFocusChanged { focused = it.isFocused }
-                    .onPreviewKeyEvent { key ->
-                        if (key.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
-                        when (key.key.mirrorHorizontalForRtl(isRtl)) {
-                            Key.DirectionUp -> { onUp(); true }
-                            Key.DirectionDown -> { onDown(); true }
-                            Key.DirectionLeft -> if (index == 0) { onLeaveStart(); true } else false
-                            else -> false
-                        }
-                    }
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(if (selected) Color.White else if (focused) LiveColors.FocusBg else Color.White.copy(alpha = 0.08f))
-                    .border(2.dp, if (focused) Color.White else Color.Transparent, RoundedCornerShape(16.dp))
-                    .clickable { onSelect(index) }
-                    .padding(horizontal = if (touch) 14.dp else 12.dp, vertical = if (touch) 7.dp else 5.dp))
-        }
-    }
-}
-
 /** Remind me, and follow either team or the competition, from a game's detail sheet. */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 private fun SportsEventActions(
     event: SportsGuideEvent,
@@ -1174,8 +1086,9 @@ private fun SportsEventActions(
     val playsFollowedTeam = remember(event.id, follows) { event.followsTeam(follows) }
     val canAlert = !event.isFinished() && playsFollowedTeam
     if (!canRemind && options.isEmpty() && !canAlert) return
-    Row(Modifier.fillMaxWidth().padding(top = 10.dp).horizontalScroll(androidx.compose.foundation.rememberScrollState()),
-        horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    // Wraps instead of scrolling sideways, so no chip is ever half outside the sheet.
+    FlowRow(Modifier.fillMaxWidth().padding(top = 10.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         if (canRemind) SportsActionChip(
             label = stringResource(if (reminded) R.string.sports_reminder_on else R.string.sports_remind_me),
             icon = if (reminded) Icons.Default.NotificationsActive else Icons.Default.NotificationsNone,
@@ -1198,6 +1111,7 @@ private fun SportsEventActions(
 }
 
 /** Watch alongside other games, or record this one from the user's own channels. */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 private fun SportsWatchActions(
     canWatch: Boolean,
@@ -1209,8 +1123,9 @@ private fun SportsWatchActions(
     val showMultiview = canWatch && onMultiview != null
     val showRecord = (canRecord || recorded) && onRecord != null
     if (!showMultiview && !showRecord) return
-    Row(Modifier.fillMaxWidth().padding(top = 8.dp).horizontalScroll(androidx.compose.foundation.rememberScrollState()),
-        horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    // Wraps instead of scrolling sideways, so no chip is ever half outside the sheet.
+    FlowRow(Modifier.fillMaxWidth().padding(top = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         if (showMultiview && onMultiview != null) SportsActionChip(
             label = stringResource(R.string.multiview_add_to),
             icon = Icons.Default.GridView,
@@ -1232,15 +1147,18 @@ private fun SportsWatchActions(
 private fun SportsActionChip(label: String, icon: androidx.compose.ui.graphics.vector.ImageVector, active: Boolean,
     modifier: Modifier = Modifier, onClick: () -> Unit) {
     var focused by remember { mutableStateOf(false) }
-    Row(modifier.clip(RoundedCornerShape(18.dp))
-        .background(if (focused) LiveColors.FocusBg else if (active) Color.White.copy(alpha = 0.16f) else Color.White.copy(alpha = 0.06f))
-        .border(1.dp, if (focused) Color.White else LiveColors.DividerStrong, RoundedCornerShape(18.dp))
+    val scale by androidx.compose.animation.core.animateFloatAsState(if (focused) 1.05f else 1f, tween(150), label = "sports-chip-scale")
+    val fg = if (focused) Color(0xFF0B0B0D) else LiveColors.Fg
+    Row(modifier.graphicsLayer { scaleX = scale; scaleY = scale }.clip(RoundedCornerShape(50))
+        .background(if (focused) Color.White else if (active) Color.White.copy(alpha = 0.16f) else Color.White.copy(alpha = 0.07f))
+        .border(1.dp, if (active && !focused) Color.White.copy(alpha = .38f) else Color.Transparent, RoundedCornerShape(50))
         .onFocusChanged { focused = it.isFocused }
         .clickable(onClick = onClick)
-        .heightIn(min = 36.dp).padding(horizontal = 12.dp, vertical = 6.dp),
+        .heightIn(min = 36.dp).padding(horizontal = 14.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically) {
-        Icon(icon, null, tint = if (active) liveAccent() else LiveColors.Fg, modifier = Modifier.size(16.dp))
-        Text(label, color = LiveColors.Fg, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+        Icon(icon, null, tint = if (active && !focused) liveAccent() else fg, modifier = Modifier.size(16.dp))
+        Text(label, color = fg, fontSize = 12.sp, fontWeight = if (focused || active) FontWeight.SemiBold else FontWeight.Medium,
+            maxLines = 1, overflow = TextOverflow.Ellipsis,
             modifier = Modifier.padding(start = 6.dp).widthIn(max = 220.dp))
     }
 }
@@ -1370,7 +1288,8 @@ private fun GameInfoTitle(text: String) {
 private fun GameInfoLine(modifier: Modifier = Modifier, content: @Composable RowScope.() -> Unit) {
     var focused by remember { mutableStateOf(false) }
     Row(modifier.fillMaxWidth().heightIn(min = 32.dp).clip(RoundedCornerShape(6.dp))
-        .background(if (focused) LiveColors.FocusBg else Color.Transparent)
+        .background(if (focused) Color.White.copy(alpha = .12f) else Color.Transparent)
+        .border(2.dp, if (focused) Color.White else Color.Transparent, RoundedCornerShape(6.dp))
         .onFocusChanged { focused = it.isFocused }.focusable()
         .padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically, content = content)
 }
@@ -1411,4 +1330,9 @@ private fun FormBadge(result: String) {
     Box(Modifier.padding(start = 4.dp).size(20.dp).clip(RoundedCornerShape(4.dp)).background(background), contentAlignment = Alignment.Center) {
         Text(result, color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
     }
+}
+
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+private val SportsNoBringIntoView = object : androidx.compose.foundation.gestures.BringIntoViewSpec {
+    override fun calculateScrollDistance(offset: Float, size: Float, containerSize: Float): Float = 0f
 }

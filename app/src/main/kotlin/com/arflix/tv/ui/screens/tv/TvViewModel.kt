@@ -219,6 +219,18 @@ class TvViewModel @Inject constructor(
                 .onFailure { System.err.println("[Sports-Cache] save failed: ${it.javaClass.simpleName}") }
             Unit
         }
+    private val sportsAddonEventDisk by lazy {
+        val installedAt = context.packageManager.getPackageInfo(context.packageName, 0).lastUpdateTime
+        com.arflix.tv.data.repository.SportsAddonEventDiskCache(java.io.File(context.cacheDir, "sports-addon-events-v1-$installedAt.json.gz"))
+    }
+    internal suspend fun restoreSportsAddonEvents(installations: Set<String>) =
+        withContext(Dispatchers.IO) { sportsAddonEventDisk.read(installations) }
+    internal suspend fun saveSportsAddonEvents(installations: Set<String>, events: List<com.arflix.tv.data.model.SportsAddonEvent>) =
+        withContext(Dispatchers.IO) {
+            runCatching { sportsAddonEventDisk.write(installations, events) }
+                .onFailure { System.err.println("[Sports-AddonCache] save failed: ${it.javaClass.simpleName}") }
+            Unit
+        }
     suspend fun loadSportsMetadata() = sportsRepository.loadMetadata()
     suspend fun loadSportsMetadataDay(day: String) = sportsRepository.loadMetadataDay(day)
     suspend fun loadSportsGameDetails(id: String) = sportsRepository.loadGameDetails(id)

@@ -38,4 +38,6 @@
     <string name="sports_alert_final">Einde wedstrijd</string>
     <string name="sports_failover_switching">Zender werkt niet. %1$s proberen…</string>
     <string name="live_sports_show_score">Toon score</string>
+    <string name="sports_pick_day">Kies een dag</string>
+    <string name="sports_pick_sport">Kies een sport</string>
 </resources>

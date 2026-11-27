@@ -37,4 +37,6 @@
     <string name="sports_alert_score">Score update</string>
     <string name="sports_alert_final">Full time</string>
     <string name="sports_failover_switching">Channel failed. Trying %1$s…</string>
+    <string name="sports_pick_day">Choose a day</string>
+    <string name="sports_pick_sport">Choose a sport</string>
 </resources>
