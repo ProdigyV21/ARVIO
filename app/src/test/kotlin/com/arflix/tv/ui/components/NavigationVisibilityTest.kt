@@ -28,7 +28,7 @@ class NavigationVisibilityTest {
         assertEquals(SidebarItem.entries, visibleNavigationItems())
         for (json in listOf(null, "broken", "{}", "null", "42")) assertTrue(readHiddenNavigationSections(json).isEmpty())
         assertEquals(setOf("search", "tv"), readHiddenNavigationSections("""["tv","home",null,42,"search","settings","tv"]"""))
-        NavigationVisibility.hiddenSections = setOf("home", "settings", "search", "watchlist", "tv", "news")
+        NavigationVisibility.hiddenSections = setOf("home", "settings", "search", "watchlist", "tv", "news", "music")
         assertEquals(listOf(SidebarItem.HOME, SidebarItem.SETTINGS), visibleNavigationItems())
     }
 
@@ -51,7 +51,9 @@ class NavigationVisibilityTest {
         assertFalse(visibleNavigationItems().contains(SidebarItem.TV))
         assertTrue(visibleNavigationItems().contains(SidebarItem.SEARCH))
         assertFalse(visibleNavigationItems().contains(SidebarItem.NEWS))
+        assertFalse(visibleNavigationItems().contains(SidebarItem.MUSIC))
         assertFalse(tvGeneralRowsForSection("appearance").contains(58))
+        assertFalse(tvGeneralRowsForSection("appearance").contains(68))
         assertTrue(tvGeneralRowsForSection("news").isEmpty())
     }
 
@@ -67,11 +69,11 @@ class NavigationVisibilityTest {
 
     @Test fun appearanceRowsHaveUniqueIdsWithoutChangingExistingSettingsSlots() {
         val appearance = tvGeneralRowsForSection("appearance")
-        // Row 59 was appended after the existing appearance slots.
-        assertEquals(listOf(56, 57, 58, 59), appearance.takeLast(4))
+        // Rows 59 and then 68 (Music tab) were appended after the existing appearance slots.
+        assertEquals(listOf(56, 57, 58, 59, 68), appearance.takeLast(5))
         // The News switch opens its own section, followed by the topics and sources pickers.
         assertEquals(listOf(61, 62, 63), tvGeneralRowsForSection("news"))
-        assertEquals(listOf("search", "watchlist", "tv", "news"), listOf(56, 57, 58, 61).map(::navigationSectionForRow))
+        assertEquals(listOf("search", "watchlist", "tv", "news", "music"), listOf(56, 57, 58, 61, 68).map(::navigationSectionForRow))
         val all = listOf("language", "subtitles", "ai_subtitles", "playback", "appearance", "news", "profiles", "network")
             .flatMap(::tvGeneralRowsForSection)
         assertEquals(all.size, all.distinct().size)

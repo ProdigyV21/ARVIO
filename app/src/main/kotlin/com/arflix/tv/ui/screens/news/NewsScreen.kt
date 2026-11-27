@@ -162,6 +162,7 @@ fun NewsScreen(
                                 SidebarItem.TV -> onNavigateToTv()
                                 SidebarItem.SETTINGS -> onNavigateToSettings()
                                 SidebarItem.NEWS -> runCatching { firstChip.requestFocus() }
+                                SidebarItem.MUSIC -> com.arflix.tv.ui.components.MusicNavigation.open()
                                 null -> onSwitchProfile()
                             }; true
                         }

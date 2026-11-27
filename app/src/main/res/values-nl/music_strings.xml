@@ -104,4 +104,5 @@
         <item quantity="one">%1$d playlist geïmporteerd: %2$d van %3$d nummers gevonden in je bronnen.</item>
         <item quantity="other">%1$d playlists geïmporteerd: %2$d van %3$d nummers gevonden in je bronnen.</item>
     </plurals>
+    <string name="music_tv_sources_hint">Muziekaddons die je op je telefoon toevoegt, verschijnen ook op deze tv. Of voeg hier een bron toe met de afstandsbediening.</string>
 </resources>

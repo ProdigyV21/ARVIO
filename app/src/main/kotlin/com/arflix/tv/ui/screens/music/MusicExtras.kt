@@ -388,7 +388,7 @@ internal fun PlayerExtrasRow(
 }
 
 @Composable
-private fun sleepLabel(playback: MusicPlaybackState): String? {
+internal fun sleepLabel(playback: MusicPlaybackState): String? {
     if (playback.sleepAtEndOfTrack) return stringResource(R.string.music_sleep_after_song)
     val at = playback.sleepAtMs ?: return null
     // Re-reads the clock every few seconds, so the minutes count down.

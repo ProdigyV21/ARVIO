@@ -111,4 +111,5 @@
         <item quantity="one">Imported %1$d playlist: %2$d of %3$d songs found in your sources.</item>
         <item quantity="other">Imported %1$d playlists: %2$d of %3$d songs found in your sources.</item>
     </plurals>
+    <string name="music_tv_sources_hint">Music addons you add on your phone show up on this TV too. Or add a source here with the remote.</string>
 </resources>
