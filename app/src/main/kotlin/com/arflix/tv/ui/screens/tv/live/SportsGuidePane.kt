@@ -2,6 +2,7 @@ package com.arflix.tv.ui.screens.tv.live
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -848,7 +849,11 @@ internal fun SportsGuidePane(
                     rowStates[row.id] = rowState
                     onDispose { rowStates.remove(row.id) }
                 }
-                Column {
+                // Rows fade in and glide to their new place when the schedule refreshes,
+                // instead of jumping.
+                Column(Modifier.animateItem(fadeInSpec = tween(220), fadeOutSpec = null,
+                    placementSpec = androidx.compose.animation.core.spring(dampingRatio = .9f, stiffness = 380f,
+                        visibilityThreshold = androidx.compose.ui.unit.IntOffset.VisibilityThreshold))) {
                     SportsRowTitle(row.title, row.events.size, touch)
                     val eventKeys = keysByRow.getValue(row.id)
                     // Inner padding leaves room for the focused card's lift without clipping;
@@ -864,11 +869,17 @@ internal fun SportsGuidePane(
                                 onDispose { cardFocus.remove(key) }
                             }
                             var focused by remember { mutableStateOf(false) }
-                            // A small lift on the focused card. Read only inside graphicsLayer,
-                            // so the animation redraws the card without recomposing or relayout.
+                            val cardInteraction = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+                            val pressed by cardInteraction.collectIsPressedAsState()
+                            // A small lift on the focused card, a short dip while it is pressed. Read
+                            // only inside graphicsLayer, so it redraws without recomposing or relayout.
                             val focusScale by androidx.compose.animation.core.animateFloatAsState(
-                                targetValue = if (focused && !touch) SPORTS_CARD_FOCUS_SCALE else 1f,
-                                animationSpec = tween(180, easing = androidx.compose.animation.core.FastOutSlowInEasing),
+                                targetValue = when {
+                                    pressed -> .96f
+                                    focused && !touch -> SPORTS_CARD_FOCUS_SCALE
+                                    else -> 1f
+                                },
+                                animationSpec = androidx.compose.animation.core.spring(dampingRatio = .82f, stiffness = 520f),
                                 label = "sportsCardFocusScale",
                             )
                             Column(Modifier.width(cardWidth).testTag("sports-event-card")
@@ -915,7 +926,7 @@ internal fun SportsGuidePane(
                                         true
                                     }
                                 }
-                                .clickable { openSheet(event, requester) }
+                                .clickable(interactionSource = cardInteraction, indication = null) { openSheet(event, requester) }
                                 .padding(2.dp)) {
                                 SportsCardArt(
                                     event = event,
@@ -1033,7 +1044,11 @@ internal fun SportsGuidePane(
             withFrameNanos { }
             runCatching { initialFocus.requestFocus() }
         }
-        Column(Modifier.widthIn(max = 586.dp).fillMaxWidth().heightIn(max = configuration.screenHeightDp.dp * .82f)
+        // Rises in with a short fade, drawn only (no relayout).
+        val sheetShown = remember { androidx.compose.animation.core.Animatable(0f) }
+        LaunchedEffect(Unit) { sheetShown.animateTo(1f, tween(200, easing = androidx.compose.animation.core.FastOutSlowInEasing)) }
+        Column(Modifier.graphicsLayer { alpha = sheetShown.value; translationY = (1f - sheetShown.value) * 28.dp.toPx() }
+            .widthIn(max = 586.dp).fillMaxWidth().heightIn(max = configuration.screenHeightDp.dp * .82f)
             .border(1.dp, LiveColors.DividerStrong, RoundedCornerShape(16.dp))
             .clip(RoundedCornerShape(16.dp)).background(LiveColors.Panel).padding(20.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {

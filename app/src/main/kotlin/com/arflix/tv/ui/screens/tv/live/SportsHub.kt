@@ -9,6 +9,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -452,7 +453,8 @@ private fun SportsRailItem(entry: SportsRailEntry, modifier: Modifier, onClick: 
     }, tween(140), label = "sports-rail-bg")
     val fg = if (focused) Color(0xFF0B0B0D) else LiveColors.Fg
     val dim = if (focused) Color(0xFF45454C) else LiveColors.FgDim
-    Row(modifier.padding(vertical = 2.dp).fillMaxWidth().heightIn(min = if (entry.detail != null) 48.dp else 40.dp)
+    val nudge by animateFloatAsState(if (focused) 1f else 0f, androidx.compose.animation.core.spring(dampingRatio = .8f, stiffness = 500f), label = "sports-rail-nudge")
+    Row(modifier.graphicsLayer { translationX = nudge * 3.dp.toPx() }.padding(vertical = 2.dp).fillMaxWidth().heightIn(min = if (entry.detail != null) 48.dp else 40.dp)
         .clip(RoundedCornerShape(10.dp)).background(bg)
         .onFocusChanged { focused = it.isFocused }.clickable(onClick = onClick)
         .padding(horizontal = 10.dp, vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -588,14 +590,24 @@ internal fun SportsHero(
         .clip(RoundedCornerShape(14.dp)).background(LiveColors.Panel).testTag("sports-focus-preview"),
         verticalAlignment = Alignment.CenterVertically) {
         val artHeight = SportsHeroHeight - 12.dp
-        Box(Modifier.fillMaxHeight().width(artHeight * 16f / 9f).clip(RoundedCornerShape(topStart = 14.dp, bottomStart = 14.dp))) {
-            key(event.id) { SportsEventVisual(event, Modifier.fillMaxSize(), large = true, score = score) }
-            if (statusLive) SportsLivePill(status, large = true,
-                modifier = Modifier.align(Alignment.BottomStart).padding(10.dp))
+        // The picture cross-fades to the next game as focus moves along a row.
+        androidx.compose.animation.Crossfade(targetState = event, animationSpec = tween(220), label = "sports-hero-art",
+            modifier = Modifier.fillMaxHeight().width(artHeight * 16f / 9f).clip(RoundedCornerShape(topStart = 14.dp, bottomStart = 14.dp))) { shown ->
+            Box(Modifier.fillMaxSize()) {
+                SportsEventVisual(shown, Modifier.fillMaxSize(), large = true, score = if (shown.id == event.id) score else shown.scoreLine(System.currentTimeMillis()))
+                if (statusLive && shown.id == event.id) SportsLivePill(status, large = true,
+                    modifier = Modifier.align(Alignment.BottomStart).padding(10.dp))
+            }
         }
         Column(Modifier.weight(1f).fillMaxHeight().padding(start = 18.dp, end = 16.dp, top = 10.dp, bottom = 8.dp),
             verticalArrangement = Arrangement.SpaceBetween) {
-            Column {
+            // The text eases in from a little below each time the game changes.
+            val textIn = remember { androidx.compose.animation.core.Animatable(1f) }
+            LaunchedEffect(event.id) {
+                textIn.snapTo(0f)
+                textIn.animateTo(1f, tween(240, easing = FastOutSlowInEasing))
+            }
+            Column(Modifier.graphicsLayer { alpha = .35f + .65f * textIn.value; translationY = (1f - textIn.value) * 6.dp.toPx() }) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(competition.uppercase(Locale.getDefault()), color = LiveColors.Fg, fontSize = 10.sp, lineHeight = 12.sp,
                         letterSpacing = 1.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis,
@@ -646,7 +658,8 @@ internal fun SportsHero(
                 // How far the game is, from the guide's start and end times.
                 Box(Modifier.padding(top = 8.dp).fillMaxWidth().height(3.dp).clip(RoundedCornerShape(2.dp))
                     .background(Color.White.copy(alpha = if (progress > 0f) .14f else 0f))) {
-                    if (progress > 0f) Box(Modifier.fillMaxHeight().fillMaxWidth(progress.coerceIn(0f, 1f))
+                    val shownProgress by animateFloatAsState(progress.coerceIn(0f, 1f), tween(400, easing = FastOutSlowInEasing), label = "sports-hero-progress")
+                    if (progress > 0f) Box(Modifier.fillMaxHeight().fillMaxWidth(shownProgress)
                         .background(Brush.horizontalGradient(listOf(Color(0xFFFF3B30), Color(0xFFFF8A65)))))
                 }
             }
@@ -659,7 +672,10 @@ internal val SportsHeroHeight = 168.dp
 @Composable
 private fun SportsHeroButton(action: SportsHeroAction, modifier: Modifier) {
     var focused by remember { mutableStateOf(false) }
-    val scale by animateFloatAsState(if (focused) 1.06f else 1f, tween(150, easing = FastOutSlowInEasing), label = "sports-hero-button")
+    val interaction = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val scale by animateFloatAsState(when { pressed -> .94f; focused -> 1.06f; else -> 1f },
+        androidx.compose.animation.core.spring(dampingRatio = .75f, stiffness = 600f), label = "sports-hero-button")
     val bg by animateColorAsState(when {
         focused -> Color.White
         action.primary -> LiveColors.LiveRed
@@ -671,7 +687,7 @@ private fun SportsHeroButton(action: SportsHeroAction, modifier: Modifier) {
         .then(if (action.iconOnly) Modifier.widthIn(min = 38.dp) else Modifier)
         .clip(RoundedCornerShape(50)).background(bg)
         .border(1.dp, if (action.active && !focused) Color.White.copy(alpha = .4f) else Color.Transparent, RoundedCornerShape(50))
-        .onFocusChanged { focused = it.isFocused }.clickable(onClick = action.onClick)
+        .onFocusChanged { focused = it.isFocused }.clickable(interactionSource = interaction, indication = null, onClick = action.onClick)
         .padding(horizontal = if (action.iconOnly) 10.dp else if (action.primary) 18.dp else 14.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
         Icon(action.icon, if (action.iconOnly) action.label else null, tint = fg, modifier = Modifier.size(18.dp))
