@@ -22,6 +22,7 @@ import {
   useProgress,
 } from "./primitives";
 import { C, DISPLAY, SCREENS, TEXT } from "./theme";
+import { LiveBadge } from "./scenes2";
 
 const W = 1920;
 
@@ -157,7 +158,7 @@ export const BigScreen: React.FC = () => {
           }}
         >
           <TV width={1380} stand={false}>
-            <Screen src={SCREENS.tvClipHome} trimBefore={75} />
+            <Screen src={SCREENS.tvClipHome} trimBefore={144} />
           </TV>
         </div>
       </AbsoluteFill>
@@ -210,13 +211,14 @@ export const Details: React.FC = () => {
 };
 
 /* 5 ─ Music */
+const MUSIC_ASPECT = 2400 / 1080;
 export const Music: React.FC = () => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const phones = [
-    { src: SCREENS.musicAlbum, x: -330, y: 70, r: -8, d: 10, w: 330 },
-    { src: SCREENS.musicPlayer, x: 330, y: 70, r: 8, d: 16, w: 330 },
-    { src: SCREENS.musicCharts, x: 0, y: 0, r: 0, d: 4, w: 380 },
+    { src: SCREENS.musicHome, x: -330, y: 70, r: -8, d: 10, w: 330 },
+    { src: SCREENS.musicQueue, x: 330, y: 70, r: 8, d: 16, w: 330 },
+    { src: SCREENS.musicLyrics, x: 0, y: 0, r: 0, d: 4, w: 380 },
   ];
   const drift = interpolate(frame, [0, 210], [20, -20], clamp);
   return (
@@ -230,18 +232,19 @@ export const Music: React.FC = () => {
           width: 820,
         }}
       >
-        <Kicker delay={0}>New · Music</Kicker>
+        <Kicker delay={0}>Music</Kicker>
         <Headline text={"Your music,\n*too.*"} delay={4} size={112} />
         <Body delay={24}>
-          Daily charts and hundreds of playlists for your language, played from
-          your own sources.
+          Charts for your country, synced lyrics, a queue and a sleep timer,
+          played from your own sources.
         </Body>
         <div
           style={{ display: "flex", gap: 14, flexWrap: "wrap", marginTop: 8 }}
         >
           <Pill delay={40}>Charts</Pill>
-          <Pill delay={44}>Playlists</Pill>
-          <Pill delay={48}>Your library</Pill>
+          <Pill delay={44}>Lyrics</Pill>
+          <Pill delay={48}>Queue</Pill>
+          <Pill delay={52}>Your library</Pill>
         </div>
       </AbsoluteFill>
       <AbsoluteFill
@@ -266,81 +269,18 @@ export const Music: React.FC = () => {
                 left: "50%",
                 top: "50%",
                 marginLeft: -p.w / 2,
-                marginTop: -(p.w * 0.93 * (2553 / 1179) + p.w * 0.07) / 2,
+                marginTop: -(p.w * 0.93 * MUSIC_ASPECT + p.w * 0.07) / 2,
                 translate: `${p.x}px ${p.y + (1 - s) * 900 + drift * (i === 2 ? 1 : 0.5)}px`,
                 rotate: `${p.r * s}deg`,
               }}
             >
-              <Phone width={p.w} aspect={2553 / 1179}>
+              <Phone width={p.w} aspect={MUSIC_ASPECT}>
                 <Screen src={p.src} />
               </Phone>
             </div>
           );
         })}
       </AbsoluteFill>
-    </AbsoluteFill>
-  );
-};
-
-/* 5b ─ Phone and tablet */
-export const Touch: React.FC = () => {
-  const frame = useCurrentFrame();
-  const { fps } = useVideoConfig();
-  const t = spring({
-    frame: frame - 4,
-    fps,
-    config: { damping: 200 },
-    durationInFrames: 34,
-  });
-  const p = spring({
-    frame: frame - 16,
-    fps,
-    config: { damping: 18, stiffness: 90 },
-  });
-  const drift = interpolate(frame, [0, 150], [10, -10], clamp);
-  return (
-    <AbsoluteFill>
-      <Backdrop hue="mix" />
-      <AbsoluteFill
-        style={{
-          padding: "0 0 0 140px",
-          justifyContent: "center",
-          gap: 28,
-          width: 760,
-        }}
-      >
-        <Kicker delay={4}>Phone · Tablet</Kicker>
-        <Headline text={"Just as good\nin your *hands.*"} delay={8} size={96} />
-        <Body delay={26}>
-          A touch layout for phones and tablets, with the same home, profiles
-          and progress.
-        </Body>
-      </AbsoluteFill>
-      <div
-        style={{
-          position: "absolute",
-          left: 860,
-          top: 250,
-          translate: `${(1 - t) * 900}px ${drift}px`,
-        }}
-      >
-        <Tablet width={880} aspect={1200 / 1920}>
-          <Screen src={SCREENS.tabletClip} />
-        </Tablet>
-      </div>
-      <div
-        style={{
-          position: "absolute",
-          left: 1610,
-          top: 400,
-          translate: `0 ${(1 - p) * 900 - drift}px`,
-          rotate: `${4 * p}deg`,
-        }}
-      >
-        <Phone width={270}>
-          <Screen src={SCREENS.phoneClip} />
-        </Phone>
-      </div>
     </AbsoluteFill>
   );
 };
@@ -389,12 +329,14 @@ export const Subtitles: React.FC = () => {
           size={92}
           delay={2}
         />
+        <div style={{ height: 18 }} />
+        <LiveBadge delay={30} />
       </AbsoluteFill>
       <div
         style={{
           position: "absolute",
           left: 130,
-          top: 360,
+          top: 400,
           width: 1220,
           borderRadius: 26,
           overflow: "hidden",
@@ -519,7 +461,7 @@ export const Subtitles: React.FC = () => {
         style={{
           position: "absolute",
           left: 1400,
-          top: 360,
+          top: 400,
           width: 400,
           padding: 26,
           borderRadius: 26,
@@ -612,148 +554,6 @@ export const Subtitles: React.FC = () => {
           </div>
         </div>
       </div>
-    </AbsoluteFill>
-  );
-};
-
-/* 6 ─ Library & calendar */
-export const Library: React.FC = () => {
-  const frame = useCurrentFrame();
-  const { fps } = useVideoConfig();
-  const a = spring({
-    frame: frame - 4,
-    fps,
-    config: { damping: 200 },
-    durationInFrames: 36,
-  });
-  const b = spring({
-    frame: frame - 18,
-    fps,
-    config: { damping: 18, stiffness: 90 },
-  });
-  const drift = interpolate(frame, [0, 165], [0, -24], clamp);
-  return (
-    <AbsoluteFill>
-      <Backdrop />
-      <AbsoluteFill style={{ perspective: 2200 }}>
-        <div
-          style={{
-            position: "absolute",
-            right: -60,
-            top: 120,
-            translate: `${(1 - a) * 700}px ${drift}px`,
-            rotate: `y ${-14 + a * 4}deg`,
-          }}
-        >
-          <TV width={1180} stand={false}>
-            <Screen src={SCREENS.tvLibrary} zoom={[1, 1.05]} />
-          </TV>
-        </div>
-        <div
-          style={{
-            position: "absolute",
-            right: 520,
-            top: 600,
-            translate: `0 ${(1 - b) * 700 - drift}px`,
-            rotate: `${-3 * b}deg`,
-          }}
-        >
-          <TV width={720} stand={false}>
-            <Screen src={SCREENS.tvCalendar} />
-          </TV>
-        </div>
-      </AbsoluteFill>
-      <AbsoluteFill
-        style={{
-          background:
-            "linear-gradient(90deg, rgba(5,7,7,0.96) 0%, rgba(5,7,7,0.75) 30%, transparent 52%)",
-        }}
-      />
-      <AbsoluteFill
-        style={{
-          padding: "0 140px",
-          justifyContent: "center",
-          gap: 28,
-          width: 860,
-        }}
-      >
-        <Kicker delay={6}>Library &amp; calendar</Kicker>
-        <Headline text={"Never miss a\n*new episode.*"} delay={10} size={96} />
-        <Body delay={28}>
-          Watchlists, your home servers and a calendar of what airs next, synced
-          with Trakt and SIMKL.
-        </Body>
-      </AbsoluteFill>
-    </AbsoluteFill>
-  );
-};
-
-/* 7 ─ Your sources */
-const SOURCES = [
-  "Plex",
-  "Jellyfin",
-  "Emby",
-  "Trakt",
-  "SIMKL",
-  "MDBList",
-  "Add-ons",
-  "Debrid",
-  "Live TV + EPG",
-  "Telegram",
-  "Music servers",
-  "AI subtitles",
-];
-
-export const Sources: React.FC = () => {
-  const frame = useCurrentFrame();
-  return (
-    <AbsoluteFill>
-      <Backdrop intensity={1.2} />
-      <AbsoluteFill
-        style={{ alignItems: "center", justifyContent: "center", gap: 40 }}
-      >
-        <Kicker delay={0}>Bring your own</Kicker>
-        <Headline
-          text="Connect what you *already have.*"
-          align="center"
-          size={96}
-          delay={4}
-        />
-        <div
-          style={{
-            display: "flex",
-            flexWrap: "wrap",
-            justifyContent: "center",
-            gap: 18,
-            maxWidth: 1360,
-            marginTop: 20,
-          }}
-        >
-          {SOURCES.map((s, i) => (
-            <Pill
-              key={s}
-              delay={24 + i * 3}
-              strong={
-                i === Math.floor(frame / 6) % SOURCES.length && frame > 70
-              }
-            >
-              {s}
-            </Pill>
-          ))}
-        </div>
-        <Body
-          delay={60}
-          style={{
-            fontSize: 28,
-            color: C.muted,
-            marginTop: 24,
-            textAlign: "center",
-          }}
-        >
-          ARVIO includes no movies, shows or channels. You connect sources you
-          are authorized to use.
-        </Body>
-      </AbsoluteFill>
     </AbsoluteFill>
   );
 };
