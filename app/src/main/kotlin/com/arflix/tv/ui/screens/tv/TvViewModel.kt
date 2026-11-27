@@ -722,6 +722,15 @@ class TvViewModel @Inject constructor(
         }
     }
 
+    /** Whether any cached programme is still on air or upcoming at [nowMs]. */
+    private fun hasCurrentEpgData(snapshot: IptvSnapshot, nowMs: Long): Boolean =
+        snapshot.nowNext.values.any { item ->
+            (item.now?.endUtcMillis ?: 0L) > nowMs ||
+                (item.next?.endUtcMillis ?: 0L) > nowMs ||
+                (item.later?.endUtcMillis ?: 0L) > nowMs ||
+                item.upcoming.any { it.endUtcMillis > nowMs }
+        }
+
     private fun hasProgramData(item: com.arflix.tv.data.model.IptvNowNext?): Boolean {
         return item != null && (
             item.now != null ||
@@ -1254,7 +1263,11 @@ class TvViewModel @Inject constructor(
         } else {
             0f
         }
-        val hasGuideData = hasAnyEpgData(state.snapshot)
+        // A guide whose programmes have all ended is no guide: every channel then reads
+        // "No guide data matched" until the user finds Refresh TV Data. Treat it as missing.
+        val guideStillCurrent = state.snapshot.nowNext.isEmpty() ||
+            hasCurrentEpgData(state.snapshot, System.currentTimeMillis())
+        val hasGuideData = hasAnyEpgData(state.snapshot) && guideStillCurrent
         val ageMs = iptvRepository.cachedEpgAgeMs()
         if (
             !force &&
@@ -1271,7 +1284,7 @@ class TvViewModel @Inject constructor(
             return
         }
         val coverage = epgCoverageRatio(state.snapshot)
-        val cacheLooksComplete = if (largeList) {
+        val cacheLooksComplete = guideStillCurrent && if (largeList) {
             !streamingXmlBackfill && indexedCoverage >= LargeListCompleteGuideCoverageTarget && ageMs < 24 * 60 * 60_000L
         } else {
             coverage >= 0.98f && ageMs < 6 * 60 * 60_000L

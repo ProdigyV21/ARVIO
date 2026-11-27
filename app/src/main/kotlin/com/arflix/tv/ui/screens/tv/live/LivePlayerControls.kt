@@ -2,6 +2,8 @@ package com.arflix.tv.ui.screens.tv.live
 
 import android.content.Context
 import android.text.format.DateFormat
+import com.arflix.tv.data.repository.effectiveSettingsDataStore
+import kotlinx.coroutines.flow.first
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Spring
@@ -284,12 +286,35 @@ internal fun PlayerBufferingIndicator(
 internal const val PlayerBufferingRevealMs = 350L
 internal const val PlayerBufferingSlowMs = 6_000L
 
-/** Weekday, date and time in the device's language and 12/24-hour setting. */
-internal fun formatPlayerHeaderClock(context: Context, millis: Long): String = runCatching {
+/**
+ * Weekday, date and time in the device's language. The time follows the app's clock setting
+ * (12h/24h, as the top bar shows it); with no setting given it falls back to the device's.
+ */
+internal fun formatPlayerHeaderClock(context: Context, millis: Long, clockFormat: String? = null): String = runCatching {
     val date = DateFormat.format(DateFormat.getBestDateTimePattern(java.util.Locale.getDefault(), "EEEdMMM"), millis)
-    val time = DateFormat.getTimeFormat(context).format(Date(millis))
+    val time = when (clockFormat) {
+        "12h" -> java.text.SimpleDateFormat("h:mm a", java.util.Locale.getDefault()).format(Date(millis))
+        "24h" -> java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).format(Date(millis))
+        else -> DateFormat.getTimeFormat(context).format(Date(millis))
+    }
     "$date  $time"
 }.getOrDefault("")
+
+/** The app's clock setting ("12h"/"24h"), read the way the top bar reads it; "24h" by default. */
+@androidx.compose.runtime.Composable
+internal fun rememberAppClockFormat(): String {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    var format by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf("24h") }
+    androidx.compose.runtime.LaunchedEffect(context) {
+        runCatching {
+            val prefs = context.effectiveSettingsDataStore.data.first()
+            format = prefs.asMap().entries
+                .firstOrNull { (key, _) -> key.name.endsWith("_clock_format") }
+                ?.value as? String ?: "24h"
+        }
+    }
+    return format
+}
 
 /**
  * A control in the button row. On a remote it is a round icon whose caption appears just below it
