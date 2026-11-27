@@ -178,4 +178,19 @@ class SportsHubTest {
         carrySportsFixtures(listOf(game("g", "A vs B", -minute).copy(fixture = fixture)), memory, now)
         assertEquals(2, carrySportsFixtures(listOf(game("g", "A vs B", -minute)), memory, now).single().fixture?.homeScore)
     }
+
+    @Test fun channelNameVariantsAndCricketCodes() {
+        assertTrue(sportsTitleIsChannelName("BE: DAZN LIVE EVENT 11", "DAZN LIVE EVENT 11"))
+        assertTrue(sportsTitleIsChannelName("BE: DAZN LIVE EVENT 02", "BE| DAZN LIVE EVENT 2 HD"))
+        assertTrue(sportsTitleIsChannelName("IT: Eleven Sport Cricket Live + Replica", "IT: Eleven Sport Cricket"))
+        assertFalse(sportsTitleIsChannelName("DAZN LIVE EVENT 11", "DAZN LIVE EVENT 1"))
+        assertFalse(sportsTitleIsChannelName("Arsenal vs Chelsea", "Arsenal TV"))
+        assertEquals(GuideSport.CRICKET, GuideSport.fromText("RCB vs MUM"))
+    }
+
+    @Test fun aGameStillOnKeepsAnOlderScore() {
+        val fixture = com.arflix.tv.data.model.SportsFixture("1", null, null, null, null, "live", now - 25 * minute, 0, 0, emptyList())
+        val event = game("g", "A vs B", -30 * minute).copy(fixture = fixture)
+        assertEquals(SportsScoreLine(0, 0, live = true), event.scoreLine(now))
+    }
 }

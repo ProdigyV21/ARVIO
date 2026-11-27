@@ -2199,6 +2199,7 @@ fun LiveTvScreen(
     val latestSportsChannelCount by rememberUpdatedState(maxOf(state.snapshot.totalChannelCount, state.snapshot.channels.size))
     LaunchedEffect(sportsScope) {
         if (state.snapshot.loadedAt.toEpochMilli() <= 0L) return@LaunchedEffect
+        var lastSportsScanAt = 0L
         // Opening Sports or receiving another guide page must not restart a full scan.
         // Drain the newest request once the current pass has published its results.
         // While Sports is off screen, wait until zapping/opening has settled (see
@@ -2206,7 +2207,20 @@ fun LiveTvScreen(
         snapshotFlow { latestSportsScanRequest to latestSportsSelected }
             .debounce { (_, onScreen) -> LiveSportsWorkPolicy.rescanSettleMs(onScreen, sportsScan != null) }
             .map { it.first }
-            .conflate().collect { request ->
+            .conflate().collect { incoming ->
+            var request = incoming
+            // A full scan of a big guide takes one to two minutes of CPU. Once a schedule
+            // is showing, the next scan of the same catalogue waits a few minutes, and then
+            // takes the newest request; a manual refresh or retry goes at once.
+            val shown = sportsScan
+            if (shown != null && shown.events.isNotEmpty() && shown.request.refresh == request.refresh &&
+                shown.request.retryOnOpen == request.retryOnOpen && shown.request.key.sameCatalogueScope(request.key)) {
+                val wait = lastSportsScanAt + SportsRescanGapMs - android.os.SystemClock.elapsedRealtime()
+                if (wait > 0) {
+                    kotlinx.coroutines.delay(wait)
+                    request = latestSportsScanRequest
+                }
+            }
             if (sportsScan?.request == request) return@collect
             val scanNow = latestSportsScanClock
             val scanChannels = latestSportsDisplayChannels
@@ -2328,6 +2342,7 @@ fun LiveTvScreen(
                 }
                 val completed = SportsScanResult(request, retained)
                 sportsScan = completed
+                lastSportsScanAt = android.os.SystemClock.elapsedRealtime()
                 viewModel.cachedSportsSchedule = completed
             } catch (cancelled: kotlinx.coroutines.CancellationException) {
                 throw cancelled

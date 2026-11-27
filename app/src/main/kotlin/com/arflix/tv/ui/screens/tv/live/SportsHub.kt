@@ -169,7 +169,13 @@ internal fun carrySportsFixtures(events: List<SportsGuideEvent>, memory: Mutable
     var changed = false
     val result = events.map { event ->
         val fixture = event.fixture
-        if (fixture != null) { memory[event.id] = fixture; event }
+        val remembered = memory[event.id]
+        if (fixture != null && fixture.homeScore == null && remembered?.homeScore != null && remembered.id == fixture.id &&
+            now - remembered.observedAt < 4 * 60 * 60_000L) {
+            // A refresh that knows the game but not (yet) its score keeps the last score.
+            changed = true
+            event.copy(fixture = fixture.copy(homeScore = remembered.homeScore, awayScore = remembered.awayScore))
+        } else if (fixture != null) { memory[event.id] = fixture; event }
         else memory[event.id]?.takeIf { now - it.observedAt < 4 * 60 * 60_000L }?.let { changed = true; event.copy(fixture = it) } ?: event
     }
     if (memory.size > 4000) memory.keys.toList().take(memory.size - 4000).forEach(memory::remove)

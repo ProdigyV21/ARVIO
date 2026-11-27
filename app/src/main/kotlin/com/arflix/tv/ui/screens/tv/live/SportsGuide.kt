@@ -17,6 +17,9 @@ internal data class SportsScheduleKey(val profileId: String?, val providerId: St
     val sourceVersion: Long, val excludedGroups: Set<String>, val epgBackfill: Boolean, val window: Long,
     val guideCoverage: Int = 0)
 internal data class SportsScheduleSnapshot(val key: SportsScheduleKey, val events: List<SportsGuideEvent>)
+/** Least time between two automatic sports scans once a schedule is showing. */
+internal const val SportsRescanGapMs = 5 * 60_000L
+
 internal data class SportsScanRequest(
     val key: SportsScheduleKey,
     val guide: Map<String, IptvNowNext>,
@@ -154,7 +157,7 @@ internal enum class GuideSport(val title: String, val asset: String, val terms: 
     MMA("MMA", "fight", Regex("\\b(mma|ufc|bellator|pfl)\\b")),
     BOXING("Boxing", "fight", Regex("\\b(boxing|boxen)\\b")),
     AMERICAN_FOOTBALL("American football", "american_football", Regex("\\b(american football|nfl|ncaa football)\\b")),
-    CRICKET("Cricket", "cricket", Regex("\\b(cricket|t20|ipl)\\b")),
+    CRICKET("Cricket", "cricket", Regex("\\b(cricket|t20|t20i|odi|ipl|big bash|bbl|rcb|csk|kkr|srh|pbks|lsg)\\b")),
     BASEBALL("Baseball", "baseball", Regex("\\b(baseball|mlb)\\b")),
     HOCKEY("Ice hockey", "hockey", Regex("\\b(ice hockey|hockey|nhl)\\b")),
     MOTORSPORT("Motorsport", "motor_sports", Regex("\\b(motorsport|motor sports|motogp|nascar|indycar|superbike|formula e|rally)\\b")),
@@ -197,13 +200,20 @@ internal val sportsPlaceholderChannel = Regex("\\bno (live )?events?\\b|\\bno st
 private val channelPrefix = Regex("^\\s*[a-z]{2,3}\\s*[:|]\\s*", RegexOption.IGNORE_CASE)
 private val channelQuality = Regex("\\b(hd|fhd|uhd|sd|4k|8k|hevc|raw|backup)\\b", RegexOption.IGNORE_CASE)
 private val nonWord = Regex("[^\\p{L}\\p{N}]+")
+private val leadingZeros = Regex("\\b0+(\\d)")
 private fun channelText(value: String) = value.replace(channelPrefix, "").replace(channelQuality, " ")
-    .lowercase(Locale.ROOT).replace(nonWord, " ").trim()
+    .lowercase(Locale.ROOT).replace(nonWord, " ").replace(leadingZeros, "$1").trim()
 
-/** A guide that only repeats the channel's own name ("IT: CHAMPIONS LEAGUE INFINITY 1 HD") is not a game. */
+/**
+ * A guide that only repeats the channel's own name ("IT: CHAMPIONS LEAGUE INFINITY 1 HD",
+ * "BE: DAZN LIVE EVENT 11" on "DAZN LIVE EVENT 11", "Eleven Sport Cricket Live + Replica"
+ * on "IT: Eleven Sport Cricket") is not a game.
+ */
 internal fun sportsTitleIsChannelName(title: String, channelName: String): Boolean {
     val a = channelText(title)
-    return a.isNotEmpty() && a == channelText(channelName)
+    val b = channelText(channelName)
+    if (a.isEmpty() || b.isEmpty()) return false
+    return a == b || (b.length >= 8 && a.startsWith("$b ")) || (a.length >= 8 && b.startsWith("$a "))
 }
 
 internal val nonEvent = Regex("\\b(highlights?|hoogtepunten|samenvatting|resumen|replay|re-?run|classic|news|magazine|review|preview|cancelled|canceled|postponed|abandoned|sendepause|off air|no signal|best of|teleshopping|infomercial|documentary)\\b", RegexOption.IGNORE_CASE)
