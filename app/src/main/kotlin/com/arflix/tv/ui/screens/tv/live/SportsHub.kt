@@ -1001,13 +1001,17 @@ private val countryCodes: Map<String, String> = buildMap {
     add("GH", "ghana"); add("SN", "senegal"); add("CM", "cameroon", "kameroen"); add("CI", "ivory coast", "cote d'ivoire")
 }
 
+/** Squad suffixes such as " U21", " Women" or " A" that still mean the national team. */
+private val sportsTeamSuffix =
+    Regex("""(\s+(u\d{2}|women|(\(w\))|a|xi|w))+$""")
+
 /**
  * A flag for a national team ("Norge", "Belgium", "England"), as an emoji, or null for
  * a club. England, Scotland and Wales use their own flags.
  */
 internal fun sportsCountryFlag(name: String): String? {
     val key = name.trim().lowercase(Locale.ROOT)
-        .removeSuffix(" u21").removeSuffix(" u19").removeSuffix(" women").removeSuffix(" (w)").trim()
+        .replace(sportsTeamSuffix, "").trim()
     val code = countryCodes[key] ?: return null
     return when (code) {
         "GB-ENG" -> "\uD83C\uDFF4\uDB40\uDC67\uDB40\uDC62\uDB40\uDC65\uDB40\uDC6E\uDB40\uDC67\uDB40\uDC7F"

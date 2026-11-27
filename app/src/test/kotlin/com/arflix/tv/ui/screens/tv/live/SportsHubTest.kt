@@ -199,6 +199,9 @@ class SportsHubTest {
         assertEquals("\uD83C\uDDE7\uD83C\uDDEA", sportsCountryFlag("Belgium"))
         assertEquals("\uD83C\uDDF3\uD83C\uDDF1", sportsCountryFlag("Netherlands U21"))
         assertEquals(null, sportsCountryFlag("Alanyaspor"))
+        assertEquals("\uD83C\uDDF5\uD83C\uDDF0", sportsCountryFlag("Pakistan A"))
+        assertEquals("\uD83C\uDDE7\uD83C\uDDE9", sportsCountryFlag("Bangladesh A"))
+        assertEquals("\uD83C\uDDEE\uD83C\uDDF3", sportsCountryFlag("India U23 Women"))
         assertTrue(sportsCountryFlag("England")!!.startsWith("\uD83C\uDFF4"))
     }
 
