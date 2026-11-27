@@ -2057,9 +2057,12 @@ fun LiveTvScreen(
                 val refreshed = viewModel.sportsAddons.load(latestSportsAddonInstallations) {
                     if (!refreshing) addonEvents = it
                 }
-                addonEvents = refreshed
+                val previous = addonEvents
+                // A load that failed outright (slow network, timeouts) keeps what is on
+                // screen, and a much smaller result is not written over the disk copy.
+                if (refreshed.isNotEmpty() || previous.isEmpty()) addonEvents = refreshed
                 addonReady = true
-                viewModel.saveSportsAddonEvents(installations, refreshed)
+                if (refreshed.size * 2 >= previous.size) viewModel.saveSportsAddonEvents(installations, refreshed)
             } finally { addonLoading = false }
             delay(120_000)
         }

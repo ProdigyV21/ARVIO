@@ -31,6 +31,8 @@ class SportsAddonRepository @Inject constructor(private val streams: StreamRepos
     private val mutex = Mutex()
     private data class Cached(val at: Long, val events: List<SportsAddonEvent>)
     private val cache = linkedMapOf<String, Cached>()
+    // Last complete result per catalog, kept past the cache lifetime as a fallback.
+    private val lastGood = linkedMapOf<String, List<SportsAddonEvent>>()
 
     /**
      * Loads every sports catalog of [addons]. Catalogs load side by side, and after the
@@ -101,10 +103,23 @@ class SportsAddonRepository @Inject constructor(private val streams: StreamRepos
                         merge(items.values, force = false)
                     }
                 }
-                items.values.toList().also { loaded -> mutex.withLock {
-                    if (!failed) cache[key] = Cached(now, loaded)
-                    while (cache.size > 100) cache.remove(cache.keys.first())
-                } }
+                mutex.withLock {
+                    if (!failed) {
+                        val loaded = items.values.toList()
+                        cache[key] = Cached(now, loaded)
+                        lastGood[key] = loaded
+                        while (cache.size > 100) cache.remove(cache.keys.first())
+                        while (lastGood.size > 100) lastGood.remove(lastGood.keys.first())
+                        loaded
+                    } else {
+                        // A slow or failing request must never wipe games that loaded
+                        // before: keep the last complete result of this catalog and lay
+                        // whatever did arrive this time over it.
+                        val previous = lastGood[key].orEmpty()
+                        if (previous.isEmpty()) items.values.toList()
+                        else (previous.associateBy { it.key } + items).values.toList()
+                    }
+                }
             }
             merge(events, force = false)
         } }.awaitAll()
