@@ -2,6 +2,9 @@ package com.arflix.tv.ui.screens.music
 
 import android.graphics.drawable.BitmapDrawable
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
@@ -294,6 +297,7 @@ internal fun LyricsPanel(
     accent: Color,
     onSeek: (Long) -> Unit,
     modifier: Modifier = Modifier,
+    tv: Boolean = false,
 ) {
     Box(modifier.testTag("music-lyrics"), contentAlignment = Alignment.Center) {
         val found = lyrics?.lyrics
@@ -301,7 +305,7 @@ internal fun LyricsPanel(
             lyrics == null || lyrics.loading -> CircularProgressIndicator(color = Color.White, strokeWidth = 2.dp, modifier = Modifier.size(28.dp))
             lyrics.failed -> LyricsMessage(stringResource(R.string.music_lyrics_failed))
             found == null || found.isEmpty -> LyricsMessage(stringResource(R.string.music_lyrics_none))
-            found.synced.isNotEmpty() -> SyncedLyrics(found.synced, found.activeIndex(positionMs), accent, onSeek)
+            found.synced.isNotEmpty() -> SyncedLyrics(found.synced, found.activeIndex(positionMs), accent, onSeek, tv)
             !found.plain.isNullOrBlank() -> Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(vertical = 12.dp)) {
                 Text(found.plain, color = Color.White, fontSize = 20.sp, lineHeight = 30.sp, fontWeight = FontWeight.SemiBold)
                 LyricsCredit()
@@ -312,7 +316,7 @@ internal fun LyricsPanel(
 }
 
 @Composable
-private fun SyncedLyrics(lines: List<com.arflix.tv.music.LyricLine>, active: Int, accent: Color, onSeek: (Long) -> Unit) {
+private fun SyncedLyrics(lines: List<com.arflix.tv.music.LyricLine>, active: Int, accent: Color, onSeek: (Long) -> Unit, tv: Boolean = false) {
     val listState = rememberLazyListState()
     LaunchedEffect(active) {
         // Keeps the sung line a little below the top, unless the user is scrolling themselves.
@@ -334,6 +338,10 @@ private fun SyncedLyrics(lines: List<com.arflix.tv.music.LyricLine>, active: Int
     ) {
         itemsIndexed(lines, key = { i, _ -> i }) { i, line ->
             val past = i < active
+            if (tv) {
+                TvLyricLine(line.text.ifEmpty { "\u266A" }, current = i == active, past = past, accent = accent)
+                return@itemsIndexed
+            }
             Text(
                 line.text.ifEmpty { "♪" },
                 color = when {
@@ -351,6 +359,36 @@ private fun SyncedLyrics(lines: List<com.arflix.tv.music.LyricLine>, active: Int
         }
         item { LyricsCredit() }
     }
+}
+
+/**
+ * One line of synced lyrics on TV: seen from the sofa, so the sung line grows, turns full white and sits on a
+ * soft accent band, while the other lines step back.
+ */
+@Composable
+private fun TvLyricLine(text: String, current: Boolean, past: Boolean, accent: Color) {
+    val color by animateColorAsState(
+        when {
+            current -> Color.White
+            past -> Color.White.copy(alpha = 0.28f)
+            else -> Color.White.copy(alpha = 0.42f)
+        },
+        tween(280), label = "tv-lyric-color",
+    )
+    val band by animateFloatAsState(if (current) 0.30f else 0f, tween(280), label = "tv-lyric-band")
+    val scale by animateFloatAsState(if (current) 1.08f else 1f, tween(280), label = "tv-lyric-scale")
+    Text(
+        text,
+        color = color,
+        fontSize = 24.sp,
+        lineHeight = 31.sp,
+        fontWeight = if (current) FontWeight.ExtraBold else FontWeight.Bold,
+        modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp)
+            .graphicsLayer { scaleX = scale; scaleY = scale; transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0f, 0.5f) }
+            .clip(RoundedCornerShape(10.dp))
+            .background(accent.copy(alpha = band))
+            .padding(vertical = 7.dp, horizontal = 12.dp),
+    )
 }
 
 @Composable

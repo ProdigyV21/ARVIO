@@ -1276,7 +1276,7 @@ private fun TvPlayer(
             ) { shown ->
                 Cover(
                     shown.coverUrl,
-                    Modifier.size(380.dp).graphicsLayer { scaleX = coverScale; scaleY = coverScale },
+                    Modifier.size(340.dp).graphicsLayer { scaleX = coverScale; scaleY = coverScale },
                     shape = RoundedCornerShape(20.dp),
                     icon = Icons.Default.MusicNote,
                 )
@@ -1290,6 +1290,7 @@ private fun TvPlayer(
                         accent = accent,
                         onSeek = viewModel::seekTo,
                         modifier = Modifier.weight(1f).fillMaxWidth(),
+                        tv = true,
                     )
                     Spacer(Modifier.height(12.dp))
                 }
@@ -1327,8 +1328,13 @@ private fun TvPlayer(
                     TvChip(stringResource(R.string.music_lyrics), Icons.Default.Lyrics, selected = lyricsOn, accent = accent, tag = "tv-music-lyrics") { lyricsOn = !lyricsOn }
                     TvChip(stringResource(R.string.music_queue), Icons.AutoMirrored.Filled.QueueMusic, selected = false, accent = accent,
                         modifier = Modifier.focusRequester(queueChipFocus), tag = "tv-music-queue") { queueOpen = true }
-                    TvChip(sleepLabel(playback) ?: stringResource(R.string.music_sleep_timer), Icons.Default.Bedtime,
-                        selected = playback.sleepTimerOn, accent = accent, tag = "tv-music-sleep") { sleepDialog = true }
+                    // Just the moon while no timer runs, so the whole row fits; the time left shows once it is set.
+                    val sleepLeft = sleepLabel(playback)
+                    if (sleepLeft == null) {
+                        TvIconButton(Icons.Default.Bedtime, stringResource(R.string.music_sleep_timer), accent, tag = "tv-music-sleep") { sleepDialog = true }
+                    } else {
+                        TvChip(sleepLeft, Icons.Default.Bedtime, selected = true, accent = accent, tag = "tv-music-sleep") { sleepDialog = true }
+                    }
                     TvIconButton(Icons.Default.MoreVert, stringResource(R.string.music_more), accent) { onTrackMenu(track, emptyList()) }
                 }
                 if (!lyricsOn) {
