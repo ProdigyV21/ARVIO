@@ -181,6 +181,14 @@ internal enum class GuideSport(val title: String, val asset: String, val terms: 
     }
 }
 
+/**
+ * Playlist guides fill event channels with placeholders between games: "ENDED | ...",
+ * "Next | ...", "- NO EVENT STREAMING -", "24/7 ...". Those are not games.
+ */
+internal val guidePlaceholder = Regex(
+    "^\\W*(ended|finished|full ?time|next|up ?next|coming up|upcoming|starts? (at|soon)|no event|offline|closed)\\b|\\bno (live )?events?\\b|\\b24/7\\b|\\bevent (starts|begins)\\b",
+    RegexOption.IGNORE_CASE)
+
 internal val nonEvent = Regex("\\b(highlights?|hoogtepunten|samenvatting|resumen|replay|re-?run|classic|news|magazine|review|preview|cancelled|canceled|postponed|abandoned|sendepause|off air|no signal|best of|teleshopping|infomercial|documentary)\\b", RegexOption.IGNORE_CASE)
 private val eventMatchup = Regex("\\s+(?:vs?\\.?|versus|at|[-–—])\\s+", RegexOption.IGNORE_CASE)
 private val liveEventCue = Regex("\\b(live|on air|match|game|race|grand prix|qualifying|tournament|coverage|championship|event)\\b", RegexOption.IGNORE_CASE)
@@ -262,7 +270,7 @@ internal class SportsProgrammeResolver {
     fun resolve(programme: IptvProgram, fallback: GuideSport?): Metadata? {
         val key = Key(programme.title, programme.category, fallback)
         if (cache.containsKey(key)) return cache[key]
-        val metadata = if (nonEvent.containsMatchIn(programme.title)) null else {
+        val metadata = if (nonEvent.containsMatchIn(programme.title) || guidePlaceholder.containsMatchIn(programme.title)) null else {
             val text = "${programme.category.orEmpty()} ${programme.title}"
             // Channel genre alone does not make advertising or downtime a sporting event.
             (GuideSport.fromText(text) ?: fallback?.takeIf {
@@ -318,7 +326,7 @@ internal fun accumulateSportsGuideEvents(
             val meta = resolver.resolve(programme, fallback)
             if (meta != null) events.add(meta.sport, meta.identity, programme, channel, meta.competition)
             else if (allowsChannelOnlyFallback(programme, fallback) && programme.isLive(now) &&
-                !nonEvent.containsMatchIn(programme.title)) {
+                !nonEvent.containsMatchIn(programme.title) && !guidePlaceholder.containsMatchIn(programme.title)) {
                 // Providers often classify a channel as Football, ESPN, or Sports
                 // while the current EPG entry contains only a show name. Keep the
                 // live source discoverable without inventing a fixture.
@@ -328,11 +336,25 @@ internal fun accumulateSportsGuideEvents(
     }
 }
 
+/**
+ * When a growing guide should trigger a new sports scan. Small guides rescan every 64
+ * channels; large ones only each time they grow by about half, so a 50,000-channel
+ * playlist that fills its guide in the background is scanned a handful of times
+ * instead of hundreds.
+ */
+internal fun sportsGuideSizeBucket(size: Int): Int {
+    if (size < 1024) return size / 64
+    val top = Integer.highestOneBit(size)
+    return 16 + 2 * Integer.numberOfTrailingZeros(top) + if (size and (top shr 1) != 0) 1 else 0
+}
+
 internal fun sportsUpcomingProgrammes(slice: IptvNowNext): List<IptvProgram> =
     listOfNotNull(slice.now, slice.next, slice.later) + slice.upcoming
 
 @Immutable
-internal data class SportsGuideRow(val id: String, val title: String, val events: List<SportsGuideEvent>)
+internal data class SportsGuideRow(val id: String, val title: String, val events: List<SportsGuideEvent>,
+    // How many games the row stands for; a row can show fewer cards than that (see SPORTS_ROW_CAP).
+    val total: Int = events.size)
 
 /**
  * Compose requires keys to be unique within each lazy container. Provider data

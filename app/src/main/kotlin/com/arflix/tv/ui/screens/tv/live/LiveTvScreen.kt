@@ -2008,7 +2008,7 @@ fun LiveTvScreen(
     }
     val sportsScheduleKey = SportsScheduleKey(currentProfile?.id, selectedProviderId, state.snapshot.loadedAt.toEpochMilli(),
         hiddenGroupSet + restrictedGroupSet, state.epgBackfillInProgress, guideClockMillis / 600_000L,
-        state.snapshot.nowNext.size / 64)
+        sportsGuideSizeBucket(state.snapshot.nowNext.size))
     var sportsFocusSignal by remember { mutableIntStateOf(0) }
     val sportsClockFormat by remember(currentProfile?.id) { viewModel.sportsClockFormat(currentProfile?.id) }.collectAsStateWithLifecycle(initialValue = "24h")
     val guideRowCount by remember(currentProfile?.id) { viewModel.guideRowCount(currentProfile?.id) }.collectAsStateWithLifecycle(initialValue = null)
@@ -2294,7 +2294,7 @@ fun LiveTvScreen(
                             val meta = programmeResolver.resolve(programme, fallbacks[id])
                             if (meta != null) matches.getOrPut(id) { arrayListOf() }.add(programme to meta)
                             else if (allowsChannelOnlyFallback(programme, fallbacks[id]) && programme.isLive(scanNow) &&
-                                !nonEvent.containsMatchIn(programme.title)) {
+                                !nonEvent.containsMatchIn(programme.title) && !guidePlaceholder.containsMatchIn(programme.title)) {
                                 // Cached EPG rows use the fast classification path above. Keep
                                 // live sports channels visible there as well, even when the
                                 // provider's group is a specific sport such as Football.

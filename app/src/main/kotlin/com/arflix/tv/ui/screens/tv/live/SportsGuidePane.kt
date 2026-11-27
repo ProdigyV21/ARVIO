@@ -293,15 +293,25 @@ internal fun SportsGuidePane(
         }
     }
     // The chips list every sport of the day (or of the overview), whatever filter is on.
-    val filterSports = remember(events, selectedDate, dayExtra, fixtures) {
-        if (selectedDate == null) sportsFilterOptions(events.filter { it.hasChannels(now) })
-        else sportsFilterOptions(sportsEventsForDay(events, fixtures + dayExtra, selectedDate, zone))
+    // Chips, rail counts and the live total all scan every game. A big playlist has
+    // thousands, so they are counted together off the main thread and kept until the
+    // next count is ready, instead of blocking a frame on each refresh.
+    val summary by produceState(SportsPaneSummary.EMPTY, events, now, selectedDate, dayExtra, fixtures, follows) {
+        value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+            val withChannels = events.filter { it.hasChannels(now) }
+            val day = selectedDate?.let { sportsEventsForDay(events, fixtures + dayExtra, it, zone) }
+            val today = sportsRailCounts(events, now)
+            SportsPaneSummary(
+                filterSports = sportsFilterOptions(day ?: withChannels),
+                sportCounts = (day ?: withChannels).groupingBy { it.sport }.eachCount(),
+                railCounts = if (day == null) today else sportsRailCounts(day, now, wholeDay = true),
+                liveCount = today[null]?.live ?: 0,
+                mineCount = mySportsEvents(events, follows, now).size,
+            )
+        }
     }
-    val sportCounts = remember(events, selectedDate, dayExtra, fixtures, now) {
-        val source = if (selectedDate == null) events.filter { it.hasChannels(now) }
-            else sportsEventsForDay(events, fixtures + dayExtra, selectedDate, zone)
-        source.groupingBy { it.sport }.eachCount()
-    }
+    val filterSports = summary.filterSports
+    val sportCounts = summary.sportCounts
     val rows = remember(presentationRows) {
         val focusSnapshot = focusedOrder[0]
         val focusOrderRanks = focusSnapshot?.second.orEmpty().withIndex().associate { it.value to it.index }
@@ -323,7 +333,7 @@ internal fun SportsGuidePane(
     val dayChipsFocus = remember { FocusRequester() }
     var picker by remember { mutableStateOf<SportsPicker?>(null) }
     val sportPillFocus = remember { FocusRequester() }
-    val liveCount = remember(events, now) { events.count { it.isOnAir(now) && it.hasChannels(now) } }
+    val liveCount = summary.liveCount
     val listState = rememberLazyListState()
     val rowStates = remember { mutableMapOf<String, LazyListState>() }
     val cardFocus = remember { mutableMapOf<Pair<String, String>, FocusRequester>() }
@@ -555,11 +565,8 @@ internal fun SportsGuidePane(
     fun heroCompetition(event: SportsGuideEvent): String =
         event.competition?.takeIf { it.isNotBlank() } ?: event.fixture?.league?.takeIf { it.isNotBlank() } ?: event.sport.title
     // ---- Filters, as rail entries (TV) or pills (phone) ---------------------------------
-    val railCounts = remember(events, now, selectedDate, dayExtra, fixtures) {
-        if (selectedDate == null) sportsRailCounts(events, now)
-        else sportsRailCounts(sportsEventsForDay(events, fixtures + dayExtra, selectedDate, zone), now, wholeDay = true)
-    }
-    val mineCount = remember(events, follows, now) { mySportsEvents(events, follows, now).size }
+    val railCounts = summary.railCounts
+    val mineCount = summary.mineCount
     val labelAllSports = stringResource(R.string.sports_filter_all)
     val labelYourTeams = stringResource(R.string.sports_your_teams)
     val yourTeamsDetail = if (follows.isEmpty()) stringResource(R.string.sports_your_teams_none)
@@ -737,7 +744,7 @@ internal fun SportsGuidePane(
                 // between rows recomposes the chips and nothing else.
                 val chips: @Composable () -> Unit = {
                     SportsJumpChips(
-                        chips = rows.map { SportsJumpChip(it.id, it.title, it.events.size, live = it.id == SPORTS_ROW_LIVE) },
+                        chips = rows.map { SportsJumpChip(it.id, it.title, it.total, live = it.id == SPORTS_ROW_LIVE) },
                         activeRowId = activeRowId,
                         label = stringResource(R.string.sports_jump_to),
                         firstFocus = jumpFocus,
@@ -861,7 +868,7 @@ internal fun SportsGuidePane(
                 Column(Modifier.animateItem(fadeInSpec = tween(220), fadeOutSpec = null,
                     placementSpec = androidx.compose.animation.core.spring(dampingRatio = .9f, stiffness = 380f,
                         visibilityThreshold = androidx.compose.ui.unit.IntOffset(1, 1)))) {
-                    SportsRowTitle(row.title, row.events.size, touch)
+                    SportsRowTitle(row.title, row.total, touch)
                     val eventKeys = keysByRow.getValue(row.id)
                     // Inner padding leaves room for the focused card's lift without clipping;
                     // the outer padding shrinks by the same amount so cards stay aligned.
@@ -1580,4 +1587,15 @@ private fun FormBadge(result: String) {
 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 private val SportsNoBringIntoView = object : androidx.compose.foundation.gestures.BringIntoViewSpec {
     override fun calculateScrollDistance(offset: Float, size: Float, containerSize: Float): Float = 0f
+}
+
+/** Counts for the rail, chips and pickers, worked out together off the main thread. */
+internal data class SportsPaneSummary(
+    val filterSports: List<GuideSport>,
+    val sportCounts: Map<GuideSport, Int>,
+    val railCounts: Map<GuideSport?, SportsRailCount>,
+    val liveCount: Int,
+    val mineCount: Int,
+) {
+    companion object { val EMPTY = SportsPaneSummary(emptyList(), emptyMap(), emptyMap(), 0, 0) }
 }
