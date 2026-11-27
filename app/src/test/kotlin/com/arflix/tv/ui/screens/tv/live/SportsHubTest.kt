@@ -88,4 +88,18 @@ class SportsHubTest {
         val off = addon(now - hour).copy(live = false)
         assertFalse(off.restoredFromDisk(now).isLive(now))
     }
+    @Test fun watchSkipsTeasersTipsAndConfigureLinks() {
+        fun s(name: String, url: String, desc: String? = null, external: Boolean = false) =
+            com.arflix.tv.data.repository.SportsAddonStream(name, url, emptyMap(), external, desc)
+        val streams = listOf(
+            s("🔒 FP1 HD", "https://www.google.com", "Upgrade to Premium"),
+            s("Tip", "https://sports.example.dev/info", "Tip: use an external player"),
+            s("Black Friday Sale", "https://sports.example.dev/sale"),
+            s("Settings", "https://sports.example.to/configure"),
+            s("Open in browser", "https://site.example/watch", external = true),
+            s("UK: TNT Sports 2", "http://cdn.example/live/tnt2.m3u8"),
+        )
+        assertEquals("UK: TNT Sports 2", sportsWatchStream(streams)?.name)
+        assertEquals(null, sportsWatchStream(streams.take(5)))
+    }
 }

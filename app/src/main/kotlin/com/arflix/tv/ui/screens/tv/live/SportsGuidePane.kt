@@ -498,7 +498,7 @@ internal fun SportsGuidePane(
                     .ifEmpty { event.addonSources }
                     .firstNotNullOfOrNull { source ->
                         val streams = try { resolveAddon(source) } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (_: Exception) { emptyList() }
-                        streams.firstOrNull { !it.external }?.let { source to it }
+                        sportsWatchStream(streams)?.let { source to it }
                     }
                 if (found != null) onPlayAddon(found.first, found.second) else openSheet(event, from)
             }
@@ -751,7 +751,14 @@ internal fun SportsGuidePane(
                 // The game the D-pad is on, large, with its buttons. Reads the focused game
                 // here only, so moving focus recomposes this panel and not the rows.
                 val hero: @Composable () -> Unit = {
-                    val event = previewEvent?.let { focusedEvent -> rows.firstNotNullOfOrNull { row -> row.events.firstOrNull { it.id == focusedEvent.id } } }
+                    // While the D-pad is held the panel waits until focus settles, so a fast
+                    // run through a row doesn't crossfade art and reload colours per card.
+                    var settled by remember { mutableStateOf(previewEvent) }
+                    LaunchedEffect(previewEvent) {
+                        if (settled != null && previewEvent != null) kotlinx.coroutines.delay(110)
+                        settled = previewEvent
+                    }
+                    val event = settled?.let { focusedEvent -> rows.firstNotNullOfOrNull { row -> row.events.firstOrNull { it.id == focusedEvent.id } } }
                         ?: rows.firstOrNull()?.events?.firstOrNull()
                     if (event != null) {
                         val (status, statusLive) = heroStatus(event)

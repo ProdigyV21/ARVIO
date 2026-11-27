@@ -889,3 +889,24 @@ internal fun SportsCardArt(
         Box(Modifier.matchParentSize().liveFocusOutline(focused, 10.dp))
     }
 }
+
+private val sportsNotAStream = Regex(
+    "🔒|\\b(premium|upgrade|unlock|locked|subscribe|sale|black friday|discount|tip|donat\\w*|support the project|configure|settings|install)\\b",
+    RegexOption.IGNORE_CASE)
+private val sportsNotAStreamHosts = setOf("google.com", "www.google.com", "ko-fi.com", "paypal.com", "www.paypal.com", "patreon.com", "www.patreon.com")
+
+/**
+ * The stream the Watch button plays: the first one that is a real video in this app.
+ * Add-ons also list locked teasers, "use an external player" tips, sale banners and
+ * configure links as streams; those are skipped so Watch never lands on a dead player.
+ */
+internal fun sportsWatchStream(streams: List<com.arflix.tv.data.repository.SportsAddonStream>) = streams.firstOrNull { stream ->
+    if (stream.external) return@firstOrNull false
+    val uri = runCatching { java.net.URI(stream.url.trim()) }.getOrNull() ?: return@firstOrNull false
+    val scheme = uri.scheme?.lowercase()
+    if (scheme != "http" && scheme != "https" && scheme != "rtmp" && scheme != "rtsp") return@firstOrNull false
+    val host = uri.host?.lowercase().orEmpty()
+    val path = uri.path?.trimEnd('/')?.lowercase().orEmpty()
+    host.isNotEmpty() && host !in sportsNotAStreamHosts && !path.endsWith("/configure") && path != "/configure" &&
+        !sportsNotAStream.containsMatchIn("${stream.name} ${stream.description.orEmpty()}")
+}
