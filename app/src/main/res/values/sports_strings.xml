@@ -39,4 +39,24 @@
     <string name="sports_failover_switching">Channel failed. Trying %1$s…</string>
     <string name="sports_pick_day">Choose a day</string>
     <string name="sports_pick_sport">Choose a sport</string>
+    <string name="sports_starting_soon">Starting soon</string>
+    <string name="sports_live_channels">Live sports channels</string>
+    <string name="sports_your_teams">Your teams</string>
+    <string name="sports_your_teams_none">Follow a team from any game</string>
+    <string name="sports_followed_count">%1$d followed</string>
+    <string name="sports_rail_section">Sports</string>
+    <string name="sports_games_count">%1$d games</string>
+    <string name="sports_live_count">%1$d live</string>
+    <string name="sports_jump_to">Jump to</string>
+    <string name="sports_watch">Watch</string>
+    <string name="sports_in_minutes">In %1$d min</string>
+    <string name="sports_in_hours">In %1$d h %2$02d</string>
+    <string name="sports_started_at">Started %1$s</string>
+    <string name="sports_minutes_in">%1$d min in</string>
+    <string name="sports_ends_about">ends about %1$s</string>
+    <string name="sports_starts_at">Starts %1$s</string>
+    <string name="sports_on_your_channels">On your channels</string>
+    <string name="sports_all_sources">All sources</string>
+    <string name="sports_your_teams_empty">No games for the teams you follow right now. Open any game and choose Follow.</string>
+    <string name="sports_live_status">Live now</string>
 </resources>

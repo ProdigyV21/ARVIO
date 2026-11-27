@@ -29,6 +29,7 @@ import androidx.compose.material.icons.filled.SportsSoccer
 import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.GridView
+import androidx.compose.material.icons.filled.VideoLibrary
 import androidx.compose.material.icons.filled.FiberManualRecord
 import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.Menu
@@ -236,8 +237,9 @@ internal fun SportsGuidePane(
             dayFixtures = date to loaded
         } finally { dayLoading = false }
     }
-    val labelMySports = stringResource(R.string.sports_my_sports)
+    val labelMySports = stringResource(R.string.sports_your_teams)
     val labelLiveNow = stringResource(R.string.sports_filter_live)
+    val hubLabels = SportsHubLabels(labelLiveNow, stringResource(R.string.sports_starting_soon), stringResource(R.string.sports_live_channels))
     val dayExtra = dayFixtures?.takeIf { it.first == selectedDate }?.second.orEmpty()
     val labelNetworks = stringResource(R.string.sports_league_networks)
     LaunchedEffect(events, now, follows, sportsFilter, selectedDate, dayExtra, fixtures, networkEvents) {
@@ -245,19 +247,27 @@ internal fun SportsGuidePane(
         try {
             val built = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
                 if (selectedDate == null) {
-                    val filtered = if (sportsFilter == SPORTS_FILTER_ALL) events else events.filter { it.matchesSportsFilter(sportsFilter, now) }
-                    val mine = mySportsEvents(filtered, follows, now)
-                    // An image failure must not remove/reparent the focused lazy item.
-                    val base = sportsPresentationRows(filtered, now, emptySet())
+                    val filtered = when (sportsFilter) {
+                        SPORTS_FILTER_ALL -> events
+                        SPORTS_FILTER_MINE -> events.filter { it.isFollowed(follows) }
+                        else -> events.filter { it.matchesSportsFilter(sportsFilter, now) }
+                    }
+                    val mine = if (sportsFilter == SPORTS_FILTER_MINE) emptyList() else mySportsEvents(filtered, follows, now)
+                    // One sport picked: its rows are its competitions.
+                    val byCompetition = sportsFilter != SPORTS_FILTER_ALL && sportsFilter != SPORTS_FILTER_LIVE && sportsFilter != SPORTS_FILTER_MINE
+                    val base = sportsHubRows(filtered, now, byCompetition, hubLabels)
                     if (sportsFilter == SPORTS_FILTER_ALL && follows.isEmpty()) SportsPresentationCache.store(events, base)
                     val networks = networkEvents.filter {
-                        sportsFilter == SPORTS_FILTER_ALL || (sportsFilter != SPORTS_FILTER_LIVE && it.matchesSportsFilter(sportsFilter, now))
+                        sportsFilter == SPORTS_FILTER_ALL || (sportsFilter != SPORTS_FILTER_LIVE && sportsFilter != SPORTS_FILTER_MINE &&
+                            it.matchesSportsFilter(sportsFilter, now))
                     }
-                    (if (mine.isEmpty()) emptyList() else listOf(SportsGuideRow(SPORTS_ROW_MINE, labelMySports, mine))) +
-                        (if (networks.isEmpty()) emptyList() else listOf(SportsGuideRow(SPORTS_ROW_NETWORKS, labelNetworks, networks))) + base
+                    val top = base.takeWhile { it.id == SPORTS_ROW_LIVE || it.id == SPORTS_ROW_SOON }
+                    (if (mine.isEmpty()) emptyList() else listOf(SportsGuideRow(SPORTS_ROW_MINE, labelMySports, mine))) + top +
+                        (if (networks.isEmpty()) emptyList() else listOf(SportsGuideRow(SPORTS_ROW_NETWORKS, labelNetworks, networks))) +
+                        base.drop(top.size)
                 } else {
                     sportsEventsForDay(events, fixtures + dayExtra, selectedDate, zone)
-                        .filter { it.matchesSportsFilter(sportsFilter, now) }
+                        .filter { if (sportsFilter == SPORTS_FILTER_MINE) it.isFollowed(follows) else it.matchesSportsFilter(sportsFilter, now) }
                         .let { sportsDayRows(it, follows, now) }
                         .map { row -> when (row.id) {
                             SPORTS_ROW_MINE -> row.copy(title = labelMySports)
@@ -320,6 +330,14 @@ internal fun SportsGuidePane(
         rows.associate { it.id to disambiguatedLazyKeys(it.events) { event -> event.id } }
     }
     val touchUi = com.arflix.tv.util.LocalDeviceType.current.isTouchDevice()
+    // Items in the vertical list before the first row (the phone's featured game).
+    val listOffset = remember { intArrayOf(0) }
+    // The card focus was last on (row, column), to come back to from the rail and the game panel.
+    val lastCard = remember { intArrayOf(-1, -1) }
+    var activeRowId by remember { mutableStateOf<String?>(null) }
+    val railFocus = remember { FocusRequester() }
+    val jumpFocus = remember { FocusRequester() }
+    val heroFocus = remember { FocusRequester() }
     // Up/Down lands on the card that is visually above/below, even when the two rows
     // are scrolled differently.
     fun alignedColumn(fromRow: Int, fromColumn: Int, toRow: Int): Int {
@@ -339,7 +357,7 @@ internal fun SportsGuidePane(
             // Materialize the target before requesting focus. Compose 1.6's
             // beyond-bounds focus search can inspect a recycled row's coordinates.
             val verticalLayout = listState.layoutInfo
-            val visibleRow = verticalLayout.visibleItemsInfo.firstOrNull { it.index == rowIndex }
+            val visibleRow = verticalLayout.visibleItemsInfo.firstOrNull { it.index == rowIndex + listOffset[0] }
             suspend fun reveal(state: LazyListState, index: Int) {
                 val layout = state.layoutInfo
                 val item = layout.visibleItemsInfo.firstOrNull { it.index == index }
@@ -357,13 +375,13 @@ internal fun SportsGuidePane(
             // On a TV the focused row moves to the top, so no half row (captions without
             // their cards) is left showing under the preview.
             launch {
-                if (touchUi) reveal(listState, rowIndex)
+                if (touchUi) reveal(listState, rowIndex + listOffset[0])
                 else {
                     // After focus has moved: focus's own bring-into-view scroll would
                     // otherwise cancel this one and leave a half row on top.
                     withFrameNanos { }
                     withFrameNanos { }
-                    listState.animateScrollToItem(rowIndex)
+                    listState.animateScrollToItem(rowIndex + listOffset[0])
                 }
             }
             if (visibleRow == null) withFrameNanos { }
@@ -423,12 +441,132 @@ internal fun SportsGuidePane(
     LaunchedEffect(selected) {
         if (!touch && selected == null) returnFocus?.let { runCatching { it.requestFocus() } }
     }
+    val railLayout = !touch && !narrow
+    listOffset[0] = 0
+    // ---- The game panel: what it says and what its buttons do --------------------------
+    val labelLiveStatus = stringResource(R.string.sports_live_status)
+    val labelWatch = stringResource(R.string.sports_watch)
+    val labelRemind = stringResource(R.string.sports_remind_me)
+    val labelReminderOn = stringResource(R.string.sports_reminder_on)
+    val labelMultiview = stringResource(R.string.multiview_add_to)
+    val labelAllSources = stringResource(R.string.sports_all_sources)
+    fun heroSources(event: SportsGuideEvent): List<IptvChannel> {
+        val confirmed = if (event.isOnAir(now)) event.availableChannels(now) else event.channels
+        return (confirmed + event.possibleChannels).distinctBy { it.id }.withRememberedFirst(channelMemory, event.channelMemoryKeys())
+    }
+    fun openSheet(event: SportsGuideEvent, from: FocusRequester?) {
+        navigationJob?.cancel(); navigationTarget = null
+        returnFocus = from; showDetails = false; selected = event
+    }
+    fun heroActions(event: SportsGuideEvent, from: FocusRequester?): List<SportsHeroAction> = buildList {
+        val canWatch = event.isOnAir(now) || event.isScheduledNow(now)
+        val sources = heroSources(event)
+        if (canWatch && (sources.isNotEmpty() || event.addonSources.isNotEmpty())) add(SportsHeroAction("watch", labelWatch, Icons.Default.PlayArrow, primary = true) {
+            val channel = sources.firstOrNull()
+            if (channel == null) openSheet(event, from)
+            else if (onPlayFromEvent != null) onPlayFromEvent(event, channel, sources) else onPlay(channel)
+        })
+        if (!event.isNetwork) {
+            val canRemind = !event.isFinished() && !event.isOnAir(now) && event.programme.startUtcMillis > now
+            if (canRemind) {
+                val reminded = event.id in remindedIds
+                add(SportsHeroAction("remind", if (reminded) labelReminderOn else labelRemind,
+                    if (reminded) Icons.Default.NotificationsActive else Icons.Default.NotificationsNone,
+                    active = reminded) { onToggleReminder(event, !reminded) })
+            }
+            event.followOptions().firstOrNull()?.let { option ->
+                val on = follows.any { it.key == option.key }
+                add(SportsHeroAction("follow",
+                    context.getString(if (on) R.string.sports_following else R.string.sports_follow, option.name),
+                    if (on) Icons.Default.Star else Icons.Default.StarBorder, active = on) { onToggleFollow(option) })
+            }
+            if (canWatch && onMultiview != null && sources.isNotEmpty()) add(SportsHeroAction("multiview", labelMultiview,
+                Icons.Default.GridView, iconOnly = true) { onMultiview(event, sources) })
+        }
+        add(SportsHeroAction("sources", labelAllSources, Icons.Default.Tv, iconOnly = true) { openSheet(event, from) })
+    }
+    fun heroStatus(event: SportsGuideEvent): Pair<String, Boolean> = when {
+        event.isFinished() -> labelFinished to false
+        event.isOnAir(now) -> labelLiveStatus to true
+        event.isScheduledNow(now) -> labelScheduledNow to false
+        event.programme.startUtcMillis > now && event.programme.startUtcMillis - now <= SPORTS_SOON_WINDOW_MS -> {
+            val minutes = ((event.programme.startUtcMillis - now + 59_999L) / 60_000L).toInt()
+            (if (minutes < 60) context.getString(R.string.sports_in_minutes, minutes)
+                else context.getString(R.string.sports_in_hours, minutes / 60, minutes % 60)) to false
+        }
+        else -> eventTime(event) to false
+    }
+    fun heroTimeLine(event: SportsGuideEvent): String? {
+        val start = event.programme.startUtcMillis
+        val end = event.programme.endUtcMillis
+        val ends = if (end > start) context.getString(R.string.sports_ends_about, timeFormat.format(Date(end))) else null
+        return if (event.isOnAir(now) && now >= start) listOfNotNull(
+            context.getString(R.string.sports_started_at, timeFormat.format(Date(start))),
+            context.getString(R.string.sports_minutes_in, ((now - start) / 60_000L).toInt()),
+            ends,
+        ).joinToString(" · ")
+        else if (event.isFinished()) null
+        else listOfNotNull(context.getString(R.string.sports_starts_at, eventTime(event)), ends).joinToString(" · ")
+    }
+    fun heroChannels(event: SportsGuideEvent): List<String> =
+        (heroSources(event).map { sportsChannelBadge(it.name) } + event.addonSources.map { it.addonName }).distinct()
+    fun heroCompetition(event: SportsGuideEvent): String =
+        event.competition?.takeIf { it.isNotBlank() } ?: event.fixture?.league?.takeIf { it.isNotBlank() } ?: event.sport.title
+    // ---- Filters, as rail entries (TV) or pills (phone) ---------------------------------
+    val railCounts = remember(events, now) { sportsRailCounts(events, now) }
+    val mineCount = remember(events, follows, now) { mySportsEvents(events, follows, now).size }
+    val labelAllSports = stringResource(R.string.sports_filter_all)
+    val labelYourTeams = stringResource(R.string.sports_your_teams)
+    val yourTeamsDetail = if (follows.isEmpty()) stringResource(R.string.sports_your_teams_none)
+        else stringResource(R.string.sports_followed_count, follows.size)
+    fun gamesDetail(count: SportsRailCount?): String? = count?.games?.let { context.getString(R.string.sports_games_count, it) }
+    fun liveDetail(count: SportsRailCount?): String? = count?.live?.takeIf { it > 0 }?.let { context.getString(R.string.sports_live_count, it) }
+    val filterEntries = buildList {
+        add(SportsRailEntry(SPORTS_FILTER_LIVE, labelLiveNow, count = liveCount, liveDot = true,
+            selected = sportsFilter == SPORTS_FILTER_LIVE))
+        add(SportsRailEntry(SPORTS_FILTER_MINE, labelYourTeams, detail = if (railLayout) yourTeamsDetail else null,
+            count = mineCount.takeIf { follows.isNotEmpty() }, icon = SportsRailTeamsIcon, selected = sportsFilter == SPORTS_FILTER_MINE))
+        add(SportsRailEntry(SPORTS_FILTER_ALL, labelAllSports, detail = gamesDetail(railCounts[null]), liveDetail = liveDetail(railCounts[null]),
+            icon = Icons.Default.SportsSoccer, selected = sportsFilter == SPORTS_FILTER_ALL,
+            count = if (railLayout) null else railCounts[null]?.games))
+        filterSports.forEach { sport ->
+            val count = railCounts[sport]
+            add(SportsRailEntry(sport.name, sport.title, detail = gamesDetail(count) ?: sportCounts[sport]?.let { context.getString(R.string.sports_games_count, it) },
+                liveDetail = liveDetail(count), sport = sport, selected = sportsFilter == sport.name,
+                count = if (railLayout) null else (count?.games ?: sportCounts[sport])))
+        }
+    }.let { entries -> if (entries.none { it.selected }) entries.map { if (it.key == SPORTS_FILTER_ALL) it.copy(selected = true) else it } else entries }
+        .map { if (it.selected) it.copy(focus = railFocus) else it }
+    fun pickFilter(key: String) {
+        sportsFilter = key
+        // Live means now, so it always shows the overview, whatever day was picked.
+        if (key == SPORTS_FILTER_LIVE) dayOffset = null
+        focusedOrder[0] = null
+        lastCard[0] = -1; lastCard[1] = -1
+    }
+    fun focusRail() {
+        navigationJob?.cancel(); navigationTarget = null
+        if (runCatching { railFocus.requestFocus() }.isFailure) leaveCards()
+    }
+    fun focusContent() {
+        if (rows.isEmpty()) { if (runCatching { firstFocus.requestFocus() }.isFailure) runCatching { jumpFocus.requestFocus() }; return }
+        val row = lastCard[0].takeIf { it in rows.indices } ?: 0
+        moveTo(row, if (row == lastCard[0]) lastCard[1] else 0)
+    }
+    fun focusAboveRows() {
+        navigationJob?.cancel(); navigationTarget = null
+        if (runCatching { heroFocus.requestFocus() }.isFailure && runCatching { jumpFocus.requestFocus() }.isFailure) focusRail()
+    }
     CompositionLocalProvider(LocalTextStyle provides LocalTextStyle.current.copy(fontFamily = LiveFontFamily)) {
     BoxWithConstraints(modifier.fillMaxSize().background(LiveColors.Bg)) {
     // Use full-screen dimensions so opening the drawer never resizes loaded artwork.
     val viewport = configuration.screenWidthDp.dp
     val cardWidth = if (narrow) {
-        180.dp
+        184.dp
+    } else if (railLayout) {
+        val available = viewport - SportsRailWidth - LiveDims.SidebarCollapsed
+        val columns = if (available >= 690.dp) 4 else 3
+        (available - 36.dp - 12.dp * (columns - 1)) / columns
     } else {
         val columns = when {
             viewport >= 850.dp -> 5
@@ -442,8 +580,34 @@ internal fun SportsGuidePane(
         val width = cardWidth - 4.dp
         androidx.compose.ui.unit.DpSize(width, width * 9f / 16f)
     }
-    Column(Modifier.fillMaxSize()) {
-        if (showHeader) {
+    Row(Modifier.fillMaxSize()) {
+    if (railLayout) SportsRail(
+        title = stringResource(R.string.live_quick_sports),
+        filters = filterEntries,
+        tools = buildList {
+            add(SportsRailEntry("day", sportsDayLabel(dayOffset, todayDate), icon = SportsRailDayIcon, chevron = true,
+                selected = dayOffset != null, focus = dayChipsFocus))
+            if (onOpenSearch != null) add(SportsRailEntry("tool-search", stringResource(R.string.search), icon = Icons.Default.Search))
+            if (onOpenMultiview != null) add(SportsRailEntry("tool-multiview", stringResource(R.string.multiview_title), icon = Icons.Default.GridView))
+            if (onOpenRecordings != null) add(SportsRailEntry("tool-recordings", stringResource(R.string.recordings_title), icon = Icons.Default.VideoLibrary))
+        },
+        backFocus = categoriesFocus,
+        onBack = if (showHeader) onOpenCategories else null,
+        onPick = { key ->
+            when (key) {
+                "day" -> picker = SportsPicker.Day
+                "tool-search" -> onOpenSearch?.invoke()
+                "tool-multiview" -> onOpenMultiview?.invoke()
+                "tool-recordings" -> onOpenRecordings?.invoke()
+                else -> pickFilter(key)
+            }
+        },
+        onRight = ::focusContent,
+        onLeft = ::leaveCards,
+        sectionLabel = stringResource(R.string.sports_rail_section),
+    )
+    Column(Modifier.weight(1f).fillMaxHeight()) {
+        if (showHeader && !railLayout) {
             if (!sidebarOpen) {
                 Row(
                     modifier = Modifier
@@ -463,8 +627,7 @@ internal fun SportsGuidePane(
                                         runCatching { firstFocus.requestFocus() }.isFailure) moveTo(0, 0)
                                     true
                                 } else false
-                            }
-                            .padding(end = 0.dp),
+                            },
                         onClick = onOpenCategories,
                     )
                     Spacer(Modifier.width(12.dp))
@@ -504,24 +667,80 @@ internal fun SportsGuidePane(
         } else if (rows.isEmpty() && !browsing) {
             Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.Center,
                 horizontalAlignment = Alignment.CenterHorizontally) {
-                run {
-                    Icon(Icons.Default.SportsSoccer, null, tint = LiveColors.FgDim, modifier = Modifier.size(36.dp))
-                    Text(
-                        text = if (failed) stringResource(R.string.live_sports_schedule_unavailable)
-                        else if (events.any { it.hasChannels(now) && (it.isOnAir(now) || it.programme.startUtcMillis > now) }) stringResource(R.string.live_sports_artwork_unavailable)
-                        else stringResource(R.string.live_sports_no_events_matched),
-                        color = LiveColors.FgDim,
-                        modifier = Modifier.padding(14.dp),
-                    )
-                    Row(Modifier.padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        SportsPill(stringResource(R.string.retry), null, touch = touch,
-                            modifier = Modifier.focusRequester(firstFocus)) { onRetry() }
-                        SportsPill(stringResource(R.string.live_groups_title), null, touch = touch, onClick = onOpenCategories)
-                    }
+                Icon(Icons.Default.SportsSoccer, null, tint = LiveColors.FgDim, modifier = Modifier.size(36.dp))
+                Text(
+                    text = if (failed) stringResource(R.string.live_sports_schedule_unavailable)
+                    else if (events.any { it.hasChannels(now) && (it.isOnAir(now) || it.programme.startUtcMillis > now) }) stringResource(R.string.live_sports_artwork_unavailable)
+                    else stringResource(R.string.live_sports_no_events_matched),
+                    color = LiveColors.FgDim,
+                    modifier = Modifier.padding(14.dp),
+                )
+                Row(Modifier.padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    SportsPill(stringResource(R.string.retry), null, touch = touch,
+                        modifier = Modifier.focusRequester(firstFocus).onPreviewKeyEvent { key ->
+                            if (railLayout && key.type == KeyEventType.KeyDown && key.key.mirrorHorizontalForRtl(isRtl) == Key.DirectionLeft) {
+                                focusRail(); true
+                            } else false
+                        }) { onRetry() }
+                    SportsPill(stringResource(R.string.live_groups_title), null, touch = touch, onClick = onOpenCategories)
                 }
             }
         } else Column(Modifier.fillMaxSize()) {
-            SportsToolbar(
+            if (railLayout) {
+                // Jump to: one chip per row. Reads the active row here only, so moving
+                // between rows recomposes the chips and nothing else.
+                val chips: @Composable () -> Unit = {
+                    SportsJumpChips(
+                        chips = rows.map { SportsJumpChip(it.id, it.title, it.events.size, live = it.id == SPORTS_ROW_LIVE) },
+                        activeRowId = activeRowId,
+                        label = stringResource(R.string.sports_jump_to),
+                        firstFocus = jumpFocus,
+                        onJump = { id -> rows.indexOfFirst { it.id == id }.takeIf { it >= 0 }?.let { moveTo(it, 0) } },
+                        onUp = { runCatching { dayChipsFocus.requestFocus() } },
+                        onDown = { if (runCatching { heroFocus.requestFocus() }.isFailure) focusContent() },
+                        onLeftEdge = ::focusRail,
+                    )
+                }
+                if (rows.isNotEmpty()) chips()
+                // The game the D-pad is on, large, with its buttons. Reads the focused game
+                // here only, so moving focus recomposes this panel and not the rows.
+                val hero: @Composable () -> Unit = {
+                    val event = previewEvent?.let { focusedEvent -> rows.firstNotNullOfOrNull { row -> row.events.firstOrNull { it.id == focusedEvent.id } } }
+                        ?: rows.firstOrNull()?.events?.firstOrNull()
+                    if (event != null) {
+                        val (status, statusLive) = heroStatus(event)
+                        SportsHero(
+                            event = event,
+                            competition = heroCompetition(event),
+                            status = status,
+                            statusLive = statusLive,
+                            timeLine = heroTimeLine(event),
+                            channelNames = heroChannels(event),
+                            channelsLabel = stringResource(R.string.sports_on_your_channels),
+                            score = event.scoreLine(now),
+                            progress = if (statusLive) liveProgrammeProgress(event.programme, now) else 0f,
+                            actions = heroActions(event, heroFocus),
+                            firstFocus = heroFocus,
+                            onUp = { if (runCatching { jumpFocus.requestFocus() }.isFailure) focusRail() },
+                            onDown = ::focusContent,
+                            onLeftEdge = ::focusRail,
+                        )
+                    }
+                }
+                if (rows.isNotEmpty()) hero()
+            } else if (touch) {
+                SportsPhoneFilters(
+                    dayLabel = sportsDayLabel(dayOffset, todayDate),
+                    dayActive = dayOffset != null,
+                    filters = filterEntries.filter { it.key != SPORTS_FILTER_MINE || follows.isNotEmpty() },
+                    onPickDay = { picker = SportsPicker.Day },
+                    onPick = ::pickFilter,
+                    onMultiview = onOpenMultiview,
+                    onRecordings = onOpenRecordings,
+                    multiviewLabel = stringResource(R.string.multiview_title),
+                    recordingsLabel = stringResource(R.string.recordings_title),
+                )
+            } else SportsToolbar(
                 dayLabel = sportsDayLabel(dayOffset, todayDate),
                 dayActive = dayOffset != null,
                 sportLabel = filterSports.firstOrNull { it.name == sportsFilter }?.title ?: stringResource(R.string.sports_filter_all),
@@ -533,12 +752,7 @@ internal fun SportsGuidePane(
                 sportFocus = sportPillFocus,
                 onPickDay = { picker = SportsPicker.Day },
                 onPickSport = { picker = SportsPicker.Sport },
-                onToggleLive = {
-                    sportsFilter = if (sportsFilter == SPORTS_FILTER_LIVE) SPORTS_FILTER_ALL else SPORTS_FILTER_LIVE
-                    // Live means now, so it always shows the overview, whatever day was picked.
-                    if (sportsFilter == SPORTS_FILTER_LIVE) dayOffset = null
-                    focusedOrder[0] = null
-                },
+                onToggleLive = { pickFilter(if (sportsFilter == SPORTS_FILTER_LIVE) SPORTS_FILTER_ALL else SPORTS_FILTER_LIVE) },
                 onUp = { if (showHeader && !sidebarOpen) runCatching { categoriesFocus.requestFocus() } },
                 onDown = { if (rows.isNotEmpty()) moveTo(0, 0) },
                 onLeaveStart = ::leaveCards,
@@ -549,23 +763,18 @@ internal fun SportsGuidePane(
             else if (rows.isEmpty()) Column(Modifier.fillMaxWidth().weight(1f), verticalArrangement = Arrangement.Center,
                 horizontalAlignment = Alignment.CenterHorizontally) {
                 Icon(Icons.Default.SportsSoccer, null, tint = LiveColors.FgMute, modifier = Modifier.size(32.dp))
-                Text(stringResource(R.string.sports_no_games_selection), color = LiveColors.FgDim, modifier = Modifier.padding(14.dp))
+                Text(stringResource(if (sportsFilter == SPORTS_FILTER_MINE) R.string.sports_your_teams_empty else R.string.sports_no_games_selection),
+                    color = LiveColors.FgDim, textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    modifier = Modifier.padding(14.dp).widthIn(max = 420.dp))
+                // Something to land on, so the remote never gets stuck on an empty page.
+                if (railLayout) SportsPill(labelAllSports, Icons.Default.SportsSoccer, touch = touch,
+                    modifier = Modifier.focusRequester(firstFocus).onPreviewKeyEvent { key ->
+                        if (key.type == KeyEventType.KeyDown && key.key.mirrorHorizontalForRtl(isRtl) == Key.DirectionLeft) { focusRail(); true } else false
+                    }) { pickFilter(SPORTS_FILTER_ALL); dayOffset = null }
             } else {
-            if (!touch && !narrow) SportsFocusPreview(
-                eventProvider = {
-                    val current = previewEvent
-                    current?.let { focusedEvent -> rows.firstNotNullOfOrNull { row -> row.events.firstOrNull { it.id == focusedEvent.id } } }
-                        ?: rows.firstOrNull()?.events?.firstOrNull()
-                },
-                timeLabel = ::eventTime,
-                isLive = { it.isOnAir(now) && !it.isFinished() },
-                scoreOf = { it.scoreLine(now) },
-                liveLabel = labelLive,
-                channelNames = { event ->
-                    ((if (event.isOnAir(now)) event.availableChannels(now) else event.channels) + event.possibleChannels)
-                        .distinctBy { it.id }.map { it.name }
-                },
-            )
+            // The phone's featured game sits at the top of the list and scrolls away with it.
+            val phoneHero = if (touch && !railLayout && selectedDate == null) rows.firstOrNull()?.events?.firstOrNull() else null
+            listOffset[0] = if (phoneHero != null) 1 else 0
             // TV: rows and cards are scrolled by moveTo(); focus's own bring-into-view
             // would fight it and leave half a row showing under the preview.
             @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
@@ -574,6 +783,19 @@ internal fun SportsGuidePane(
             CompositionLocalProvider(androidx.compose.foundation.gestures.LocalBringIntoViewSpec provides bringIntoView) {
             LazyColumn(Modifier.weight(1f).fillMaxWidth().clipToBounds().testTag("sports-guide-list"), state = listState, contentPadding = PaddingValues(bottom = 24.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()),
             verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            if (phoneHero != null) item(key = "phone-hero", contentType = "sports-hero") {
+                val (status, statusLive) = heroStatus(phoneHero)
+                SportsHeroCompact(
+                    event = phoneHero,
+                    competition = heroCompetition(phoneHero),
+                    status = status,
+                    statusLive = statusLive,
+                    timeLine = heroTimeLine(phoneHero),
+                    score = phoneHero.scoreLine(now),
+                    progress = if (statusLive) liveProgrammeProgress(phoneHero.programme, now) else 0f,
+                    actions = heroActions(phoneHero, null),
+                )
+            }
             val rowKeys = disambiguatedLazyKeys(rows) { it.id }
             itemsIndexed(rows, key = { index, _ -> rowKeys[index] }, contentType = { _, _ -> "sports-row" }) { rowIndex, row ->
                 val rowState = rememberLazyListState()
@@ -586,10 +808,9 @@ internal fun SportsGuidePane(
                     val eventKeys = keysByRow.getValue(row.id)
                     // Inner padding leaves room for the focused card's lift without clipping;
                     // the outer padding shrinks by the same amount so cards stay aligned.
-                    LazyRow(Modifier.padding(horizontal = 8.dp), state = rowState, contentPadding = PaddingValues(horizontal = 10.dp, vertical = 10.dp),
+                    LazyRow(Modifier.padding(horizontal = 8.dp), state = rowState, contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp),
                         horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         itemsIndexed(row.events, key = { index, _ -> eventKeys[index] }, contentType = { _, _ -> "sports-card" }) { index, event ->
-                            val scheduleOnly = row.id.endsWith("-schedule")
                             val itemRequester = remember { FocusRequester() }
                             val requester = if (index == 0 && rowIndex == 0) firstFocus else itemRequester
                             DisposableEffect(row.id, eventKeys[index], requester) {
@@ -613,6 +834,8 @@ internal fun SportsGuidePane(
                                     focused = it.isFocused
                                     if (it.isFocused) {
                                         previewEvent = event
+                                        lastCard[0] = rowIndex; lastCard[1] = index
+                                        if (activeRowId != row.id) activeRowId = row.id
                                         handledFocusSignal = focusSignal
                                         onContentFocused()
                                         if (focusedOrder[0]?.first != row.id) {
@@ -629,6 +852,7 @@ internal fun SportsGuidePane(
                                                     val fromRow = navigationTarget?.first ?: rowIndex
                                                     moveTo(fromRow - 1, alignedColumn(fromRow, navigationTarget?.second ?: index, fromRow - 1))
                                                 }
+                                                else if (railLayout) focusAboveRows()
                                                 else {
                                                     navigationJob?.cancel(); navigationTarget = null
                                                     if (runCatching { dayChipsFocus.requestFocus() }.isFailure) {
@@ -639,50 +863,41 @@ internal fun SportsGuidePane(
                                                 val fromRow = navigationTarget?.first ?: rowIndex
                                                 moveTo(fromRow + 1, alignedColumn(fromRow, navigationTarget?.second ?: index, fromRow + 1))
                                             }
-                                            Key.DirectionLeft -> if ((navigationTarget?.second ?: index) == 0) leaveCards() else moveTo(navigationTarget?.first ?: rowIndex, (navigationTarget?.second ?: index) - 1)
+                                            Key.DirectionLeft -> if ((navigationTarget?.second ?: index) == 0) { if (railLayout) focusRail() else leaveCards() }
+                                                else moveTo(navigationTarget?.first ?: rowIndex, (navigationTarget?.second ?: index) - 1)
                                             Key.DirectionRight -> moveTo(navigationTarget?.first ?: rowIndex, (navigationTarget?.second ?: index) + 1)
                                         }
                                         true
                                     }
                                 }
-                                .clickable {
-                                    navigationJob?.cancel(); navigationTarget = null
-                                    returnFocus = requester; showDetails = false; selected = event
-                                }
+                                .clickable { openSheet(event, requester) }
                                 .padding(2.dp)) {
-                                val score = event.scoreLine(now)
-                                if (scheduleOnly) Row(Modifier.fillMaxWidth().height(36.dp)
-                                    .clip(SportsCardShape).background(Color.White.copy(alpha = if (focused) 1f else .07f))
-                                    .padding(horizontal = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-                                    Text(eventTime(event), color = if (focused) Color(0xFF0B0B0D) else LiveColors.Fg, fontSize = 12.sp, fontWeight = FontWeight.Medium)
-                                    if (event.id in remindedIds) Icon(Icons.Default.NotificationsActive, null, tint = if (focused) Color(0xFF0B0B0D) else LiveColors.Fg,
-                                        modifier = Modifier.padding(start = 6.dp).size(12.dp))
-                                } else Box(Modifier.fillMaxWidth().aspectRatio(16f / 9f).testTag("sports-event-art").clip(SportsCardShape)) {
-                                    EventArtwork(event, Modifier.fillMaxSize(), knownSize = cardArtSize)
-                                    // Status top-left: LIVE, Finished or the kick-off time.
-                                    Row(Modifier.padding(7.dp), verticalAlignment = Alignment.CenterVertically) {
-                                        if (event.isOnAir(now) && !event.isFinished()) SportsLivePill(labelLive)
-                                        else SportsInfoPill(eventTime(event))
-                                        if (event.id in remindedIds) Icon(Icons.Default.NotificationsActive, null, tint = Color.White,
-                                            modifier = Modifier.padding(start = 5.dp).size(13.dp))
-                                    }
-                                    // Score bottom-right, always visible for live and finished games.
-                                    if (score != null) SportsInfoPill(score.text(), strong = true,
-                                        modifier = Modifier.align(Alignment.BottomEnd).padding(7.dp).testTag("sports-card-score"))
-                                    Box(Modifier.matchParentSize().liveFocusOutline(focused, 10.dp))
-                                }
-                                Text(event.displayTitle(), color = LiveColors.Fg, fontSize = if (touch) 14.sp else SportsTitleSize,
-                                    lineHeight = if (touch) 18.sp else 16.sp, fontWeight = FontWeight.SemiBold,
-                                    maxLines = 1, overflow = TextOverflow.Ellipsis,
-                                    modifier = Modifier.padding(top = 7.dp, start = 2.dp, end = 2.dp))
-                                Row(Modifier.fillMaxWidth().padding(top = 2.dp, start = 2.dp, end = 2.dp), verticalAlignment = Alignment.CenterVertically) {
-                                    Text(listOfNotNull(event.competition ?: event.sport.title).joinToString(" · "), color = LiveColors.FgDim,
-                                        fontSize = if (touch) 12.sp else 11.sp, lineHeight = 14.sp,
+                                SportsCardArt(
+                                    event = event,
+                                    now = now,
+                                    focused = focused,
+                                    artSize = cardArtSize,
+                                    reminded = event.id in remindedIds,
+                                    timeLabel = ::eventTime,
+                                    liveLabel = labelLive,
+                                    scheduledLabel = labelScheduledNow,
+                                    maxBadgeWidth = cardWidth * .52f,
+                                )
+                                Row(Modifier.fillMaxWidth().padding(top = 6.dp, start = 2.dp, end = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    val split = remember(event.id, event.title, event.teamArtwork) { event.matchupTeams() != null && !event.channelOnly && !event.isNetwork }
+                                    // Team cards already name both teams, so their caption is the competition.
+                                    if (split) Box(Modifier.padding(end = 6.dp).size(6.dp).clip(androidx.compose.foundation.shape.CircleShape)
+                                        .background(if (event.isOnAir(now)) LiveColors.LiveRed else LiveColors.FgMute))
+                                    Text(if (split) heroCompetition(event) else event.displayTitle(),
+                                        color = if (split) LiveColors.FgDim else LiveColors.Fg,
+                                        fontSize = if (touch) 13.sp else 12.sp, lineHeight = 16.sp,
+                                        fontWeight = if (split) FontWeight.Medium else FontWeight.SemiBold,
                                         maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
                                     val count = remember(event, now) {
-                                        ((if (event.isOnAir(now)) event.availableChannels(now) else event.channels) + event.possibleChannels).distinctBy { it.id }.size + event.addonSources.size
+                                        ((if (event.isOnAir(now)) event.availableChannels(now) else event.channels) + event.possibleChannels).distinctBy { it.id }.size +
+                                            event.addonSources.distinctBy { it.installation }.size
                                     }
-                                    if (count > 0) {
+                                    if (count > 1) {
                                         Icon(Icons.Default.Tv, null, tint = LiveColors.FgMute, modifier = Modifier.padding(start = 6.dp).size(12.dp))
                                         Text(count.toString(), color = LiveColors.FgMute, fontSize = 11.sp, lineHeight = 14.sp,
                                             modifier = Modifier.padding(start = 3.dp))
@@ -697,6 +912,7 @@ internal fun SportsGuidePane(
             }
             }
         }
+    }
     }
     }
     when (picker) {
@@ -757,6 +973,7 @@ internal fun SportsGuidePane(
         val sourceChannels = (confirmedChannels + event?.possibleChannels.orEmpty()).distinctBy { it.id }
             .withRememberedFirst(channelMemory, memoryKeys)
         val rememberedId = memoryKeys.firstNotNullOfOrNull { channelMemory[it] }
+        val addonGroups = remember(event?.addonSources) { event?.addonSources.orEmpty().groupBy { it.installation }.values.toList() }
         val initialFocus = remember(event?.id) { FocusRequester() }
         LaunchedEffect(event?.id, sourceChannels.isEmpty()) {
             if (touch) return@LaunchedEffect
@@ -834,7 +1051,7 @@ internal fun SportsGuidePane(
                 Text(if (event?.addonSources.orEmpty().isNotEmpty()) stringResource(R.string.sources) else if (onAir) stringResource(R.string.live_sports_channels) else stringResource(R.string.live_sports_scheduled_channels), fontSize = 14.sp, color = LiveColors.Fg,
                     fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
                 Text(if (event?.addonSources.orEmpty().isEmpty()) channelCount(sourceChannels.size)
-                    else stringResource(R.string.live_sports_source_count, sourceChannels.size + event?.addonSources.orEmpty().size), fontSize = 11.sp, color = LiveColors.FgDim)
+                    else stringResource(R.string.live_sports_source_count, sourceChannels.size + addonGroups.size), fontSize = 11.sp, color = LiveColors.FgDim)
             }
             val channelKeys = remember(sourceChannels) { disambiguatedLazyKeys(sourceChannels) { it.id } }
             LazyColumn(Modifier.weight(1f, fill = false).heightIn(max = configuration.screenHeightDp.dp * .55f)) {
@@ -877,9 +1094,11 @@ internal fun SportsGuidePane(
                     }
                     Box(Modifier.fillMaxWidth().height(1.dp).background(LiveColors.Divider))
                 }
-                items(event?.addonSources.orEmpty(), key = { "addon:${it.key}" }, contentType = { "SportsGuidePane.event" }) { source ->
-                    SportsAddonSourceRow(source, (canOpenChannel || source.isLive(now)) && (source.startsAt == null || source.startsAt <= now), resolveAddon,
-                        if (sourceChannels.isEmpty() && source == event?.addonSources?.firstOrNull()) initialFocus else null) { stream ->
+                // One row per add-on: the same add-on often lists a game in several
+                // catalogs (live, today), which used to show its name twice.
+                items(addonGroups, key = { "addon:${it.first().installation}" }, contentType = { "SportsGuidePane.event" }) { group ->
+                    SportsAddonSourceRow(group, (canOpenChannel || group.any { it.isLive(now) }) && group.any { it.startsAt == null || it.startsAt <= now }, resolveAddon,
+                        if (sourceChannels.isEmpty() && group === addonGroups.firstOrNull()) initialFocus else null) { source, stream ->
                         onPlayAddon(source, stream)
                         dismiss()
                     }
@@ -896,14 +1115,16 @@ internal fun SportsGuidePane(
 
 @Composable
 private fun SportsAddonSourceRow(
-    event: com.arflix.tv.data.model.SportsAddonEvent,
+    events: List<com.arflix.tv.data.model.SportsAddonEvent>,
     canPlay: Boolean,
     resolve: suspend (com.arflix.tv.data.model.SportsAddonEvent) -> List<com.arflix.tv.data.repository.SportsAddonStream>,
     initialFocus: FocusRequester?,
-    onPlay: (com.arflix.tv.data.repository.SportsAddonStream) -> Unit,
+    onPlay: (com.arflix.tv.data.model.SportsAddonEvent, com.arflix.tv.data.repository.SportsAddonStream) -> Unit,
 ) {
-    var sources by remember(event.key) { mutableStateOf<List<com.arflix.tv.data.repository.SportsAddonStream>?>(null) }
-    var loading by remember(event.key) { mutableStateOf(false) }
+    val first = events.first()
+    val groupKey = events.joinToString("|") { it.key }
+    var sources by remember(groupKey) { mutableStateOf<List<Pair<com.arflix.tv.data.model.SportsAddonEvent, com.arflix.tv.data.repository.SportsAddonStream>>?>(null) }
+    var loading by remember(groupKey) { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     Column {
         var focused by remember { mutableStateOf(false) }
@@ -911,26 +1132,31 @@ private fun SportsAddonSourceRow(
             .onFocusChanged { focused = it.isFocused }.clickable {
                 if (!loading) scope.launch {
                     loading = true
-                    try { sources = resolve(event) }
-                    catch (_: kotlinx.coroutines.TimeoutCancellationException) { sources = emptyList() }
-                    catch (e: kotlinx.coroutines.CancellationException) { throw e }
-                    catch (_: Exception) { sources = emptyList() }
-                    finally { loading = false }
+                    try {
+                        // Every listing of this add-on for the game, one list without repeats.
+                        val found = events.flatMap { source ->
+                            try { resolve(source).map { source to it } }
+                            catch (e: kotlinx.coroutines.TimeoutCancellationException) { emptyList() }
+                            catch (e: kotlinx.coroutines.CancellationException) { throw e }
+                            catch (_: Exception) { emptyList() }
+                        }
+                        sources = found.distinctBy { it.second.url }
+                    } finally { loading = false }
                 }
             }.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
             Icon(Icons.Default.Tv, null, tint = LiveColors.Fg, modifier = Modifier.size(22.dp))
             Column(Modifier.weight(1f).padding(start = 12.dp)) {
-                Text(event.addonName, color = LiveColors.Fg, fontSize = 13.sp)
+                Text(first.addonName, color = LiveColors.Fg, fontSize = 13.sp)
                 Text(stringResource(if (sources?.isEmpty() == true) R.string.live_sports_addon_retry else R.string.live_sports_addon_sources),
                     color = LiveColors.FgDim, fontSize = 10.sp)
             }
             if (loading) CircularProgressIndicator(Modifier.size(18.dp), color = LiveColors.Fg, strokeWidth = 2.dp)
             else Icon(Icons.Outlined.ChevronRight, null, tint = LiveColors.Fg, modifier = Modifier.size(20.dp))
         }
-        sources.orEmpty().forEach { stream ->
+        sources.orEmpty().forEach { (source, stream) ->
             var focused by remember(stream) { mutableStateOf(false) }
             Row(Modifier.fillMaxWidth().heightIn(min = 44.dp).liveFocusOutline(focused, 4.dp)
-                .onFocusChanged { focused = it.isFocused }.clickable(enabled = !loading && (canPlay || stream.external)) { onPlay(stream) }
+                .onFocusChanged { focused = it.isFocused }.clickable(enabled = !loading && (canPlay || stream.external)) { onPlay(source, stream) }
                 .focusable(enabled = !canPlay && !stream.external).padding(horizontal = 24.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
@@ -954,7 +1180,7 @@ private fun channelCount(count: Int) =
  * real banner fades in over it once it has loaded, so a card is never empty or grey.
  */
 @Composable
-private fun EventArtwork(
+internal fun EventArtwork(
     event: SportsGuideEvent,
     modifier: Modifier = Modifier,
     // The card's art size when the caller already knows it. Skips BoxWithConstraints,
@@ -1003,60 +1229,6 @@ private fun EventArtwork(
     }
 }
 
-/**
- * The focused game, large, above the Sports rows.
- * Reads the focused event through [eventProvider] so moving focus recomposes only
- * this banner, never the rows.
- */
-@Composable
-private fun SportsFocusPreview(
-    eventProvider: () -> SportsGuideEvent?,
-    timeLabel: (SportsGuideEvent) -> String,
-    isLive: (SportsGuideEvent) -> Boolean,
-    channelNames: (SportsGuideEvent) -> List<String>,
-    modifier: Modifier = Modifier,
-    scoreOf: (SportsGuideEvent) -> SportsScoreLine? = { null },
-    liveLabel: String = "LIVE",
-) {
-    val event = eventProvider()
-    Row(
-        modifier.fillMaxWidth().zIndex(1f).background(LiveColors.Bg).height(SportsPreviewHeight).padding(horizontal = 18.dp, vertical = 8.dp)
-            .testTag("sports-focus-preview"),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(20.dp),
-    ) {
-        if (event == null) return@Row
-        val score = scoreOf(event)
-        Box(Modifier.width(SportsPreviewArtWidth).aspectRatio(16f / 9f).clip(SportsCardShape)) {
-            key(event.id) {
-                EventArtwork(event, Modifier.fillMaxSize(),
-                    knownSize = androidx.compose.ui.unit.DpSize(SportsPreviewArtWidth, SportsPreviewArtWidth * 9f / 16f))
-            }
-        }
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text(listOfNotNull(event.sport.title, event.competition).joinToString(" · "),
-                color = LiveColors.FgDim, fontSize = 13.sp, lineHeight = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(event.displayTitle(), color = LiveColors.Fg, fontSize = 24.sp, lineHeight = 28.sp, fontWeight = FontWeight.SemiBold,
-                    maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false).testTag("sports-focus-preview-title"))
-                if (score != null) Text(score.text(), color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(start = 16.dp).testTag("sports-focus-preview-score"))
-            }
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                if (isLive(event)) SportsLivePill(liveLabel, large = true) else SportsInfoPill(timeLabel(event), large = true)
-                val names = channelNames(event)
-                if (names.isNotEmpty()) {
-                    Icon(Icons.Default.Tv, null, tint = LiveColors.FgDim, modifier = Modifier.size(14.dp))
-                    Text(names.take(3).joinToString(", ") + if (names.size > 3) " +${names.size - 3}" else "",
-                        color = LiveColors.FgDim, fontSize = 12.sp, lineHeight = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                }
-            }
-        }
-    }
-}
-
-private val SportsPreviewHeight = 124.dp
-private val SportsPreviewArtWidth = 192.dp
 
 @Composable
 private fun PickerBadge(label: String) {
