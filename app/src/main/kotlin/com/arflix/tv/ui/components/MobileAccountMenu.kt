@@ -135,6 +135,9 @@ private fun MobileAccountSheet(
     val actions = remember(NavigationVisibility.hiddenSections, KidsNavigation.hideLiveTv) {
         mobileAccountActions(NavigationVisibility.hiddenSections, KidsNavigation.hideLiveTv)
     }
+    // The sheet is its own window, whose LocalContext is the Activity again: its resources keep
+    // the language the app started in. Hand it the app-language context the screen uses.
+    val appContext = androidx.compose.ui.platform.LocalContext.current
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
@@ -143,6 +146,7 @@ private fun MobileAccountSheet(
         contentColor = Color.White,
         shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
     ) {
+        androidx.compose.runtime.CompositionLocalProvider(androidx.compose.ui.platform.LocalContext provides appContext) {
         Column(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 20.dp)) {
             if (profile != null) {
                 Row(
@@ -185,6 +189,7 @@ private fun MobileAccountSheet(
                     }
                 }
             }
+        }
         }
     }
 }
