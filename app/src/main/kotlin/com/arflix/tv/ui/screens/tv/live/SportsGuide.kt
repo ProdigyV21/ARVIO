@@ -188,7 +188,7 @@ internal enum class GuideSport(val title: String, val asset: String, val terms: 
  * "Next | ...", "- NO EVENT STREAMING -", "24/7 ...". Those are not games.
  */
 internal val guidePlaceholder = Regex(
-    "^\\W*(ended?|finished|full ?time|next|up ?next|coming up|upcoming|starts? (at|soon)|no event|offline|closed)\\b|\\bno (live )?events?\\b|\\b24/7\\b|\\bevent (starts|begins)\\b|@\\s*(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\\.?\\s+\\d{1,2}\\b",
+    "^\\W*(end(ed)?|finished|full ?time|next|up ?next|coming up|upcoming|starts? (at|soon)|no event|offline|closed)\\b|\\bno (live )?events?\\b|\\b24/7\\b|\\bevent (starts|begins)\\b|@\\s*(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\\.?\\s+\\d{1,2}\\b",
     RegexOption.IGNORE_CASE)
 
 internal val nonEvent = Regex("\\b(highlights?|hoogtepunten|samenvatting|resumen|replay|re-?run|classic|news|magazine|review|preview|cancelled|canceled|postponed|abandoned|sendepause|off air|no signal|best of|teleshopping|infomercial|documentary)\\b", RegexOption.IGNORE_CASE)
