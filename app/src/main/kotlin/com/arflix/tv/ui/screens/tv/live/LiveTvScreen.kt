@@ -2013,6 +2013,8 @@ fun LiveTvScreen(
     val sportsClockFormat by remember(currentProfile?.id) { viewModel.sportsClockFormat(currentProfile?.id) }.collectAsStateWithLifecycle(initialValue = "24h")
     val guideRowCount by remember(currentProfile?.id) { viewModel.guideRowCount(currentProfile?.id) }.collectAsStateWithLifecycle(initialValue = null)
     val sportsScope = remember(currentProfile?.id, selectedProviderId, state.snapshot.loadedAt, hiddenGroupSet, restrictedGroupSet) { Any() }
+    // Programme titles classify the same way in every scan of a playlist.
+    val sportsProgrammeResolver = remember(selectedProviderId, hiddenGroupSet, restrictedGroupSet) { SportsProgrammeResolver() }
     var sportsScan by remember(sportsScope) {
         mutableStateOf(viewModel.cachedSportsSchedule?.takeIf { it.request.key.sameCatalogueScope(sportsScheduleKey) })
     }
@@ -2288,7 +2290,8 @@ fun LiveTvScreen(
                         .forEach { candidateIds.add(it.id) }
                     candidateIds.addAll(generalIds)
                     val events = SportsEventIndex()
-                    val programmeResolver = SportsProgrammeResolver()
+                    // Kept across scans: a rescan then classifies only titles it hasn't seen.
+                    val programmeResolver = sportsProgrammeResolver
                     for (ids in candidateIds.toList().chunked(SportsGuideScanBatchSize)) {
                         kotlinx.coroutines.currentCoroutineContext().ensureActive()
                         val indexedStarts = hashMapOf<String, MutableSet<Long>>()
