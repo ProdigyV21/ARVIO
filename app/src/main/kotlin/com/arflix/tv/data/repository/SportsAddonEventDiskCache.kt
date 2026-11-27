@@ -3,6 +3,7 @@ package com.arflix.tv.data.repository
 import android.util.AtomicFile
 import com.arflix.tv.data.model.SportsAddonEvent
 import com.arflix.tv.data.model.SportsAddonEventSnapshot
+import com.arflix.tv.data.model.restoredFromDisk
 import com.google.gson.Gson
 import java.io.File
 import java.util.zip.Deflater
@@ -11,9 +12,9 @@ import java.util.zip.GZIPOutputStream
 
 /**
  * The last sports add-on schedule, so Sports shows games straight away after the app
- * starts instead of waiting for every catalog page again. Live flags expire by
- * themselves (SportsAddonEvent.isLive checks observedAt), so an older copy never claims
- * a game is live; the fresh load replaces it within seconds.
+ * starts instead of waiting for every catalog page again. Games that started recently
+ * keep their live flag until the fresh load replaces them (see restoredFromDisk), so the
+ * live count does not drop and jump back a few seconds after opening Sports.
  */
 internal class SportsAddonEventDiskCache(file: File) {
     private val atomic = AtomicFile(file)
@@ -28,7 +29,7 @@ internal class SportsAddonEventDiskCache(file: File) {
             // Only events of add-ons that are still installed, and nothing long over.
             val events = snapshot.events.orEmpty().filter { event ->
                 event.installation in installations && (event.startsAt == null || now - event.startsAt < STALE_EVENT_MS)
-            }
+            }.map { it.restoredFromDisk(now) }
             System.err.println("[Sports-AddonCache] restored ${events.size} of ${snapshot.events.orEmpty().size}")
             events
         }.onFailure { System.err.println("[Sports-AddonCache] read failed: ${it.javaClass.simpleName}") }.getOrDefault(emptyList())

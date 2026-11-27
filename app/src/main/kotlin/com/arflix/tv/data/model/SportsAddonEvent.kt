@@ -29,6 +29,21 @@ data class SportsAddonEvent(
         (startsAt == null || startsAt <= now)
 }
 
+/**
+ * A copy restored from disk at app start. Its live marker is usually older than the
+ * five minutes [SportsAddonEvent.isLive] accepts, so a game that is still on would
+ * first show as not live and then jump back once the network load arrives. A game that
+ * started at most [RESTORED_LIVE_MS] ago keeps its marker until that load replaces it;
+ * anything older is no longer called live.
+ */
+fun SportsAddonEvent.restoredFromDisk(now: Long): SportsAddonEvent {
+    if (!live) return this
+    val stillOn = startsAt?.let { now - it in 0..RESTORED_LIVE_MS } ?: (now - observedAt in 0..RESTORED_LIVE_MS)
+    return if (stillOn) copy(observedAt = now) else copy(live = false)
+}
+
+const val RESTORED_LIVE_MS = 3 * 60 * 60_000L
+
 /** Overlapping catalogs may omit fields; keep the original live observation time. */
 fun mergeSportsAddonEvent(previous: SportsAddonEvent, incoming: SportsAddonEvent): SportsAddonEvent {
     if (previous.key != incoming.key || sportsEventIdentity(previous.title) != sportsEventIdentity(incoming.title) ||
