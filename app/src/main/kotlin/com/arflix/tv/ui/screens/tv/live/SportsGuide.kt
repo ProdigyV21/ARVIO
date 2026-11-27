@@ -154,8 +154,8 @@ internal enum class GuideSport(val title: String, val asset: String, val terms: 
     BASKETBALL("Basketball", "basketball", Regex("\\b(basketball|nba|wnba|euroleague|ncaab|ncaam|ncaaw|college basketball|march madness)\\b")),
     F1("Formula 1", "motor_sports", Regex("\\b(f1|formula 1|formula one)\\b")),
     TENNIS("Tennis", "tennis", Regex("\\b(tennis|atp|wta|wimbledon)\\b")),
-    MMA("MMA", "fight", Regex("\\b(mma|ufc|bellator|pfl)\\b")),
-    BOXING("Boxing", "fight", Regex("\\b(boxing|boxen)\\b")),
+    MMA("MMA", "fight", Regex("\\b(mma|ufc|bellator|pfl|kick ?boxing|muay thai|k-1)\\b")),
+    BOXING("Boxing", "fight", Regex("(?<!kick )\\b(boxing|boxen)\\b")),
     AMERICAN_FOOTBALL("American football", "american_football", Regex("\\b(american football|nfl|ncaa football|ncaaf|college football|cfb)\\b")),
     CRICKET("Cricket", "cricket", Regex("\\b(cricket|t20|t20i|odi|ipl|big bash|bbl|rcb|csk|kkr|srh|pbks|lsg)\\b")),
     BASEBALL("Baseball", "baseball", Regex("\\b(baseball|mlb)\\b")),
@@ -216,7 +216,21 @@ internal fun sportsTitleIsChannelName(title: String, channelName: String): Boole
     return a == b || (b.length >= 8 && a.startsWith("$b ")) || (a.length >= 8 && b.startsWith("$a "))
 }
 
-internal val nonEvent = Regex("\\b(highlights?|hoogtepunten|samenvatting|resumen|replay|re-?run|classic|news|magazine|review|preview|cancelled|canceled|postponed|abandoned|sendepause|off air|no signal|best of|teleshopping|infomercial|documentary)\\b", RegexOption.IGNORE_CASE)
+private val channelMatchup = Regex("\\s(?:vs?\\.?|versus|@)\\s", RegexOption.IGNORE_CASE)
+private val stopWords = setOf("the", "and", "live", "vs", "fc", "sc", "university", "state", "college")
+private fun teamWords(value: String) = channelText(value).split(' ').filter { it.length >= 3 && it !in stopWords }.toSet()
+
+/**
+ * An event channel named after one game ("VTSU_Castleton vs Eastern") whose guide still
+ * shows another game ("Sharjah vs Dubai") is stale. It must not be offered for that game.
+ */
+internal fun sportsChannelNamesOtherEvent(title: String, channelName: String): Boolean {
+    if (!channelMatchup.containsMatchIn(channelName.replace('_', ' '))) return false
+    val channelWords = teamWords(channelName.replace('_', ' '))
+    return channelWords.isNotEmpty() && channelWords.none { it in teamWords(title) }
+}
+
+internal val nonEvent = Regex("\\b(highlights?|hoogtepunten|samenvatting|resumen|replay|replica|herhaling|wiederholung|repeticion|repetición|rediffusion|re-?run|classic|news|magazine|review|preview|cancelled|canceled|postponed|abandoned|sendepause|off air|no signal|best of|teleshopping|infomercial|documentary)\\b", RegexOption.IGNORE_CASE)
 private val collegeRanking = Regex("(^|[\\s|:])#\\d{1,2}\\s+\\p{L}")
 private val eventMatchup = Regex("\\s+(?:vs?\\.?|versus|at|[-–—])\\s+", RegexOption.IGNORE_CASE)
 private val liveEventCue = Regex("\\b(live|on air|match|game|race|grand prix|qualifying|tournament|coverage|championship|event)\\b", RegexOption.IGNORE_CASE)
@@ -259,11 +273,12 @@ internal class SportsEventIndex {
         add(event.sport, event.identity, event.programme, event.channels, event.schedules, event.competition, event.channelOnly, event.artwork)
     }
     fun add(sport: GuideSport, identity: String, programme: IptvProgram, channel: IptvChannel, competition: String?) {
-        if (sportsPlaceholderChannel.containsMatchIn(channel.name) || sportsTitleIsChannelName(programme.title, channel.name)) return
+        if (sportsPlaceholderChannel.containsMatchIn(channel.name) || sportsTitleIsChannelName(programme.title, channel.name) ||
+            sportsChannelNamesOtherEvent(programme.title, channel.name)) return
         add(sport, identity, programme, listOf(channel), null, competition)
     }
     fun addChannelOnly(sport: GuideSport, programme: IptvProgram, channel: IptvChannel) {
-        if (sportsPlaceholderChannel.containsMatchIn(channel.name)) return
+        if (sportsPlaceholderChannel.containsMatchIn(channel.name) || sportsChannelNamesOtherEvent(programme.title, channel.name)) return
         add(sport, sportsEventIdentity(programme.title), programme, listOf(channel), null, null,
             channelOnly = true, artwork = channel.logo)
     }
