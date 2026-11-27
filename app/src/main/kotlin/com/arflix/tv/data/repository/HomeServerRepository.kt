@@ -143,6 +143,18 @@ enum class HomeServerLibrarySort(
     RELEASE_DATE_OLDEST("originallyAvailableAt:asc", "PremiereDate", ascending = true)
 }
 
+/**
+ * Order of a home-server row on Home. Whole libraries (Plex, Emby, Jellyfin, Silo) show their
+ * newest additions first, the same default as the Library screen, so a big library's rail is not
+ * an endless A-Z list. Server collections (box sets) keep title order.
+ */
+internal fun homeServerHomeRowSort(sourceRef: String?): HomeServerLibrarySort {
+    val collectionId = HomeServerRepository.parseCatalogSourceRef(sourceRef)?.second
+        ?: return HomeServerLibrarySort.RECENTLY_ADDED
+    return if (collectionId.startsWith("collection:")) HomeServerLibrarySort.TITLE
+    else HomeServerLibrarySort.RECENTLY_ADDED
+}
+
 internal fun homeServerCatalogMediaType(
     collectionType: String,
     explicitMediaType: MediaType? = null

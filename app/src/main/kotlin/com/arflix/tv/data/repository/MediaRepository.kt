@@ -1270,7 +1270,8 @@ class MediaRepository @Inject constructor(
         val page = homeServerRepository.loadCatalogItems(
             sourceRef = catalog.sourceRef,
             offset = offset,
-            limit = limit
+            limit = limit,
+            sort = homeServerHomeRowSort(catalog.sourceRef)
         )
         if (page.items.isEmpty()) {
             return@coroutineScope CategoryPageResult(emptyList(), hasMore = false)
