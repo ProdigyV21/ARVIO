@@ -10,13 +10,11 @@ import {
   Details,
   Everywhere,
   Intro,
-  Library,
   Music,
   Outro,
-  Sources,
   Subtitles,
-  Touch,
 } from "./scenes";
+import { HomeServers, LiveTv, News, OwnSources, Sports } from "./scenes2";
 import { loadBrandFonts } from "./theme";
 import { easeInOut } from "./primitives";
 
@@ -26,16 +24,18 @@ export const T = 12;
 const timing = linearTiming({ durationInFrames: T, easing: easeInOut });
 
 export const SCENES = [
-  { id: "Intro", C: Intro, d: 48 },
-  { id: "BigScreen", C: BigScreen, d: 120 },
-  { id: "Details", C: Details, d: 100 },
-  { id: "Touch", C: Touch, d: 105 },
+  { id: "Intro", C: Intro, d: 45 },
+  { id: "BigScreen", C: BigScreen, d: 105 },
+  { id: "Details", C: Details, d: 85 },
+  { id: "LiveTv", C: LiveTv, d: 130 },
+  { id: "Sports", C: Sports, d: 125 },
   { id: "Music", C: Music, d: 125 },
-  { id: "Subtitles", C: Subtitles, d: 140 },
-  { id: "Library", C: Library, d: 105 },
-  { id: "Sources", C: Sources, d: 100 },
-  { id: "Everywhere", C: Everywhere, d: 120 },
-  { id: "Outro", C: Outro, d: 150 },
+  { id: "Subtitles", C: Subtitles, d: 135 },
+  { id: "News", C: News, d: 100 },
+  { id: "HomeServers", C: HomeServers, d: 110 },
+  { id: "OwnSources", C: OwnSources, d: 115 },
+  { id: "Everywhere", C: Everywhere, d: 110 },
+  { id: "Outro", C: Outro, d: 135 },
 ] as const;
 
 export const PROMO_DURATION =
@@ -45,12 +45,14 @@ export const PROMO_DURATION =
 const transitions: any[] = [
   fade(),
   slide({ direction: "from-bottom" }),
-  fade(),
+  wipe({ direction: "from-left" }),
   slide({ direction: "from-right" }),
   fade(),
   wipe({ direction: "from-left" }),
-  fade(),
   slide({ direction: "from-bottom" }),
+  fade(),
+  slide({ direction: "from-right" }),
+  fade(),
   fade(),
 ];
 
