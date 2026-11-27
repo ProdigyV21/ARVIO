@@ -410,3 +410,66 @@ export const LiveBadge: React.FC<{ delay: number }> = ({ delay }) => {
     </div>
   );
 };
+
+/* Music, on phone and now on TV */
+export const MusicEverywhere: React.FC = () => {
+  const frame = useCurrentFrame();
+  const a = useSpring(2);
+  const b = useSpring(12, true);
+  const c = useSpring(20, true);
+  const drift = interpolate(frame, [0, 125], [10, -14], clamp);
+  return (
+    <AbsoluteFill>
+      <Backdrop hue="mix" />
+      <AbsoluteFill style={{ perspective: 2200 }}>
+        <div
+          style={{
+            position: "absolute",
+            right: -90,
+            top: 150,
+            translate: `${(1 - a) * 700}px ${drift}px`,
+            rotate: `y ${-12 + a * 4}deg`,
+          }}
+        >
+          <TV width={1100} stand={false}>
+            <Screen src={SCREENS.tvClipMusic} trimBefore={45} />
+          </TV>
+        </div>
+        <div
+          style={{
+            position: "absolute",
+            left: 800,
+            top: 470,
+            translate: `0 ${(1 - b) * 900 - drift}px`,
+            rotate: `${-5 * b}deg`,
+          }}
+        >
+          <Phone width={250} aspect={PHONE_ASPECT}>
+            <Screen src={SCREENS.musicLyrics} />
+          </Phone>
+        </div>
+        <div
+          style={{
+            position: "absolute",
+            left: 1080,
+            top: 560,
+            translate: `0 ${(1 - c) * 900 - drift * 0.6}px`,
+            rotate: `${3 * c}deg`,
+          }}
+        >
+          <Phone width={220} aspect={PHONE_ASPECT}>
+            <Screen src={SCREENS.musicQueue} />
+          </Phone>
+        </div>
+      </AbsoluteFill>
+      <Fade />
+      <Copy
+        kicker="Music · Now on TV"
+        headline={"Your music,\n*too.*"}
+        body="Charts for your country, synced lyrics, a queue and a sleep timer, on your phone and now on your TV."
+        pills={["Charts", "Lyrics", "Queue", "Your library"]}
+        size={108}
+      />
+    </AbsoluteFill>
+  );
+};
