@@ -20,6 +20,21 @@ internal object LiveSportsWorkPolicy {
 
     fun settleMs(sportsOnScreen: Boolean): Long = if (sportsOnScreen) 0L else BACKGROUND_SETTLE_MS
 
+    /**
+     * Quiet time before an off-screen schedule *refresh*. Browsing a large guide keeps
+     * loading guide pages, and each one asked for a new full scan of the 48-hour guide
+     * index; with 20k channels that SQLite pass took a quarter of the app's CPU while
+     * the user scrolled. A schedule that already exists only needs refreshing once the
+     * user has paused; opening Sports still refreshes at once.
+     */
+    const val BACKGROUND_REFRESH_SETTLE_MS = 15_000L
+
+    fun rescanSettleMs(sportsOnScreen: Boolean, hasSchedule: Boolean): Long = when {
+        sportsOnScreen -> 0L
+        hasSchedule -> BACKGROUND_REFRESH_SETTLE_MS
+        else -> BACKGROUND_SETTLE_MS
+    }
+
     @OptIn(ExperimentalCoroutinesApi::class)
     val dispatcher: CoroutineDispatcher = Dispatchers.Default.limitedParallelism(1)
 }

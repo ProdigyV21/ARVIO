@@ -2172,7 +2172,7 @@ fun LiveTvScreen(
         // While Sports is off screen, wait until zapping/opening has settled (see
         // LiveSportsWorkPolicy); opening Sports releases the newest request at once.
         snapshotFlow { latestSportsScanRequest to latestSportsSelected }
-            .debounce { (_, onScreen) -> LiveSportsWorkPolicy.settleMs(onScreen) }
+            .debounce { (_, onScreen) -> LiveSportsWorkPolicy.rescanSettleMs(onScreen, sportsScan != null) }
             .map { it.first }
             .conflate().collect { request ->
             if (sportsScan?.request == request) return@collect
