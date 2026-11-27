@@ -1213,6 +1213,16 @@ private fun TvPlayer(
     var sleepDialog by remember { mutableStateOf(false) }
     val playFocus = remember { FocusRequester() }
     val queueChipFocus = remember { FocusRequester() }
+    val sleepFocus = remember { FocusRequester() }
+    // After picking a time, focus goes back to the moon button instead of the seek bar.
+    var sleepWasOpen by remember { mutableStateOf(false) }
+    LaunchedEffect(sleepDialog) {
+        if (sleepWasOpen && !sleepDialog) {
+            delay(50)
+            runCatching { sleepFocus.requestFocus() }
+        }
+        sleepWasOpen = sleepDialog
+    }
     val closeQueue = { queueOpen = false }
     // Once the controls can take focus again, it goes back to the Queue chip.
     var queueWasOpen by remember { mutableStateOf(false) }
@@ -1304,6 +1314,13 @@ private fun TvPlayer(
                     modifier = Modifier.padding(top = 6.dp),
                 )
                 Spacer(Modifier.height(if (lyricsOn) 14.dp else 28.dp))
+                sleepLabel(playback)?.let { left ->
+                    Row(Modifier.padding(bottom = 8.dp).testTag("tv-music-sleep-left"), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Bedtime, contentDescription = null, tint = accent, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text(left, color = Muted, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                    }
+                }
                 TvSeekBar(playback, accent, viewModel::seekTo)
                 Spacer(Modifier.height(20.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -1328,13 +1345,10 @@ private fun TvPlayer(
                     TvChip(stringResource(R.string.music_lyrics), Icons.Default.Lyrics, selected = lyricsOn, accent = accent, tag = "tv-music-lyrics") { lyricsOn = !lyricsOn }
                     TvChip(stringResource(R.string.music_queue), Icons.AutoMirrored.Filled.QueueMusic, selected = false, accent = accent,
                         modifier = Modifier.focusRequester(queueChipFocus), tag = "tv-music-queue") { queueOpen = true }
-                    // Just the moon while no timer runs, so the whole row fits; the time left shows once it is set.
-                    val sleepLeft = sleepLabel(playback)
-                    if (sleepLeft == null) {
-                        TvIconButton(Icons.Default.Bedtime, stringResource(R.string.music_sleep_timer), accent, tag = "tv-music-sleep") { sleepDialog = true }
-                    } else {
-                        TvChip(sleepLeft, Icons.Default.Bedtime, selected = true, accent = accent, tag = "tv-music-sleep") { sleepDialog = true }
-                    }
+                    // Always just the moon, so the whole row fits; it lights up while a timer runs and the time
+                    // left shows above the seek bar.
+                    TvIconButton(Icons.Default.Bedtime, stringResource(R.string.music_sleep_timer), accent, active = playback.sleepTimerOn,
+                        modifier = Modifier.focusRequester(sleepFocus), tag = "tv-music-sleep") { sleepDialog = true }
                     TvIconButton(Icons.Default.MoreVert, stringResource(R.string.music_more), accent) { onTrackMenu(track, emptyList()) }
                 }
                 if (!lyricsOn) {
@@ -1743,10 +1757,11 @@ private fun TvIconButton(
     active: Boolean = false,
     enabled: Boolean = true,
     size: Dp = 48.dp,
+    modifier: Modifier = Modifier,
     tag: String? = null,
     onClick: () -> Unit,
 ) {
-    TvFocusBox(shape = CircleShape, modifier = Modifier.size(size), focusedScale = 1.12f, ring = false, enabled = enabled, tag = tag, onClick = onClick) { focused ->
+    TvFocusBox(shape = CircleShape, modifier = modifier.size(size), focusedScale = 1.12f, ring = false, enabled = enabled, tag = tag, onClick = onClick) { focused ->
         Box(
             Modifier.fillMaxSize().background(if (focused) Color.White else Color(0x1FFFFFFF)),
             contentAlignment = Alignment.Center,

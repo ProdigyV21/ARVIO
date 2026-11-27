@@ -318,9 +318,19 @@ internal fun LyricsPanel(
 @Composable
 private fun SyncedLyrics(lines: List<com.arflix.tv.music.LyricLine>, active: Int, accent: Color, onSeek: (Long) -> Unit, tv: Boolean = false) {
     val listState = rememberLazyListState()
+    val lineGuessPx = with(androidx.compose.ui.platform.LocalDensity.current) { 48.dp.roundToPx() }
     LaunchedEffect(active) {
-        // Keeps the sung line a little below the top, unless the user is scrolling themselves.
-        if (active >= 0 && !listState.isScrollInProgress) listState.animateScrollToItem(max(0, active - 2))
+        if (active < 0 || listState.isScrollInProgress) return@LaunchedEffect
+        if (tv) {
+            // The TV lyrics area is only a few lines tall, so the sung line sits in the middle of it.
+            val info = listState.layoutInfo
+            val viewport = info.viewportSize.height
+            val line = info.visibleItemsInfo.firstOrNull { it.index == active }?.size ?: lineGuessPx
+            listState.animateScrollToItem(active, -(viewport / 2 - line / 2))
+        } else {
+            // Keeps the sung line a little below the top, unless the user is scrolling themselves.
+            listState.animateScrollToItem(max(0, active - 2))
+        }
     }
     // The lines fade out at the top and bottom edges instead of running into the title below.
     LazyColumn(
@@ -334,7 +344,7 @@ private fun SyncedLyrics(lines: List<com.arflix.tv.music.LyricLine>, active: Int
                 )
             },
         state = listState,
-        contentPadding = PaddingValues(top = 24.dp, bottom = 48.dp),
+        contentPadding = if (tv) PaddingValues(bottom = 160.dp) else PaddingValues(top = 24.dp, bottom = 48.dp),
     ) {
         itemsIndexed(lines, key = { i, _ -> i }) { i, line ->
             val past = i < active
