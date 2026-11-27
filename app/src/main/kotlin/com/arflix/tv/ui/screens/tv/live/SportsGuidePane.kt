@@ -853,7 +853,7 @@ internal fun SportsGuidePane(
                 // instead of jumping.
                 Column(Modifier.animateItem(fadeInSpec = tween(220), fadeOutSpec = null,
                     placementSpec = androidx.compose.animation.core.spring(dampingRatio = .9f, stiffness = 380f,
-                        visibilityThreshold = androidx.compose.ui.unit.IntOffset.VisibilityThreshold))) {
+                        visibilityThreshold = androidx.compose.ui.unit.IntOffset(1, 1)))) {
                     SportsRowTitle(row.title, row.events.size, touch)
                     val eventKeys = keysByRow.getValue(row.id)
                     // Inner padding leaves room for the focused card's lift without clipping;
