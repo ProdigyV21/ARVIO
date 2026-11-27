@@ -6572,10 +6572,11 @@ private fun SubtitleMenu(
                                         .fillMaxHeight(),
                                     contentAlignment = Alignment.Center
                                 ) {
+                                    // Row 0 on the left is "Off": say so instead of a lone dash.
                                     Text(
-                                        text = "—",
+                                        text = stringResource(R.string.mplayer_subtitles_off),
                                         style = ArflixTypography.caption,
-                                        color = TextSecondary.copy(alpha = 0.3f)
+                                        color = TextSecondary.copy(alpha = 0.5f)
                                     )
                                 }
                             } else {

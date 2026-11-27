@@ -61,6 +61,9 @@ import androidx.compose.ui.draw.scale
 
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -243,6 +246,7 @@ private fun ProfileDialogContent(
     var editTextRef by remember { mutableStateOf<EditText?>(null) }
     val confirmButtonFocusRequester = remember { FocusRequester() }
     val lockButtonFocusRequester = remember { FocusRequester() }
+    val firstAvatarFocusRequester = remember { FocusRequester() }
     // Setting or removing a PIN swaps the lock buttons; keep focus on that row instead of
     // letting it fall back to the first avatar (where the next OK would change the avatar).
     var lastPin by remember { mutableStateOf(profile?.pin) }
@@ -615,7 +619,10 @@ private fun ProfileDialogContent(
             } else {
                 Row(
                     modifier = Modifier
-                        .padding(horizontal = 48.dp)
+                        .padding(horizontal = 48.dp, vertical = 32.dp)
+                        // Keep a margin above and below: on 720p/1080p TVs the kids controls made
+                        // the card touch the screen edges and clipped the Cancel button.
+                        .heightIn(max = (configuration.screenHeightDp - 64).dp)
                         .clip(RoundedCornerShape(16.dp))
                         .background(BackgroundCard)
                         .padding(start = 28.dp, top = 28.dp, bottom = 28.dp, end = 12.dp),
@@ -628,7 +635,22 @@ private fun ProfileDialogContent(
                     Column(
                         modifier = Modifier
                             .width(200.dp)
-                            .verticalScroll(rememberScrollState()),
+                            // RIGHT from anything in this column goes to the top of the avatar
+                            // picker; the default geometric search picked the Kids toggle or the
+                            // bottom avatar row. In the name field it only jumps at the text end.
+                            .onPreviewKeyEvent { event ->
+                                if (event.type != KeyEventType.KeyDown ||
+                                    event.nativeKeyEvent.keyCode != KeyEvent.KEYCODE_DPAD_RIGHT
+                                ) return@onPreviewKeyEvent false
+                                val et = editTextRef
+                                if (et != null && et.hasFocus() &&
+                                    et.selectionEnd < (et.text?.length ?: 0)
+                                ) return@onPreviewKeyEvent false
+                                runCatching { firstAvatarFocusRequester.requestFocus() }.isSuccess
+                            }
+                            .verticalScroll(rememberScrollState())
+                            // Room for the focused button's border at the bottom of the scroll.
+                            .padding(bottom = 6.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         Text(
@@ -837,7 +859,7 @@ private fun ProfileDialogContent(
 
                     // ---- Right column: avatar picker (4 themed rows) ----
                     Column(
-                        modifier = Modifier.width(460.dp)
+                        modifier = Modifier.width(460.dp).verticalScroll(rememberScrollState())
                     ) {
                         // Avatar picker - 4 horizontal scrolling rows by category
                         AvatarRegistry.categories.forEachIndexed { rowIdx, (label, ids) ->
@@ -860,7 +882,8 @@ private fun ProfileDialogContent(
                                             avatarId = 0,
                                             isSelected = selectedAvatarId == 0,
                                             onClick = { onAvatarSelected(0) },
-                                            isNone = true
+                                            isNone = true,
+                                            modifier = Modifier.focusRequester(firstAvatarFocusRequester)
                                         )
                                     }
                                 }
@@ -1239,7 +1262,8 @@ private fun AvatarGridItem(
     avatarId: Int,
     isSelected: Boolean,
     onClick: () -> Unit,
-    isNone: Boolean = false
+    isNone: Boolean = false,
+    modifier: Modifier = Modifier
 ) {
     val isTouchDevice = LocalDeviceType.current.isTouchDevice()
     var isFocused by remember { mutableIntStateOf(0) }
@@ -1313,7 +1337,7 @@ private fun AvatarGridItem(
     } else {
         Surface(
             onClick = onClick,
-            modifier = Modifier
+            modifier = modifier
                 .size(54.dp)
                 .scale(scale)
                 .onFocusChanged { isFocused = if (it.isFocused) 1 else 0 },

@@ -102,7 +102,7 @@ class TraktRepository @Inject constructor(
     private fun refreshTokenKey() = profileManager.profileStringKey("trakt_refresh_token")
     private fun expiresAtKey() = profileManager.profileLongKey("trakt_expires_at")
     private fun tokenUpdatedAtKey() = profileManager.profileLongKey("trakt_token_updated_at_v3")
-    private fun includeSpecialsKey() = profileManager.profileBooleanKey("trakt_include_specials")
+    private fun includeSpecialsKey() = profileManager.profileBooleanKey("include_specials")
     private fun dismissedContinueWatchingKey() = profileManager.profileStringKey("trakt_dismissed_continue_watching_v1")
     // v5 invalidates snapshots written by the old 50-show/18-month resolver.
     // Keeping that snapshot would make the corrected resolver appear broken

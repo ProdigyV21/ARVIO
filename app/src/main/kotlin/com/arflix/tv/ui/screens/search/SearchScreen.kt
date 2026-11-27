@@ -1266,6 +1266,8 @@ private fun SearchInputBar(
                         .clip(CircleShape)
                         .background(if (isClearFocused) Color.White else Color.White.copy(alpha = 0.08f))
                         .semantics { onClick { onClear(); true } }
+                        // Touch has no D-pad handler to press it for us.
+                        .then(if (isTouchDevice) Modifier.clickable { onClear() } else Modifier)
                         .testTag("search-clear")
                 ) {
                     Icon(
@@ -1301,6 +1303,7 @@ private fun SearchInputBar(
                             }
                         )
                         .semantics { onClick { onMic(); true } }
+                        .then(if (isTouchDevice) Modifier.clickable { onMic() } else Modifier)
                         .testTag("search-voice")
                 ) {
                     Icon(
