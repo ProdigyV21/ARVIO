@@ -386,15 +386,14 @@ private fun TvLyricLine(text: String, current: Boolean, past: Boolean, accent: C
         tween(280), label = "tv-lyric-color",
     )
     val band by animateFloatAsState(if (current) 0.30f else 0f, tween(280), label = "tv-lyric-band")
-    val scale by animateFloatAsState(if (current) 1.08f else 1f, tween(280), label = "tv-lyric-scale")
     Text(
         text,
         color = color,
-        fontSize = 24.sp,
-        lineHeight = 31.sp,
+        // A larger font rather than a scale, so a long sung line wraps instead of running past the edge.
+        fontSize = if (current) 26.sp else 23.sp,
+        lineHeight = 32.sp,
         fontWeight = if (current) FontWeight.ExtraBold else FontWeight.Bold,
         modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp)
-            .graphicsLayer { scaleX = scale; scaleY = scale; transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0f, 0.5f) }
             .clip(RoundedCornerShape(10.dp))
             .background(accent.copy(alpha = band))
             .padding(vertical = 7.dp, horizontal = 12.dp),

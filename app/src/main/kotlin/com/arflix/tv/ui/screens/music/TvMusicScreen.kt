@@ -1352,7 +1352,8 @@ private fun TvPlayer(
                     TvIconButton(Icons.Default.MoreVert, stringResource(R.string.music_more), accent) { onTrackMenu(track, emptyList()) }
                 }
                 if (!lyricsOn) {
-                    val upNext = playback.upNext.take(2).mapNotNull { playback.queue.getOrNull(it) }
+                    // One line fewer while the sleep timer line shows above the seek bar, so nothing is cut at the bottom.
+                    val upNext = playback.upNext.take(if (playback.sleepTimerOn) 1 else 2).mapNotNull { playback.queue.getOrNull(it) }
                     if (upNext.isNotEmpty()) {
                         Spacer(Modifier.height(28.dp))
                         Text(stringResource(R.string.music_up_next), color = Faint, fontSize = 14.sp, fontWeight = FontWeight.Bold)
