@@ -67,6 +67,7 @@ import androidx.compose.material.icons.filled.Audiotrack
 import androidx.compose.material.icons.filled.Subtitles
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.foundation.layout.size
 import androidx.compose.ui.unit.sp
 import com.arflix.tv.ui.theme.TextPrimary
@@ -5427,8 +5428,8 @@ fun LiveTvScreen(
                         streamBitrate = streamStats.bitrate,
                         categoryName = categoryTitle,
                         isCatchupMode = playingCatchupProgram != null,
-                        // A live channel that is loading is not paused: keep the Pause icon up.
-                        isPlaying = if (playingCatchupProgram != null) playerPlayWhenReady else (playerIsPlaying || playerIsBuffering),
+                        // A live channel that is loading or retrying is not paused: keep the Pause icon up.
+                        isPlaying = playerPlayWhenReady || playerIsPlaying || (playingCatchupProgram == null && playerIsBuffering),
                         isBuffering = playerIsBuffering,
                         playbackPositionMs = playerPositionMs,
                         playbackDurationMs = playerDurationMs,
@@ -5494,7 +5495,7 @@ fun LiveTvScreen(
                             if (playingCatchupProgram != null) {
                                 toggleCatchupPlayback()
                             } else {
-                                if (exoPlayer.isPlaying) {
+                                if (exoPlayer.playWhenReady) {
                                     exoPlayer.pause()
                                     playerPlayWhenReady = false
                                 } else {
@@ -6332,14 +6333,21 @@ fun FullscreenSourcesOverlay(
         }
     }
 
+    var targetFocused by remember(targetKey) { mutableStateOf(false) }
     LaunchedEffect(firstFocus, targetPlaced, touchDevice, visible) {
         if (visible && !touchDevice && targetPlaced) {
-            withFrameNanos { }
-            runCatching { firstFocus.requestFocus() }
+            // The dialog window can take a few frames to gain focus; retry until it sticks.
+            repeat(20) {
+                if (targetFocused) return@LaunchedEffect
+                withFrameNanos { }
+                runCatching { firstFocus.requestFocus() }
+                kotlinx.coroutines.delay(50)
+            }
         }
     }
 
     val initialFocus = Modifier.focusRequester(firstFocus)
+        .onFocusChanged { if (it.hasFocus) targetFocused = true }
         .onGloballyPositioned { if (it.isAttached) targetPlaced = true }
 
     // Keep the player's remote handlers in a different focus window (D-Pad Case)
@@ -6467,15 +6475,12 @@ fun FullscreenSourcesOverlay(
                     }
 
                     // Invisible or “Cancel” button to capture focus if the list is empty
-                    androidx.compose.material3.TextButton(
+                    PlayerChipButton(
+                        icon = Icons.Filled.Close,
+                        label = stringResource(android.R.string.cancel),
                         onClick = onDismiss,
-                        modifier = if (!hasAlternatives) initialFocus else Modifier.padding(top = 16.dp),
-                    ) {
-                        androidx.tv.material3.Text(
-                            text = stringResource(android.R.string.cancel),
-                            color = Color(0xFF9E9E9E)
-                        )
-                    }
+                        modifier = Modifier.padding(top = 16.dp).then(if (!hasAlternatives) initialFocus else Modifier),
+                    )
                 }
             }
         }
