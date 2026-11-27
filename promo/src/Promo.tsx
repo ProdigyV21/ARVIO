@@ -10,11 +10,17 @@ import {
   Details,
   Everywhere,
   Intro,
-  Music,
   Outro,
   Subtitles,
 } from "./scenes";
-import { HomeServers, LiveTv, News, OwnSources, Sports } from "./scenes2";
+import {
+  HomeServers,
+  LiveTv,
+  MusicEverywhere,
+  News,
+  OwnSources,
+  Sports,
+} from "./scenes2";
 import { loadBrandFonts } from "./theme";
 import { easeInOut } from "./primitives";
 
@@ -29,7 +35,7 @@ export const SCENES = [
   { id: "Details", C: Details, d: 85 },
   { id: "LiveTv", C: LiveTv, d: 130 },
   { id: "Sports", C: Sports, d: 125 },
-  { id: "Music", C: Music, d: 125 },
+  { id: "Music", C: MusicEverywhere, d: 125 },
   { id: "Subtitles", C: Subtitles, d: 135 },
   { id: "News", C: News, d: 100 },
   { id: "HomeServers", C: HomeServers, d: 110 },

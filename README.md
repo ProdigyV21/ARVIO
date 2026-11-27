@@ -12,7 +12,7 @@
 
 <div align="center">
 
-[![Watch ARVIO: a looping preview of the smooth new Live TV guide, the Sports hub on TV and phone, Music with synced lyrics and AI subtitles that also work on live TV.](netlify-arvio-tv-site/assets/promo/arvio-tour-preview.gif)](https://arvio.tv/#demo)
+[![Watch ARVIO: a looping preview of the smooth new Live TV guide, the Sports hub on TV and phone, Music with synced lyrics (now on TV too) and AI subtitles that also work on live TV.](netlify-arvio-tv-site/assets/promo/arvio-tour-preview.gif)](https://arvio.tv/#demo)
 
 </div>
 
