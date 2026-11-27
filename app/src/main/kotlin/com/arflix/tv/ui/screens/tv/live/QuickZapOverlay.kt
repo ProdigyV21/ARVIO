@@ -5,8 +5,12 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.focusable
@@ -22,6 +26,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowDown
@@ -43,6 +48,8 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -131,6 +138,20 @@ fun QuickZapOverlay(
 
     val focusRequester = remember { FocusRequester() }
     val isRtl = LocalLayoutDirection.current == LayoutDirection.Rtl
+    val categoryAlpha by animateFloatAsState(if (categoryListFocused) 1f else 0.45f, tween(180), label = "qz-cat-alpha")
+    val channelAlpha by animateFloatAsState(if (!categoryListFocused) 1f else 0.5f, tween(180), label = "qz-ch-alpha")
+    // A short slide on every step, in the direction of travel, so moving through the list reads as scrolling.
+    val channelShift = remember { Animatable(0f) }
+    val stepPx = with(LocalDensity.current) { 18.dp.toPx() }
+    var lastChannelIndex by remember { mutableIntStateOf(-1) }
+    LaunchedEffect(selectedChannelIndex) {
+        val previous = lastChannelIndex
+        lastChannelIndex = selectedChannelIndex
+        if (previous < 0 || previous == selectedChannelIndex) return@LaunchedEffect
+        val down = selectedChannelIndex > previous || (previous == channels.lastIndex && selectedChannelIndex == 0)
+        channelShift.snapTo(if (down) stepPx else -stepPx)
+        channelShift.animateTo(0f, tween(150, easing = FastOutSlowInEasing))
+    }
 
     LaunchedEffect(visible) {
         if (visible) {
@@ -151,20 +172,19 @@ fun QuickZapOverlay(
 
     AnimatedVisibility(
         visible = visible,
-        enter = fadeIn(tween(300)) + slideInVertically(tween(300)) { it / 6 },
-        exit = fadeOut(tween(200)) + slideOutVertically(tween(200)) { it / 6 },
+        enter = fadeIn(tween(220)) + slideInHorizontally(tween(260, easing = FastOutSlowInEasing)) { -it / 10 },
+        exit = fadeOut(tween(160)) + slideOutHorizontally(tween(180)) { -it / 12 },
         modifier = modifier.fillMaxSize()
     ) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
+                // The list sits on the left; the picture keeps playing, visible on the right.
                 .background(
-                    Brush.verticalGradient(
-                        colors = listOf(
-                            Color.Black.copy(alpha = 0.90f),
-                            Color.Black.copy(alpha = 0.78f),
-                            Color.Black.copy(alpha = 0.90f)
-                        )
+                    Brush.horizontalGradient(
+                        0f to Color.Black.copy(alpha = 0.94f),
+                        0.55f to Color.Black.copy(alpha = 0.82f),
+                        1f to Color.Black.copy(alpha = 0.30f),
                     )
                 )
                 .focusRequester(focusRequester)
@@ -245,8 +265,9 @@ fun QuickZapOverlay(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .align(Alignment.TopCenter)
-                    .padding(horizontal = 56.dp, vertical = 28.dp),
+                    .align(Alignment.TopStart)
+                    .width(860.dp)
+                    .padding(start = 56.dp, end = 24.dp, top = 28.dp, bottom = 28.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -289,7 +310,7 @@ fun QuickZapOverlay(
                     .fillMaxWidth()
                     .fillMaxHeight()
                     .padding(top = 96.dp, bottom = 48.dp, start = 48.dp, end = 48.dp),
-                horizontalArrangement = Arrangement.Center,
+                horizontalArrangement = Arrangement.Start,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 // Left Column: Category Sidebar Panel (Always visible, highlighted when focused)
@@ -298,11 +319,11 @@ fun QuickZapOverlay(
                     selectedIndex = selectedCategoryIndex,
                     isFocused = categoryListFocused,
                     modifier = Modifier
-                        .width(260.dp)
-                        .alpha(if (categoryListFocused) 1.0f else 0.45f)
+                        .width(220.dp)
+                        .alpha(categoryAlpha)
                 )
 
-                Spacer(modifier = Modifier.width(48.dp))
+                Spacer(modifier = Modifier.width(32.dp))
 
                 // Right Column: Channel Column Panel
                 ChannelColumnPanel(
@@ -310,9 +331,11 @@ fun QuickZapOverlay(
                     selectedIndex = selectedChannelIndex,
                     isFocused = !categoryListFocused,
                     nowNextMap = nowNextMap,
+                    playingChannelId = currentChannel?.id,
                     modifier = Modifier
-                        .width(640.dp)
-                        .alpha(if (!categoryListFocused) 1.0f else 0.55f)
+                        .width(560.dp)
+                        .alpha(channelAlpha)
+                        .graphicsLayer { translationY = channelShift.value }
                 )
             }
         }
@@ -433,6 +456,7 @@ private fun ChannelColumnPanel(
     selectedIndex: Int,
     isFocused: Boolean,
     nowNextMap: Map<String, IptvNowNext>,
+    playingChannelId: String? = null,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -449,7 +473,8 @@ private fun ChannelColumnPanel(
                     NonFocusedChannelSlot(
                         number = ch.number,
                         channel = ch,
-                        nowNext = nowNext
+                        nowNext = nowNext,
+                        playing = ch.id == playingChannelId,
                     )
                 }
             }
@@ -461,7 +486,8 @@ private fun ChannelColumnPanel(
                     number = ch.number,
                     channel = ch,
                     nowNext = nowNext,
-                    isFocused = isFocused
+                    isFocused = isFocused,
+                    playing = ch.id == playingChannelId,
                 )
             }
 
@@ -473,7 +499,8 @@ private fun ChannelColumnPanel(
                     NonFocusedChannelSlot(
                         number = ch.number,
                         channel = ch,
-                        nowNext = nowNext
+                        nowNext = nowNext,
+                        playing = ch.id == playingChannelId,
                     )
                 }
             }
@@ -492,48 +519,73 @@ private fun ChannelColumnPanel(
 private fun NonFocusedChannelSlot(
     number: Int,
     channel: EnrichedChannel,
-    nowNext: IptvNowNext?
+    nowNext: IptvNowNext?,
+    playing: Boolean = false,
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .height(42.dp)
-            .padding(horizontal = 24.dp),
+            .padding(horizontal = 16.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(16.dp)
+        horizontalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         Text(
-            text = number.toString(),
+            text = number.takeIf { it > 0 }?.toString().orEmpty(),
             style = LiveType.NumberMono.copy(
-                color = LiveColors.FgMute,
-                fontSize = 12.sp,
+                color = if (playing) LiveColors.Fg else LiveColors.FgMute,
+                fontSize = 13.sp,
                 fontWeight = FontWeight.SemiBold
             ),
-            modifier = Modifier.width(42.dp),
+            modifier = Modifier.width(40.dp),
             textAlign = TextAlign.End
         )
 
         Box(
             modifier = Modifier
-                .width(42.dp)
+                .width(44.dp)
                 .height(28.dp)
                 .clip(RoundedCornerShape(4.dp))
-                .background(LiveColors.Panel)
+                .background(LiveColors.Panel),
+            contentAlignment = Alignment.Center,
         ) {
             ChannelLogo(channel = channel, size = 28.dp)
         }
 
         Text(
-            text = nowNext?.now?.title ?: channel.name,
+            text = channel.name,
+            style = LiveType.ChannelName.copy(
+                color = LiveColors.Fg.copy(alpha = 0.85f),
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold
+            ),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.width(150.dp)
+        )
+        Text(
+            text = nowNext?.now?.title.orEmpty(),
             style = LiveType.CellTitle.copy(
-                color = LiveColors.FgDim.copy(alpha = 0.75f),
+                color = LiveColors.FgDim.copy(alpha = 0.7f),
                 fontSize = 12.sp
             ),
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f)
         )
+        if (playing) PlayingDot()
     }
+}
+
+/** Marks the channel that is on screen right now. */
+@Composable
+private fun PlayingDot() {
+    Box(
+        Modifier
+            .size(8.dp)
+            .clip(CircleShape)
+            .background(LiveColors.LiveRed)
+    )
 }
 
 @OptIn(ExperimentalTvMaterial3Api::class)
@@ -542,41 +594,41 @@ private fun FocusedChannelSlot(
     number: Int,
     channel: EnrichedChannel,
     nowNext: IptvNowNext?,
-    isFocused: Boolean
+    isFocused: Boolean,
+    playing: Boolean = false,
 ) {
+    val shape = RoundedCornerShape(12.dp)
+    val bg by animateColorAsState(if (isFocused) Color.White else LiveColors.PanelRaised, tween(160), label = "qz-focus-bg")
+    val fg = if (isFocused) Color(0xFF0B0B0C) else LiveColors.Fg
+    val fgDim = if (isFocused) Color(0xFF0B0B0C).copy(alpha = 0.62f) else LiveColors.FgDim
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .height(96.dp)
-            .clip(RoundedCornerShape(LiveDims.CardRadius))
-            .border(
-                width = if (isFocused) 2.dp else 0.dp,
-                color = if (isFocused) LiveColors.FocusRing else Color.Transparent,
-                shape = RoundedCornerShape(LiveDims.CardRadius)
-            )
-            .background(LiveColors.PanelRaised)
+            .clip(shape)
+            .background(bg)
             .padding(horizontal = 16.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(16.dp)
+        horizontalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center,
-            modifier = Modifier.width(42.dp)
+            modifier = Modifier.width(40.dp)
         ) {
             if (isFocused) {
                 Icon(
                     imageVector = Icons.Default.KeyboardArrowUp,
                     contentDescription = null,
-                    tint = LiveColors.FgDim,
+                    tint = fgDim,
                     modifier = Modifier.size(16.dp)
                 )
             }
             Text(
-                text = number.toString(),
+                text = number.takeIf { it > 0 }?.toString().orEmpty(),
                 style = LiveType.NumberMono.copy(
-                    color = if (isFocused) liveAccent() else LiveColors.FgDim,
-                    fontSize = 15.sp,
+                    color = fg,
+                    fontSize = 16.sp,
                     fontWeight = FontWeight.Bold
                 )
             )
@@ -584,7 +636,7 @@ private fun FocusedChannelSlot(
                 Icon(
                     imageVector = Icons.Default.KeyboardArrowDown,
                     contentDescription = null,
-                    tint = LiveColors.FgDim,
+                    tint = fgDim,
                     modifier = Modifier.size(16.dp)
                 )
             }
@@ -592,29 +644,43 @@ private fun FocusedChannelSlot(
 
         Box(
             modifier = Modifier
-                .width(64.dp)
-                .height(48.dp)
-                .clip(RoundedCornerShape(LiveDims.CellRadius))
-                .background(LiveColors.Panel)
+                .width(72.dp)
+                .height(54.dp)
+                .clip(RoundedCornerShape(6.dp))
+                .background(LiveColors.Panel),
+            contentAlignment = Alignment.Center,
         ) {
-            ChannelLogo(channel = channel, size = 48.dp)
+            ChannelLogo(channel = channel, size = 50.dp)
         }
 
         Column(
             modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.Center
+            verticalArrangement = Arrangement.spacedBy(3.dp)
         ) {
             val now = nowNext?.now
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                if (playing) PlayingDot()
+                Text(
+                    text = channel.name,
+                    style = LiveType.ChannelName.copy(color = fgDim, fontSize = 12.sp, fontWeight = FontWeight.SemiBold),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false),
+                )
+            }
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text(
                     text = now?.title ?: channel.name,
                     style = LiveType.ProgramTitle.copy(
-                        color = LiveColors.Fg,
-                        fontSize = 14.sp,
+                        color = fg,
+                        fontSize = 16.sp,
+                        lineHeight = 20.sp,
                         fontWeight = FontWeight.Bold
                     ),
                     maxLines = 1,
@@ -625,8 +691,8 @@ private fun FocusedChannelSlot(
                     Text(
                         text = formatTimeWindow(it),
                         style = LiveType.TimeMono.copy(
-                            color = liveAccent(),
-                            fontSize = 11.sp,
+                            color = fgDim,
+                            fontSize = 12.sp,
                             fontWeight = FontWeight.SemiBold
                         ),
                         modifier = Modifier.padding(start = 12.dp)
@@ -634,18 +700,28 @@ private fun FocusedChannelSlot(
                 }
             }
 
-            Spacer(modifier = Modifier.height(8.dp))
-
             val progress = progressOf(now)
-            LinearProgressIndicator(
-                progress = { progress ?: 0f },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(3.dp)
-                    .clip(RoundedCornerShape(1.5.dp)),
-                color = liveAccent(),
-                trackColor = LiveColors.Divider
-            )
+            if (progress != null) {
+                LinearProgressIndicator(
+                    progress = { progress },
+                    modifier = Modifier
+                        .padding(top = 4.dp)
+                        .fillMaxWidth()
+                        .height(3.dp)
+                        .clip(RoundedCornerShape(1.5.dp)),
+                    color = if (isFocused) Color(0xFF0B0B0C) else Color.White,
+                    trackColor = if (isFocused) Color.Black.copy(alpha = 0.15f) else LiveColors.Divider,
+                    drawStopIndicator = {},
+                )
+            }
+            nowNext?.next?.let { next ->
+                Text(
+                    text = "${formatClock(next.startUtcMillis)}  ${next.title}",
+                    style = LiveType.CellTitle.copy(color = fgDim, fontSize = 11.sp),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
         }
     }
 }

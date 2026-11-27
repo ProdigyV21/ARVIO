@@ -1,10 +1,15 @@
 package com.arflix.tv.ui.screens.tv.live
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,7 +23,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
@@ -147,39 +151,44 @@ private fun TrackRow(
     modifier: Modifier = Modifier,
 ) {
     var focused by remember { mutableStateOf(false) }
+    // Focus is white with dark text, whatever the accent colour; the current choice carries a tick.
+    val bg by animateColorAsState(if (focused) Color.White else LiveColors.PanelDeep, tween(140), label = "track-row-bg")
+    val fg = if (focused) Color(0xFF0B0B0C) else LiveColors.Fg
+    val scale = playerFocusScale(focused, 1.02f)
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(10.dp))
-            .background(if (focused) LiveColors.Panel else LiveColors.PanelDeep)
-            .border(
-                width = if (focused) 2.dp else 1.dp,
-                color = if (focused) LiveColors.FocusRing else LiveColors.Divider,
-                shape = RoundedCornerShape(10.dp),
-            )
-            .onFocusChanged { focused = it.hasFocus }
-            .focusable()
-            .clickable(onClick = onPick)
-            .onKeyEvent { event ->
-                if (event.type == KeyEventType.KeyDown && (event.key == Key.DirectionCenter || event.key == Key.Enter)) {
-                    onPick()
-                    true
-                } else {
-                    false
-                }
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
             }
-            .padding(horizontal = 12.dp, vertical = 10.dp),
+            .clip(RoundedCornerShape(10.dp))
+            .background(bg)
+            .border(1.dp, if (focused) Color.Transparent else LiveColors.Divider, RoundedCornerShape(10.dp))
+            .onFocusChanged { focused = it.hasFocus }
+            // One focus target per row: clickable is focusable itself and answers OK/Enter.
+            .clickable(onClick = onPick)
+            .padding(horizontal = 14.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Box(
-            modifier = Modifier
-                .size(8.dp)
-                .background(if (option.selected) liveAccent() else LiveColors.FgMute, CircleShape),
-        )
+        Box(modifier = Modifier.size(20.dp), contentAlignment = Alignment.Center) {
+            if (option.selected) {
+                Icon(
+                    imageVector = Icons.Filled.Check,
+                    contentDescription = null,
+                    tint = fg,
+                    modifier = Modifier.size(20.dp),
+                )
+            }
+        }
         Text(
             text = option.label,
-            style = LiveType.CellTitle.copy(color = LiveColors.Fg, fontSize = 14.sp),
+            style = LiveType.CellTitle.copy(
+                color = fg,
+                fontSize = 15.sp,
+                fontWeight = if (option.selected) FontWeight.SemiBold else FontWeight.Normal,
+            ),
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
