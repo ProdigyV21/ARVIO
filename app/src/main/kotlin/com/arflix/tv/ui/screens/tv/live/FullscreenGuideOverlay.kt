@@ -57,6 +57,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -513,21 +514,31 @@ private fun GuideProgramRow(
 ) {
     var focused by remember { mutableStateOf(false) }
     val playable = item.state == GuideProgramState.PastPlayable || item.state == GuideProgramState.Live
-    val active = focused || selected
-    val bg = when {
-        active -> LiveColors.PanelRaised.copy(alpha = 0.94f)
-        item.state == GuideProgramState.Future -> Color.White.copy(alpha = 0.045f)
-        else -> Color.White.copy(alpha = 0.07f)
-    }
+    // Focus is a solid white ring and a lighter card, clearly apart from the playing programme.
+    val bg by androidx.compose.animation.animateColorAsState(
+        when {
+            focused -> Color.White.copy(alpha = 0.16f)
+            selected -> LiveColors.PanelRaised.copy(alpha = 0.94f)
+            item.state == GuideProgramState.Future -> Color.White.copy(alpha = 0.045f)
+            else -> Color.White.copy(alpha = 0.07f)
+        },
+        androidx.compose.animation.core.tween(140),
+        label = "guide-row-bg",
+    )
     val border = when {
-        selected -> liveAccent()
-        focused -> LiveColors.Fg.copy(alpha = 0.42f)
+        focused -> Color.White
+        selected -> liveAccent().copy(alpha = 0.6f)
         else -> Color.White.copy(alpha = 0.08f)
     }
+    val scale = playerFocusScale(focused, 1.015f)
 
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+            }
             .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
             .onFocusChanged { focused = it.hasFocus }
             .focusable()
@@ -541,8 +552,10 @@ private fun GuideProgramRow(
             }
             .clip(RoundedCornerShape(12.dp))
             .background(bg)
-            .border(BorderStroke(1.dp, border), RoundedCornerShape(12.dp))
-            .clickable(enabled = playable, onClick = onClick)
+            .border(BorderStroke(if (focused) 2.dp else 1.dp, border), RoundedCornerShape(12.dp))
+            // On a remote the row above is the single focus stop and answers OK itself; a
+            // clickable here would add a second, invisible stop per row.
+            .then(if (isTouchDevice) Modifier.clickable(enabled = playable, onClick = onClick) else Modifier)
             .heightIn(min = if (isTouchDevice) 70.dp else 0.dp)
             .padding(if (isTouchDevice) 10.dp else 12.dp),
         verticalAlignment = Alignment.CenterVertically,
