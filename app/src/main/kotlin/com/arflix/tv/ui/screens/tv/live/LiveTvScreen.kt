@@ -2063,7 +2063,9 @@ fun LiveTvScreen(
                 }
                 // A load that failed outright (slow network, timeouts) keeps what is on
                 // screen, and a much smaller result is not written over the disk copy.
-                addonEvents = if (refreshed.isNotEmpty() || previous.isEmpty()) refreshed else previous
+                val next = if (refreshed.isNotEmpty() || previous.isEmpty()) refreshed else previous
+                // An unchanged refresh keeps the same list, so the sports keys stay cheap to compare.
+                addonEvents = withContext(LiveSportsWorkPolicy.dispatcher) { next.reuseIfEqual(previous) }
                 addonReady = true
                 if (refreshed.isNotEmpty() && refreshed.size * 2 >= previous.size) viewModel.saveSportsAddonEvents(installations, refreshed)
             } finally { addonLoading = false }
