@@ -103,6 +103,10 @@ internal fun SportsGuideEvent.scoreLine(now: Long): SportsScoreLine? {
     return when {
         isConfirmedLive(now) -> SportsScoreLine(home, away, live = true)
         isFinished() -> SportsScoreLine(home, away, live = false)
+        // The score feed refreshes less often than "live" goes stale (15 min). A game that
+        // is still on keeps its last known score instead of falling back to "v".
+        fixture.status == "live" && isOnAir(now) && now - fixture.observedAt < 2 * 60 * 60_000L ->
+            SportsScoreLine(home, away, live = true)
         else -> null
     }
 }
