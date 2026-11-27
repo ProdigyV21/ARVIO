@@ -162,18 +162,12 @@ class TvViewModel @Inject constructor(
         val offset = prefs[profileManager.profileStringKey("subtitle_offset")] ?: "Bottom"
         com.arflix.tv.ui.screens.tv.live.aisubs.LiveSubtitleStyle(
             sizePreference = size,
-            sizePercent = prefs[profileManager.profileIntKey("subtitle_size_pct")] ?: when (size.lowercase()) {
-                "small" -> 80
-                "large" -> 120
-                "extra large" -> 140
-                else -> 100
-            },
-            verticalPercent = prefs[profileManager.profileIntKey("subtitle_vertical_pct")] ?: when (offset) {
-                "Low" -> 8
-                "Medium" -> 15
-                "High" -> 25
-                else -> 2
-            },
+            sizePercent = com.arflix.tv.ui.screens.player.SubtitlePlacementPrefs.resolveSizePct(
+                size, prefs[profileManager.profileIntKey("subtitle_size_pct")]
+            ),
+            verticalPercent = com.arflix.tv.ui.screens.player.SubtitlePlacementPrefs.resolveVerticalPct(
+                offset, prefs[profileManager.profileIntKey("subtitle_vertical_pct")]
+            ),
             color = prefs[profileManager.profileStringKey("subtitle_color")] ?: "White",
             style = prefs[profileManager.profileStringKey("subtitle_style")] ?: "Bold",
             font = com.arflix.tv.ui.screens.player.SubtitleFontOption.fromPreference(

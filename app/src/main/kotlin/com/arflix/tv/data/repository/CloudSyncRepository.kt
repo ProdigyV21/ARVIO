@@ -431,6 +431,13 @@ class CloudSyncRepository @Inject constructor(
         val musicTasteJson: String? = null,
         /** Followed sports teams and leagues (JSON). Null from older clients keeps the local list. */
         val sportsFollowsJson: String? = null,
+        // Appearance/player toggles that used to stay on one device. Null (older clients, or never
+        // set here) keeps the local value.
+        val smoothScrolling: Boolean? = null,
+        val comingUpOnHome: Boolean? = null,
+        val autoSkipIntro: Boolean? = null,
+        val autoSkipOutro: Boolean? = null,
+        val audioNormalization: Boolean? = null,
     )
 
     // ── DataStore key helpers ──
@@ -868,6 +875,11 @@ class CloudSyncRepository @Inject constructor(
                         musicCollectionsJson = prefs[com.arflix.tv.music.MusicCloudKeys.collections(profile.id)],
                         musicTasteJson = prefs[com.arflix.tv.music.MusicCloudKeys.taste(profile.id)],
                         sportsFollowsJson = prefs[SportsCloudKeys.follows(profile.id)],
+                        smoothScrolling = prefs[profileManager.profileBooleanKeyFor(profile.id, "smooth_scrolling")],
+                        comingUpOnHome = prefs[profileManager.profileBooleanKeyFor(profile.id, com.arflix.tv.ui.screens.home.COMING_UP_ON_HOME)],
+                        autoSkipIntro = prefs[profileManager.profileBooleanKeyFor(profile.id, "auto_skip_intro")],
+                        autoSkipOutro = prefs[profileManager.profileBooleanKeyFor(profile.id, "auto_skip_outro")],
+                        audioNormalization = prefs[profileManager.profileBooleanKeyFor(profile.id, "audio_normalization")],
                     )
                 )
             }
@@ -1891,6 +1903,11 @@ class CloudSyncRepository @Inject constructor(
                         state.musicCollectionsJson?.let { prefs[com.arflix.tv.music.MusicCloudKeys.collections(profileId)] = it }
                         state.musicTasteJson?.let { prefs[com.arflix.tv.music.MusicCloudKeys.taste(profileId)] = it }
                         state.sportsFollowsJson?.let { prefs[SportsCloudKeys.follows(profileId)] = it }
+                        state.smoothScrolling?.let { prefs[profileManager.profileBooleanKeyFor(profileId, "smooth_scrolling")] = it }
+                        state.comingUpOnHome?.let { prefs[profileManager.profileBooleanKeyFor(profileId, com.arflix.tv.ui.screens.home.COMING_UP_ON_HOME)] = it }
+                        state.autoSkipIntro?.let { prefs[profileManager.profileBooleanKeyFor(profileId, "auto_skip_intro")] = it }
+                        state.autoSkipOutro?.let { prefs[profileManager.profileBooleanKeyFor(profileId, "auto_skip_outro")] = it }
+                        state.audioNormalization?.let { prefs[profileManager.profileBooleanKeyFor(profileId, "audio_normalization")] = it }
                         state.kidsCatalogApprovals?.let { approvals ->
                             val approved = approvals.toSet()
                             val members = KidsTrustedCatalogs.membersKey(profileId)

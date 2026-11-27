@@ -916,12 +916,7 @@ class PlayerViewModel @Inject constructor(
                 maximumSizeGb = prefs[profileManager.profileIntKey("auto_play_max_size_gb")] ?: 0
             )
             val subSize = prefs[profileManager.profileStringKey("subtitle_size")] ?: "Medium"
-            val subSizePct = prefs[profileManager.profileIntKey("subtitle_size_pct")] ?: when (subSize.lowercase()) {
-                "small" -> 80
-                "large" -> 120
-                "extra large" -> 140
-                else -> 100
-            }
+            val subSizePct = SubtitlePlacementPrefs.resolveSizePct(subSize, prefs[profileManager.profileIntKey("subtitle_size_pct")])
             val subColor = prefs[profileManager.profileStringKey("subtitle_color")] ?: "White"
             val subStyle = prefs[profileManager.profileStringKey("subtitle_style")] ?: "Bold"
             val subFont = SubtitleFontOption.fromPreference(
@@ -929,9 +924,7 @@ class PlayerViewModel @Inject constructor(
             ).preferenceValue
             val subStylized = prefs[profileManager.profileBooleanKey("subtitle_stylized")] ?: true
             val subOffset = prefs[profileManager.profileStringKey("subtitle_offset")] ?: "Bottom"
-            val subVertPct = prefs[profileManager.profileIntKey("subtitle_vertical_pct")] ?: when (subOffset) {
-                "Bottom" -> 2; "Low" -> 8; "Medium" -> 15; "High" -> 25; else -> 2
-            }
+            val subVertPct = SubtitlePlacementPrefs.resolveVerticalPct(subOffset, prefs[profileManager.profileIntKey("subtitle_vertical_pct")])
             val filterSubLang = prefs[filterSubtitlesByLanguageKey()] ?: true
             val useForcedSubs = prefs[useForcedSubtitlesKey()] ?: false
             val removeHi = prefs[profileManager.profileBooleanKey("subtitle_remove_hearing_impaired")] ?: false
@@ -3799,6 +3792,7 @@ class PlayerViewModel @Inject constructor(
             context.settingsDataStore.edit { prefs ->
                 prefs[autoPlayNextKey()] = enabled
             }
+            runCatching { cloudSyncRepository.markLocalStateDirtyNow() }
         }
     }
 
@@ -3808,6 +3802,7 @@ class PlayerViewModel @Inject constructor(
             context.settingsDataStore.edit { prefs ->
                 prefs[profileManager.profileBooleanKey("auto_skip_intro")] = enabled
             }
+            runCatching { cloudSyncRepository.markLocalStateDirtyNow() }
         }
     }
 
@@ -3817,6 +3812,7 @@ class PlayerViewModel @Inject constructor(
             context.settingsDataStore.edit { prefs ->
                 prefs[profileManager.profileBooleanKey("auto_skip_outro")] = enabled
             }
+            runCatching { cloudSyncRepository.markLocalStateDirtyNow() }
         }
     }
 
@@ -3835,6 +3831,7 @@ class PlayerViewModel @Inject constructor(
             context.settingsDataStore.edit { prefs ->
                 prefs[profileManager.profileBooleanKey("audio_normalization")] = enabled
             }
+            runCatching { cloudSyncRepository.markLocalStateDirtyNow() }
         }
     }
 
@@ -3851,6 +3848,7 @@ class PlayerViewModel @Inject constructor(
                 prefs[profileManager.profileStringKey("subtitle_size")] = size
                 prefs[profileManager.profileIntKey("subtitle_size_pct")] = mappedPct
             }
+            runCatching { cloudSyncRepository.markLocalStateDirtyNow() }
         }
     }
 
@@ -3868,6 +3866,7 @@ class PlayerViewModel @Inject constructor(
                 prefs[profileManager.profileIntKey("subtitle_size_pct")] = clamped
                 prefs[profileManager.profileStringKey("subtitle_size")] = name
             }
+            runCatching { cloudSyncRepository.markLocalStateDirtyNow() }
         }
     }
 
@@ -3886,6 +3885,7 @@ class PlayerViewModel @Inject constructor(
                 prefs[profileManager.profileIntKey("subtitle_vertical_pct")] = clamped
                 prefs[profileManager.profileStringKey("subtitle_offset")] = name
             }
+            runCatching { cloudSyncRepository.markLocalStateDirtyNow() }
         }
     }
 
