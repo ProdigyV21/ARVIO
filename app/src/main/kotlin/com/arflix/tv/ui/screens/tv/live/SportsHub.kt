@@ -374,17 +374,25 @@ internal fun SportsSplitArt(
 @Composable
 private fun SportsTeamTag(name: String, badge: String?, color: Color, large: Boolean, start: Boolean, modifier: Modifier) {
     val code = remember(name) { sportsTeamCode(name) }
+    // Club badge when the schedule has one; a national team gets its flag.
+    val flag = remember(name, badge) { if (badge == null) sportsCountryFlag(name) else null }
+    val markSize = if (large) 26.dp else 18.dp
+    @Composable fun mark() {
+        if (badge != null) SportsTeamBadge(name, badge, markSize, if (large) 96 else 64)
+        else if (flag != null) Text(flag, fontSize = if (large) 22.sp else 15.sp, lineHeight = if (large) 26.sp else 18.sp, maxLines = 1)
+    }
+    val hasMark = badge != null || flag != null
     Column(modifier, horizontalAlignment = if (start) Alignment.Start else Alignment.End) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            if (large && badge != null && start) {
-                SportsTeamBadge(name, badge, 26.dp, 96)
-                Spacer(Modifier.width(6.dp))
+            if (hasMark && start) {
+                mark()
+                Spacer(Modifier.width(if (large) 6.dp else 4.dp))
             }
             Text(code, color = color, fontWeight = FontWeight.Bold, maxLines = 1, softWrap = false, letterSpacing = (-0.5).sp,
                 fontSize = if (large) 30.sp else 21.sp, lineHeight = if (large) 34.sp else 24.sp)
-            if (large && badge != null && !start) {
-                Spacer(Modifier.width(6.dp))
-                SportsTeamBadge(name, badge, 26.dp, 96)
+            if (hasMark && !start) {
+                Spacer(Modifier.width(if (large) 6.dp else 4.dp))
+                mark()
             }
         }
         // A short underline in the text colour, like a kit stripe.
@@ -964,4 +972,47 @@ internal fun sportsWatchStream(streams: List<com.arflix.tv.data.repository.Sport
     val path = uri.path?.trimEnd('/')?.lowercase().orEmpty()
     host.isNotEmpty() && host !in sportsNotAStreamHosts && !path.endsWith("/configure") && path != "/configure" &&
         !sportsNotAStream.containsMatchIn("${stream.name} ${stream.description.orEmpty()}")
+}
+
+private val countryCodes: Map<String, String> = buildMap {
+    fun add(code: String, vararg names: String) = names.forEach { put(it, code) }
+    add("NL", "netherlands", "nederland", "holland"); add("BE", "belgium", "belgie", "belgië", "belgia", "belgique")
+    add("DE", "germany", "duitsland", "deutschland", "tyskland"); add("FR", "france", "frankrijk", "frankrike")
+    add("ES", "spain", "spanje", "españa", "spania"); add("IT", "italy", "italie", "italië", "italia")
+    add("PT", "portugal"); add("GB-ENG", "england", "engeland"); add("GB-SCT", "scotland", "schotland")
+    add("GB-WLS", "wales"); add("GB", "great britain", "united kingdom"); add("IE", "ireland", "ierland", "republic of ireland")
+    add("NO", "norway", "noorwegen", "norge"); add("SE", "sweden", "zweden", "sverige"); add("DK", "denmark", "denemarken", "danmark")
+    add("FI", "finland", "suomi"); add("IS", "iceland", "ijsland"); add("PL", "poland", "polen", "polska")
+    add("CZ", "czech republic", "czechia", "tsjechie", "tsjechië"); add("SK", "slovakia"); add("AT", "austria", "oostenrijk", "österreich")
+    add("CH", "switzerland", "zwitserland", "schweiz"); add("HR", "croatia", "kroatie", "kroatië", "hrvatska"); add("RS", "serbia", "servie", "servië")
+    add("SI", "slovenia"); add("BA", "bosnia and herzegovina", "bosnia"); add("ME", "montenegro"); add("AL", "albania", "albanie", "albanië")
+    add("MK", "north macedonia"); add("GR", "greece", "griekenland"); add("TR", "turkey", "turkiye", "türkiye", "turkije")
+    add("HU", "hungary", "hongarije"); add("RO", "romania", "roemenie", "roemenië"); add("BG", "bulgaria", "bulgarije")
+    add("UA", "ukraine", "oekraine", "oekraïne"); add("GE", "georgia"); add("AM", "armenia"); add("AZ", "azerbaijan")
+    add("IL", "israel"); add("CY", "cyprus"); add("LU", "luxembourg", "luxemburg"); add("EE", "estonia"); add("LV", "latvia"); add("LT", "lithuania")
+    add("US", "usa", "united states"); add("CA", "canada"); add("MX", "mexico"); add("BR", "brazil", "brazilie", "brazilië", "brasil")
+    add("AR", "argentina", "argentinie", "argentinië"); add("UY", "uruguay"); add("CO", "colombia"); add("CL", "chile")
+    add("PE", "peru"); add("EC", "ecuador"); add("PY", "paraguay"); add("VE", "venezuela"); add("BO", "bolivia")
+    add("JP", "japan"); add("KR", "south korea", "korea republic"); add("CN", "china"); add("AU", "australia", "australie", "australië")
+    add("NZ", "new zealand", "nieuw-zeeland"); add("IN", "india"); add("PK", "pakistan"); add("BD", "bangladesh"); add("LK", "sri lanka")
+    add("AF", "afghanistan"); add("ZA", "south africa", "zuid-afrika"); add("ZW", "zimbabwe"); add("SA", "saudi arabia")
+    add("QA", "qatar"); add("AE", "united arab emirates", "uae"); add("IR", "iran"); add("IQ", "iraq"); add("JO", "jordan")
+    add("EG", "egypt"); add("MA", "morocco", "marokko"); add("TN", "tunisia"); add("DZ", "algeria"); add("NG", "nigeria")
+    add("GH", "ghana"); add("SN", "senegal"); add("CM", "cameroon", "kameroen"); add("CI", "ivory coast", "cote d'ivoire")
+}
+
+/**
+ * A flag for a national team ("Norge", "Belgium", "England"), as an emoji, or null for
+ * a club. England, Scotland and Wales use their own flags.
+ */
+internal fun sportsCountryFlag(name: String): String? {
+    val key = name.trim().lowercase(Locale.ROOT)
+        .removeSuffix(" u21").removeSuffix(" u19").removeSuffix(" women").removeSuffix(" (w)").trim()
+    val code = countryCodes[key] ?: return null
+    return when (code) {
+        "GB-ENG" -> "\uD83C\uDFF4\uDB40\uDC67\uDB40\uDC62\uDB40\uDC65\uDB40\uDC6E\uDB40\uDC67\uDB40\uDC7F"
+        "GB-SCT" -> "\uD83C\uDFF4\uDB40\uDC67\uDB40\uDC62\uDB40\uDC73\uDB40\uDC63\uDB40\uDC74\uDB40\uDC7F"
+        "GB-WLS" -> "\uD83C\uDFF4\uDB40\uDC67\uDB40\uDC62\uDB40\uDC77\uDB40\uDC6C\uDB40\uDC73\uDB40\uDC7F"
+        else -> buildString { code.forEach { appendCodePoint(0x1F1E6 + (it - 'A')) } }
+    }
 }
