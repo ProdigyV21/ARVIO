@@ -566,6 +566,12 @@ internal fun SportsGuidePane(
                         .distinctBy { it.id }.map { it.name }
                 },
             )
+            // TV: rows and cards are scrolled by moveTo(); focus's own bring-into-view
+            // would fight it and leave half a row showing under the preview.
+            @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+            val bringIntoView = if (touch) androidx.compose.foundation.gestures.LocalBringIntoViewSpec.current else SportsNoBringIntoView
+            @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+            CompositionLocalProvider(androidx.compose.foundation.gestures.LocalBringIntoViewSpec provides bringIntoView) {
             LazyColumn(Modifier.weight(1f).fillMaxWidth().clipToBounds().testTag("sports-guide-list"), state = listState, contentPadding = PaddingValues(bottom = 24.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()),
             verticalArrangement = Arrangement.spacedBy(2.dp)) {
             val rowKeys = disambiguatedLazyKeys(rows) { it.id }
@@ -688,6 +694,7 @@ internal fun SportsGuidePane(
                 }
             }
         }
+            }
             }
         }
     }
@@ -1323,4 +1330,9 @@ private fun FormBadge(result: String) {
     Box(Modifier.padding(start = 4.dp).size(20.dp).clip(RoundedCornerShape(4.dp)).background(background), contentAlignment = Alignment.Center) {
         Text(result, color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
     }
+}
+
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+private val SportsNoBringIntoView = object : androidx.compose.foundation.gestures.BringIntoViewSpec {
+    override fun calculateScrollDistance(offset: Float, size: Float, containerSize: Float): Float = 0f
 }
