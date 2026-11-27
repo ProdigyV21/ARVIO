@@ -211,3 +211,17 @@ data class CatalogPackItem(
     val name: String?,
     val url: String?
 ) : Serializable
+
+/** Values an exported collection writes for "no value" ("None" from Python, "null" from JS). */
+private val EMPTY_LABEL_VALUES = setOf("none", "null", "undefined", "n/a")
+
+/** [value] trimmed, or null when it is blank or one of the exported "no value" spellings. */
+fun meaningfulLabel(value: String?): String? =
+    value?.trim()?.takeIf { it.isNotEmpty() && it.lowercase() !in EMPTY_LABEL_VALUES }
+
+/**
+ * A catalog title without the empty parts an exported collection may join into it,
+ * so "Latest · None" reads "Latest".
+ */
+fun cleanCatalogTitle(title: String?): String? =
+    title?.split('·')?.mapNotNull { meaningfulLabel(it) }?.joinToString(" · ")?.takeIf { it.isNotEmpty() }

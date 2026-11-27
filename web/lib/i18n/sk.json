@@ -5,5 +5,13 @@
   "Completed": "Dokončené",
   "Dropped": "Zanechané",
   "Silo: use the Jellyfin-compatible address. Optional profile: username#ProfileName. Protected profile: password#PIN.": "Silo: použite adresu kompatibilnú s Jellyfin. Voliteľný profil: username#ProfileName. Chránený profil: password#PIN.",
-  "None of your enabled addons provide playback sources.": "Žiadny z vašich povolených doplnkov neposkytuje zdroje prehrávania."
+  "None of your enabled addons provide playback sources.": "Žiadny z vašich povolených doplnkov neposkytuje zdroje prehrávania.",
+  "Game info": "Informácie o zápase",
+  "Standings": "Tabuľka",
+  "Form": "Forma",
+  "Head to head": "Vzájomné zápasy",
+  "Score alerts": "Upozornenia na skóre",
+  "League networks": "Ligové kanály",
+  "Score update": "Zmena skóre",
+  "Full time": "Koniec zápasu"
 }

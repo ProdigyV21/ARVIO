@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="live_menu_fix_guide">اصلاح راهنما</string>
+    <string name="live_guide_fix_title">اصلاح راهنما</string>
+    <string name="live_guide_fix_source_heading">استفاده از راهنمای</string>
+    <string name="live_guide_fix_automatic">خودکار</string>
+    <string name="live_guide_fix_automatic_desc">راهنمایی که ارائه‌دهنده‌تان تطبیق داد</string>
+    <string name="live_guide_fix_none">بدون راهنما</string>
+    <string name="live_guide_fix_none_desc">پنهان کردن راهنمای نادرست</string>
+    <string name="live_guide_fix_search_hint">جست‌وجوی کانال</string>
+    <string name="live_guide_fix_no_suggestions">کانال مشابهی نیست. با نام جست‌وجو کنید.</string>
+    <string name="live_guide_fix_no_results">کانالی پیدا نشد</string>
+    <string name="live_guide_fix_offset_title">زمان‌های راهنما</string>
+    <string name="live_guide_fix_offset_desc">همه برنامه‌های %1$s را جابه‌جا می‌کند. وقتی برنامه‌ها زودتر یا دیرتر از زمان ذکرشده شروع می‌شوند از آن استفاده کنید.</string>
+    <string name="live_guide_fix_earlier">زودتر</string>
+    <string name="live_guide_fix_later">دیرتر</string>
+    <string name="settings_iptv_start_last_channel">شروع با آخرین کانال</string>
+    <string name="settings_iptv_start_last_channel_desc">با باز کردن برنامه، آخرین کانالی که دیدید تمام‌صفحه پخش می‌شود</string>
+</resources>

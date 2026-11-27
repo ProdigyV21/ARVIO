@@ -23,10 +23,12 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.only
@@ -40,6 +42,11 @@ import androidx.compose.material.icons.filled.LiveTv
 import androidx.compose.material.icons.filled.Newspaper
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.outlined.BookmarkBorder
+import androidx.compose.material.icons.outlined.Home
+import androidx.compose.material.icons.outlined.LibraryMusic
+import androidx.compose.material.icons.outlined.LiveTv
+import androidx.compose.material.icons.outlined.Search
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -49,6 +56,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -58,6 +67,7 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.annotation.StringRes
 import androidx.compose.ui.platform.LocalConfiguration
@@ -207,18 +217,25 @@ internal fun shouldShowBottomBar(
 data class BottomBarItem(
     @StringRes val labelRes: Int,
     val icon: ImageVector,
-    val route: String
+    val route: String,
+    /** Line icon for the unselected tab; the filled [icon] marks the selected one. */
+    val idleIcon: ImageVector = icon,
 )
 
+/**
+ * Phone tabs. News and Settings moved behind the profile avatar ([MobileAccountButton]), so the
+ * bar keeps five readable tabs, like the web app.
+ */
 val bottomBarItems = listOf(
-    BottomBarItem(R.string.home, Icons.Default.Home, "home"),
-    BottomBarItem(R.string.search, Icons.Default.Search, "search"),
-    BottomBarItem(R.string.nav_library, Icons.Default.Bookmark, "watchlist"),
-    BottomBarItem(R.string.topbar_tv, Icons.Default.LiveTv, "tv"),
-    BottomBarItem(R.string.nav_news, Icons.Default.Newspaper, "news"),
-    BottomBarItem(R.string.nav_music, Icons.Default.LibraryMusic, "music"),
-    BottomBarItem(R.string.settings, Icons.Default.Settings, "settings")
+    BottomBarItem(R.string.home, Icons.Default.Home, "home", Icons.Outlined.Home),
+    BottomBarItem(R.string.search, Icons.Default.Search, "search", Icons.Outlined.Search),
+    BottomBarItem(R.string.nav_library, Icons.Default.Bookmark, "watchlist", Icons.Outlined.BookmarkBorder),
+    BottomBarItem(R.string.topbar_tv, Icons.Default.LiveTv, "tv", Icons.Outlined.LiveTv),
+    BottomBarItem(R.string.nav_music, Icons.Default.LibraryMusic, "music", Icons.Outlined.LibraryMusic),
 )
+
+/** The landscape rail has the height for Settings, pinned below the tabs. */
+internal val railSettingsItem = BottomBarItem(R.string.settings, Icons.Default.Settings, "settings")
 
 /** Bottom clearance applied inside scrolling content rather than to its viewport. */
 val LocalBottomBarInset = staticCompositionLocalOf { 0.dp }
@@ -253,11 +270,6 @@ fun AppBottomBar(
     val barHeight = maxOf((spec.itemHeightDp ?: 64).toFloat(), 34f + 28f * androidx.compose.ui.platform.LocalDensity.current.fontScale).dp
     val surfaceShape = RectangleShape
 
-    // A single dark fade stays readable over artwork without live backdrop blur.
-    val baseModifier = modifier.background(
-        Brush.verticalGradient(0f to Color.Transparent, 0.28f to Color.Black.copy(alpha = 0.9f), 1f to Color.Black)
-    )
-
     val items = bottomBarItems.filter {
         com.arflix.tv.util.isNavigationSectionVisible(it.route, NavigationVisibility.hiddenSections, KidsNavigation.hideLiveTv)
     }
@@ -269,8 +281,16 @@ fun AppBottomBar(
         if (!onMusic) onNavigate("music")
     }
     if (isRail) {
+        // Solid black like the pages beside it, so the rail and the cutout strip read as one edge;
+        // a hairline separates it from content.
         Column(
-            modifier = baseModifier
+            modifier = modifier
+                .background(Color.Black)
+                .drawBehind {
+                    val x = size.width - 1.dp.toPx()
+                    drawLine(Color.White.copy(alpha = 0.07f), androidx.compose.ui.geometry.Offset(x, 0f),
+                        androidx.compose.ui.geometry.Offset(x, size.height), 1.dp.toPx())
+                }
                 .width(LANDSCAPE_RAIL_WIDTH_DP.dp)
                 .fillMaxHeight()
                 .navigationBarsPadding()
@@ -293,35 +313,68 @@ fun AppBottomBar(
                         }
                     }
                 }
-                items.filter { it.route != "settings" }.forEach { item ->
-                    BottomBarItemButton(item, currentRoute, onNavigate, spec, accent, Modifier.height(48.dp), song)
+                items.forEach { item ->
+                    BottomBarItemButton(item, currentRoute, onNavigate, spec, accent, Modifier.height(48.dp), song = song)
                 }
             }
-            items.firstOrNull { it.route == "settings" }?.let { item ->
-                BottomBarItemButton(item, currentRoute, onNavigate, spec, accent, Modifier.height(48.dp))
-            }
+            BottomBarItemButton(railSettingsItem, currentRoute, onNavigate, spec, accent, Modifier.height(48.dp))
         }
     } else {
+        // Floating, rounded bar over a soft fade, so artwork stays visible beside it.
         Column(
-            modifier = baseModifier.fillMaxWidth()
+            modifier = modifier.fillMaxWidth()
+                .background(Brush.verticalGradient(0f to Color.Transparent, 0.45f to Color.Black.copy(alpha = 0.7f), 1f to Color.Black.copy(alpha = 0.92f)))
                 .navigationBarsPadding()
+                .padding(start = 12.dp, end = 12.dp, top = 6.dp, bottom = 8.dp)
         ) {
             song?.takeIf { !onMusic }?.let {
-                Spacer(Modifier.height(6.dp))
                 MobileNowPlayingBar(it, accent, onOpen = openMusicPlayer)
+                Spacer(Modifier.height(6.dp))
             }
-            Row(
-                modifier = Modifier.fillMaxWidth().height(barHeight),
-                horizontalArrangement = Arrangement.SpaceEvenly,
-                verticalAlignment = Alignment.CenterVertically,
+            // Glassy dark capsule: a lit top edge, a deep soft shadow, and one indicator that
+            // glides between tabs instead of each tab fading its own highlight.
+            androidx.compose.foundation.layout.BoxWithConstraints(
+                modifier = Modifier.align(Alignment.CenterHorizontally).widthIn(max = 480.dp).fillMaxWidth().height(barHeight)
+                    .shadow(24.dp, FloatingBarShape, clip = false, ambientColor = Color.Black, spotColor = Color.Black)
+                    .clip(FloatingBarShape)
+                    .background(Brush.verticalGradient(listOf(Color(0xF2202024), Color(0xF5121215))))
+                    .border(
+                        1.dp,
+                        Brush.verticalGradient(listOf(Color.White.copy(alpha = 0.16f), Color.White.copy(alpha = 0.04f))),
+                        FloatingBarShape,
+                    )
+                    .padding(horizontal = 6.dp, vertical = 6.dp)
+                    .testTag("floating_tab_bar"),
             ) {
-                items.forEach { item ->
-                    BottomBarItemButton(item, currentRoute, onNavigate, spec, accent, Modifier.weight(1f).fillMaxHeight(), song)
+                val slot = if (items.isEmpty()) maxWidth else maxWidth / items.size
+                val selectedIndex = items.indexOfFirst { currentRoute?.substringBefore('?') == it.route }
+                val indicatorX by androidx.compose.animation.core.animateDpAsState(
+                    targetValue = slot * selectedIndex.coerceAtLeast(0),
+                    animationSpec = androidx.compose.animation.core.spring(dampingRatio = 0.78f, stiffness = 420f),
+                    label = "tab_indicator_x",
+                )
+                val indicatorAlpha by androidx.compose.animation.core.animateFloatAsState(
+                    if (selectedIndex >= 0) 1f else 0f, tween(200), label = "tab_indicator_alpha")
+                Box(
+                    Modifier.offset(x = indicatorX).width(slot).fillMaxHeight()
+                        .padding(horizontal = 4.dp)
+                        .graphicsLayer { alpha = indicatorAlpha }
+                        .clip(RoundedCornerShape(22.dp))
+                        .background(Brush.verticalGradient(listOf(accent.copy(alpha = 0.18f), accent.copy(alpha = 0.10f))))
+                        .border(1.dp, accent.copy(alpha = 0.10f), RoundedCornerShape(22.dp))
+                )
+                Row(Modifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
+                    items.forEach { item ->
+                        BottomBarItemButton(item, currentRoute, onNavigate, spec, accent,
+                            Modifier.weight(1f).fillMaxHeight(), ownIndicator = false, song = song)
+                    }
                 }
             }
         }
     }
 }
+
+private val FloatingBarShape = RoundedCornerShape(28.dp)
 
 @Composable
 private fun BottomBarItemButton(
@@ -331,6 +384,7 @@ private fun BottomBarItemButton(
     spec: AppBottomBarSpec,
     accent: Color,
     modifier: Modifier,
+    ownIndicator: Boolean = true,
     song: com.arflix.tv.music.MusicNowPlaying.Song? = null,
 ) {
     val isSelected = currentRoute?.substringBefore('?') == item.route
@@ -341,6 +395,20 @@ private fun BottomBarItemButton(
         targetValue = if (isSelected || isFocused) accent else Color.White.copy(alpha = 0.55f),
         animationSpec = tween(180),
         label = "navigation_icon_color"
+    )
+    // The selected icon springs up a touch, so a tab change is felt as well as seen.
+    val iconScale by androidx.compose.animation.core.animateFloatAsState(
+        targetValue = if (isSelected) 1f else 0.92f,
+        animationSpec = androidx.compose.animation.core.spring(
+            dampingRatio = androidx.compose.animation.core.Spring.DampingRatioMediumBouncy,
+            stiffness = androidx.compose.animation.core.Spring.StiffnessMediumLow,
+        ),
+        label = "navigation_icon_scale"
+    )
+    val indicatorColor by animateColorAsState(
+        targetValue = if (isSelected && ownIndicator) accent.copy(alpha = 0.16f) else Color.Transparent,
+        animationSpec = tween(200),
+        label = "navigation_indicator"
     )
 
     Box(
@@ -364,21 +432,29 @@ private fun BottomBarItemButton(
             .then(if (isFocused) Modifier.border(1.dp, accent, CircleShape) else Modifier),
         contentAlignment = Alignment.Center
     ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(3.dp)) {
-        if (item.route == "music" && song != null) {
-            // Something is playing: the tab's icon bounces with it.
-            Box(Modifier.size(spec.iconSizeDp.dp), contentAlignment = Alignment.Center) {
-                NowPlayingBars(iconColor, song.isPlaying, Modifier.size((spec.iconSizeDp * 0.75f).dp))
+        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            // Selected tab: a soft pill behind the icon (Material 3 style) instead of colour alone.
+            Box(
+                Modifier.widthIn(max = 52.dp).fillMaxWidth().height(28.dp).clip(CircleShape)
+                    .background(indicatorColor),
+                contentAlignment = Alignment.Center,
+            ) {
+                if (item.route == "music" && song != null) {
+                    // Something is playing: the tab's icon bounces with it.
+                    NowPlayingBars(iconColor, song.isPlaying, Modifier.size(18.dp))
+                } else Icon(
+                    imageVector = if (isSelected) item.icon else item.idleIcon,
+                    contentDescription = null,
+                    tint = iconColor,
+                    modifier = Modifier.size(24.dp).graphicsLayer { scaleX = iconScale; scaleY = iconScale }
+                )
             }
-        } else Icon(
-            imageVector = item.icon,
-            contentDescription = null,
-            tint = iconColor,
-            modifier = Modifier.size(spec.iconSizeDp.dp)
-        )
-        androidx.compose.material3.Text(label, color = iconColor, fontSize = spec.labelFontSizeSp.sp,
-            lineHeight = 14.sp, maxLines = 2, textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-            modifier = Modifier.padding(horizontal = 2.dp))
+            androidx.compose.material3.Text(label, color = iconColor, fontSize = spec.labelFontSizeSp.sp,
+                fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium,
+                lineHeight = 14.sp, maxLines = 1, softWrap = false,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                modifier = Modifier.padding(horizontal = 2.dp))
         }
     }
 }

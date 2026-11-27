@@ -40,6 +40,7 @@ internal fun ChannelProgrammeCanvas(
     modifier: Modifier,
     /** How much of an on-air programme has played (0..1); drawn as a thin bar. */
     nowProgress: Float = 0f,
+    isReminded: Boolean = false,
 ) {
     val measurer = rememberTextMeasurer(cacheSize = 4)
     val progressColor = liveAccent()
@@ -57,7 +58,7 @@ internal fun ChannelProgrammeCanvas(
                 AnnotatedString(program.title), AnnotatedString(time),
                 program.description?.takeIf { it.isNotBlank() }?.let(::AnnotatedString),
             )
-            if (isNow || (isPast && isCatchupSupported)) onClick { onClick(); true }
+            onClick { onClick(); true }
         }
         .drawWithCache {
             val x = 7.dp.toPx() + contentStartOffsetPx()
@@ -84,6 +85,7 @@ internal fun ChannelProgrammeCanvas(
                 val radius = CornerRadius(LiveDims.CellRadius.toPx())
                 drawRoundRect(if (isNow) LiveColors.FocusBg else LiveColors.Panel, origin, cellSize, radius)
                 if (isNow && nowProgress > 0f) drawLiveProgress(nowProgress, progressColor)
+                if (isReminded) drawReminderDot(progressColor)
                 if (badgeLayout != null) {
                     drawRoundRect(LiveColors.PanelRaised,
                         Offset(x, 5.dp.toPx()), Size(badgeWidth, badgeLayout.size.height + 1.dp.toPx()), CornerRadius(3.dp.toPx()))
@@ -108,6 +110,12 @@ internal fun androidx.compose.ui.graphics.drawscope.DrawScope.drawLiveProgress(p
     val top = size.height - inset - height / 2f
     drawRoundRect(color.copy(alpha = 0.18f), Offset(inset, top), Size(track, height), CornerRadius(height / 2f))
     drawRoundRect(color.copy(alpha = 0.85f), Offset(inset, top), Size(track * progress.coerceIn(0f, 1f), height), CornerRadius(height / 2f))
+}
+
+/** A small dot in the top corner of a show that has a reminder. */
+internal fun androidx.compose.ui.graphics.drawscope.DrawScope.drawReminderDot(color: androidx.compose.ui.graphics.Color) {
+    val radius = 3.dp.toPx()
+    drawCircle(color, radius, Offset(size.width - 6.dp.toPx() - radius, 6.dp.toPx() + radius))
 }
 
 /** Share of [program] that has played at [nowMillis], or 0 when it isn't on air. */

@@ -8,5 +8,13 @@
   "Dropped": "رهاشده",
   "Mark Season Unwatched": "علامت‌گذاری فصل به‌عنوان تماشانشده",
   "Silo: use the Jellyfin-compatible address. Optional profile: username#ProfileName. Protected profile: password#PIN.": "Silo: از نشانی سازگار با Jellyfin استفاده کنید. نمایهٔ اختیاری: username#ProfileName. نمایهٔ محافظت‌شده: password#PIN.",
-  "None of your enabled addons provide playback sources.": "هیچ‌یک از افزونه‌های فعال شما منبع پخش ارائه نمی‌کنند."
+  "None of your enabled addons provide playback sources.": "هیچ‌یک از افزونه‌های فعال شما منبع پخش ارائه نمی‌کنند.",
+  "Game info": "اطلاعات بازی",
+  "Standings": "جدول رده‌بندی",
+  "Form": "وضعیت",
+  "Head to head": "رویارویی‌ها",
+  "Score alerts": "هشدار نتیجه",
+  "League networks": "کانال‌های لیگ",
+  "Score update": "تغییر نتیجه",
+  "Full time": "پایان بازی"
 }

@@ -1117,8 +1117,6 @@
     <string name="home_sports_opening">פותח אירוע חי...</string>
     <string name="home_sports_playback_failed">לא ניתן להפעיל את האירוע החי הזה</string>
     <string name="home_sports_event_not_live">האירוע הזה עדיין לא בשידור חי</string>
-    <string name="home_optimizing_notice">ARVIO עדיין עוברת אופטימיזציה למכשיר זה. ייתכן שהגלילה תהיה איטית בינתיים.</string>
-    <string name="settings_optimizing_notice">האפליקציה עדיין עוברת אופטימיזציה למכשיר זה. ייתכן שהגלילה תהיה איטית בינתיים.</string>
     <string name="home_cd_primary_provider">ספק הסטרימינג הראשי</string>
     <string name="home_cd_rank">דירוג #%1$d</string>
     <string name="search_filter_all">הכול</string>
@@ -2120,7 +2118,7 @@
     <string name="youtube_search_row_title">YouTube</string>
     <string name="youtube_search_button">חיפוש ביוטיוב</string>
     <string name="youtube_kids_search_button">חיפוש ב-YouTube Kids</string>
-    <string name="youtube_search_for">עבור "%1$s"</string>
+    <string name="youtube_search_for">עבור \"%1$s\"</string>
     <string name="youtube_search_loading">מחפש ביוטיוב…</string>
     <string name="youtube_search_no_results">לא נמצאו סרטונים ביוטיוב</string>
     <string name="youtube_search_failed">יוטיוב לא הגיב</string>
@@ -2193,4 +2191,6 @@
     <string name="news_topics_uncovered">אין פיד בנושאים האלה: %1$s</string>
     <string name="news_no_topic_sources">לאף מקור שלכם אין פיד בנושאים האלה</string>
     <string name="news_no_topic_sources_desc">בחרו נושאים נוספים או מקורות אחרים בהגדרות, חדשות.</string>
+    <string name="seek_thumbnails">תמונות ממוזערות בדילוג</string>
+    <string name="seek_thumbnails_desc">מציג תמונות קטנות מהסרטון בזמן דילוג. הן נוצרות במכשיר הזה ברקע במהלך הניגון ומושהות כשהניגון צריך רשת או זיכרון.</string>
 </resources>

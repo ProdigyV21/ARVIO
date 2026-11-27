@@ -1155,4 +1155,6 @@
     <string name="phone_input_page_sent">Envoyé ✓ — appuyez sur OK sur la TV.</string>
     <string name="phone_input_page_not_sent">Non envoyé</string>
     <string name="phone_input_page_expired">Ce code a expiré — scannez à nouveau le QR code sur la TV.</string>
+    <string name="seek_thumbnails">Miniatures de navigation</string>
+    <string name="seek_thumbnails_desc">Affiche de petites images de la vidéo pendant que vous avancez ou reculez. Elles sont créées sur cet appareil en arrière-plan pendant la lecture et se mettent en pause quand la lecture a besoin du réseau ou de la mémoire.</string>
 </resources>

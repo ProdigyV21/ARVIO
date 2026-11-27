@@ -24,6 +24,7 @@ import com.arflix.tv.ui.components.LocalBottomBarInset
 import com.arflix.tv.ui.components.LocalBottomBarHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
+import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
@@ -244,15 +245,25 @@ fun AppNavigation(
 ) {
     // Activity-scoped results survive Home/Library navigation and remain profile-scoped internally.
     val calendarViewModel: ReleaseCalendarViewModel = hiltViewModel()
+    // Activity-scoped: the "start in last channel" choice is made once per app launch.
+    val liveTvStartup: com.arflix.tv.ui.screens.tv.LiveTvStartupViewModel = hiltViewModel()
     // Live TV carries no age ratings: a kids profile loses the tab and every way into it.
     val isKidsProfile = currentProfile?.isKidsProfile == true
     SideEffect { KidsNavigation.hideLiveTv = isKidsProfile }
+    // The tab a Details page was opened from, so its top bar highlights that tab, not Home.
+    val topLevelRoute = navController.currentBackStackEntryAsState().value?.destination?.route?.substringBefore('?')
+    var lastTopLevelTab by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(Screen.Home.route) }
+    if (topLevelRoute != null && topLevelRoute in DETAILS_ORIGIN_TABS && topLevelRoute != lastTopLevelTab) {
+        lastTopLevelTab = topLevelRoute
+    }
     val navigateTopLevel: (String) -> Unit = navigate@{ route ->
         if (isKidsProfile && route.substringBefore('?') in com.arflix.tv.util.KIDS_HIDDEN_NAVIGATION_SECTIONS) return@navigate
         navController.navigate(route) {
             popUpTo(Screen.Home.route) { saveState = true }
             launchSingleTop = true
-            restoreState = true
+            // A link to one settings section (e.g. "Open settings" on an empty Live TV page) must
+            // open that section, not restore wherever Settings was left last time.
+            restoreState = !route.contains("initialSection=")
         }
     }
 
@@ -285,6 +296,8 @@ fun AppNavigation(
         }
     }
 
+    val touchNav = com.arflix.tv.util.LocalDeviceType.current.isTouchDevice()
+    Box(Modifier.fillMaxSize()) {
     NavHost(
         navController = navController,
         startDestination = startDestination,
@@ -292,10 +305,28 @@ fun AppNavigation(
         // Netflix TV uses ~250ms fade; this is tuned for Android TV's 60fps.
         // Pure crossfade — no horizontal slides (those feel mobile, not TV).
         // Netflix TV uses ~250ms crossfade for all screen transitions.
-        enterTransition = { fadeIn(androidx.compose.animation.core.tween(180, easing = androidx.compose.animation.core.FastOutSlowInEasing)) },
-        exitTransition = { fadeOut(androidx.compose.animation.core.tween(140, easing = androidx.compose.animation.core.FastOutSlowInEasing)) },
-        popEnterTransition = { fadeIn(androidx.compose.animation.core.tween(180, easing = androidx.compose.animation.core.FastOutSlowInEasing)) },
-        popExitTransition = { fadeOut(androidx.compose.animation.core.tween(140, easing = androidx.compose.animation.core.FastOutSlowInEasing)) }
+        // TV: plain crossfade. Phones: tabs crossfade, while opening a page (details, a list,
+        // a settings section) gently grows in from 96% and returning settles it back.
+        enterTransition = {
+            if (touchNav && !isTopLevelRoute(targetState.destination.route)) {
+                fadeIn(navTween(260)) + androidx.compose.animation.scaleIn(navTween(320), initialScale = 0.96f)
+            } else fadeIn(navTween(if (touchNav) 220 else 180))
+        },
+        exitTransition = {
+            if (touchNav && !isTopLevelRoute(targetState.destination.route)) {
+                fadeOut(navTween(200)) + androidx.compose.animation.scaleOut(navTween(320), targetScale = 1.02f)
+            } else fadeOut(navTween(140))
+        },
+        popEnterTransition = {
+            if (touchNav && !isTopLevelRoute(initialState.destination.route)) {
+                fadeIn(navTween(240)) + androidx.compose.animation.scaleIn(navTween(300), initialScale = 1.02f)
+            } else fadeIn(navTween(if (touchNav) 220 else 180))
+        },
+        popExitTransition = {
+            if (touchNav && !isTopLevelRoute(initialState.destination.route)) {
+                fadeOut(navTween(180)) + androidx.compose.animation.scaleOut(navTween(260), targetScale = 0.96f)
+            } else fadeOut(navTween(140))
+        }
     ) {
         // Login screen
         composable(Screen.Login.route) {
@@ -310,6 +341,17 @@ fun AppNavigation(
 
         // Home screen
         composable(Screen.Home.route) {
+            // Settings > TV > Start in last channel: the first Home of a launch hands over
+            // to that channel, full screen. Back from it lands on this Home.
+            LaunchedEffect(currentProfile?.id) {
+                if (liveTvStartup.decided || currentProfile == null) return@LaunchedEffect
+                liveTvStartup.decided = true
+                if (isKidsProfile) return@LaunchedEffect
+                val channelId = liveTvStartup.startupChannelId() ?: return@LaunchedEffect
+                // A link the app was opened with (or a quick tap elsewhere) wins.
+                if (navController.currentDestination?.route != Screen.Home.route) return@LaunchedEffect
+                navigateTopLevel(Screen.Tv.createRoute(channelId))
+            }
             NavigationRailScreen(navigationRailInset, bottomInset = navigationRailBottomInset) {
               CalendarIdlePreload(calendarViewModel, currentProfile?.id) {
                 val upcoming by calendarViewModel.homeUpcomingItems.collectAsState()
@@ -581,7 +623,15 @@ fun AppNavigation(
                 navArgument("catalogId") { type = NavType.StringType },
                 navArgument("serviceRow") { type = NavType.StringType; nullable = true; defaultValue = null },
                 navArgument("serviceFilter") { type = NavType.StringType; nullable = true; defaultValue = null }
-            )
+            ),
+            // Opening a collection zooms it up out of its tile (TV and phones), and going back
+            // settles it into the page underneath, so the folder feels like it opens.
+            enterTransition = {
+                fadeIn(navTween(280)) + androidx.compose.animation.scaleIn(navTween(420), initialScale = 0.9f)
+            },
+            popExitTransition = {
+                fadeOut(navTween(220)) + androidx.compose.animation.scaleOut(navTween(300), targetScale = 0.92f)
+            }
         ) { backStackEntry ->
             val catalogId = backStackEntry.arguments?.getString("catalogId").orEmpty()
             val gridArgs = backStackEntry.arguments
@@ -683,6 +733,7 @@ fun AppNavigation(
             val mediaType = if (mediaTypeStr == "tv") MediaType.TV else MediaType.MOVIE
 
             DetailsScreen(
+                originTab = detailsOriginTab(lastTopLevelTab),
                 onFullscreenChanged = onOverlayFullscreenChanged,
                 mediaType = mediaType,
                 mediaId = mediaId,
@@ -853,6 +904,7 @@ fun AppNavigation(
                 isLiveStream = isLiveStream,
                 iptvSourceId = iptvSourceId,
                 onBack = { navController.popBackStack() },
+                onOpenAddonSettings = { navigateTopLevel(Screen.Settings.createRoute(initialSection = "stremio")) },
                 onPlayNext = { nextIdentity, nextPreferredAddonId, nextPreferredSourceName, nextPreferredBingeGroup ->
                     // Navigate to next episode
                     navController.navigate(
@@ -876,4 +928,38 @@ fun AppNavigation(
             )
         }
     }
+    // Kick-off reminders for sports, over whatever screen is open.
+    val currentRoute = navController.currentBackStackEntryAsState().value?.destination?.route
+    com.arflix.tv.ui.screens.tv.live.SportsReminderHost(
+        enabled = !isKidsProfile && currentRoute != null &&
+            currentRoute.substringBefore('?') !in setOf(Screen.Login.route, Screen.ProfileSelection.route),
+        isOnLiveTv = { navController.currentDestination?.route?.substringBefore('?') == "tv" },
+        openLiveTv = { navigateTopLevel(Screen.Tv.createRoute()) },
+    )
+    // Score alerts for followed teams, over whatever screen is open.
+    com.arflix.tv.ui.screens.tv.live.SportsScoreAlertHost(
+        enabled = !isKidsProfile && currentRoute != null &&
+            currentRoute.substringBefore('?') !in setOf(Screen.Login.route, Screen.ProfileSelection.route),
+    )
+    }
+}
+
+private fun <T> navTween(ms: Int) =
+    androidx.compose.animation.core.tween<T>(ms, easing = androidx.compose.animation.core.FastOutSlowInEasing)
+
+/** The tab destinations; moving between them is a crossfade, never a zoom. */
+private val TopLevelRoutes = setOf("home", "search", "watchlist", "tv", "music", "news", "settings", "profile_selection", "player", "login")
+
+internal fun isTopLevelRoute(route: String?): Boolean =
+    route == null || route.substringBefore('?').substringBefore('/') in TopLevelRoutes
+
+/** Top-level routes a Details page can be opened from (and highlights in its top bar). */
+private val DETAILS_ORIGIN_TABS = setOf("home", "search", "watchlist", "tv", "news")
+
+private fun detailsOriginTab(route: String): com.arflix.tv.ui.components.SidebarItem = when (route) {
+    "search" -> com.arflix.tv.ui.components.SidebarItem.SEARCH
+    "watchlist" -> com.arflix.tv.ui.components.SidebarItem.WATCHLIST
+    "tv" -> com.arflix.tv.ui.components.SidebarItem.TV
+    "news" -> com.arflix.tv.ui.components.SidebarItem.NEWS
+    else -> com.arflix.tv.ui.components.SidebarItem.HOME
 }

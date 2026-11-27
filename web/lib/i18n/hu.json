@@ -6,5 +6,13 @@
   "Completed": "Befejezett",
   "Dropped": "Abbahagyott",
   "Silo: use the Jellyfin-compatible address. Optional profile: username#ProfileName. Protected profile: password#PIN.": "Silo: használd a Jellyfin-kompatibilis címet. Opcionális profil: username#ProfileName. Védett profil: password#PIN.",
-  "None of your enabled addons provide playback sources.": "Egyik engedélyezett kiegészítőd sem biztosít lejátszási forrást."
+  "None of your enabled addons provide playback sources.": "Egyik engedélyezett kiegészítőd sem biztosít lejátszási forrást.",
+  "Game info": "Meccsinfó",
+  "Standings": "Tabella",
+  "Form": "Forma",
+  "Head to head": "Egymás elleni mérleg",
+  "Score alerts": "Eredményértesítések",
+  "League networks": "Bajnoki csatornák",
+  "Score update": "Eredményváltozás",
+  "Full time": "Végeredmény"
 }

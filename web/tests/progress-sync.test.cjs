@@ -235,6 +235,18 @@ test('marking an episode watched keeps the up next row for the following episode
   assert.deepEqual([row.episode, row.isUpNext], [5, true]);
 });
 
+test('marking watched stamps only the exact entry so older progress cannot bring it back', { skip: !server }, async () => {
+  const backend = fakeBackend();
+  const { cloud } = client(backend);
+  await cloud.saveWatchedState(auth(), { id: 77, mediaType: 'movie', seasonNumber: null, episodeNumber: null }, true, 'p1');
+  await cloud.saveWatchedState(auth(), { id: 30, mediaType: 'tv', seasonNumber: 1, episodeNumber: 4 }, true, 'p1');
+  const stamped = () => String(backend.state.payload.dismissedContinueWatchingByProfile?.p1 ?? '')
+    .split('|').filter(Boolean).map((entry) => entry.slice(0, entry.lastIndexOf(','))).sort();
+  assert.deepEqual(stamped(), ['movie:77', 'tv:30:1:4']);
+  await cloud.saveWatchedState(auth(), { id: 77, mediaType: 'movie', seasonNumber: null, episodeNumber: null }, false, 'p1');
+  assert.deepEqual(stamped(), ['tv:30:1:4']);
+});
+
 test('Continue Watching reads one row per show and maps up next rows to Up Next cards', async () => {
   const payload = androidPayload();
   payload.localContinueWatchingByProfile.p1.push(

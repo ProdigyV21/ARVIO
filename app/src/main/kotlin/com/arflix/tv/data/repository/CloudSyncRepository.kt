@@ -239,6 +239,31 @@ class CloudSyncRepository @Inject constructor(
     private val remoteRevision = RemoteRevisionTracker()
 
     /**
+     * The account document as downloaded during the current push or pull. One push used to
+     * download it twice and one pull up to three times (payload, local rank check, settings
+     * merge), which made account-sync-pull the largest server cost by far. Only touched under
+     * [cloudSyncMutex]; every push and pull clears it when it starts, and a successful upload
+     * clears it, so nothing older than the running operation is ever reused.
+     */
+    private var operationRemotePayload: String? = null
+    private var operationRemotePayloadLoaded = false
+
+    private fun forgetOperationRemotePayload() {
+        operationRemotePayload = null
+        operationRemotePayloadLoaded = false
+    }
+
+    private suspend fun loadRemotePayloadForOperation(): Result<String?> {
+        if (operationRemotePayloadLoaded) return Result.success(operationRemotePayload)
+        val result = authRepository.loadAccountSyncPayload()
+        result.onSuccess {
+            operationRemotePayload = it
+            operationRemotePayloadLoaded = true
+        }
+        return result
+    }
+
+    /**
      * True when another device saved the account document since the last check. Costs one tiny
      * request and downloads nothing; a failed read is never reported as a change.
      */
@@ -368,6 +393,14 @@ class CloudSyncRepository @Inject constructor(
         val showLoadingStats: Boolean? = null,
         // Older clients omit this field; do not reset an opted-in TV on restore.
         val showAddonStreamDetails: Boolean? = null,
+        /** Seek-bar thumbnails (default on). Null from older clients keeps the local choice. */
+        val seekThumbnailsEnabled: Boolean? = null,
+        /** Second-choice audio language ("Off" = none). Null from older clients keeps the local choice. */
+        val secondaryAudioLanguage: String? = null,
+        /** Switch to the next source when one fails (default on). Null from older clients keeps the local choice. */
+        val autoSourceFailover: Boolean? = null,
+        /** Open streams in another video app (default off). Null from older clients keeps the local choice. */
+        val externalPlayer: Boolean? = null,
         val spoilerBlurEnabled: Boolean = false,
         val volumeBoostDb: Int = 0,
         val includeSpecials: Boolean = false,
@@ -394,6 +427,17 @@ class CloudSyncRepository @Inject constructor(
         /** The Music tab's addons and the user's liked songs, favourites and playlists (JSON). Null keeps local. */
         val musicAddonsJson: String? = null,
         val musicCollectionsJson: String? = null,
+        /** The Music tab's listening history and searches, for its recommendations (JSON). Null keeps local. */
+        val musicTasteJson: String? = null,
+        /** Followed sports teams and leagues (JSON). Null from older clients keeps the local list. */
+        val sportsFollowsJson: String? = null,
+        // Appearance/player toggles that used to stay on one device. Null (older clients, or never
+        // set here) keeps the local value.
+        val smoothScrolling: Boolean? = null,
+        val comingUpOnHome: Boolean? = null,
+        val autoSkipIntro: Boolean? = null,
+        val autoSkipOutro: Boolean? = null,
+        val audioNormalization: Boolean? = null,
     )
 
     // ── DataStore key helpers ──
@@ -428,6 +472,14 @@ class CloudSyncRepository @Inject constructor(
         profileManager.profileBooleanKeyFor(profileId, "show_loading_stats")
     private fun spoilerBlurKeyFor(profileId: String) =
         profileManager.profileBooleanKeyFor(profileId, "spoiler_blur")
+    private fun seekThumbnailsKeyFor(profileId: String) =
+        profileManager.profileBooleanKeyFor(profileId, com.arflix.tv.ui.screens.player.preview.SEEK_THUMBNAILS_PREF)
+    private fun secondaryAudioLanguageKeyFor(profileId: String) =
+        profileManager.profileStringKeyFor(profileId, com.arflix.tv.ui.screens.player.SECONDARY_AUDIO_LANGUAGE_PREF)
+    private fun autoSourceFailoverKeyFor(profileId: String) =
+        profileManager.profileBooleanKeyFor(profileId, com.arflix.tv.ui.screens.player.AUTO_SOURCE_FAILOVER_PREF)
+    private fun externalPlayerKeyFor(profileId: String) =
+        profileManager.profileBooleanKeyFor(profileId, com.arflix.tv.ui.screens.player.EXTERNAL_PLAYER_PREF)
     private fun volumeBoostDbKeyFor(profileId: String) =
         profileManager.profileStringKeyFor(profileId, "volume_boost_db")
     private fun dnsProviderKeyFor(profileId: String) =
@@ -778,6 +830,10 @@ class CloudSyncRepository @Inject constructor(
                         iptvFavoritesOnHome = prefs[iptvFavoritesOnHomeKeyFor(profile.id)] ?: true,
                         showLoadingStats = prefs[showLoadingStatsKeyFor(profile.id)] ?: true,
                         showAddonStreamDetails = prefs[com.arflix.tv.util.addonStreamDetailsKey(profile.id)] ?: false,
+                        seekThumbnailsEnabled = prefs[seekThumbnailsKeyFor(profile.id)] ?: true,
+                        secondaryAudioLanguage = prefs[secondaryAudioLanguageKeyFor(profile.id)] ?: "Off",
+                        autoSourceFailover = prefs[autoSourceFailoverKeyFor(profile.id)] ?: true,
+                        externalPlayer = prefs[externalPlayerKeyFor(profile.id)] ?: false,
                         spoilerBlurEnabled = prefs[spoilerBlurKeyFor(profile.id)] ?: false,
                         volumeBoostDb = prefs[volumeBoostDbKeyFor(profile.id)]?.toIntOrNull()?.coerceIn(0, 15) ?: 0,
                         dnsProvider = prefs[dnsProviderKeyFor(profile.id)] ?: globalDnsProvider,
@@ -817,6 +873,13 @@ class CloudSyncRepository @Inject constructor(
                         kidsCatalogApprovals = prefs[KidsTrustedCatalogs.approvalsKey(profile.id)]?.sorted(),
                         musicAddonsJson = prefs[com.arflix.tv.music.MusicCloudKeys.addons(profile.id)],
                         musicCollectionsJson = prefs[com.arflix.tv.music.MusicCloudKeys.collections(profile.id)],
+                        musicTasteJson = prefs[com.arflix.tv.music.MusicCloudKeys.taste(profile.id)],
+                        sportsFollowsJson = prefs[SportsCloudKeys.follows(profile.id)],
+                        smoothScrolling = prefs[profileManager.profileBooleanKeyFor(profile.id, "smooth_scrolling")],
+                        comingUpOnHome = prefs[profileManager.profileBooleanKeyFor(profile.id, com.arflix.tv.ui.screens.home.COMING_UP_ON_HOME)],
+                        autoSkipIntro = prefs[profileManager.profileBooleanKeyFor(profile.id, "auto_skip_intro")],
+                        autoSkipOutro = prefs[profileManager.profileBooleanKeyFor(profile.id, "auto_skip_outro")],
+                        audioNormalization = prefs[profileManager.profileBooleanKeyFor(profile.id, "audio_normalization")],
                     )
                 )
             }
@@ -867,7 +930,7 @@ class CloudSyncRepository @Inject constructor(
 
         root.put("activeProfileId", profileRepository.getActiveProfileId() ?: JSONObject.NULL)
         root.put("profiles", JSONArray(gson.toJson(profiles)))
-        val existingAvatarImagesById = authRepository.loadAccountSyncPayload()
+        val existingAvatarImagesById = loadRemotePayloadForOperation()
             .getOrNull()
             ?.takeIf { it.isNotBlank() }
             ?.let { payload ->
@@ -1101,10 +1164,12 @@ class CloudSyncRepository @Inject constructor(
     // ══════════════════════════════════════════════════════════
 
     suspend fun pushToCloud(force: Boolean = false): Result<Unit> = cloudSyncMutex.withLock {
+        forgetOperationRemotePayload()
         pushToCloudLocked(force = force, allowRemoteRestoreBeforePush = !force)
     }
 
     suspend fun pushLocalSnapshotToCloud(): Result<Unit> = cloudSyncMutex.withLock {
+        forgetOperationRemotePayload()
         pushToCloudLocked(force = true, allowRemoteRestoreBeforePush = false)
     }
 
@@ -1154,7 +1219,7 @@ class CloudSyncRepository @Inject constructor(
             return Result.failure(it)
         }
 
-        val existingRemotePayload = authRepository.loadAccountSyncPayload()
+        val existingRemotePayload = loadRemotePayloadForOperation()
             .getOrNull()
             ?.takeIf { it.isNotBlank() }
         if (
@@ -1237,6 +1302,8 @@ class CloudSyncRepository @Inject constructor(
         }
 
         val result = authRepository.saveAccountSyncPayload(effectivePayload)
+        // The server copy changed (or may have); a later read in this operation must download it.
+        forgetOperationRemotePayload()
         if (result.isSuccess) {
             clearLocalDirtyAfterSuccessfulPush(uploadedVersion)
             lastPushedPayloadHash = payloadHash
@@ -1451,6 +1518,7 @@ class CloudSyncRepository @Inject constructor(
      * Returns [RestoreResult] indicating what happened.
      */
     suspend fun pullFromCloud(pushPendingLocalFirst: Boolean = true): RestoreResult = cloudSyncMutex.withLock {
+        forgetOperationRemotePayload()
         val hasPendingLocalChanges = hasPendingLocalChanges()
         if (pushPendingLocalFirst && hasPendingLocalChanges) {
             AppLogger.breadcrumb(
@@ -1477,7 +1545,7 @@ class CloudSyncRepository @Inject constructor(
             )
         }
 
-        val payloadResult = authRepository.loadAccountSyncPayload()
+        val payloadResult = loadRemotePayloadForOperation()
         if (payloadResult.isFailure) {
             AppLogger.recordException(
                 throwable = payloadResult.exceptionOrNull() ?: IllegalStateException("Cloud pull failed"),
@@ -1780,6 +1848,10 @@ class CloudSyncRepository @Inject constructor(
                         prefs[iptvFavoritesOnHomeKeyFor(profileId)] = state.iptvFavoritesOnHome
                         state.showLoadingStats?.let { prefs[showLoadingStatsKeyFor(profileId)] = it }
                         state.showAddonStreamDetails?.let { prefs[com.arflix.tv.util.addonStreamDetailsKey(profileId)] = it }
+                        state.seekThumbnailsEnabled?.let { prefs[seekThumbnailsKeyFor(profileId)] = it }
+                        state.secondaryAudioLanguage?.let { prefs[secondaryAudioLanguageKeyFor(profileId)] = it.ifBlank { "Off" } }
+                        state.autoSourceFailover?.let { prefs[autoSourceFailoverKeyFor(profileId)] = it }
+                        state.externalPlayer?.let { prefs[externalPlayerKeyFor(profileId)] = it }
                         prefs[spoilerBlurKeyFor(profileId)] = state.spoilerBlurEnabled
                         prefs[volumeBoostDbKeyFor(profileId)] = state.volumeBoostDb.coerceIn(0, 15).toString()
                         prefs[dnsProviderKeyFor(profileId)] = state.dnsProvider.ifBlank { "system" }
@@ -1829,6 +1901,13 @@ class CloudSyncRepository @Inject constructor(
                         )
                         state.musicAddonsJson?.let { prefs[com.arflix.tv.music.MusicCloudKeys.addons(profileId)] = it }
                         state.musicCollectionsJson?.let { prefs[com.arflix.tv.music.MusicCloudKeys.collections(profileId)] = it }
+                        state.musicTasteJson?.let { prefs[com.arflix.tv.music.MusicCloudKeys.taste(profileId)] = it }
+                        state.sportsFollowsJson?.let { prefs[SportsCloudKeys.follows(profileId)] = it }
+                        state.smoothScrolling?.let { prefs[profileManager.profileBooleanKeyFor(profileId, "smooth_scrolling")] = it }
+                        state.comingUpOnHome?.let { prefs[profileManager.profileBooleanKeyFor(profileId, com.arflix.tv.ui.screens.home.COMING_UP_ON_HOME)] = it }
+                        state.autoSkipIntro?.let { prefs[profileManager.profileBooleanKeyFor(profileId, "auto_skip_intro")] = it }
+                        state.autoSkipOutro?.let { prefs[profileManager.profileBooleanKeyFor(profileId, "auto_skip_outro")] = it }
+                        state.audioNormalization?.let { prefs[profileManager.profileBooleanKeyFor(profileId, "audio_normalization")] = it }
                         state.kidsCatalogApprovals?.let { approvals ->
                             val approved = approvals.toSet()
                             val members = KidsTrustedCatalogs.membersKey(profileId)

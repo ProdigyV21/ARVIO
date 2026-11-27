@@ -1,6 +1,22 @@
 // English guides and tools with no translated counterpart yet. Keep their real language
 // explicit in localized directories rather than adding inaccurate hreflang.
 export const standaloneGuideRoutes = [
+  { route: "/how-arvio-works/", updated: "2026-11-26", labels: {
+    pt: ["Comece aqui · Em inglês", "Como o ARVIO funciona", "O que o ARVIO é e não é, como catálogos, fontes e contas se encaixam e seus primeiros 10 minutos."],
+    es: ["Empieza aquí · En inglés", "Cómo funciona ARVIO", "Qué es y qué no es ARVIO, cómo encajan catálogos, fuentes y cuentas, y tus primeros 10 minutos."]
+  } },
+  { route: "/music-guide/", updated: "2026-11-26", labels: {
+    pt: ["Música · Em inglês", "Música no ARVIO", "Conecte Navidrome, Jellyfin ou um addon de música, crie playlists e importe suas playlists do Spotify."],
+    es: ["Música · En inglés", "Música en ARVIO", "Conecta Navidrome, Jellyfin o un addon de música, crea listas e importa tus listas de Spotify."]
+  } },
+  { route: "/live-sports/", updated: "2026-11-26", labels: {
+    pt: ["Esportes · Em inglês", "Esportes ao vivo nos seus canais", "Veja quais jogos passam nos canais que você já tem, com placares sem spoiler."],
+    es: ["Deportes · En inglés", "Deportes en directo en tus canales", "Mira qué partidos emiten los canales que ya tienes, con marcadores sin spoilers."]
+  } },
+  { route: "/profiles-sync-personalize/", updated: "2026-11-26", labels: {
+    pt: ["Perfis · Em inglês", "Perfis, modo infantil, sincronização e cores", "Perfis com PIN, perfis infantis, ARVIO Cloud e cor de destaque."],
+    es: ["Perfiles · En inglés", "Perfiles, modo infantil, sincronización y colores", "Perfiles con PIN, perfiles infantiles, ARVIO Cloud y color de acento."]
+  } },
   { route: "/arvio-iphone-ipad/", updated: "2026-10-24", labels: {
     pt: ["iPhone e iPad · Em inglês", "ARVIO no iPhone e iPad", "Abra o ARVIO Web no Safari, entre com sua conta ARVIO, adicione à Tela de Início e explore antes de pagar."],
     es: ["iPhone y iPad · En inglés", "ARVIO en iPhone y iPad", "Abre ARVIO Web en Safari, inicia sesión con tu cuenta ARVIO, añádelo a la pantalla de inicio y explóralo antes de pagar."]

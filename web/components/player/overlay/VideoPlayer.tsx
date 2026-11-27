@@ -1,4 +1,5 @@
 // Part of the player overlay (see components/player/PlayerOverlay.tsx).
+import { recordSourceOutcome } from "@/lib/sourceReliability";
 import type { MediaItem, StreamSource, AppSettings, InstalledAddon } from "@/lib/types";
 import { useTranslation } from "@/lib/i18n";
 import { useRef, useMemo, useCallback, useState, useEffect } from "react";
@@ -22,7 +23,7 @@ import { canTryRemux, recordBrowserPlaybackFailure, canProviderTranscode, stream
 import { rememberSuccessfulSource } from "@/lib/autoplaySelection";
 import { markHomeScreenTipEligible } from "@/lib/homeScreenTip";
 import { isAudioOnlySource, monitorAudioDecode, monitorVideoFrames, monitorPlaybackStall, bufferedEndAt, bufferedAhead } from "@/lib/playerRecovery";
-import { streamSizeBytes, groupSourcesForPlayback } from "@/lib/sourceRank";
+import { streamSizeBytes, groupSourcesForPlayback, browserAudioClass } from "@/lib/sourceRank";
 import { getLogoUrl } from "@/lib/tmdb";
 import { browserAutoplayCandidates } from "@/lib/browserAutoplay";
 import { prefersVideoElementFullscreen, requestVideoFullscreen } from "@/lib/fullscreen";
@@ -40,6 +41,10 @@ import { loadTrickplay, type Trickplay } from "@/lib/trickplay";
 import { useSkipAndUpNext, PlayerSkipUpNext } from "./skipUpNext";
 import { LiveDockControls, PlayerTopBar, PlayerControlsBar } from "./PlayerControls";
 import { PlayerStatusLayers, PlayerEndScreen } from "./PlayerScreens";
+
+// Chromium decodes a playable audio track within the first second of playback;
+// 2.5 s of picture with zero decoded audio bytes means the track is unsupported.
+const SILENT_AUDIO_GRACE_MS = 2_500;
 import { PlayerSidePanel } from "./PlayerPanels";
 
 export function VideoPlayer({
@@ -326,7 +331,7 @@ export function VideoPlayer({
           probeUrl = resolved.url;
         }
         if (controller.signal.aborted) return;
-        const prepared = await probeAndPrepareRemux(probeUrl, current.behaviorHints?.proxyHeaders?.request, settings.audioLanguage, { signal: controller.signal });
+        const prepared = await probeAndPrepareRemux(probeUrl, current.behaviorHints?.proxyHeaders?.request, settings.secondaryAudioLanguage ? `${settings.audioLanguage || ""},${settings.secondaryAudioLanguage}` : settings.audioLanguage, { signal: controller.signal });
         if (!prepared) throw new Error("Could not read audio tracks");
         if (!controller.signal.aborted) {
           setRemuxTracks(prepared.probe.audioTracks);
@@ -338,7 +343,7 @@ export function VideoPlayer({
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [liveTv, settings.audioLanguage]);
+  }, [liveTv, settings.audioLanguage, settings.secondaryAudioLanguage]);
 
   // Startup time runs from opening a title (or the next episode) to its first
   // frame; source hops, URL refreshes and restarts in between count as part of
@@ -399,6 +404,7 @@ export function VideoPlayer({
       if (!liveTv) {
         // Autoplay waits briefly for this addon next time (see autoplaySelection).
         rememberSuccessfulSource(currentStreamRef.current);
+        recordSourceOutcome(currentStreamRef.current, true);
         markHomeScreenTipEligible();
       }
     };
@@ -456,6 +462,15 @@ export function VideoPlayer({
     return monitorAudioDecode(video, () => {
       const playhead = video.currentTime;
       if (playhead > 5) resumeAtRef.current = playhead;
+      // An automatic pick went silent and the list holds a release whose audio
+      // is known to play here (AAC/Opus): switch to it at once. Converting a
+      // 30-60 GB disc rip's audio in the browser is slow and, for TrueHD, often
+      // fails only after another wait.
+      if (stream.autoSelect && hasKnownBrowserAudioAlternative(stream)) {
+        video.pause();
+        failureDiagnosticRef.current = { failure_kind: "format", phase: "playback" };
+        if (tryNextSource()) return;
+      }
       if (canTryRemux(stream)) {
         onToast("This file's audio can't play directly in this browser. Converting the audio…");
         onSelectStream({ ...stream, convertAudio: true }, { forceRemux: true, forceBrowser: true });
@@ -470,7 +485,7 @@ export function VideoPlayer({
       failureDiagnosticRef.current = { failure_kind: "format", phase: "playback" };
       if (tryNextSource()) return;
       onToast("This source's audio can't play in this browser. Choose another source or use an external player.");
-    });
+    }, SILENT_AUDIO_GRACE_MS);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [booted, stream.url, stream.remux, remuxRestartKey, liveTv]);
 
@@ -586,6 +601,7 @@ export function VideoPlayer({
     const addonKey = current.addonId || current.addonName || "";
     if (addonKey) failedAddonStrikesRef.current.set(addonKey, (failedAddonStrikesRef.current.get(addonKey) ?? 0) + 1);
     recordBrowserPlaybackFailure(current, "This source failed during browser playback", true);
+    recordSourceOutcome(current, false);
     const pick = (skipStruckAddons: boolean) => browserAutoplayCandidates(sourceListRef.current, failedSourceUrlsRef.current).find((candidate) => {
       if (!candidate.url || failedSourceUrlsRef.current.has(candidate.url)) return false;
       // Uncached debrid torrents would stall on a server-side download.
@@ -608,6 +624,10 @@ export function VideoPlayer({
     onSelectStream({ ...next, autoSelect: true, resumePositionSeconds: resumeAtRef.current }, { forceBrowser: true });
     return true;
   }, [liveTv, onSelectStream, onToast, reportFailedAttempt]);
+  // Whether an untried candidate's release names audio this browser decodes.
+  const hasKnownBrowserAudioAlternative = useCallback((current: StreamSource) => browserAutoplayCandidates(sourceListRef.current, failedSourceUrlsRef.current)
+    .some((candidate) => candidate.url !== current.url && candidate.url !== current.originalUrl && !isUncachedDebridStream(candidate)
+      && streamPlayability(candidate).mode === "direct" && browserAudioClass(candidate) === "ok"), []);
   const badges = useMemo(() => {
     if (liveTv) return ["LIVE"];
     const base = qualityBadges(stream);

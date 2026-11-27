@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="search_top_results">Topresultaten</string>
+    <string name="mobile_live_empty_title">Live tv is nog niet ingesteld</string>
+    <string name="mobile_live_empty_hint">Voeg een M3U-playlist of Xtream-login toe om live zenders en de tv-gids te bekijken.</string>
+    <string name="mobile_live_empty_action">Playlist toevoegen</string>
+    <string name="mplayer_open_addons">Add-ons beheren</string>
+    <string name="mobile_library_empty_title">Je watchlist is leeg</string>
+    <string name="mobile_library_empty_hint">Bewaar films en series om ze hier terug te vinden, op elk apparaat.</string>
+    <string name="mobile_library_empty_action">Zoek iets om te kijken</string>
+</resources>

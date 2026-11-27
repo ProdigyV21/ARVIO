@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="live_menu_fix_guide">תיקון המדריך</string>
+    <string name="live_guide_fix_title">תיקון המדריך</string>
+    <string name="live_guide_fix_source_heading">השתמש במדריך של</string>
+    <string name="live_guide_fix_automatic">אוטומטי</string>
+    <string name="live_guide_fix_automatic_desc">המדריך שהספק שלך התאים</string>
+    <string name="live_guide_fix_none">ללא מדריך</string>
+    <string name="live_guide_fix_none_desc">הסתר מדריך שגוי</string>
+    <string name="live_guide_fix_search_hint">חיפוש ערוץ</string>
+    <string name="live_guide_fix_no_suggestions">אין ערוצים דומים. חפש לפי שם.</string>
+    <string name="live_guide_fix_no_results">לא נמצאו ערוצים</string>
+    <string name="live_guide_fix_offset_title">זמני המדריך</string>
+    <string name="live_guide_fix_offset_desc">מזיז כל תוכנית של %1$s. השתמש בזה כשתוכניות מתחילות מוקדם או מאוחר מהמצוין.</string>
+    <string name="live_guide_fix_earlier">מוקדם יותר</string>
+    <string name="live_guide_fix_later">מאוחר יותר</string>
+    <string name="settings_iptv_start_last_channel">התחל בערוץ האחרון</string>
+    <string name="settings_iptv_start_last_channel_desc">פתיחת האפליקציה מפעילה את הערוץ האחרון שצפית בו, במסך מלא</string>
+</resources>

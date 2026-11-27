@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="live_menu_fix_guide">편성표 수정</string>
+    <string name="live_guide_fix_title">편성표 수정</string>
+    <string name="live_guide_fix_source_heading">다음 채널의 편성표 사용</string>
+    <string name="live_guide_fix_automatic">자동</string>
+    <string name="live_guide_fix_automatic_desc">제공업체가 연결한 편성표</string>
+    <string name="live_guide_fix_none">편성표 없음</string>
+    <string name="live_guide_fix_none_desc">잘못된 편성표 숨기기</string>
+    <string name="live_guide_fix_search_hint">채널 검색</string>
+    <string name="live_guide_fix_no_suggestions">비슷한 채널이 없습니다. 이름으로 검색하세요.</string>
+    <string name="live_guide_fix_no_results">채널을 찾을 수 없음</string>
+    <string name="live_guide_fix_offset_title">편성표 시간</string>
+    <string name="live_guide_fix_offset_desc">%1$s의 모든 프로그램을 이동합니다. 프로그램이 표시보다 일찍 또는 늦게 시작할 때 사용하세요.</string>
+    <string name="live_guide_fix_earlier">더 일찍</string>
+    <string name="live_guide_fix_later">나중에</string>
+    <string name="settings_iptv_start_last_channel">마지막 채널로 시작</string>
+    <string name="settings_iptv_start_last_channel_desc">앱을 열면 마지막으로 본 채널이 전체 화면으로 재생됩니다</string>
+</resources>

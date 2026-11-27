@@ -34,6 +34,7 @@ export const defaultSettings: AppSettings = {
   defaultSubtitle: "en",
   secondarySubtitle: "",
   audioLanguage: "",
+  secondaryAudioLanguage: "",
   subtitleSize: 100,
   subtitleColor: "#ffffff",
   subtitleColorName: "White",

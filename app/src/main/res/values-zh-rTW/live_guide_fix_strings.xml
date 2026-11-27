@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="live_menu_fix_guide">修正節目表</string>
+    <string name="live_guide_fix_title">修正節目表</string>
+    <string name="live_guide_fix_source_heading">使用此頻道的節目表</string>
+    <string name="live_guide_fix_automatic">自動</string>
+    <string name="live_guide_fix_automatic_desc">供應商配對的節目表</string>
+    <string name="live_guide_fix_none">無節目表</string>
+    <string name="live_guide_fix_none_desc">隱藏錯誤的節目表</string>
+    <string name="live_guide_fix_search_hint">搜尋頻道</string>
+    <string name="live_guide_fix_no_suggestions">沒有相似的頻道。請依名稱搜尋。</string>
+    <string name="live_guide_fix_no_results">找不到頻道</string>
+    <string name="live_guide_fix_offset_title">節目表時間</string>
+    <string name="live_guide_fix_offset_desc">移動 %1$s 的所有節目。節目比列出的時間早或晚開始時使用。</string>
+    <string name="live_guide_fix_earlier">提前</string>
+    <string name="live_guide_fix_later">稍後</string>
+    <string name="settings_iptv_start_last_channel">從上次的頻道啟動</string>
+    <string name="settings_iptv_start_last_channel_desc">開啟應用程式時全螢幕播放你最後觀看的頻道</string>
+</resources>

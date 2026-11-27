@@ -9,10 +9,20 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import androidx.compose.material3.Icon
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.SwapHoriz
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.unit.sp
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
@@ -23,6 +33,7 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.res.stringResource
@@ -48,47 +59,72 @@ internal fun FullscreenSourcesDialog(
         val targetKey = if (hasAlternatives) "source:${variants.first().id}" else "cancel"
         val firstFocus = remember(targetKey) { FocusRequester() }
         var targetPlaced by remember(targetKey) { mutableStateOf(false) }
+        var targetFocused by remember(targetKey) { mutableStateOf(false) }
         LaunchedEffect(firstFocus, targetPlaced, touchDevice) {
             if (!touchDevice && targetPlaced) {
-                withFrameNanos { }
-                // The dialog may close or replace its lazy items before this frame.
-                runCatching { firstFocus.requestFocus() }
+                // requestFocus() fails silently until the window has focus, so check that it landed.
+                repeat(20) {
+                    withFrameNanos { }
+                    if (targetFocused) return@LaunchedEffect
+                    // The dialog may close or replace its lazy items before this frame.
+                    runCatching { firstFocus.requestFocus() }
+                    kotlinx.coroutines.delay(75)
+                }
             }
         }
-        val initialFocus = Modifier.focusRequester(firstFocus)
+        val initialFocus = Modifier.onFocusChanged { targetFocused = it.hasFocus }
+            .focusRequester(firstFocus)
             .onGloballyPositioned { if (it.isAttached) targetPlaced = true }
         Column(
             modifier = Modifier.widthIn(max = 560.dp).fillMaxWidth()
-                .background(LiveColors.PanelRaised).padding(24.dp),
+                .clip(RoundedCornerShape(16.dp))
+                .background(LiveColors.PanelRaised)
+                .border(1.dp, LiveColors.DividerStrong, RoundedCornerShape(16.dp))
+                .padding(20.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Text(stringResource(R.string.live_label_choose_source), color = Color.White)
-            Text(channel.name, color = LiveColors.FgDim)
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Icon(Icons.Filled.SwapHoriz, contentDescription = null, tint = Color.White, modifier = Modifier.size(22.dp))
+                Column {
+                    Text(
+                        stringResource(R.string.live_label_choose_source),
+                        style = LiveType.ChannelName.copy(color = LiveColors.Fg, fontSize = 18.sp, lineHeight = 22.sp),
+                    )
+                    Text(channel.name, style = LiveType.SectionTag.copy(color = LiveColors.FgDim, fontSize = 12.sp, lineHeight = 15.sp))
+                }
+            }
             when {
-                loading -> CircularProgressIndicator()
+                loading -> Box(Modifier.fillMaxWidth().padding(vertical = 16.dp), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator(color = Color.White, strokeWidth = 3.dp)
+                }
                 failed -> Text(stringResource(R.string.live_sources_failed), color = Color.White)
                 !hasAlternatives -> Text(stringResource(R.string.live_sources_empty), color = Color.White)
                 else -> LazyColumn(
                     modifier = Modifier.fillMaxWidth().heightIn(max = 320.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
                     itemsIndexed(variants, key = { _, item -> item.id }) { index, variant ->
-                        Button(
+                        PlayerListRow(
+                            label = variant.name,
+                            detail = listOf(variant.quality.takeIf { it != Quality.UNKNOWN }?.label, variant.lang.takeIf { it.isNotBlank() })
+                                .filterNotNull().joinToString("  ·  "),
+                            selected = variant.id == channel.id,
                             onClick = { onPick(variant) },
-                            modifier = Modifier.fillMaxWidth()
-                                .then(if (index == 0) initialFocus else Modifier),
-                        ) {
-                            Text(variant.name)
-                        }
+                            modifier = if (index == 0) initialFocus else Modifier,
+                        )
                     }
                 }
             }
-            TextButton(
+            PlayerChipButton(
+                icon = Icons.Filled.Close,
+                label = stringResource(android.R.string.cancel),
                 onClick = onDismiss,
-                modifier = if (!hasAlternatives) initialFocus else Modifier,
-            ) {
-                Text(stringResource(android.R.string.cancel))
-            }
+                focusRequester = if (!hasAlternatives) firstFocus else null,
+                modifier = if (!hasAlternatives) {
+                    Modifier.onFocusChanged { targetFocused = it.hasFocus }
+                        .onGloballyPositioned { if (it.isAttached) targetPlaced = true }
+                } else Modifier,
+            )
         }
     }
 }

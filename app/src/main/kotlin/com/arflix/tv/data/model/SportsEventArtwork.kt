@@ -27,13 +27,32 @@ private val qualifierRegex = Regex("\\b(women(?:s|'s)?|youth|u\\d{2}|under[ -]?\
 private val womenPrefixRegex = Regex("^women.*")
 private val hyphenSpaceRegex = Regex("[ -]")
 
-fun sportsArtworkKey(title: String): String = Normalizer.normalize(title, Normalizer.Form.NFD)
+// The same programme and fixture titles are normalised again on every catalogue pass
+// (several regex passes each). Memoising them took the biggest single cost out of the
+// sports join; the bound keeps memory flat on huge guides.
+private const val TITLE_CACHE_LIMIT = 8_192
+private val artworkKeyCache = java.util.concurrent.ConcurrentHashMap<String, String>()
+private val eventIdentityCache = java.util.concurrent.ConcurrentHashMap<String, String>()
+
+private inline fun memo(cache: java.util.concurrent.ConcurrentHashMap<String, String>, title: String, compute: () -> String): String {
+    cache[title]?.let { return it }
+    val value = compute()
+    if (cache.size >= TITLE_CACHE_LIMIT) cache.clear()
+    cache[title] = value
+    return value
+}
+
+fun sportsArtworkKey(title: String): String = memo(artworkKeyCache, title) { computeSportsArtworkKey(title) }
+
+private fun computeSportsArtworkKey(title: String): String = Normalizer.normalize(title, Normalizer.Form.NFD)
     .replace(marks, "").lowercase(Locale.ROOT)
     .replace(livePrefix, "").replace(sportPrefix, "")
     .replace(versus, "vs ").replace(punctuation, " ").trim()
 
 /** Only cosmetic title differences are ignored. Age/gender/round qualifiers remain. */
-fun sportsEventIdentity(title: String): String {
+fun sportsEventIdentity(title: String): String = memo(eventIdentityCache, title) { computeSportsEventIdentity(title) }
+
+private fun computeSportsEventIdentity(title: String): String {
     val plain = title.replace(cosmeticTags, " ")
     val matchup = plain.substringAfterLast(':').substringBefore(',').trim()
     val normalized = sportsArtworkKey((if (matchupSeparator.containsMatchIn(matchup)) matchup else plain)

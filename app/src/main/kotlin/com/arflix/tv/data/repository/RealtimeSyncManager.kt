@@ -66,6 +66,7 @@ class RealtimeSyncManager @Inject constructor(
         // the worst-case propagation window for cross-device sync without
         // meaningfully increasing load (one GET every 45s while signed in).
         private const val PERIODIC_SYNC_INTERVAL_MS = 15 * 60 * 1000L
+        private const val PERIODIC_FULL_PULL_INTERVAL_MS = 6 * 60 * 60 * 1000L
         private const val DEBOUNCE_MS = 2_000L
         private const val WATCH_HISTORY_DEBOUNCE_MS = 1_000L
         private const val WATCH_HISTORY_SELF_ECHO_GUARD_MS = 1_500L
@@ -100,6 +101,8 @@ class RealtimeSyncManager @Inject constructor(
 
     @Volatile
     private var lastPushTimestamp = 0L
+    @Volatile
+    private var lastPeriodicFullPullAt = 0L
     @Volatile
     private var lastLocalWatchHistoryWriteTimestamp = 0L
     @Volatile
@@ -540,7 +543,24 @@ class RealtimeSyncManager @Inject constructor(
                 }
                 Log.d(TAG, "Periodic sync tick")
                 try {
-                    cloudSyncRepository.pullFromCloud()
+                    // Ask the server whether the account document changed (a tiny request that
+                    // downloads nothing) and download it only then. Devices left on all day used
+                    // to download the whole document every 15 minutes. A full pull still runs
+                    // every few hours in case a change was missed.
+                    val now = android.os.SystemClock.elapsedRealtime()
+                    val changed = cloudSyncRepository.remoteChangedSinceLastCheck()
+                    val overdue = lastPeriodicFullPullAt == 0L ||
+                        now - lastPeriodicFullPullAt >= PERIODIC_FULL_PULL_INTERVAL_MS
+                    if (changed || overdue) {
+                        lastPeriodicFullPullAt = now
+                        val result = cloudSyncRepository.pullFromCloud()
+                        if (result != CloudSyncRepository.RestoreResult.FAILED) {
+                            cloudSyncRepository.rememberRemoteRevision()
+                        }
+                        if (result == CloudSyncRepository.RestoreResult.RESTORED) {
+                            _accountSyncEvents.tryEmit(Unit)
+                        }
+                    }
                 } catch (e: retrofit2.HttpException) {
                     Log.w(TAG, "Periodic sync failed (HTTP): ${e.message}")
                 } catch (e: java.io.IOException) {

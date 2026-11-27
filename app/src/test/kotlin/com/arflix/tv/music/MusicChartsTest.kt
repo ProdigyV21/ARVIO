@@ -47,6 +47,108 @@ class MusicChartsTest {
             assertEquals("Israeli hits", rows[2].query)
             assertEquals("להיטי 2026", rows.single { it.key == "year" }.title)
             assertEquals("Hits 2026", rows.single { it.key == "year" }.query)
+            // Israel's own name for itself, also when the device gives the country.
+            assertEquals("המובילים בישראל", ChartCatalog.rows(tag, day, "IL")[0].title)
+        }
+        assertEquals("כי שמעת את %s", ChartCatalog.personalTitles("iw-IL").because)
+    }
+
+    @Test fun chartsFollowTheCountryNotTheLanguage() {
+        // English app in the Netherlands: Dutch charts and local rows, English titles.
+        val rows = ChartCatalog.rows("en-US", day, "nl")
+        assertEquals("Top Netherlands", rows[0].query)
+        assertEquals("Top 50 Netherlands", rows[1].query)
+        assertEquals("Charts", rows[1].title)
+        assertEquals("Top 40 Nederland", rows[2].query)
+        // Dutch app in Belgium: Belgian charts, Dutch names.
+        val belgium = ChartCatalog.rows("nl", day, "BE")
+        assertEquals("Top Belgium", belgium[0].query)
+        assertEquals("Top België", belgium[0].title)
+        assertEquals("Hitlijsten", belgium[1].title)
+        // A country without its own rows still gets its chart by name.
+        val greece = ChartCatalog.rows("en", day, "GR")
+        assertEquals("Top Greece", greece[0].query)
+        assertEquals("top40", greece[2].key)
+        // No country from the device: the language's region, else the language's country.
+        assertEquals("BE", ChartCatalog.country("nl-BE", null))
+        assertEquals("NL", ChartCatalog.country("nl", null))
+        assertEquals("GB", ChartCatalog.country("en-GB", ""))
+        assertEquals("US", ChartCatalog.country("xx", null))
+    }
+
+    @Test fun deviceCountryPrefersNetworkThenSimThenTimeZone() {
+        assertEquals("NL", DeviceCountry.pick("nl", "de", "Europe/Berlin", "US"))
+        assertEquals("DE", DeviceCountry.pick("", "de", "Europe/Amsterdam", "US"))
+        // A TV without SIM that kept "en-US": its time zone wins.
+        assertEquals("NL", DeviceCountry.pick(null, null, "Europe/Amsterdam", "US"))
+        assertEquals("FR", DeviceCountry.pick(null, null, "UTC", "FR"))
+        assertEquals(null, DeviceCountry.pick(null, null, "UTC", ""))
+    }
+
+    @Test fun tasteKeepsPlayedArtistsAndSettledSearches() {
+        val t0 = 1_700_000_000_000L
+        val day = 86_400_000L
+        var taste = MusicTaste()
+            .recordPlay("Old Band", t0 - 120 * day)
+            .recordPlay("Dua Lipa feat. DaBaby", t0)
+            .recordPlay("Dua Lipa", t0 + 1)
+            .recordPlay("Simon & Garfunkel", t0 + 2)
+        assertEquals(listOf("Dua Lipa", "Simon & Garfunkel", "Old Band"), taste.artists.map { it.name })
+        assertEquals(2, taste.artists[0].plays)
+        // The favourite always leads; another one joins it.
+        val today = taste.artistsForToday(t0 + day, 20_000)
+        assertEquals("Dua Lipa", today[0])
+        assertEquals(2, today.size)
+
+        taste = taste.recordSearch("du", t0).recordSearch("dua", t0).recordSearch("dua lipa", t0 + 1)
+            .recordSearch("top gym hits", t0 + 2)
+        assertEquals(listOf("top gym hits", "dua lipa"), taste.recentSearches())
+    }
+
+    @Test fun personalRowsComeFromTasteAfterTheCharts() = runBlocking {
+        val server = MockWebServer()
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse {
+                val url = request.requestUrl!!
+                val body = when {
+                    url.encodedPath == "/search/playlist" && url.queryParameter("q") == "Top Netherlands" -> """{"data":${playlists("1", 4)}}"""
+                    url.encodedPath == "/search/playlist" && url.queryParameter("q") == "Top 50 Netherlands" -> """{"data":${playlists("2", 4)}}"""
+                    url.encodedPath == "/search/playlist" && url.queryParameter("q") == "Top 40 Nederland" -> """{"data":${playlists("3", 4)}}"""
+                    url.encodedPath == "/search/playlist" && url.queryParameter("q") == "techno" -> """{"data":${playlists("4", 4)}}"""
+                    url.encodedPath == "/search/artist" ->
+                        """{"data":[{"id":5,"name":"Dua Lipa Tribute"},{"id":7,"name":"Dua Lipa","picture_xl":"https://img/dua"}]}"""
+                    url.encodedPath == "/artist/7/related" ->
+                        """{"data":[{"id":8,"name":"Miley Cyrus","picture_xl":"https://img/m"},{"id":9,"name":"Doja Cat"}]}"""
+                    url.encodedPath == "/artist/8/radio" ->
+                        """{"data":[{"id":50,"title":"Flowers","duration":200,"artist":{"name":"Miley Cyrus"},"album":{"title":"Endless"}}]}"""
+                    else -> """{"data":[]}"""
+                }
+                return MockResponse().setBody(body).setHeader("Content-Type", "application/json")
+            }
+        }
+        server.start()
+        try {
+            val taste = MusicTaste().recordPlay("Dua Lipa", 1L).recordSearch("techno", 1L)
+            val source = ChartsSource(
+                http, "nl-NL", null, server.url("/").toString().trimEnd('/'),
+                deviceCountry = "NL", taste = { taste }, now = { 2L },
+            ) { day }
+            val shelves = source.shelves()
+            assertEquals(
+                listOf("charts:country", "charts:charts", "charts:you:artist:7", "charts:you:searches", "charts:local0"),
+                shelves.map { it.key },
+            )
+            assertEquals("Omdat je luisterde naar Dua Lipa", shelves[2].title)
+            assertEquals(listOf("mix:7", "mix:8", "mix:9"), shelves[2].albums.map { it.id })
+            assertEquals("Op basis van je zoekopdrachten", shelves[3].title)
+            assertEquals(listOf("Flowers"), source.albumTracks("mix:8").map { it.title })
+            // The home keeps the personal rows with the leading chart rows.
+            val arranged = MusicSearchRanking.arrangeHome(
+                listOf(MusicShelf("0/NEWEST", emptyList(), AlbumShelf.NEWEST)) + shelves.map { it.copy(key = "1/" + it.key) },
+            )
+            assertEquals("0/NEWEST", arranged.last().key)
+        } finally {
+            server.shutdown()
         }
     }
 

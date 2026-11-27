@@ -78,11 +78,12 @@ object MusicSearchRanking {
     }
 
     /**
-     * The home rows: the first chart rows (the country's charts) lead, then the user's own
-     * sources' rows, then the rest of the charts.
+     * The home rows: the first chart rows (the country's charts, then the rows made from the
+     * profile's taste) lead, then the user's own sources' rows, then the rest of the charts.
      */
     fun arrangeHome(shelves: List<MusicShelf>, lead: Int = 4): List<MusicShelf> {
         val (charts, own) = shelves.partition { ChartsSource.isChartShelf(it.key) }
-        return charts.take(lead) + own + charts.drop(lead)
+        val leading = lead + charts.count { ChartsSource.isPersonalShelf(it.key) }
+        return charts.take(leading) + own + charts.drop(leading)
     }
 }

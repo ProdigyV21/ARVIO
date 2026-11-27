@@ -9,4 +9,12 @@
     <string name="mobile_connection_help">Connection help</string>
     <string name="mobile_expand_preview">Expand preview</string>
     <string name="mobile_collapse_preview">Collapse preview</string>
+    <string name="search_top_results">Top results</string>
+    <string name="mobile_live_empty_title">Live TV isn\'t set up yet</string>
+    <string name="mobile_live_empty_hint">Add an M3U playlist or Xtream login to watch live channels and the TV guide.</string>
+    <string name="mobile_live_empty_action">Add a playlist</string>
+    <string name="mplayer_open_addons">Manage addons</string>
+    <string name="mobile_library_empty_title">Your watchlist is empty</string>
+    <string name="mobile_library_empty_hint">Save movies and shows to find them here, on every device.</string>
+    <string name="mobile_library_empty_action">Find something to watch</string>
 </resources>

@@ -4,6 +4,7 @@ import android.content.ComponentName
 import android.content.Context
 import android.net.Uri
 import androidx.core.content.ContextCompat
+import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
@@ -40,10 +41,17 @@ data class MusicPlaybackState(
     val problem: MusicPlaybackProblem? = null,
     /** How long the song has been loading: [LoadingWait.NONE] at first, then a note, then the reason it can take long. */
     val loadingWait: LoadingWait = LoadingWait.NONE,
+    /** The queue positions still to come, in the order they will play (shuffle included). */
+    val upNext: List<Int> = emptyList(),
+    /** When the sleep timer pauses the music (wall clock), or null. */
+    val sleepAtMs: Long? = null,
+    /** The sleep timer pauses at the end of the current song. */
+    val sleepAtEndOfTrack: Boolean = false,
 ) {
     enum class LoadingWait { NONE, PREPARING, SLOW }
 
     val current: MusicTrack? get() = queue.getOrNull(index)
+    val sleepTimerOn: Boolean get() = sleepAtMs != null || sleepAtEndOfTrack
     val hasNext: Boolean get() = index in 0 until queue.lastIndex || repeatMode != Player.REPEAT_MODE_OFF
 }
 
@@ -71,9 +79,26 @@ class MusicPlayer @Inject constructor(
         MusicNowPlaying.togglePlay = ::togglePlay
         MusicNowPlaying.stopPlayback = ::stop
     }
+    private var sleepJob: Job? = null
+    private var radioJob: Job? = null
 
     private val listener = object : Player.Listener {
         override fun onEvents(player: Player, events: Player.Events) = sync(player)
+
+        override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+            // "End of this song": the next one has just started on its own, so stop it right there.
+            if (_state.value.sleepAtEndOfTrack && reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO) {
+                controller?.pause()
+                controller?.seekTo(0L)
+                _state.update { it.copy(sleepAtEndOfTrack = false) }
+            }
+        }
+
+        override fun onPlaybackStateChanged(playbackState: Int) {
+            if (playbackState == Player.STATE_ENDED && _state.value.sleepAtEndOfTrack) {
+                _state.update { it.copy(sleepAtEndOfTrack = false) }
+            }
+        }
     }
 
     private suspend fun controller(): MediaController {
@@ -109,7 +134,79 @@ class MusicPlayer @Inject constructor(
                 _state.update { it.copy(problem = MusicPlaybackProblem(MusicPlaybackProblem.Kind.OTHER, detail = error.message)) }
             }
         }
+        radioJob?.cancel()
+        // A song played on its own is followed by similar ones, so the music does not just stop.
+        if (queue.size == 1 && !shuffle) startRadio(queue[0])
     }
+
+    private fun startRadio(seed: MusicTrack) {
+        radioJob = scope.launch {
+            val more = runCatching {
+                kotlinx.coroutines.withContext(Dispatchers.IO) { repository.currentSource()?.radio(seed) }
+            }.getOrNull().orEmpty()
+            val player = runCatching { controller() }.getOrNull() ?: return@launch
+            // Only while that song is still the whole queue: the user may have started something else.
+            if (more.isEmpty() || player.mediaItemCount != 1 || player.currentMediaItem?.mediaId != seed.id) return@launch
+            val fresh = more.distinctBy { it.id }.filter { it.id != seed.id }.take(RADIO_SIZE)
+            fresh.forEach { tracks[it.id] = it }
+            player.addMediaItems(fresh.map { it.toMediaItem() })
+        }
+    }
+
+    /** Puts a song right after the current one, or plays it when nothing is playing. */
+    fun playNext(track: MusicTrack) = withController { player ->
+        if (player.mediaItemCount == 0) { playQueue(listOf(track)); return@withController }
+        tracks[track.id] = track
+        player.addMediaItem(player.currentMediaItemIndex + 1, track.toMediaItem())
+    }
+
+    /** Adds a song at the end of the queue, or plays it when nothing is playing. */
+    fun addToQueue(track: MusicTrack) = withController { player ->
+        if (player.mediaItemCount == 0) { playQueue(listOf(track)); return@withController }
+        tracks[track.id] = track
+        player.addMediaItem(track.toMediaItem())
+    }
+
+    fun removeFromQueue(index: Int) = withController { if (index in 0 until it.mediaItemCount && index != it.currentMediaItemIndex) it.removeMediaItem(index) }
+
+    fun moveInQueue(from: Int, to: Int) = withController {
+        if (from in 0 until it.mediaItemCount && to in 0 until it.mediaItemCount && from != to) it.moveMediaItem(from, to)
+    }
+
+    /** Pauses the music after [minutes], fading out over the last seconds. */
+    fun setSleepTimer(minutes: Int) {
+        sleepJob?.cancel()
+        val at = System.currentTimeMillis() + minutes * 60_000L
+        _state.update { it.copy(sleepAtMs = at, sleepAtEndOfTrack = false) }
+        sleepJob = scope.launch {
+            delay((at - System.currentTimeMillis() - SLEEP_FADE_MS).coerceAtLeast(0L))
+            val player = runCatching { controller() }.getOrNull()
+            if (player != null) {
+                val steps = 20
+                repeat(steps) { step ->
+                    player.volume = 1f - (step + 1f) / steps
+                    delay(SLEEP_FADE_MS / steps)
+                }
+                player.pause()
+                player.volume = 1f
+            }
+            _state.update { it.copy(sleepAtMs = null) }
+        }
+    }
+
+    fun sleepAtEndOfTrack() {
+        sleepJob?.cancel()
+        restoreVolume()
+        _state.update { it.copy(sleepAtMs = null, sleepAtEndOfTrack = true) }
+    }
+
+    fun cancelSleepTimer() {
+        sleepJob?.cancel()
+        restoreVolume()
+        _state.update { it.copy(sleepAtMs = null, sleepAtEndOfTrack = false) }
+    }
+
+    private fun restoreVolume() = withController { if (it.volume < 1f) it.volume = 1f }
 
     fun togglePlay() = withController { if (it.isPlaying) it.pause() else { if (it.playbackState == Player.STATE_IDLE) it.prepare(); it.play() } }
     fun next() = withController { it.seekToNext() }
@@ -147,6 +244,7 @@ class MusicPlayer @Inject constructor(
                 shuffle = player.shuffleModeEnabled,
                 repeatMode = player.repeatMode,
                 problem = player.playerError?.let(MusicPlaybackProblem::of),
+                upNext = if (queue.size == player.mediaItemCount) upcoming(player) else emptyList(),
             )
         }
         MusicNowPlaying.publish(_state.value.current?.let { MusicNowPlaying.Song(it.title, it.artist, it.coverUrl, player.isPlaying) })
@@ -177,6 +275,20 @@ class MusicPlayer @Inject constructor(
         }
     }
 
+    /** The positions after the current one in play order, following the shuffle when it is on. */
+    private fun upcoming(player: Player): List<Int> {
+        val timeline = player.currentTimeline
+        if (timeline.isEmpty || player.currentMediaItemIndex == C.INDEX_UNSET) return emptyList()
+        val order = mutableListOf<Int>()
+        var i = player.currentMediaItemIndex
+        repeat(timeline.windowCount) {
+            i = timeline.getNextWindowIndex(i, Player.REPEAT_MODE_OFF, player.shuffleModeEnabled)
+            if (i == C.INDEX_UNSET) return order
+            order += i
+        }
+        return order
+    }
+
     private fun startTicker(player: Player) {
         if (ticker?.isActive == true) return
         ticker = scope.launch {
@@ -202,7 +314,19 @@ class MusicPlayer @Inject constructor(
         val duration = player.duration.takeIf { it > 0 } ?: return
         if (positionMs < minOf(duration / 2, 240_000L)) return
         reportedFor = playKey
-        scope.launch(Dispatchers.IO) { runCatching { repository.currentSource()?.reportPlayed(id) } }
+        val track = tracks[id]
+        scope.launch(Dispatchers.IO) {
+            runCatching { repository.currentSource()?.reportPlayed(id) }
+            // The listening history behind "Recently played" and the "Because you listened to" rows.
+            if (track != null) runCatching { repository.recordPlay(track) }
+        }
+    }
+
+    private companion object {
+        const val RADIO_SIZE = 25
+        const val SLEEP_FADE_MS = 8_000L
+        const val PREPARING_NOTE_MS = 3_000L
+        const val SLOW_NOTE_MS = 15_000L
     }
 
     private fun MusicTrack.toMediaItem(): MediaItem {
@@ -223,10 +347,5 @@ class MusicPlayer @Inject constructor(
                     .build()
             )
             .build()
-    }
-
-    private companion object {
-        const val PREPARING_NOTE_MS = 3_000L
-        const val SLOW_NOTE_MS = 15_000L
     }
 }

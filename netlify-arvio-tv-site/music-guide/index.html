@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Music in ARVIO: Add Your Music, Playlists &amp; Spotify Import | ARVIO</title>
+<meta name="description" content="Set up the ARVIO Music tab on Android: connect Navidrome, Jellyfin or a music add-on, browse charts, like songs, build playlists and rebuild your Spotify playlists from your own sources.">
+<link rel="canonical" href="https://arvio.tv/music-guide/">
+<link rel="icon" href="/assets/arvio-icon-512.png" type="image/png"><link rel="stylesheet" href="/guides/guide.css">
+<meta property="og:type" content="article"><meta property="og:site_name" content="ARVIO"><meta property="og:title" content="Music in ARVIO: Add Your Music, Playlists &amp; Spotify Import | ARVIO"><meta property="og:description" content="Set up the ARVIO Music tab on Android: connect Navidrome, Jellyfin or a music add-on, browse charts, like songs, build playlists and rebuild your Spotify playlists from your own sources."><meta property="og:url" content="https://arvio.tv/music-guide/"><meta property="og:image" content="https://arvio.tv/assets/guides/music-phone.webp">
+<meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="Music in ARVIO: Add Your Music, Playlists &amp; Spotify Import | ARVIO"><meta name="twitter:description" content="Set up the ARVIO Music tab on Android: connect Navidrome, Jellyfin or a music add-on, browse charts, like songs, build playlists and rebuild your Spotify playlists from your own sources."><meta name="twitter:image" content="https://arvio.tv/assets/guides/music-phone.webp">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "TechArticle",
+      "headline": "Music in ARVIO: your own music, nicely organized.",
+      "description": "Set up the ARVIO Music tab on Android: connect Navidrome, Jellyfin or a music add-on, browse charts, like songs, build playlists and rebuild your Spotify playlists from your own sources.",
+      "inLanguage": "en",
+      "url": "https://arvio.tv/music-guide/",
+      "dateModified": "2026-11-26",
+      "image": "https://arvio.tv/assets/guides/music-phone.webp",
+      "author": {
+        "@type": "Organization",
+        "name": "ARVIO",
+        "url": "https://arvio.tv/"
+      }
+    },
+    {
+      "@type": "BreadcrumbList",
+      "itemListElement": [
+        {
+          "@type": "ListItem",
+          "position": 1,
+          "name": "ARVIO",
+          "item": "https://arvio.tv/"
+        },
+        {
+          "@type": "ListItem",
+          "position": 2,
+          "name": "Guides",
+          "item": "https://arvio.tv/guides/"
+        },
+        {
+          "@type": "ListItem",
+          "position": 3,
+          "name": "Music",
+          "item": "https://arvio.tv/music-guide/"
+        }
+      ]
+    },
+    {
+      "@type": "FAQPage",
+      "mainEntity": [
+        {
+          "@type": "Question",
+          "name": "Does ARVIO include music?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "No. ARVIO is a music player. Songs play only from sources you add: your own Navidrome, Subsonic or Jellyfin server, or a music add-on you are allowed to use."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Why can I see a chart song that does not play?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Charts show what is popular, using public chart data. ARVIO then looks for that song in your own sources. If none of them has it, the song cannot play. Add it to your library or a source that has it."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Can ARVIO play Spotify, Apple Music or YouTube Music?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "No. Those services only allow playback in their own apps. ARVIO can import your Spotify playlists and liked songs as lists and match them to music in your own sources."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Is Music available on Android TV or ARVIO Web?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Not yet. Music is available in the Android app on phones and tablets. ARVIO Web and TV versions are being worked on."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Why can a profile not see the Music tab?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Music may be switched off for that profile under Settings → Interface → Navigation. Kids profiles never show Music, because music catalogs carry no age ratings."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "My server will not connect. What should I check?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Use the address you would open in a browser on the same network, including the port, such as 192.168.1.10:4533. Check the username and password, that the phone is on the same network or the server is reachable from outside, and that the server is running."
+          }
+        }
+      ]
+    }
+  ]
+}
+</script>
+</head>
+<body class="practical-guide">
+<a class="skip-link" href="#content">Skip to content</a>
+<header class="site-header"><div class="header-inner"><a class="brand-link" href="/" aria-label="ARVIO home"><img src="/assets/arvio-wordmark.png" alt="ARVIO" width="630" height="135"></a><nav class="header-nav" aria-label="Main navigation"><a href="/">Home</a><a href="/guides/">Guides</a><a href="https://github.com/ProdigyV21/ARVIO">GitHub</a><a class="play-link" href="https://play.google.com/store/apps/details?id=com.arvio.tv">Google Play</a></nav></div></header>
+<main id="content">
+<section class="guide-intro"><div class="shell">
+<nav class="breadcrumb" aria-label="Breadcrumb"><a href="/">ARVIO</a><span aria-hidden="true">/</span><a href="/guides/">Guides</a><span aria-hidden="true">/</span><span>Music</span></nav>
+<p class="eyebrow">New · Android phones and tablets</p>
+<h1>Music in ARVIO: your own music, nicely organized.</h1>
+<p class="lead">The Music tab plays music from sources you connect: your own Navidrome or other Subsonic server, your Jellyfin music library, or a music add-on. Like films, ARVIO itself does not provide any music.</p>
+<p class="status-line"><span class="status-pill">Available</span> Android phones and tablets <span class="status-pill soon">Coming</span> ARVIO Web and TV</p>
+<p class="guide-updated">Updated 26 November 2026 · By the ARVIO project</p>
+<nav class="guide-jump" aria-label="On this page"><a href="#turn-on">Turn it on</a><a href="#sources">Add a source</a><a href="#browse">Browse and play</a><a href="#mine">My music</a><a href="#spotify">Spotify import</a><a href="#faq">Questions</a></nav>
+</div></section>
+
+<section class="screen-band"><div class="shell"><figure class="guide-capture"><img src="/assets/guides/music-phone.webp" alt="Four ARVIO Music screens on a phone: adding a source, the For you page with charts, My music with playlists and Spotify import, and the full-screen player" width="1868" height="952" loading="lazy"><figcaption>Add a source, browse charts, keep your playlists and play. Songs always come from your own sources.</figcaption></figure></div></section>
+<section class="section compact" id="turn-on"><div class="shell guide-reading"><p class="eyebrow">Step 1</p><h2>Find the Music tab</h2><ol class="setup-list"><li><h3>Update ARVIO</h3><p>Music is part of the current Android app. Update from <a href="https://play.google.com/store/apps/details?id=com.arvio.tv">Google Play</a> or install the latest <a href="https://github.com/ProdigyV21/ARVIO/releases/latest">official APK</a>.</p></li><li><h3>Open Music in the bottom bar</h3><p>You will find <strong>Music</strong> next to TV and Settings. Do not see it? Open <strong>Settings → Interface → Navigation</strong> and switch <strong>Show Music</strong> on. This is set per profile.</p></li><li><h3>Kids profiles</h3><p>Music is hidden on kids profiles, because music catalogs have no age ratings.</p></li></ol></div></section><section class="section" id="sources"><div class="shell guide-reading"><p class="eyebrow">Step 2</p><h2>Add a music source</h2><p>Tap <strong>Add source</strong> and pick one of three options. You can add more than one; ARVIO searches all of them.</p><div class="decision-list"><article><h3>Navidrome or Subsonic</h3><p>Free software you run at home on a PC, NAS or Raspberry Pi, pointed at your own music folder. Enter the server address (for example <code>192.168.1.10:4533</code>), your username and password, then tap <strong>Connect</strong>. Any OpenSubsonic-compatible server works.</p></article><article><h3>Jellyfin</h3><p>Already have a Jellyfin server with a music library? Choose <strong>Jellyfin</strong>, enter its address and your Jellyfin login.</p></article><article><h3>Music add-on</h3><p>Paste an add-on address ending in <code>/manifest.json</code> and tap <strong>Add addon</strong>. Want to try it right now? Our reference add-on plays the free catalog that artists upload to Audius themselves: <code>https://resolve.arvio.tv/music/audius/manifest.json</code></p></article></div><div class="callout callout-info"><strong>Only add music you are allowed to play.</strong><p>Your own files, music you bought DRM-free (Bandcamp, Qobuz downloads, CDs you ripped), and catalogs artists publish for free are all fine. Add-ons that scrape streaming services are not, and ARVIO will not recommend them.</p></div></div></section><section class="section" id="browse"><div class="shell guide-reading"><p class="eyebrow">Step 3</p><h2>Browse, search and play</h2><div class="decision-list"><article><h3>For you</h3><p>Charts and editorial playlists for your app language, refreshed every day, plus <strong>Recently added</strong>, <strong>Recently played</strong>, <strong>Most played</strong> and <strong>Discover</strong> from your server. Chart information comes from Deezer; the songs themselves play from your own sources.</p></article><article><h3>Albums and Artists</h3><p>Your whole library, sorted and with artwork. Open an album and press <strong>Play</strong> or <strong>Shuffle</strong>.</p></article><article><h3>Search</h3><p>Type an artist, album, song or mood like “gym hits”. Songs come first; for playlist-style searches, playlists come first.</p></article><article><h3>The player</h3><p>Tap the mini player for the full-screen player with seek, shuffle, repeat and <strong>Up next</strong>. Music keeps playing in the background with controls on your lock screen and in notifications.</p></article></div></div></section><section class="section" id="mine"><div class="shell guide-reading"><p class="eyebrow">Step 4</p><h2>Keep what you love in My music</h2><ol class="setup-list"><li><h3>Like songs and albums</h3><p>Tap the heart in the player, or use the <strong>⋮</strong> menu next to a song. Liked songs and favourite albums appear under <strong>My music</strong>.</p></li><li><h3>Make playlists</h3><p>Tap <strong>New playlist</strong>, give it a name, and add songs with <strong>⋮ → Add to playlist</strong>. Reorder with <strong>Move up</strong> and <strong>Move down</strong>; deleting a playlist never deletes the songs.</p></li><li><h3>Same playlists on every device</h3><p>With ARVIO Cloud signed in, your music add-ons, liked songs and playlists are saved per profile and follow you. Server logins stay on the device you entered them on.</p></li></ol></div></section><section class="section" id="spotify"><div class="shell guide-reading"><p class="eyebrow">Coming from Spotify?</p><h2>Rebuild your Spotify playlists</h2><p>ARVIO can recreate your Spotify playlists and liked songs from <em>your own</em> music sources. Spotify itself is not played and you never sign in with Spotify.</p><ol class="setup-list"><li><h3>Export your library</h3><p>Use <a href="https://exportify.app/">exportify.app</a> to download a CSV per playlist (including Liked Songs), or request <strong>Download your data</strong> in your Spotify account privacy settings and use the zip or its <code>YourLibrary.json</code> and playlist files.</p></li><li><h3>Import in ARVIO</h3><p>Open <strong>Music → My music → Import from Spotify</strong>, tap <strong>Choose files</strong> and select the files. ARVIO looks up each song in your sources.</p></li><li><h3>Check the result</h3><p>Songs your sources do not have are left out. Add them to your library later and import again to fill the gaps.</p></li></ol></div></section>
+<section class="section" id="faq"><div class="shell guide-reading"><p class="eyebrow">Common questions</p><h2>Music questions</h2><div class="faq-list"><details><summary>Does ARVIO include music?</summary><p>No. ARVIO is a music player. Songs play only from sources you add: your own Navidrome, Subsonic or Jellyfin server, or a music add-on you are allowed to use.</p></details><details><summary>Why can I see a chart song that does not play?</summary><p>Charts show what is popular, using public chart data. ARVIO then looks for that song in your own sources. If none of them has it, the song cannot play. Add it to your library or a source that has it.</p></details><details><summary>Can ARVIO play Spotify, Apple Music or YouTube Music?</summary><p>No. Those services only allow playback in their own apps. ARVIO can import your Spotify playlists and liked songs as lists and match them to music in your own sources.</p></details><details><summary>Is Music available on Android TV or ARVIO Web?</summary><p>Not yet. Music is available in the Android app on phones and tablets. ARVIO Web and TV versions are being worked on.</p></details><details><summary>Why can a profile not see the Music tab?</summary><p>Music may be switched off for that profile under Settings → Interface → Navigation. Kids profiles never show Music, because music catalogs carry no age ratings.</p></details><details><summary>My server will not connect. What should I check?</summary><p>Use the address you would open in a browser on the same network, including the port, such as 192.168.1.10:4533. Check the username and password, that the phone is on the same network or the server is reachable from outside, and that the server is running.</p></details></div></div></section>
+<section class="section compact"><div class="shell guide-reading"><div class="help-box"><h2>Still stuck?</h2><p>Ask in the <a href="https://discord.gg/UavuEYMfQ4">ARVIO Discord</a>. Mention your device, the ARVIO version (shown under Settings → Accounts) and the exact message you see. Never share passwords, access tokens or private addon or playlist URLs.</p><p>Back to <a href="/guides/">all guides</a> · New here? Read <a href="/how-arvio-works/">how ARVIO works</a>.</p></div></div></section>
+</main>
+<footer class="site-footer"><div class="shell"><div class="footer-main"><div class="footer-brand"><img src="/assets/arvio-wordmark.png" alt="ARVIO" width="630" height="135"><p>Open-source media management for Android TV, Google TV, Android phones and the browser.</p></div><nav class="footer-links" aria-label="Footer navigation"><a href="/">Home</a><a href="/guides/">Guides</a><a href="/privacy">Privacy</a><a href="https://github.com/ProdigyV21/ARVIO">GitHub</a></nav></div><div class="footer-bottom"><span>© 2026 ARVIO</span><span>ARVIO provides software, not media.</span></div></div></footer>
+</body>
+</html>

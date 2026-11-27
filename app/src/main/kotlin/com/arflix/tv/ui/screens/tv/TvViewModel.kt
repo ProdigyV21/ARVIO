@@ -122,6 +122,7 @@ class TvViewModel @Inject constructor(
     private val mediaRepository: com.arflix.tv.data.repository.MediaRepository,
     private val sportsRepository: com.arflix.tv.data.repository.SportsRepository,
     val sportsAddons: com.arflix.tv.data.repository.SportsAddonRepository,
+    val sportsPreferences: com.arflix.tv.data.repository.SportsPreferencesRepository,
     private val profileManager: com.arflix.tv.data.repository.ProfileManager,
 ) : ViewModel() {
 
@@ -161,18 +162,12 @@ class TvViewModel @Inject constructor(
         val offset = prefs[profileManager.profileStringKey("subtitle_offset")] ?: "Bottom"
         com.arflix.tv.ui.screens.tv.live.aisubs.LiveSubtitleStyle(
             sizePreference = size,
-            sizePercent = prefs[profileManager.profileIntKey("subtitle_size_pct")] ?: when (size.lowercase()) {
-                "small" -> 80
-                "large" -> 120
-                "extra large" -> 140
-                else -> 100
-            },
-            verticalPercent = prefs[profileManager.profileIntKey("subtitle_vertical_pct")] ?: when (offset) {
-                "Low" -> 8
-                "Medium" -> 15
-                "High" -> 25
-                else -> 2
-            },
+            sizePercent = com.arflix.tv.ui.screens.player.SubtitlePlacementPrefs.resolveSizePct(
+                size, prefs[profileManager.profileIntKey("subtitle_size_pct")]
+            ),
+            verticalPercent = com.arflix.tv.ui.screens.player.SubtitlePlacementPrefs.resolveVerticalPct(
+                offset, prefs[profileManager.profileIntKey("subtitle_vertical_pct")]
+            ),
             color = prefs[profileManager.profileStringKey("subtitle_color")] ?: "White",
             style = prefs[profileManager.profileStringKey("subtitle_style")] ?: "Bold",
             font = com.arflix.tv.ui.screens.player.SubtitleFontOption.fromPreference(
@@ -218,7 +213,21 @@ class TvViewModel @Inject constructor(
                 .onFailure { System.err.println("[Sports-Cache] save failed: ${it.javaClass.simpleName}") }
             Unit
         }
+    private val sportsAddonEventDisk by lazy {
+        val installedAt = context.packageManager.getPackageInfo(context.packageName, 0).lastUpdateTime
+        com.arflix.tv.data.repository.SportsAddonEventDiskCache(java.io.File(context.cacheDir, "sports-addon-events-v1-$installedAt.json.gz"))
+    }
+    internal suspend fun restoreSportsAddonEvents(installations: Set<String>) =
+        withContext(Dispatchers.IO) { sportsAddonEventDisk.read(installations) }
+    internal suspend fun saveSportsAddonEvents(installations: Set<String>, events: List<com.arflix.tv.data.model.SportsAddonEvent>) =
+        withContext(Dispatchers.IO) {
+            runCatching { sportsAddonEventDisk.write(installations, events) }
+                .onFailure { System.err.println("[Sports-AddonCache] save failed: ${it.javaClass.simpleName}") }
+            Unit
+        }
     suspend fun loadSportsMetadata() = sportsRepository.loadMetadata()
+    suspend fun loadSportsMetadataDay(day: String) = sportsRepository.loadMetadataDay(day)
+    suspend fun loadSportsGameDetails(id: String) = sportsRepository.loadGameDetails(id)
     suspend fun loadSportsAddonArtwork() = sportsRepository.loadAddonGuideArtwork()
     fun sportsClockFormat(profileId: String?) = context.settingsDataStore.data.map { prefs ->
         val key = profileId?.let { profileManager.profileStringKeyFor(it, "clock_format") } ?: profileManager.profileStringKey("clock_format")
@@ -2362,6 +2371,22 @@ class TvViewModel @Inject constructor(
             eagerLimit = minOf(warmChannels.size, if (largeList) 32 else 96),
             backgroundLimit = minOf(warmChannels.size, if (largeList) 96 else 520)
         )
+    }
+
+    /** Channel menu > Fix guide: take another channel's guide (or none, or back to automatic). */
+    fun setGuideSource(channelId: String, sourceChannelId: String?) {
+        viewModelScope.launch(Dispatchers.IO) {
+            iptvRepository.setGuideSource(channelId, sourceChannelId)
+            scheduleIptvCloudSync()
+        }
+    }
+
+    /** Channel menu > Fix guide: move a playlist's guide times by [minutes]. */
+    fun setGuideOffset(playlistId: String, minutes: Int) {
+        viewModelScope.launch(Dispatchers.IO) {
+            iptvRepository.setGuideOffset(playlistId, minutes)
+            scheduleIptvCloudSync()
+        }
     }
 
     private fun scheduleIptvCloudSync() {

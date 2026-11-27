@@ -262,6 +262,8 @@ fun DetailsScreen(
     initialEpisode: Int? = null,
     autoPlay: Boolean = false,
     onAutoPlayHandled: () -> Unit = {},
+    /** The top-level tab this page was opened from; its top bar highlights that tab. */
+    originTab: SidebarItem = SidebarItem.HOME,
     viewModel: DetailsViewModel = hiltViewModel(),
     currentProfile: com.arflix.tv.data.model.Profile? = null,
     onNavigateToPlayer: (MediaType, Int, EpisodeIdentity?, String?, String?, String?, String?, Long?, String?) -> Unit,
@@ -332,7 +334,7 @@ fun DetailsScreen(
     var isSidebarFocused by remember { mutableStateOf(false) }
     val hasProfile = currentProfile != null
     val maxSidebarIndex = topBarMaxIndex(hasProfile)
-    var sidebarFocusIndex by remember { mutableIntStateOf(com.arflix.tv.ui.components.topBarSelectedIndex(SidebarItem.HOME, hasProfile)) }
+    var sidebarFocusIndex by remember { mutableIntStateOf(com.arflix.tv.ui.components.topBarSelectedIndex(originTab, hasProfile).takeIf { it >= 0 } ?: com.arflix.tv.ui.components.topBarSelectedIndex(SidebarItem.HOME, hasProfile)) }
     com.arflix.tv.ui.components.ReconcileTopBarFocus(sidebarFocusIndex, hasProfile) { sidebarFocusIndex = it }
 
     // Stream Selector state
@@ -1027,6 +1029,8 @@ fun DetailsScreen(
                     DetailsContent(
                         item = item,
                         logoUrl = uiState.logoUrl,
+                        textlessPosterUrl = uiState.textlessPosterUrl,
+                        textlessBackdropUrl = uiState.textlessBackdropUrl,
                         episodes = uiState.episodes,
                         totalSeasons = uiState.totalSeasons,
                         currentSeason = uiState.currentSeason,
@@ -1081,7 +1085,7 @@ fun DetailsScreen(
 
         if (!LocalDeviceType.current.isTouchDevice()) {
             AppTopBar(
-                selectedItem = SidebarItem.HOME,
+                selectedItem = originTab,
                 isFocused = isSidebarFocused,
                 focusedIndex = sidebarFocusIndex,
                 profile = currentProfile
@@ -1123,7 +1127,7 @@ fun DetailsScreen(
         // every other reader of uiState.streams never see it.
         val telegramRowLabel = when (uiState.telegramSearchRow) {
             TelegramSearchRow.HIDDEN -> null
-            TelegramSearchRow.IDLE -> stringResource(R.string.telegram_search_row_idle)
+            TelegramSearchRow.IDLE -> stringResource(R.string.telegram_search_row_idle).touchTapWording(LocalDeviceType.current.isTouchDevice())
                 .takeIf { uiState.streams.none { it.addonId == TELEGRAM_SEARCH_ROW.addonId } }
             TelegramSearchRow.SEARCHING -> stringResource(R.string.telegram_search_row_searching)
             TelegramSearchRow.NONE -> stringResource(R.string.telegram_search_row_none)
@@ -1131,7 +1135,7 @@ fun DetailsScreen(
         // Likewise the "Search YouTube" row (Settings > Sources > YouTube): searched on press only.
         val youTubeRowLabel = when (uiState.youTubeSourceRow) {
             YouTubeSourceRow.HIDDEN -> null
-            YouTubeSourceRow.IDLE -> stringResource(R.string.youtube_source_row_idle)
+            YouTubeSourceRow.IDLE -> stringResource(R.string.youtube_source_row_idle).touchTapWording(LocalDeviceType.current.isTouchDevice())
             YouTubeSourceRow.SEARCHING -> stringResource(R.string.youtube_source_row_searching)
             YouTubeSourceRow.NONE -> stringResource(R.string.youtube_source_row_none)
             YouTubeSourceRow.FAILED -> stringResource(R.string.youtube_source_row_failed)
@@ -1320,6 +1324,8 @@ fun DetailsScreen(
 internal fun DetailsContent(
     item: MediaItem,
     logoUrl: String?,
+    textlessPosterUrl: String? = null,
+    textlessBackdropUrl: String? = null,
     episodes: List<Episode>,
     totalSeasons: Int,
     currentSeason: Int,
@@ -1391,7 +1397,13 @@ internal fun DetailsContent(
             availableWidthDp = maxWidth.value,
             availableHeightDp = (maxHeight - navigationBottomPadding).coerceAtLeast(1.dp).value,
         ).dp
-        val artwork = mobileDetailsArtworkSource(item.image, item.backdrop, maxWidth <= maxHeight)
+        // With a logo on top, use artwork that doesn't already print the title.
+        val artwork = mobileDetailsArtworkSource(
+            if (logoUrl == null) item.image
+            else textlessPosterUrl ?: if (textlessBackdropUrl != null) null else item.image,
+            (if (logoUrl != null) textlessBackdropUrl else null) ?: item.backdrop,
+            maxWidth <= maxHeight,
+        )
         var mobileLogoFailed by remember(item.id, logoUrl) { mutableStateOf(false) }
         val mobileScrollState = rememberScrollState()
         val density = LocalDensity.current
@@ -1511,11 +1523,26 @@ internal fun DetailsContent(
                                 label = "mobile_logo_crossfade"
                             ) { currentLogoUrl ->
                                 if (!currentLogoUrl.isNullOrBlank()) {
+                                    // Black title logos vanish on the dark scrim; those are drawn white.
+                                    val logoContext = LocalContext.current
+                                    var logoDark by remember(currentLogoUrl) { mutableStateOf(false) }
+                                    val logoRequest = remember(currentLogoUrl, logoContext) {
+                                        coil.request.ImageRequest.Builder(logoContext)
+                                            .data(currentLogoUrl)
+                                            .allowHardware(false)
+                                            .build()
+                                    }
                                     AsyncImage(
-                                        model = currentLogoUrl,
+                                        model = logoRequest,
                                         contentDescription = item.title,
                                         contentScale = ContentScale.Fit,
                                         onError = { mobileLogoFailed = true },
+                                        onSuccess = { state ->
+                                            (state.result.drawable as? android.graphics.drawable.BitmapDrawable)?.bitmap?.let {
+                                                logoDark = com.arflix.tv.ui.components.logoBitmapIsDark(it)
+                                            }
+                                        },
+                                        colorFilter = if (logoDark) androidx.compose.ui.graphics.ColorFilter.tint(Color.White) else null,
                                         alignment = Alignment.Center,
                                         modifier = Modifier
                                             .fillMaxWidth(0.78f)
@@ -2819,9 +2846,21 @@ private fun DetailsSeasonRail(
 ) {
     val seasonRowState = rememberLazyListState()
     val seasonItems = remember(totalSeasons) { (1..totalSeasons).toList() }
+    // When every season tab already fits on screen, keep the row still: pinning the focused tab
+    // to the left scrolled Season 1 out of view although there was room on the right.
+    val allSeasonsFit by remember {
+        derivedStateOf {
+            val info = seasonRowState.layoutInfo
+            val last = info.visibleItemsInfo.lastOrNull()
+            info.totalItemsCount > 0 && seasonRowState.firstVisibleItemIndex == 0 &&
+                seasonRowState.firstVisibleItemScrollOffset == 0 && last != null &&
+                last.index == info.totalItemsCount - 1 &&
+                last.offset + last.size <= info.viewportEndOffset
+        }
+    }
     HomeStyleRowAutoScroll(
         rowState = seasonRowState,
-        isCurrentRow = focusSectionForUi == FocusSection.SEASONS,
+        isCurrentRow = focusSectionForUi == FocusSection.SEASONS && !allSeasonsFit,
         focusedItemIndex = seasonIndex,
         totalItems = totalSeasons,
         itemWidth = 96.dp,
@@ -4951,3 +4990,7 @@ private fun bookmarkIcon(saved: Boolean, isYouTubeVideo: Boolean) = when {
     saved -> Icons.Default.Bookmark
     else -> Icons.Default.BookmarkBorder
 }
+
+/** Phones are tapped, not clicked: reword the English "Click to ..." source rows on touch. */
+internal fun String.touchTapWording(touch: Boolean): String =
+    if (touch && startsWith("Click to ")) "Tap to " + removePrefix("Click to ") else this

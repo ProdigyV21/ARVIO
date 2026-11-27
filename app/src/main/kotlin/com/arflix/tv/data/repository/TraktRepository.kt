@@ -102,7 +102,7 @@ class TraktRepository @Inject constructor(
     private fun refreshTokenKey() = profileManager.profileStringKey("trakt_refresh_token")
     private fun expiresAtKey() = profileManager.profileLongKey("trakt_expires_at")
     private fun tokenUpdatedAtKey() = profileManager.profileLongKey("trakt_token_updated_at_v3")
-    private fun includeSpecialsKey() = profileManager.profileBooleanKey("trakt_include_specials")
+    private fun includeSpecialsKey() = profileManager.profileBooleanKey("include_specials")
     private fun dismissedContinueWatchingKey() = profileManager.profileStringKey("trakt_dismissed_continue_watching_v1")
     // v5 invalidates snapshots written by the old 50-show/18-month resolver.
     // Keeping that snapshot would make the corrected resolver appear broken
@@ -637,6 +637,7 @@ class TraktRepository @Inject constructor(
         updateWatchedCache(tmdbId, null, null, true)
         persistLocalWatchedSnapshotForCurrentProfile()
         removeFromContinueWatchingCache(tmdbId, null, null, MediaType.MOVIE)
+        markContinueWatchingEntryWatched(MediaType.MOVIE, tmdbId, null, null)
 
         // Then sync to backend in background
         try {
@@ -668,6 +669,7 @@ class TraktRepository @Inject constructor(
         // OPTIMISTIC UPDATE: Update cache immediately so the UI responds instantly
         updateWatchedCache(tmdbId, null, null, false)
         persistLocalWatchedSnapshotForCurrentProfile()
+        clearContinueWatchingEntryWatched(MediaType.MOVIE, tmdbId, null, null)
 
         // Then sync to backend in background
         try {
@@ -701,6 +703,7 @@ class TraktRepository @Inject constructor(
         updateShowWatchedCache(showTmdbId, season, episode, true)
         persistLocalWatchedSnapshotForCurrentProfile()
         removeFromContinueWatchingCache(showTmdbId, season, episode)
+        markContinueWatchingEntryWatched(MediaType.TV, showTmdbId, season, episode)
 
         // Then sync to backend in background (don't block UI on network)
         try {
@@ -758,6 +761,7 @@ class TraktRepository @Inject constructor(
         updateWatchedCache(showTmdbId, season, episode, false)
         updateShowWatchedCache(showTmdbId, season, episode, false)
         persistLocalWatchedSnapshotForCurrentProfile()
+        clearContinueWatchingEntryWatched(MediaType.TV, showTmdbId, season, episode)
 
         // Then sync to backend in background (skip if batch Trakt removal already handled it)
         if (syncTrakt) {
@@ -3224,13 +3228,53 @@ class TraktRepository @Inject constructor(
         }
     }
 
+    /**
+     * Marking a title watched hides that exact Continue Watching entry everywhere it can come from
+     * (paused tracker playback, ARVIO Cloud progress, another device's snapshot, the disk cache).
+     * Only the exact entry is stamped: the movie, or the one episode, so the Up Next pointer for
+     * the following episode still shows. Progress saved after this moment (a rewatch) is newer
+     * than the stamp and shows again; [filterDismissedContinueWatchingItems] then clears it.
+     */
+    private val WATCHED_STAMP_TTL_MS = 30L * 24 * 60 * 60 * 1000
+
+    suspend fun markContinueWatchingEntryWatched(mediaType: MediaType, tmdbId: Int, season: Int?, episode: Int?) {
+        if (mediaType == MediaType.TV && (season == null || episode == null)) return
+        val key = buildContinueWatchingKey(mediaType, tmdbId, season, episode)
+        val now = System.currentTimeMillis()
+        context.settingsDataStore.edit { prefs ->
+            val map = parseDismissedMap(prefs[dismissedContinueWatchingKey()])
+            // Every completed episode lands here, so let old episode stamps go: a show-level
+            // dismissal keeps its own "tv:<id>" key, and month-old progress is long replaced.
+            map.entries.removeAll { (k, at) ->
+                k.startsWith("tv:") && k.count { it == ':' } == 3 && now - at > WATCHED_STAMP_TTL_MS
+            }
+            map[key] = now
+            prefs[dismissedContinueWatchingKey()] = encodeDismissedMap(map)
+        }
+    }
+
+    /** Unmarking a title watched lifts the stamp [markContinueWatchingEntryWatched] left. */
+    private suspend fun clearContinueWatchingEntryWatched(mediaType: MediaType, tmdbId: Int, season: Int?, episode: Int?) {
+        if (mediaType == MediaType.TV && (season == null || episode == null)) return
+        val key = buildContinueWatchingKey(mediaType, tmdbId, season, episode)
+        context.settingsDataStore.edit { prefs ->
+            val map = parseDismissedMap(prefs[dismissedContinueWatchingKey()])
+            if (map.remove(key) != null) {
+                if (map.isEmpty()) prefs.remove(dismissedContinueWatchingKey())
+                else prefs[dismissedContinueWatchingKey()] = encodeDismissedMap(map)
+            }
+        }
+    }
+
     suspend fun getDismissedContinueWatchingShowKeys(): Set<String> {
         val dismissed = loadDismissedContinueWatching()
         if (dismissed.isEmpty()) return emptySet()
         return dismissed.keys.mapNotNull { key ->
             when {
                 key.startsWith("movie:") -> key.substringAfterLast(':').toIntOrNull()?.let { "MOVIE:$it" }
-                key.startsWith("tv:") -> key.split(':').getOrNull(1)?.toIntOrNull()?.let { "TV:$it" }
+                // An episode-only stamp (a watched mark) must not hide the show's Up Next entry.
+                key.startsWith("tv:") -> key.split(':').takeIf { it.size == 2 }
+                    ?.get(1)?.toIntOrNull()?.let { "TV:$it" }
                 else -> null
             }
         }.toSet()

@@ -254,7 +254,7 @@ class EpgProgramActionsTest {
     }
 
     @Test
-    fun pastEpgCellWithoutCatchupDoesNothing() {
+    fun pastEpgCellWithoutCatchupShowsItsDetails() {
         assertThat(
             epgProgramInteractionAction(
                 temporalState = EpgTemporalState.Past,
@@ -262,11 +262,11 @@ class EpgProgramActionsTest {
                 isCatchupSupported = false,
                 vodActionsEnabled = true,
             )
-        ).isEqualTo(EpgInteractionAction.NoOp)
+        ).isEqualTo(EpgInteractionAction.ShowProgrammeInfo)
     }
 
     @Test
-    fun futureEpgCellDoesNothingUntilRecordingOrReminderExists() {
+    fun futureEpgCellShowsDetailsWithRemindMe() {
         assertThat(
             epgProgramInteractionAction(
                 temporalState = EpgTemporalState.Future,
@@ -274,7 +274,7 @@ class EpgProgramActionsTest {
                 isCatchupSupported = false,
                 vodActionsEnabled = true,
             )
-        ).isEqualTo(EpgInteractionAction.NoOp)
+        ).isEqualTo(EpgInteractionAction.ShowProgrammeInfo)
     }
 
     @Test

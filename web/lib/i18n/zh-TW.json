@@ -7,5 +7,13 @@
   "Completed": "已看完",
   "Dropped": "已棄劇",
   "Silo: use the Jellyfin-compatible address. Optional profile: username#ProfileName. Protected profile: password#PIN.": "Silo: 使用相容 Jellyfin 的位址. 可選個人資料: username#ProfileName. 受保護的個人資料: password#PIN.",
-  "None of your enabled addons provide playback sources.": "您已啟用的附加元件均未提供播放來源。"
+  "None of your enabled addons provide playback sources.": "您已啟用的附加元件均未提供播放來源。",
+  "Game info": "比賽資訊",
+  "Standings": "積分榜",
+  "Form": "近期狀態",
+  "Head to head": "交鋒紀錄",
+  "Score alerts": "比分提醒",
+  "League networks": "聯賽頻道",
+  "Score update": "比分更新",
+  "Full time": "全場結束"
 }

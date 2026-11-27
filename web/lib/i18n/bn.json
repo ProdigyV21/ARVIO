@@ -7,5 +7,13 @@
   "Completed": "সম্পন্ন",
   "Dropped": "বাদ দেওয়া",
   "Silo: use the Jellyfin-compatible address. Optional profile: username#ProfileName. Protected profile: password#PIN.": "Silo: Jellyfin-সামঞ্জস্যপূর্ণ ঠিকানা ব্যবহার করুন. ঐচ্ছিক প্রোফাইল: username#ProfileName. সুরক্ষিত প্রোফাইল: password#PIN.",
-  "None of your enabled addons provide playback sources.": "আপনার সক্রিয় কোনো অ্যাডঅন প্লেব্যাকের উৎস সরবরাহ করে না।"
+  "None of your enabled addons provide playback sources.": "আপনার সক্রিয় কোনো অ্যাডঅন প্লেব্যাকের উৎস সরবরাহ করে না।",
+  "Game info": "খেলার তথ্য",
+  "Standings": "পয়েন্ট টেবিল",
+  "Form": "ফর্ম",
+  "Head to head": "মুখোমুখি",
+  "Score alerts": "স্কোর সতর্কতা",
+  "League networks": "লিগ চ্যানেল",
+  "Score update": "স্কোর আপডেট",
+  "Full time": "খেলা শেষ"
 }

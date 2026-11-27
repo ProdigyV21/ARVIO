@@ -1,5 +1,6 @@
 package com.arflix.tv.ui.screens.player
 
+import com.arflix.tv.ui.screens.player.preview.SEEK_THUMBNAILS_PREF
 import android.content.Context
 import android.util.Log
 import androidx.annotation.StringRes
@@ -218,6 +219,13 @@ data class PlayerUiState(
     val expectedDurationMs: Long = 0,
     val isLoadingPlaybackMetadata: Boolean = false,
     val preferredAudioLanguage: String = "en",
+    // Second-choice audio language (ISO code), blank when off. Used only when the
+    // preferred language is not on the stream.
+    val secondaryAudioLanguage: String = "",
+    // Settings > Playback "Switch source automatically": off keeps a hand-picked source.
+    val autoSourceFailover: Boolean = true,
+    // Settings > Playback "External player": hand resolved streams to another video app.
+    val externalPlayer: Boolean = false,
     // The language a source's badge puts first: the chosen audio language, or null (the device
     // language) under "Auto"/"None", the same as the details screen's source list.
     val sourceBadgeLanguage: String? = null,
@@ -243,6 +251,8 @@ data class PlayerUiState(
     // "auto_play_next" DataStore setting so the player can respect the toggle
     // and so the post-episode overlay can show a Continue/Cancel prompt.
     val autoPlayNext: Boolean = true,
+    // Seek-bar thumbnail previews (profile setting "seek_thumbnails", synced to the cloud).
+    val seekThumbnailsEnabled: Boolean = true,
     // Volume boost in decibels. 0 = disabled, up to 15 dB. The player observes this
     // and attaches a LoudnessEnhancer to the ExoPlayer audio session. Issue #88.
     val volumeBoostDb: Int = 0,
@@ -690,6 +700,7 @@ class PlayerViewModel @Inject constructor(
     private val subtitleMenuCandidates = linkedMapOf<String, Subtitle>()
     private fun frameRateMatchingModeKey() = profileManager.profileStringKey("frame_rate_matching_mode")
     private fun autoPlayNextKey() = profileManager.profileBooleanKey("auto_play_next")
+    private fun seekThumbnailsKey() = profileManager.profileBooleanKey(SEEK_THUMBNAILS_PREF)
     private fun showLoadingStatsKey() = profileManager.profileBooleanKey("show_loading_stats")
     private val gson = Gson()
     private val knownLanguageCodes = setOf(
@@ -905,12 +916,7 @@ class PlayerViewModel @Inject constructor(
                 maximumSizeGb = prefs[profileManager.profileIntKey("auto_play_max_size_gb")] ?: 0
             )
             val subSize = prefs[profileManager.profileStringKey("subtitle_size")] ?: "Medium"
-            val subSizePct = prefs[profileManager.profileIntKey("subtitle_size_pct")] ?: when (subSize.lowercase()) {
-                "small" -> 80
-                "large" -> 120
-                "extra large" -> 140
-                else -> 100
-            }
+            val subSizePct = SubtitlePlacementPrefs.resolveSizePct(subSize, prefs[profileManager.profileIntKey("subtitle_size_pct")])
             val subColor = prefs[profileManager.profileStringKey("subtitle_color")] ?: "White"
             val subStyle = prefs[profileManager.profileStringKey("subtitle_style")] ?: "Bold"
             val subFont = SubtitleFontOption.fromPreference(
@@ -918,14 +924,16 @@ class PlayerViewModel @Inject constructor(
             ).preferenceValue
             val subStylized = prefs[profileManager.profileBooleanKey("subtitle_stylized")] ?: true
             val subOffset = prefs[profileManager.profileStringKey("subtitle_offset")] ?: "Bottom"
-            val subVertPct = prefs[profileManager.profileIntKey("subtitle_vertical_pct")] ?: when (subOffset) {
-                "Bottom" -> 2; "Low" -> 8; "Medium" -> 15; "High" -> 25; else -> 2
-            }
+            val subVertPct = SubtitlePlacementPrefs.resolveVerticalPct(subOffset, prefs[profileManager.profileIntKey("subtitle_vertical_pct")])
             val filterSubLang = prefs[filterSubtitlesByLanguageKey()] ?: true
             val useForcedSubs = prefs[useForcedSubtitlesKey()] ?: false
             val removeHi = prefs[profileManager.profileBooleanKey("subtitle_remove_hearing_impaired")] ?: false
             translationManager.removeSubtitleHearingImpaired = removeHi
             val autoPlayNext = prefs[autoPlayNextKey()] ?: true
+            val seekThumbnailsEnabled = prefs[seekThumbnailsKey()] ?: true
+            val autoSourceFailover = prefs[profileManager.profileBooleanKey(AUTO_SOURCE_FAILOVER_PREF)] ?: true
+            val externalPlayer = prefs[profileManager.profileBooleanKey(EXTERNAL_PLAYER_PREF)] ?: false
+            val secondaryAudioLanguage = resolveSecondaryAudioLanguage(prefs[profileManager.profileStringKey(SECONDARY_AUDIO_LANGUAGE_PREF)])
             val showLoadingStats = prefs[showLoadingStatsKey()] ?: true
             val volumeBoostDb = prefs[profileManager.profileStringKey("volume_boost_db")]
                 ?.toIntOrNull()?.coerceIn(0, 15) ?: 0
@@ -1003,6 +1011,10 @@ class PlayerViewModel @Inject constructor(
                 useForcedSubtitles = useForcedSubs,
                 subtitleRemoveHearingImpaired = removeHi,
                 autoPlayNext = autoPlayNext,
+                seekThumbnailsEnabled = seekThumbnailsEnabled,
+                autoSourceFailover = autoSourceFailover,
+                externalPlayer = externalPlayer,
+                secondaryAudioLanguage = secondaryAudioLanguage,
                 autoSkipIntro = autoSkipIntro,
                 autoSkipOutro = autoSkipOutro,
                 audioDelayMs = audioDelayMs,
@@ -1940,6 +1952,19 @@ class PlayerViewModel @Inject constructor(
     private fun isYouTubeVideo(): Boolean =
         mediaRepository.addonNativeCard(currentMediaType, currentMediaId)?.addonNativeAddonId == YouTubeCollection.ADDON_ID
 
+    /**
+     * A YouTube result picked from a movie's or episode's source list that is clearly not the
+     * title itself (a trailer, review or clip). It must not write progress, watched state or
+     * scrobbles onto that title.
+     */
+    private fun isYouTubeClipOnTitle(durationMs: Long): Boolean {
+        if (_uiState.value.selectedStream?.addonId != YouTubeCollection.ADDON_ID) return false
+        if (isYouTubeVideo()) return false
+        if (durationMs <= 0L) return true
+        val expected = _uiState.value.expectedDurationMs
+        return if (expected > 0L) durationMs < expected / 2 else durationMs < 40 * 60_000L
+    }
+
     private suspend fun fetchMediaMetadata(mediaType: MediaType, mediaId: Int) {
         val season = currentSeason
         val episode = currentEpisode
@@ -2827,6 +2852,13 @@ class PlayerViewModel @Inject constructor(
         ?.trim()
         ?.takeUnless { it.isBlank() || it.startsWith("Auto", ignoreCase = true) || it.equals("None", ignoreCase = true) }
         ?.let(::normalizeLanguageCode)
+
+    private fun resolveSecondaryAudioLanguage(setting: String?): String {
+        val value = setting?.trim().orEmpty()
+        if (value.isBlank() || value.equals("Off", ignoreCase = true) || value.equals("None", ignoreCase = true) ||
+            value.startsWith("Auto", ignoreCase = true)) return ""
+        return normalizeLanguage(value).takeIf { it in knownLanguageCodes }.orEmpty()
+    }
 
     private suspend fun resolvePreferredAudioLanguage(): String {
         val setting = runCatching {
@@ -3773,6 +3805,7 @@ class PlayerViewModel @Inject constructor(
             context.settingsDataStore.edit { prefs ->
                 prefs[autoPlayNextKey()] = enabled
             }
+            runCatching { cloudSyncRepository.markLocalStateDirtyNow() }
         }
     }
 
@@ -3782,6 +3815,7 @@ class PlayerViewModel @Inject constructor(
             context.settingsDataStore.edit { prefs ->
                 prefs[profileManager.profileBooleanKey("auto_skip_intro")] = enabled
             }
+            runCatching { cloudSyncRepository.markLocalStateDirtyNow() }
         }
     }
 
@@ -3791,6 +3825,7 @@ class PlayerViewModel @Inject constructor(
             context.settingsDataStore.edit { prefs ->
                 prefs[profileManager.profileBooleanKey("auto_skip_outro")] = enabled
             }
+            runCatching { cloudSyncRepository.markLocalStateDirtyNow() }
         }
     }
 
@@ -3809,6 +3844,7 @@ class PlayerViewModel @Inject constructor(
             context.settingsDataStore.edit { prefs ->
                 prefs[profileManager.profileBooleanKey("audio_normalization")] = enabled
             }
+            runCatching { cloudSyncRepository.markLocalStateDirtyNow() }
         }
     }
 
@@ -3825,6 +3861,7 @@ class PlayerViewModel @Inject constructor(
                 prefs[profileManager.profileStringKey("subtitle_size")] = size
                 prefs[profileManager.profileIntKey("subtitle_size_pct")] = mappedPct
             }
+            runCatching { cloudSyncRepository.markLocalStateDirtyNow() }
         }
     }
 
@@ -3842,6 +3879,7 @@ class PlayerViewModel @Inject constructor(
                 prefs[profileManager.profileIntKey("subtitle_size_pct")] = clamped
                 prefs[profileManager.profileStringKey("subtitle_size")] = name
             }
+            runCatching { cloudSyncRepository.markLocalStateDirtyNow() }
         }
     }
 
@@ -3860,6 +3898,7 @@ class PlayerViewModel @Inject constructor(
                 prefs[profileManager.profileIntKey("subtitle_vertical_pct")] = clamped
                 prefs[profileManager.profileStringKey("subtitle_offset")] = name
             }
+            runCatching { cloudSyncRepository.markLocalStateDirtyNow() }
         }
     }
 
@@ -8128,7 +8167,7 @@ class PlayerViewModel @Inject constructor(
                 isLiveStream = currentIsLiveStreamPlayback,
                 addons = currentInstalledAddons,
                 isAddonNative = mediaRepository.isAddonNative(currentMediaId)
-            )
+            ) || isYouTubeClipOnTitle(duration)
 
             // Scrobble start/pause/updates with debounce
             if (!isLiveStreamOrSports && closing) {
@@ -8677,9 +8716,13 @@ class PlayerViewModel @Inject constructor(
                 }
 
             val existingVod = _uiState.value.streams.filter(::isSupplementalStream)
+            // The "Direct" stand-in is only for a player opened with a bare URL: next to a known
+            // selected source it showed up as a second "current" entry ("Direct / Direct / Direct").
             val activeStreamList = listOfNotNull(
                 _uiState.value.selectedStream,
-                if (playbackUrl.isNotBlank()) StreamSource(source = "Direct", addonName = "Direct", quality = "Direct", size = "", url = playbackUrl) else null
+                if (playbackUrl.isNotBlank() && _uiState.value.selectedStream == null) {
+                    StreamSource(source = "Direct", addonName = "Direct", quality = "Direct", size = "", url = playbackUrl)
+                } else null
             )
             val mergedStreams = (allStreams + existingVod + activeStreamList)
                 .distinctBy { providerScopedStreamIdentity(it) to playbackRequestIdentity(it) }
@@ -9033,4 +9076,18 @@ private object PlayerViewModelRegexes {
     // A cue that is ONLY music notation or a bracketed sound effect — SDH decoration with no
     // counterpart in a translated file, so it can only produce false pairs when line-matching.
     val SDH_ONLY = Regex("""^[\s♪♫]*(\[[^]]*]|\([^)]*\)|[-–—\s])*[\s♪♫]*$""")
+}
+
+
+/**
+ * A YouTube result (trailer, review, clip) played from a movie's or show's source list carries
+ * the video's own title as its source label; the player chrome shows that instead of the
+ * title's logo, episode name and plot. YouTube collection videos (label "YouTube") are unchanged.
+ */
+internal fun PlayerUiState.asYouTubeClipChrome(): PlayerUiState {
+    val stream = selectedStream ?: return this
+    if (stream.addonId != YouTubeCollection.ADDON_ID) return this
+    val clipTitle = stream.source.trim()
+    if (clipTitle.isBlank() || clipTitle == YouTubeCollection.ADDON_NAME) return this
+    return copy(title = clipTitle, logoUrl = null, overview = null, episodeTitle = null)
 }

@@ -5,5 +5,13 @@
   "Completed": "Pabeigts",
   "Dropped": "Pamests",
   "Silo: use the Jellyfin-compatible address. Optional profile: username#ProfileName. Protected profile: password#PIN.": "Silo: izmantojiet ar Jellyfin saderīgu adresi. Neobligāts profils: username#ProfileName. Aizsargāts profils: password#PIN.",
-  "None of your enabled addons provide playback sources.": "Neviens no jūsu iespējotajiem papildinājumiem nenodrošina atskaņošanas avotus."
+  "None of your enabled addons provide playback sources.": "Neviens no jūsu iespējotajiem papildinājumiem nenodrošina atskaņošanas avotus.",
+  "Game info": "Spēles informācija",
+  "Standings": "Turnīra tabula",
+  "Form": "Forma",
+  "Head to head": "Savstarpējās spēles",
+  "Score alerts": "Rezultāta paziņojumi",
+  "League networks": "Līgas kanāli",
+  "Score update": "Rezultāta izmaiņas",
+  "Full time": "Gala rezultāts"
 }

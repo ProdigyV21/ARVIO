@@ -29,5 +29,13 @@
   "Generating QR…": "Membuat QR…",
   "Guide time window": "Rentang waktu panduan",
   "Silo: use the Jellyfin-compatible address. Optional profile: username#ProfileName. Protected profile: password#PIN.": "Silo: gunakan alamat yang kompatibel dengan Jellyfin. Profil opsional: username#ProfileName. Profil terlindungi: password#PIN.",
-  "None of your enabled addons provide playback sources.": "Tidak ada addon aktif Anda yang menyediakan sumber pemutaran."
+  "None of your enabled addons provide playback sources.": "Tidak ada addon aktif Anda yang menyediakan sumber pemutaran.",
+  "Game info": "Info pertandingan",
+  "Standings": "Klasemen",
+  "Form": "Performa",
+  "Head to head": "Head to head",
+  "Score alerts": "Peringatan skor",
+  "League networks": "Saluran liga",
+  "Score update": "Pembaruan skor",
+  "Full time": "Selesai"
 }

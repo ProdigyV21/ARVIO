@@ -5,5 +5,13 @@
   "Completed": "Selesai",
   "Dropped": "Dihentikan",
   "Silo: use the Jellyfin-compatible address. Optional profile: username#ProfileName. Protected profile: password#PIN.": "Silo: gunakan alamat yang serasi dengan Jellyfin. Profil pilihan: username#ProfileName. Profil terlindung: password#PIN.",
-  "None of your enabled addons provide playback sources.": "Tiada addon anda yang didayakan menyediakan sumber main balik."
+  "None of your enabled addons provide playback sources.": "Tiada addon anda yang didayakan menyediakan sumber main balik.",
+  "Game info": "Maklumat perlawanan",
+  "Standings": "Kedudukan",
+  "Form": "Prestasi",
+  "Head to head": "Bersemuka",
+  "Score alerts": "Makluman skor",
+  "League networks": "Saluran liga",
+  "Score update": "Kemas kini skor",
+  "Full time": "Tamat"
 }

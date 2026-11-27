@@ -837,7 +837,7 @@ fun StreamSelector(
                                 overflow = TextOverflow.Ellipsis
                             )
                             Text(
-                                text = "$sourceCount ${stringResource(R.string.sources_available)}",
+                                text = "$sourceCount ${singularSourcesLabel(stringResource(R.string.sources_available), sourceCount)}",
                                 style = ArflixTypography.caption.copy(fontSize = 12.sp),
                                 color = TextSecondary
                             )
@@ -1361,6 +1361,13 @@ internal fun sourceTabId(stream: StreamSource): String {
 private fun isSelectedSource(candidate: StreamSource, selected: StreamSource?): Boolean {
     selected ?: return false
     if (candidate == selected) return true
+    // YouTube videos share one addon id and often one label ("Trailer"): only the video id
+    // identifies the one playing.
+    if (candidate.addonId == YouTubeCollection.ADDON_ID || selected.addonId == YouTubeCollection.ADDON_ID) {
+        val candidateId = candidate.url?.let { YouTubeCollection.videoIdFromStreamMarker(it) ?: YouTubeCollection.videoIdFromUrl(it) }
+        val selectedId = selected.url?.let { YouTubeCollection.videoIdFromStreamMarker(it) ?: YouTubeCollection.videoIdFromUrl(it) }
+        if (candidateId != null && selectedId != null) return candidateId == selectedId
+    }
 
     val sameAddon = candidate.addonId.isNotBlank() && candidate.addonId == selected.addonId
     val sameSource = candidate.source.isNotBlank() && candidate.source == selected.source
@@ -3028,3 +3035,12 @@ private object StreamSelectorRegexes {
     val CLEAN_TITLE_REGEX = Regex("""[^\p{L}\p{N} .+|\-]""")
     val DISTINCT_TITLE_REGEX = Regex("[^\\p{L}\\p{N}]+")
 }
+
+/** "1 sources available" reads wrong; use the singular for the languages we know it for. */
+internal fun singularSourcesLabel(label: String, count: Int): String =
+    if (count != 1) label else when (label) {
+        "sources available" -> "source available"
+        "bronnen beschikbaar" -> "bron beschikbaar"
+        "fuentes disponibles" -> "fuente disponible"
+        else -> label
+    }

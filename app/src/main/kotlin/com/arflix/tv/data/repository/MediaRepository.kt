@@ -29,6 +29,7 @@ import com.arflix.tv.data.model.Category
 import com.arflix.tv.data.model.CollectionGroupKind
 import com.arflix.tv.data.model.CollectionSourceConfig
 import com.arflix.tv.data.model.CollectionSourceKind
+import com.arflix.tv.data.model.meaningfulLabel
 import com.arflix.tv.data.model.CollectionTileShape
 import com.arflix.tv.data.model.Episode
 import com.arflix.tv.data.model.MediaItem
@@ -132,6 +133,11 @@ class MediaRepository @Inject constructor(
     private val apiKey = Constants.TMDB_API_KEY
     private val gson = Gson()
     private val repositoryScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    init {
+        // Phone cards everywhere show the same IMDb score as the hero and details page.
+        com.arflix.tv.ui.components.CardRatings.fetcher = { type, id -> getImdbRating(type, id) }
+    }
     // Lazy so constructing the repository (tests do, with mocks) doesn't touch disk.
     private val addonNative by lazy { AddonNativeCatalog(context, streamRepository, gson) }
 
@@ -1264,7 +1270,8 @@ class MediaRepository @Inject constructor(
         val page = homeServerRepository.loadCatalogItems(
             sourceRef = catalog.sourceRef,
             offset = offset,
-            limit = limit
+            limit = limit,
+            sort = homeServerHomeRowSort(catalog.sourceRef)
         )
         if (page.items.isEmpty()) {
             return@coroutineScope CategoryPageResult(emptyList(), hasMore = false)
@@ -1543,7 +1550,7 @@ class MediaRepository @Inject constructor(
             .firstOrNull { it.id.equals(id, ignoreCase = true) && it.type.equals(type, ignoreCase = true) }
             ?.name?.trim()?.takeIf { it.isNotEmpty() }
             ?: return null
-        val genre = source.addonGenre?.trim()?.takeIf { it.isNotEmpty() && !it.equals("All", ignoreCase = true) }
+        val genre = meaningfulLabel(source.addonGenre)?.takeIf { !it.equals("All", ignoreCase = true) }
         return if (genre != null) "$name · $genre" else name
     }
 
@@ -2164,10 +2171,24 @@ class MediaRepository @Inject constructor(
     private suspend fun resolveVodSeedToItem(seed: IptvRepository.VodCatalogSeed): MediaItem? {
         val tmdbId = seed.tmdbId?.takeIf { it > 0 }
             ?: seed.imdbId?.let { resolveImdbToTmdbRef(it, seed.mediaType)?.second }
-            ?: IptvTitleNormalizer.normalize(seed.title).takeIf { it.isNotBlank() }
-                ?.let { normalized -> resolveTitleToTmdbRef(normalized, seed.mediaType)?.second }
+            ?: resolveVodTitleToTmdbId(seed.title, seed.mediaType)
             ?: return null
         return catalogItemFor(seed.mediaType, tmdbId)
+    }
+
+    /**
+     * Title lookup for a provider entry without ids. The original letters go
+     * first (a Greek or Cyrillic title folds to nothing, and TMDB matches
+     * accented titles best as written), then the ASCII-folded form.
+     */
+    private suspend fun resolveVodTitleToTmdbId(title: String, mediaType: MediaType): Int? {
+        val queries = listOf(IptvTitleNormalizer.searchQuery(title), IptvTitleNormalizer.normalize(title))
+            .filter { it.isNotBlank() }
+            .distinctBy { it.lowercase(Locale.ROOT) }
+        for (query in queries) {
+            resolveTitleToTmdbRef(query, mediaType)?.second?.let { return it }
+        }
+        return null
     }
 
     private suspend fun delegatedHomeSource(request: ClientCatalogRequest, catalog: CatalogConfig): String? {
@@ -2335,6 +2356,17 @@ class MediaRepository @Inject constructor(
         val imdbCandidates = mutableListOf<Pair<String, MediaType?>>()
         val titleCandidates = mutableListOf<Pair<String, MediaType?>>()
         val unresolvedMetaCandidates = mutableListOf<UnresolvedAddonMeta>()
+        // Where each title sits in the addon's list. Titles resolve along different paths (own
+        // metadata, TMDB id, IMDb id, title search); the result keeps the addon's order, so a
+        // "Latest" catalog still starts with its newest title.
+        val refPosition = HashMap<Pair<MediaType, Int>, Int>()
+        val imdbPosition = HashMap<String, Int>()
+        val metaPosition = HashMap<String, Int>()
+        val titlePosition = HashMap<Pair<String, MediaType?>, Int>()
+        fun place(ref: Pair<MediaType, Int>, position: Int) {
+            val known = refPosition[ref]
+            if (known == null || position < known) refPosition[ref] = position
+        }
         val seenImdb = HashSet<String>()
         val seenTitle = HashSet<String>()
         val seenMetaId = HashSet<String>()
@@ -2349,24 +2381,25 @@ class MediaRepository @Inject constructor(
         // starved the heap on a 500-item catalog (ANR).
         val installed = installedAddonsSnapshot()
         val catalogAddon = installed.firstOrNull { it.id == descriptor.addonId }
-        metas.forEach { meta ->
-            if (parseTmdbRefFromAddonMeta(meta, typeHint) != null || extractImdbId(meta) != null) return@forEach
+        metas.forEachIndexed { position, meta ->
+            if (parseTmdbRefFromAddonMeta(meta, typeHint) != null || extractImdbId(meta) != null) return@forEachIndexed
             val metaId = meta.id?.trim().orEmpty()
             // The addon's own type ("Podcasts", "tv", ...) is what its /meta answers to.
             val addonType = meta.type?.trim()?.takeIf { it.isNotBlank() } ?: descriptor.catalogType
             val mediaType = nativeAddonMediaType(addonType, typeHint)
-            if (metaId.isBlank()) return@forEach
+            if (metaId.isBlank()) return@forEachIndexed
             // A metadata addon (AIOMetadata) can re-list another addon's catalog; that addon
             // owns the ids and serves their details and streams.
             val owner = if (catalogAddon != null && addonServesOwnMeta(catalogAddon, addonType, metaId)) {
                 descriptor.addonId
             } else {
                 findAddonServingOwnMeta(installed, addonType, metaId, excludeAddonId = descriptor.addonId)
-            } ?: return@forEach
-            val item = addonNative.register(owner, meta, mediaType, addonType) ?: return@forEach
+            } ?: return@forEachIndexed
+            val item = addonNative.register(owner, meta, mediaType, addonType) ?: return@forEachIndexed
             if (nativeMetaIds.add(metaId)) {
                 nativeItems += item
                 nativeRefs += mediaType to item.id
+                place(mediaType to item.id, position)
             }
         }
         if (nativeItems.isNotEmpty()) {
@@ -2374,21 +2407,24 @@ class MediaRepository @Inject constructor(
             addonNative.flush()
         }
 
-        metas.forEach { meta ->
-            if (meta.id?.trim() in nativeMetaIds) return@forEach
+        metas.forEachIndexed { position, meta ->
+            if (meta.id?.trim() in nativeMetaIds) return@forEachIndexed
             val direct = parseTmdbRefFromAddonMeta(meta, typeHint)
             if (direct != null) {
                 directRefs += direct
-                return@forEach
+                place(direct, position)
+                return@forEachIndexed
             }
             val inferredHint = typeHint ?: addonCatalogTypeToMediaType(meta.type)
             val imdb = extractImdbId(meta)
             if (!imdb.isNullOrBlank() && seenImdb.add(imdb)) {
                 imdbCandidates += imdb to inferredHint
-                return@forEach
+                imdbPosition[imdb] = position
+                return@forEachIndexed
             }
             val metaId = meta.id?.trim().orEmpty()
             if (metaId.isNotBlank() && seenMetaId.add(metaId)) {
+                metaPosition[metaId] = position
                 unresolvedMetaCandidates += UnresolvedAddonMeta(
                     id = metaId,
                     typeHint = inferredHint
@@ -2396,17 +2432,18 @@ class MediaRepository @Inject constructor(
             }
         }
 
-        metas.forEach { meta ->
-            if (meta.id?.trim() in nativeMetaIds) return@forEach
-            if (parseTmdbRefFromAddonMeta(meta, typeHint) != null) return@forEach
-            if (extractImdbId(meta) != null) return@forEach
+        metas.forEachIndexed { position, meta ->
+            if (meta.id?.trim() in nativeMetaIds) return@forEachIndexed
+            if (parseTmdbRefFromAddonMeta(meta, typeHint) != null) return@forEachIndexed
+            if (extractImdbId(meta) != null) return@forEachIndexed
             val title = meta.name?.trim().orEmpty()
-            if (title.isBlank()) return@forEach
+            if (title.isBlank()) return@forEachIndexed
             // A title alone, with no movie/series type to narrow it, matches unrelated TMDB titles.
-            val metaHint = typeHint ?: addonCatalogTypeToMediaType(meta.type) ?: return@forEach
+            val metaHint = typeHint ?: addonCatalogTypeToMediaType(meta.type) ?: return@forEachIndexed
             val titleKey = "${metaHint.name}|${title.lowercase(Locale.US)}"
             if (seenTitle.add(titleKey)) {
                 titleCandidates += title to metaHint
+                titlePosition.putIfAbsent(title to metaHint, position)
             }
         }
 
@@ -2422,28 +2459,36 @@ class MediaRepository @Inject constructor(
                     resolveAddonMetaToTmdbRef(
                         descriptor = descriptor,
                         unresolved = unresolved
-                    )
+                    )?.let { it to (metaPosition[unresolved.id] ?: Int.MAX_VALUE) }
                 }
             }
         }.mapNotNull { it.await() }
+            .onEach { (ref, position) -> place(ref, position) }
+            .map { it.first }
 
         val imdbSemaphore = Semaphore(4)
         val resolvedImdbRefs = imdbCandidates.map { (imdbId, hint) ->
             async {
                 imdbSemaphore.withPermit {
                     resolveImdbToTmdbRef(imdbId, hint)
+                        ?.let { it to (imdbPosition[imdbId] ?: Int.MAX_VALUE) }
                 }
             }
         }.mapNotNull { it.await() }
+            .onEach { (ref, position) -> place(ref, position) }
+            .map { it.first }
 
         val titleSemaphore = Semaphore(2)
         val resolvedTitleRefs = titleCandidates.take(12).map { (title, hint) ->
             async {
                 titleSemaphore.withPermit {
                     resolveTitleToTmdbRef(title, hint)
+                        ?.let { it to (titlePosition[title to hint] ?: Int.MAX_VALUE) }
                 }
             }
         }.mapNotNull { it.await() }
+            .onEach { (ref, position) -> place(ref, position) }
+            .map { it.first }
 
         // A kids profile whose parent approved this catalog trusts what it lists — only titles
         // it names exactly, never a TMDB match guessed from a title (see KidsTrustedCatalogs).
@@ -2458,7 +2503,9 @@ class MediaRepository @Inject constructor(
             }
         }
 
-        (nativeRefs + directRefs + resolvedFromMeta + resolvedImdbRefs + resolvedTitleRefs).distinct()
+        (nativeRefs + directRefs + resolvedFromMeta + resolvedImdbRefs + resolvedTitleRefs)
+            .distinct()
+            .sortedBy { refPosition[it] ?: Int.MAX_VALUE }
     }
 
     private suspend fun activeKidsCatalogApprovals(): Set<String> = try {
@@ -3082,6 +3129,7 @@ class MediaRepository @Inject constructor(
         val type = if (mediaType == MediaType.TV) "tv" else "movie"
         return try {
             val images = tmdbApi.getImages(type, mediaId, apiKey)
+            textlessArtCache["${mediaType}_$mediaId"] = com.arflix.tv.data.api.pickTextlessArtwork(images)
             // Quality ranking for clearlogos: prefer PNG over SVG (the app has
             // no SVG decoder), English over other locales, and among the
             // survivors pick the highest community-rated logo (vote_average
@@ -3103,6 +3151,26 @@ class MediaRepository @Inject constructor(
         } catch (e: Exception) {
             if (e is kotlinx.coroutines.CancellationException) throw e
 
+            null
+        }
+    }
+
+    private val textlessArtCache = ConcurrentHashMap<String, com.arflix.tv.data.api.TextlessArtwork>()
+
+    /**
+     * Poster and backdrop without title text, for heroes that draw a clear logo on top. Shares
+     * the logo's images request, so a hero whose logo is already loaded costs nothing extra.
+     */
+    suspend fun getTextlessArtwork(mediaType: MediaType, mediaId: Int): com.arflix.tv.data.api.TextlessArtwork? {
+        if (mediaId <= 0) return null
+        val key = "${mediaType}_$mediaId"
+        textlessArtCache[key]?.let { return it }
+        val type = if (mediaType == MediaType.TV) "tv" else "movie"
+        return try {
+            com.arflix.tv.data.api.pickTextlessArtwork(tmdbApi.getImages(type, mediaId, apiKey))
+                .also { textlessArtCache[key] = it }
+        } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
             null
         }
     }

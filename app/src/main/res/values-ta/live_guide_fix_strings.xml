@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="live_menu_fix_guide">வழிகாட்டியைத் திருத்து</string>
+    <string name="live_guide_fix_title">வழிகாட்டியைத் திருத்து</string>
+    <string name="live_guide_fix_source_heading">இதன் வழிகாட்டியைப் பயன்படுத்து</string>
+    <string name="live_guide_fix_automatic">தானியங்கு</string>
+    <string name="live_guide_fix_automatic_desc">உங்கள் வழங்குநர் பொருத்திய வழிகாட்டி</string>
+    <string name="live_guide_fix_none">வழிகாட்டி இல்லை</string>
+    <string name="live_guide_fix_none_desc">தவறான வழிகாட்டியை மறை</string>
+    <string name="live_guide_fix_search_hint">சேனலைத் தேடு</string>
+    <string name="live_guide_fix_no_suggestions">ஒத்த சேனல்கள் இல்லை. பெயரால் தேடவும்.</string>
+    <string name="live_guide_fix_no_results">சேனல்கள் எதுவும் கிடைக்கவில்லை</string>
+    <string name="live_guide_fix_offset_title">வழிகாட்டி நேரங்கள்</string>
+    <string name="live_guide_fix_offset_desc">%1$s இன் ஒவ்வொரு நிகழ்ச்சியையும் நகர்த்தும். நிகழ்ச்சிகள் குறிப்பிட்டதை விட முன்போ பின்போ தொடங்கும்போது பயன்படுத்தவும்.</string>
+    <string name="live_guide_fix_earlier">முன்னதாக</string>
+    <string name="live_guide_fix_later">பின்னர்</string>
+    <string name="settings_iptv_start_last_channel">கடைசி சேனலில் தொடங்கு</string>
+    <string name="settings_iptv_start_last_channel_desc">ஆப்பைத் திறந்தால் நீங்கள் கடைசியாகப் பார்த்த சேனல் முழுத்திரையில் இயங்கும்</string>
+</resources>

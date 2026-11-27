@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="live_menu_fix_guide">Rregullo udhëzuesin</string>
+    <string name="live_guide_fix_title">Rregullo udhëzuesin</string>
+    <string name="live_guide_fix_source_heading">Përdor udhëzuesin e</string>
+    <string name="live_guide_fix_automatic">Automatik</string>
+    <string name="live_guide_fix_automatic_desc">Udhëzuesi që lidhi ofruesi yt</string>
+    <string name="live_guide_fix_none">Pa udhëzues</string>
+    <string name="live_guide_fix_none_desc">Fshih një udhëzues të gabuar</string>
+    <string name="live_guide_fix_search_hint">Kërko një kanal</string>
+    <string name="live_guide_fix_no_suggestions">Nuk ka kanale të ngjashme. Kërko sipas emrit.</string>
+    <string name="live_guide_fix_no_results">Nuk u gjet asnjë kanal</string>
+    <string name="live_guide_fix_offset_title">Oraret e udhëzuesit</string>
+    <string name="live_guide_fix_offset_desc">Zhvendos çdo program të %1$s. Përdore kur programet nisin më herët ose më vonë se sa shënohet.</string>
+    <string name="live_guide_fix_earlier">Më herët</string>
+    <string name="live_guide_fix_later">Më vonë</string>
+    <string name="settings_iptv_start_last_channel">Nis te kanali i fundit</string>
+    <string name="settings_iptv_start_last_channel_desc">Hapja e aplikacionit luan kanalin që pe së fundmi, në ekran të plotë</string>
+</resources>

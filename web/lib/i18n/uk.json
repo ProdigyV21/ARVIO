@@ -5,5 +5,13 @@
   "Completed": "Завершено",
   "Dropped": "Покинуто",
   "Silo: use the Jellyfin-compatible address. Optional profile: username#ProfileName. Protected profile: password#PIN.": "Silo: використовуйте адресу, сумісну з Jellyfin. Необов’язковий профіль: username#ProfileName. Захищений профіль: password#PIN.",
-  "None of your enabled addons provide playback sources.": "Жоден із увімкнених додатків не надає джерел відтворення."
+  "None of your enabled addons provide playback sources.": "Жоден із увімкнених додатків не надає джерел відтворення.",
+  "Game info": "Про матч",
+  "Standings": "Турнірна таблиця",
+  "Form": "Форма",
+  "Head to head": "Особисті зустрічі",
+  "Score alerts": "Сповіщення про рахунок",
+  "League networks": "Канали ліги",
+  "Score update": "Зміна рахунку",
+  "Full time": "Матч завершено"
 }

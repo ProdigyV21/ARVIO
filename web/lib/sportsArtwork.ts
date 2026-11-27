@@ -131,3 +131,42 @@ export function loadSportsGuideArtwork(addons: InstalledAddon[]): Promise<Sports
   cache.set(key, entry);
   return entry.request;
 }
+
+const dayCache = new Map<string, { until: number; request: Promise<SportsEventArtwork[]> }>();
+/** Fixtures of one UTC day ("2026-11-20") for the Sports day tabs, a week back to a week ahead. */
+export function loadSportsDay(day: string): Promise<SportsEventArtwork[]> {
+  const endpoint = metadataEndpoint();
+  if (!endpoint || !/^\d{4}-\d{2}-\d{2}$/.test(day)) return Promise.resolve([]);
+  const stored = dayCache.get(day);
+  if (stored && stored.until > Date.now()) return stored.request;
+  const entry = { until: Date.now() + 20 * 60_000, request: Promise.resolve([] as SportsEventArtwork[]) };
+  const url = `${endpoint}${endpoint.includes("?") ? "&" : "?"}day=${encodeURIComponent(day)}`;
+  entry.request = jsonRequest<unknown>(url, { signal: AbortSignal.timeout(8_000) }).then(parseSportsMetadata)
+    .catch(() => { entry.until = Date.now() + 60_000; return stored ? stored.request : []; });
+  if (dayCache.size >= 20) dayCache.delete(dayCache.keys().next().value!);
+  dayCache.set(day, entry);
+  return entry.request;
+}
+
+const gameCache = new Map<string, { until: number; request: Promise<unknown> }>();
+/** One game's details ("123", "espn:nba:401", "mlb:77"), fetched when its page opens. Raw JSON; parse with parseSportsGameDetails. */
+export function loadSportsGame(id: string): Promise<unknown> {
+  const endpoint = metadataEndpoint();
+  if (!endpoint || !/^(?:\d+|espn:[a-z]+:\d+|mlb:\d+)$/.test(id)) return Promise.resolve(null);
+  const stored = gameCache.get(id);
+  if (stored && stored.until > Date.now()) return stored.request;
+  const entry = { until: Date.now() + 60_000, request: Promise.resolve(null as unknown) };
+  entry.request = jsonRequest<unknown>(`${endpoint}${endpoint.includes("?") ? "&" : "?"}game=${encodeURIComponent(id)}`, { signal: AbortSignal.timeout(8_000) })
+    .catch(() => { entry.until = Date.now() + 15_000; return stored ? stored.request : null; });
+  if (gameCache.size >= 30) gameCache.delete(gameCache.keys().next().value!);
+  gameCache.set(id, entry);
+  return entry.request;
+}
+
+/** Live and recent scores of games near now (a small slice of the catalogue), for score alerts. Null on failure. */
+export function loadSportsScores(): Promise<SportsEventArtwork[] | null> {
+  const endpoint = metadataEndpoint();
+  if (!endpoint) return Promise.resolve(null);
+  return jsonRequest<unknown>(`${endpoint}${endpoint.includes("?") ? "&" : "?"}scores=1`, { signal: AbortSignal.timeout(8_000) })
+    .then(parseSportsMetadata).catch(() => null);
+}

@@ -17,13 +17,16 @@ import {
 } from "@/lib/externalPlayers";
 import { fetchSubtitlesForItem } from "@/lib/addons";
 import { cachedDebridDirectUrl, isUncachedDebridStream, parseDebridStream, prefetchDebridDirectUrl, resolveDebridDirectUrl } from "@/lib/debrid";
-import { groupSourcesForPlayback } from "@/lib/sourceRank";
+import { groupSourcesForPlayback, sourcePickerScore } from "@/lib/sourceRank";
 import { playbackCompatibilityRevision, playbackPlan, subscribePlaybackCompatibility } from "@/lib/streamCompatibility";
 import { claimEscape, isTopmostLayer, trapTab } from "@/lib/playerKeys";
 import { authClient, useAppPick } from "@/lib/store";
 import type { InstalledAddon, MediaItem, StreamSource, SubtitleTrack } from "@/lib/types";
 import { isCachedSource, matchesSourceFilter, sourceBadges, sourcePlaybackPresentation, sourceQuality, sourceTitle, type SourceFilter } from "./sourcePlaybackPresentation";
 import { SourceRow } from "./SourceRow";
+
+const SOURCE_SORT_KEY = "arvio.web.sourceSort";
+type SourceSort = "here" | "quality";
 
 export type SourceFacts = {
   stream: StreamSource;
@@ -100,6 +103,17 @@ export function SourcePickerModal({
   useSyncExternalStore(subscribePlaybackCompatibility, playbackCompatibilityRevision, () => 0);
   const [addonFilter, setAddonFilter] = useState("all");
   const [filter, setFilter] = useState<SourceFilter>("all");
+  const [sortMode, setSortModeState] = useState<SourceSort>(() => {
+    try {
+      const saved = window.localStorage.getItem(SOURCE_SORT_KEY);
+      if (saved === "here" || saved === "quality") return saved;
+    } catch { /* storage unavailable */ }
+    return settings.defaultPlayer && settings.defaultPlayer !== "browser" ? "quality" : "here";
+  });
+  const setSortMode = (mode: SourceSort) => {
+    setSortModeState(mode);
+    try { window.localStorage.setItem(SOURCE_SORT_KEY, mode); } catch { /* storage unavailable */ }
+  };
   const [query, setQuery] = useState("");
   const compact = useCompactSources();
   const panelRef = useRef<HTMLElement | null>(null);
@@ -223,7 +237,11 @@ export function SourcePickerModal({
     const visibleStreams = searched.filter((stream) => matchesSourceFilter(filter, facts.get(stream)!));
     return groupSourcesForPlayback(visibleStreams);
   }, [facts, filter, searched]);
-  const ordered = useMemo(() => [...groups.here, ...groups.external], [groups]);
+  // "Quality" lists the best releases first, whatever this browser can decode:
+  // what a VLC/Infuse viewer wants (4K remuxes were buried under "External player").
+  const qualityOrder = useMemo(() => sortMode !== "quality" ? null
+    : [...groups.here, ...groups.external].sort((a, b) => sourcePickerScore(b, "external") - sourcePickerScore(a, "external")), [groups, sortMode]);
+  const ordered = useMemo(() => qualityOrder ?? [...groups.here, ...groups.external], [groups, qualityOrder]);
 
   // Warm the direct CDN URLs of the top debrid picks while the user is still
   // looking at the list — pressing Play then skips the resolver round-trips
@@ -421,6 +439,10 @@ export function SourcePickerModal({
             <Search size={18} />
             <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={translateUi("Search quality, release, provider")} aria-label={translateUi("Search sources")} />
           </label>
+          <div className="src-sort" role="group" aria-label={translateUi("Sort")}>
+            <button type="button" aria-pressed={sortMode === "here"} onClick={() => setSortMode("here")}>{translateUi("Plays here")}</button>
+            <button type="button" aria-pressed={sortMode === "quality"} onClick={() => setSortMode("quality")}>{translateUi("Quality")}</button>
+          </div>
         </div>
 
         <div className="src-filters" role="group" aria-label={translateUi("Filter sources")}>
@@ -447,14 +469,16 @@ export function SourcePickerModal({
                   : streams.length ? translateUi("No sources match this filter.") : translateUi("Sources will appear here when an installed addon returns results.")}
             </p>
           )}
-          {groups.here.length > 0 && (
-            <h3 className="src-group-head">{translateUi("Plays here")} <small>{translateUi("{value0} sources", { value0: groups.here.length })}</small></h3>
-          )}
-          {groups.here.map((stream, index) => renderRow(stream, index))}
-          {groups.external.length > 0 && (
-            <h3 className="src-group-head">{translateUi("External player")} <small>{translateUi("{value0} sources", { value0: groups.external.length })}</small></h3>
-          )}
-          {groups.external.map((stream, index) => renderRow(stream, groups.here.length + index))}
+          {qualityOrder ? qualityOrder.map((stream, index) => renderRow(stream, index)) : <>
+            {groups.here.length > 0 && (
+              <h3 className="src-group-head">{translateUi("Plays here")} <small>{translateUi("{value0} sources", { value0: groups.here.length })}</small></h3>
+            )}
+            {groups.here.map((stream, index) => renderRow(stream, index))}
+            {groups.external.length > 0 && (
+              <h3 className="src-group-head">{translateUi("External player")} <small>{translateUi("{value0} sources", { value0: groups.external.length })}</small></h3>
+            )}
+            {groups.external.map((stream, index) => renderRow(stream, groups.here.length + index))}
+          </>}
           {loading && ordered.length > 0 ? <p className="source-empty" role="status">{translateUi("Searching addons...")}</p> : null}
         </div>
       </div>

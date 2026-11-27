@@ -345,13 +345,14 @@ fun PlayerScreen(
     iptvSourceId: String? = null,
     viewModel: PlayerViewModel = hiltViewModel(),
     onBack: () -> Unit = {},
-    onPlayNext: (EpisodeIdentity, String?, String?, String?) -> Unit = { _, _, _, _ -> }
+    onPlayNext: (EpisodeIdentity, String?, String?, String?) -> Unit = { _, _, _, _ -> },
+    onOpenAddonSettings: (() -> Unit)? = null,
 ) {
     PlayerScreenContent(
         args = PlayerScreenArgs(
             mediaType, mediaId, seasonNumber, episodeNumber, tmdbSeasonNumber, tmdbEpisodeNumber,
             kitsuId, kitsuEpisodeNumber, imdbId, streamUrl, preferredAddonId, preferredSourceName,
-            preferredBingeGroup, startPositionMs, isLiveStream, iptvSourceId, onBack, onPlayNext
+            preferredBingeGroup, startPositionMs, isLiveStream, iptvSourceId, onBack, onPlayNext, onOpenAddonSettings
         ),
         viewModel = viewModel
     )
@@ -386,7 +387,8 @@ private data class PlayerScreenArgs(
     val isLiveStream: Boolean,
     val iptvSourceId: String?,
     val onBack: () -> Unit,
-    val onPlayNext: (EpisodeIdentity, String?, String?, String?) -> Unit
+    val onPlayNext: (EpisodeIdentity, String?, String?, String?) -> Unit,
+    val onOpenAddonSettings: (() -> Unit)? = null,
 )
 
 @OptIn(ExperimentalTvMaterial3Api::class)
@@ -779,6 +781,8 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
     var bufferingStartTime by remember { mutableStateOf<Long?>(null) }
     val bufferingTimeoutMs = 25_000L // Mid-playback timeout for stuck buffering
     var userSelectedSourceManually by remember { mutableStateOf(false) }
+    // One hand-off per player screen: coming back from the external app must not reopen it.
+    var externalPlayerHandled by remember { mutableStateOf(false) }
     val allowStartupSourceFallback = true
     val allowMidPlaybackSourceFallback = false
     val initialBufferingTimeoutMs = remember(uiState.selectedStream, userSelectedSourceManually) {
@@ -1022,6 +1026,12 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
         recordCurrentFailure: Boolean = true,
         reason: String = context.getString(R.string.player_fail_source_didnt_start)
     ): Boolean {
+        if (!uiState.autoSourceFailover) {
+            // Settings > Playback "Switch source automatically" is off: stay on this source
+            // and let the caller show why it failed, so the user can retry or pick another.
+            sourceFailoverLog("automatic source switching is off; staying on ${uiState.selectedStream.failoverSummary()} reason=$reason")
+            return false
+        }
         val streams = uiState.streams
         return if (streams.size <= 1) {
             sourceFailoverLog(
@@ -1408,7 +1418,7 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
                 androidx.media3.exoplayer.trackselection.DefaultTrackSelector(context).apply {
                     parameters = buildUponParameters()
                         // Prefer original audio language when available
-                        .setPreferredAudioLanguage(uiState.preferredAudioLanguage.takeUnless { it.isBlank() || it.equals("none", ignoreCase = true) })
+                        .setPreferredAudioLanguages(*preferredAudioLanguageList(uiState.preferredAudioLanguage, uiState.secondaryAudioLanguage))
                         // Allow decoder fallback for unsupported codecs
                         .setAllowVideoMixedMimeTypeAdaptiveness(true)
                         .setAllowVideoNonSeamlessAdaptiveness(true)
@@ -1963,8 +1973,9 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
             }
     }
 
-    // Disabled for TV and mobile until seek previews are consistently reliable.
-    val seekThumbnailsEnabled = false
+    // Previews are made off the main player: a separate low-priority process decodes one keyframe
+    // at a time, and background preparation pauses on a thin buffer or dropped frames.
+    val seekThumbnailsEnabled = uiState.seekThumbnailsEnabled
     val useNativeSeekKeyframes = seekThumbnailsEnabled && uiState.selectedStreamUrl?.let {
         it.startsWith("https://", ignoreCase = true) || it.startsWith("http://", ignoreCase = true)
     } == true &&
@@ -2030,7 +2041,11 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
     }
 
     val controlsPreviewPosition = if (isControlScrubbing || seekInteraction.phase == SeekPhase.Exiting) scrubPreviewPosition else currentPosition
-    val previewTarget = if (seekInteraction.phase != SeekPhase.Idle) seekInteraction.targetMs else currentPosition
+    // Touch drags move by the pixel; previews use the 10-second cache bucket so a drag reuses
+    // frames instead of restarting a lookup on every move. The seek itself stays exact.
+    val previewTarget = if (seekInteraction.phase == SeekPhase.Idle) currentPosition
+        else if (seekInteraction.surface == SeekSurface.Touch) quantizeSeekPreviewPosition(seekInteraction.targetMs, duration)
+        else seekInteraction.targetMs
     val previewRequested = seekThumbnailsEnabled && !isCasting && !args.isLiveStream && hasPlaybackStarted && duration > 0L &&
         seekInteraction.browsing
     val previewFrameForTarget = seekPreviewFrame?.takeIf {
@@ -2086,8 +2101,14 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
             seekPreviewProvider.warmWindow(previewTarget)
             return@LaunchedEffect
         }
-        seekPreviewProvider.cachedDisplayFrameAt(previewTarget)?.let { nearby ->
+        // Memory first (no I/O), so every scrub step shows a nearby picture at once.
+        seekPreviewProvider.memoryNearbyFrameAt(previewTarget)?.let { nearby ->
             if (seekPreviewProvider.matchesDisplayTarget(nearby, previewTarget)) seekPreviewFrame = nearby
+        }
+        if (!seekPreviewProvider.matchesDisplayTarget(seekPreviewFrame, previewTarget)) {
+            seekPreviewProvider.cachedDisplayFrameAt(previewTarget)?.let { nearby ->
+                if (seekPreviewProvider.matchesDisplayTarget(nearby, previewTarget)) seekPreviewFrame = nearby
+            }
         }
         if (previewStatus.capability == SeekPreviewCapability.UNAVAILABLE) return@LaunchedEffect
         delay(SEEK_PREVIEW_DEBOUNCE_MS)
@@ -2643,12 +2664,12 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
         }
     }
 
-    LaunchedEffect(uiState.preferredAudioLanguage) {
+    LaunchedEffect(uiState.preferredAudioLanguage, uiState.secondaryAudioLanguage) {
         if (playerReleased) return@LaunchedEffect
         val trackSelector = exoPlayer.trackSelector as? androidx.media3.exoplayer.trackselection.DefaultTrackSelector
         if (trackSelector != null) {
             val params = trackSelector.buildUponParameters()
-                .setPreferredAudioLanguage(uiState.preferredAudioLanguage.takeUnless { it.isBlank() || it.equals("none", ignoreCase = true) })
+                .setPreferredAudioLanguages(*preferredAudioLanguageList(uiState.preferredAudioLanguage, uiState.secondaryAudioLanguage))
                 .build()
             trackSelector.parameters = params
         }
@@ -2666,12 +2687,12 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
     // tag get skipped and playback falls back to the default track (often Russian on
     // multi-audio releases). We additionally match on the track label here so the user's
     // chosen language wins regardless of how the track was tagged.
-    LaunchedEffect(audioTracks, uiState.preferredAudioLanguage, userPickedAudioForStream) {
+    LaunchedEffect(audioTracks, uiState.preferredAudioLanguage, uiState.secondaryAudioLanguage, userPickedAudioForStream) {
         if (playerReleased || userPickedAudioForStream) return@LaunchedEffect
         if (audioTracks.size < 2) return@LaunchedEffect
-        val preferred = uiState.preferredAudioLanguage.trim()
-        if (preferred.isBlank() || preferred.equals("none", ignoreCase = true)) return@LaunchedEffect
-        val matchIndex = findPreferredAudioTrackIndex(audioTracks, preferred)
+        val matchIndex = pickAudioTrackByLanguage(
+            audioTracks, uiState.preferredAudioLanguage, uiState.secondaryAudioLanguage, ::findPreferredAudioTrackIndex
+        )
         if (matchIndex == null || matchIndex == selectedAudioIndex) return@LaunchedEffect
         audioTracks.getOrNull(matchIndex)?.let { track ->
             applyAudioTrackSelection(exoPlayer, track, audioTracks)?.let {
@@ -2775,6 +2796,18 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
         if (playerReleased || exitTransition.isExiting) return@LaunchedEffect
         val url = uiState.selectedStreamUrl
         if (BuildConfig.DEBUG) {
+        }
+        if (url != null && uiState.externalPlayer && !args.isLiveStream && !externalPlayerHandled) {
+            externalPlayerHandled = true
+            val headers = uiState.selectedStream?.behaviorHints?.proxyHeaders?.request.orEmpty().safePlaybackHeaders()
+            val title = listOfNotNull(uiState.title.takeIf { it.isNotBlank() }, uiState.episodeTitle?.takeIf { it.isNotBlank() })
+                .joinToString(" · ")
+            if (ExternalPlayerLauncher.launch(context, url, title, headers, args.startPositionMs ?: 0L)) {
+                exoPlayer.stop()
+                args.onBack()
+                return@LaunchedEffect
+            }
+            android.widget.Toast.makeText(context, R.string.external_player_missing, android.widget.Toast.LENGTH_LONG).show()
         }
         if (url != null) {
             startupTrace.begin()
@@ -3260,6 +3293,20 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
     // Sync in-player subtitle delay with the renderer factory (microseconds = ms * 1000)
     LaunchedEffect(subtitleSyncOffsetMs) {
         aiRenderersFactory.syncOffsetUs.set(subtitleSyncOffsetMs * 1000L)
+    }
+    // Every subtitle track has its own timing, so a manual delay tuned for one track is not
+    // carried over to another (e.g. an addon subtitle -> the embedded one). A retimed copy of the
+    // same track keeps the delay, and turning subtitles off and back on to the same track too.
+    val subtitleDelayKey = subtitleDelayTrackKey(uiState.selectedSubtitle)
+    var lastSubtitleDelayKey by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(subtitleDelayKey) {
+        if (subtitleDelayKey != null) {
+            val previous = lastSubtitleDelayKey
+            if (previous != null && previous != subtitleDelayKey && subtitleSyncOffsetMs != 0L) {
+                subtitleSyncOffsetMs = 0L
+            }
+            lastSubtitleDelayKey = subtitleDelayKey
+        }
     }
 
     // When cast starts: keep controls permanently visible.
@@ -4704,6 +4751,7 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
                 onReloadStreams = {
                     viewModel.reloadStreams()
                 },
+                onOpenAddons = args.onOpenAddonSettings,
                 onUpdateAutoplay = { enabled ->
                     viewModel.setAutoPlayNext(enabled)
                 },
@@ -4833,7 +4881,7 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
                         val isPaused = hasPlaybackStarted && !isPlaying && !isBuffering
 
                         PlayerMetadataChrome(
-                            uiState = uiState,
+                            playerUiState = uiState,
                             mediaType = args.mediaType,
                             seasonNumber = args.seasonNumber,
                             episodeNumber = args.episodeNumber,
@@ -6209,7 +6257,12 @@ private fun getFullLanguageName(code: String?): String {
 
     val mapped = when {
         normalizedCode in listOf("en", "eng", "english") -> "English"
-        normalizedCode in listOf("es", "spa", "spanish") -> "Spanish"
+        normalizedCode in listOf("es", "spa", "spanish", "spn") -> "Spanish"
+        // OpenSubtitles' own two-letter codes
+        normalizedCode == "sp" -> "Spanish (Spain)"
+        normalizedCode == "ea" -> "Spanish (Latin America)"
+        normalizedCode == "pb" -> "Portuguese (Brazil)"
+        normalizedCode == "ze" -> "Chinese (Bilingual)"
         normalizedCode in listOf("es-419", "es-la") -> "Spanish (Latin America)"
         normalizedCode in listOf("es-es") -> "Spanish (Spain)"
         normalizedCode in listOf("nl", "nld", "dut", "dutch") -> "Dutch"
@@ -6519,10 +6572,11 @@ private fun SubtitleMenu(
                                         .fillMaxHeight(),
                                     contentAlignment = Alignment.Center
                                 ) {
+                                    // Row 0 on the left is "Off": say so instead of a lone dash.
                                     Text(
-                                        text = "—",
+                                        text = stringResource(R.string.mplayer_subtitles_off),
                                         style = ArflixTypography.caption,
-                                        color = TextSecondary.copy(alpha = 0.3f)
+                                        color = TextSecondary.copy(alpha = 0.5f)
                                     )
                                 }
                             } else {
@@ -7316,6 +7370,15 @@ private const val ADDON_SUB_ID_PREFIX = "arvio-addon-sub:"
 private fun isSameSubtitleTrack(selected: Subtitle?, rowId: String): Boolean =
     selected != null && (selected.id == rowId || selected.id == rowId + RETIMED_SUBTITLE_ID_SUFFIX)
 
+/**
+ * Identity of the base subtitle track for the manual subtitle delay: the delay resets when this
+ * changes. A retimed copy maps to the same key as its source track; null when subtitles are off.
+ */
+internal fun subtitleDelayTrackKey(subtitle: Subtitle?): String? = subtitle?.let { sub ->
+    if (sub.isEmbedded) "embedded|${sub.id}"
+    else "${sub.provider}|${sub.id.removeSuffix(RETIMED_SUBTITLE_ID_SUFFIX)}"
+}
+
 /** True when [selected] is [rowId]'s retimed copy. */
 private fun isRetimedCopyOf(selected: Subtitle?, rowId: String): Boolean =
     selected?.id == rowId + RETIMED_SUBTITLE_ID_SUFFIX
@@ -7811,7 +7874,7 @@ private fun buildSeekPreviewCacheIdentity(
 
 @Composable
 internal fun PlayerMetadataChrome(
-    uiState: PlayerUiState,
+    playerUiState: PlayerUiState,
     mediaType: MediaType,
     seasonNumber: Int?,
     episodeNumber: Int?,
@@ -7819,6 +7882,8 @@ internal fun PlayerMetadataChrome(
     accentColor: Color,
     modifier: Modifier = Modifier
 ) {
+    // A YouTube clip picked from a title's sources shows its own name, not the title's logo and plot.
+    val uiState = playerUiState.asYouTubeClipChrome()
     val displayTitle = when {
         mediaType == MediaType.TV && !uiState.episodeTitle.isNullOrBlank() -> uiState.episodeTitle
         else -> uiState.title

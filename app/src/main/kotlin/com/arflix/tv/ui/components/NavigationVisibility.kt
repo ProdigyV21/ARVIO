@@ -29,6 +29,11 @@ object MusicNavigation {
     var open: () -> Unit = {}
 }
 
+/** Brings the phone tab bar back after it slid away on scroll, e.g. when a page switches tab. */
+object MobileTabBar {
+    var reveal: () -> Unit = {}
+}
+
 /** Shared with the plain D-pad index helpers, like [KidsNavigation]. */
 object NavigationVisibility {
     var hiddenSections by mutableStateOf<Set<String>>(emptySet())

@@ -32,7 +32,7 @@ class SeekPreviewCoverageTest {
         val planner = SeekPreviewCoverage()
         repeat(40) { tick ->
             val target = planner.next(100_000, 150_000, 86_000_000_000, tick.toLong(),
-                PREVIEW_SPECULATIVE_BYTES, true) { false }
+                previewSpeculativeBudget(86_000_000_000), true) { false }
             if (target != null) assertTrue(target in 60_000 until 150_000)
         }
     }
@@ -60,7 +60,7 @@ class SeekPreviewCoverageTest {
         }
         assertEquals(800_000L, planned())
         assertNotEquals(800_000L, planned(now = 120_001))
-        assertNotEquals(800_000L, planned(bytes = PREVIEW_SPECULATIVE_BYTES))
+        assertNotEquals(800_000L, planned(bytes = previewSpeculativeBudget(86_000_000_000)))
         assertTrue(planned(position = 600_000)!! >= 0)
     }
 
@@ -118,16 +118,33 @@ class SeekPreviewCoverageTest {
         assertTrue(targets.any { it <= 20_000 })
     }
 
-    @Test fun `large or unknown files remain within ten minutes ahead`() {
-        for (size in listOf(null, 30_000_000_000L)) {
-            val planner = SeekPreviewCoverage()
-            val cached = mutableSetOf<Long>()
-            repeat(120) { tick ->
-                planner.next(1_000_000, 9_000_000, size, tick * 3_000L, 0) { it in cached }
-                    ?.let { assertTrue(it <= 1_600_000); cached += it }
-            }
-            assertTrue(cached.any { it > 1_300_000 })
+    @Test fun `unknown sizes remain within ten minutes ahead`() {
+        val planner = SeekPreviewCoverage()
+        val cached = mutableSetOf<Long>()
+        repeat(120) { tick ->
+            planner.next(1_000_000, 9_000_000, null, tick * 3_000L, 0) { it in cached }
+                ?.let { assertTrue(it <= 1_600_000); cached += it }
         }
+        assertTrue(cached.any { it > 1_300_000 })
+    }
+
+    @Test fun `large remuxes cover the whole bar coarse first while playing`() {
+        val planner = SeekPreviewCoverage()
+        val cached = mutableSetOf<Long>()
+        repeat(240) { tick ->
+            planner.next(60_000 + tick * 3_000L, 7_200_000, 30_000_000_000, tick * 3_000L, 0, true) { it in cached }
+                ?.let { cached += it }
+        }
+        // Every two-minute slot of a two-hour film, both behind and far ahead of playback.
+        val coarse = (120_000L until 7_200_000L step 120_000L).toList()
+        assertTrue("Missing coarse slots ${coarse.filter { it !in cached }}", cached.containsAll(coarse))
+    }
+
+    @Test fun `speculative budget grows with the file within bounds`() {
+        assertEquals(PREVIEW_SPECULATIVE_BYTES, previewSpeculativeBudget(null))
+        assertEquals(PREVIEW_SPECULATIVE_BYTES, previewSpeculativeBudget(2_000_000_000))
+        assertEquals(30_000_000_000L / 64, previewSpeculativeBudget(30_000_000_000))
+        assertEquals(512L * 1024 * 1024, previewSpeculativeBudget(90_000_000_000))
     }
 
     @Test fun `exhausted wide budget preserves nearby previews for long movies`() {

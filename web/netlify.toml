@@ -1,4 +1,9 @@
 [build]
+  # Production deploys come only from the Deploy Web App GitHub Action (CLI build
+  # + deploy). Netlify's own Git builds duplicated every one of them and each
+  # costs deploy credits, so they are always skipped (exit 0 = skip). The CLI
+  # build in the Action does not evaluate this rule.
+  ignore = "exit 0"
   command = "npm run build"
   publish = ".next"
 

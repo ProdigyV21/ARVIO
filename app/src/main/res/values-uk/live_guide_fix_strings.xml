@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="live_menu_fix_guide">Виправити телегід</string>
+    <string name="live_guide_fix_title">Виправити телегід</string>
+    <string name="live_guide_fix_source_heading">Використати телегід каналу</string>
+    <string name="live_guide_fix_automatic">Автоматично</string>
+    <string name="live_guide_fix_automatic_desc">Телегід, підібраний провайдером</string>
+    <string name="live_guide_fix_none">Без телегіда</string>
+    <string name="live_guide_fix_none_desc">Приховати неправильний телегід</string>
+    <string name="live_guide_fix_search_hint">Знайти канал</string>
+    <string name="live_guide_fix_no_suggestions">Схожих каналів немає. Знайдіть за назвою.</string>
+    <string name="live_guide_fix_no_results">Канали не знайдено</string>
+    <string name="live_guide_fix_offset_title">Час у телегіді</string>
+    <string name="live_guide_fix_offset_desc">Зсуває всі передачі %1$s. Використовуйте, якщо передачі починаються раніше або пізніше вказаного.</string>
+    <string name="live_guide_fix_earlier">Раніше</string>
+    <string name="live_guide_fix_later">Пізніше</string>
+    <string name="settings_iptv_start_last_channel">Запуск на останньому каналі</string>
+    <string name="settings_iptv_start_last_channel_desc">Відкриття застосунку вмикає останній переглянутий канал на весь екран</string>
+</resources>

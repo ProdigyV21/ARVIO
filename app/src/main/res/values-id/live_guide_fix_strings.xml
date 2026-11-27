@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="live_menu_fix_guide">Perbaiki panduan</string>
+    <string name="live_guide_fix_title">Perbaiki panduan</string>
+    <string name="live_guide_fix_source_heading">Gunakan panduan dari</string>
+    <string name="live_guide_fix_automatic">Otomatis</string>
+    <string name="live_guide_fix_automatic_desc">Panduan yang dicocokkan penyedia Anda</string>
+    <string name="live_guide_fix_none">Tanpa panduan</string>
+    <string name="live_guide_fix_none_desc">Sembunyikan panduan yang salah</string>
+    <string name="live_guide_fix_search_hint">Cari saluran</string>
+    <string name="live_guide_fix_no_suggestions">Tidak ada saluran serupa. Cari berdasarkan nama.</string>
+    <string name="live_guide_fix_no_results">Tidak ada saluran ditemukan</string>
+    <string name="live_guide_fix_offset_title">Waktu panduan</string>
+    <string name="live_guide_fix_offset_desc">Menggeser setiap acara di %1$s. Gunakan saat acara mulai lebih awal atau lebih lambat dari jadwal.</string>
+    <string name="live_guide_fix_earlier">Lebih awal</string>
+    <string name="live_guide_fix_later">Nanti</string>
+    <string name="settings_iptv_start_last_channel">Mulai di saluran terakhir</string>
+    <string name="settings_iptv_start_last_channel_desc">Membuka aplikasi memutar saluran terakhir yang Anda tonton, layar penuh</string>
+</resources>

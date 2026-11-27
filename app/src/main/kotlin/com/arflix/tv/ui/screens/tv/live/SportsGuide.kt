@@ -17,12 +17,26 @@ internal data class SportsScheduleKey(val profileId: String?, val providerId: St
     val sourceVersion: Long, val excludedGroups: Set<String>, val epgBackfill: Boolean, val window: Long,
     val guideCoverage: Int = 0)
 internal data class SportsScheduleSnapshot(val key: SportsScheduleKey, val events: List<SportsGuideEvent>)
+/** Least time between two automatic sports scans once a schedule is showing. */
+internal const val SportsRescanGapMs = 5 * 60_000L
+
 internal data class SportsScanRequest(
     val key: SportsScheduleKey,
     val guide: Map<String, IptvNowNext>,
     val refresh: Int,
     val retryOnOpen: Int,
-)
+) {
+    // The guide is the whole in-memory EPG, and a big playlist hands over a new copy
+    // every time a page of it arrives. Rescanning for each copy kept a TV busy scanning
+    // about half of the time. The key already changes when the guide grows a lot
+    // (guideCoverage), when the backfill ends, and every ten minutes (window), so a new
+    // copy alone is not a new request; the next request carries the newest guide.
+    override fun equals(other: Any?): Boolean = this === other || other is SportsScanRequest &&
+        key == other.key && refresh == other.refresh && retryOnOpen == other.retryOnOpen
+
+    override fun hashCode(): Int =
+        (key.hashCode() * 31 + refresh) * 31 + retryOnOpen
+}
 internal data class SportsScanResult(val request: SportsScanRequest, val events: List<SportsGuideEvent>)
 
 internal fun SportsScheduleKey.sameCatalogueScope(other: SportsScheduleKey): Boolean =
@@ -137,13 +151,13 @@ internal fun attachSportsArtwork(events: List<SportsGuideEvent>, artwork: List<S
 
 internal enum class GuideSport(val title: String, val asset: String, val terms: Regex) {
     FOOTBALL("Football", "football", Regex("\\b(football|soccer|premier league|champions league|la liga|eredivisie|bundesliga)\\b")),
-    BASKETBALL("Basketball", "basketball", Regex("\\b(basketball|nba|wnba|euroleague)\\b")),
+    BASKETBALL("Basketball", "basketball", Regex("\\b(basketball|nba|wnba|euroleague|ncaab|ncaam|ncaaw|college basketball|march madness)\\b")),
     F1("Formula 1", "motor_sports", Regex("\\b(f1|formula 1|formula one)\\b")),
     TENNIS("Tennis", "tennis", Regex("\\b(tennis|atp|wta|wimbledon)\\b")),
-    MMA("MMA", "fight", Regex("\\b(mma|ufc|bellator|pfl)\\b")),
-    BOXING("Boxing", "fight", Regex("\\b(boxing|boxen)\\b")),
-    AMERICAN_FOOTBALL("American football", "american_football", Regex("\\b(american football|nfl|ncaa football)\\b")),
-    CRICKET("Cricket", "cricket", Regex("\\b(cricket|t20|ipl)\\b")),
+    MMA("MMA", "fight", Regex("\\b(mma|ufc|bellator|pfl|kick ?boxing|muay thai|k-1)\\b")),
+    BOXING("Boxing", "fight", Regex("(?<!kick )\\b(boxing|boxen)\\b")),
+    AMERICAN_FOOTBALL("American football", "american_football", Regex("\\b(american football|nfl|ncaa football|ncaaf|college football|cfb)\\b")),
+    CRICKET("Cricket", "cricket", Regex("\\b(cricket|t20|t20i|odi|ipl|big bash|bbl|rcb|csk|kkr|srh|pbks|lsg)\\b")),
     BASEBALL("Baseball", "baseball", Regex("\\b(baseball|mlb)\\b")),
     HOCKEY("Ice hockey", "hockey", Regex("\\b(ice hockey|hockey|nhl)\\b")),
     MOTORSPORT("Motorsport", "motor_sports", Regex("\\b(motorsport|motor sports|motogp|nascar|indycar|superbike|formula e|rally)\\b")),
@@ -172,7 +186,52 @@ internal enum class GuideSport(val title: String, val asset: String, val terms: 
     }
 }
 
-internal val nonEvent = Regex("\\b(highlights?|hoogtepunten|samenvatting|resumen|replay|re-?run|classic|news|magazine|review|preview|cancelled|canceled|postponed|abandoned|sendepause|off air|no signal|best of|teleshopping|infomercial|documentary)\\b", RegexOption.IGNORE_CASE)
+/**
+ * Playlist guides fill event channels with placeholders between games: "ENDED | ...",
+ * "Next | ...", "- NO EVENT STREAMING -", "24/7 ...". Those are not games.
+ */
+internal val guidePlaceholder = Regex(
+    "^\\W*(end(ed)?|finished|full ?time|next|up ?next|coming up|upcoming|starts? (at|soon)|no event|offline|closed)\\b|\\bno (live )?events?\\b|\\b24/7\\b|\\bevent (starts|begins)\\b|@\\s*(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\\.?\\s+\\d{1,2}\\b|\\|\\s*all\\s*\\||\\b8k exclusive\\b|\\(\\d{4}-\\d{2}-\\d{2}[ t]\\d{1,2}:\\d{2}",
+    RegexOption.IGNORE_CASE)
+
+/** Event channels that are parked between games ("NO EVENT STREAMING", "No event"). */
+internal val sportsPlaceholderChannel = Regex("\\bno (live )?events?\\b|\\bno stream", RegexOption.IGNORE_CASE)
+
+private val channelPrefix = Regex("^\\s*[a-z]{2,3}\\s*[:|]\\s*", RegexOption.IGNORE_CASE)
+private val channelQuality = Regex("\\b(hd|fhd|uhd|sd|4k|8k|hevc|raw|backup)\\b", RegexOption.IGNORE_CASE)
+private val nonWord = Regex("[^\\p{L}\\p{N}]+")
+private val leadingZeros = Regex("\\b0+(\\d)")
+private fun channelText(value: String) = value.replace(channelPrefix, "").replace(channelQuality, " ")
+    .lowercase(Locale.ROOT).replace(nonWord, " ").replace(leadingZeros, "$1").trim()
+
+/**
+ * A guide that only repeats the channel's own name ("IT: CHAMPIONS LEAGUE INFINITY 1 HD",
+ * "BE: DAZN LIVE EVENT 11" on "DAZN LIVE EVENT 11", "Eleven Sport Cricket Live + Replica"
+ * on "IT: Eleven Sport Cricket") is not a game.
+ */
+internal fun sportsTitleIsChannelName(title: String, channelName: String): Boolean {
+    val a = channelText(title)
+    val b = channelText(channelName)
+    if (a.isEmpty() || b.isEmpty()) return false
+    return a == b || (b.length >= 8 && a.startsWith("$b ")) || (a.length >= 8 && b.startsWith("$a "))
+}
+
+private val channelMatchup = Regex("\\s(?:vs?\\.?|versus|@)\\s", RegexOption.IGNORE_CASE)
+private val stopWords = setOf("the", "and", "live", "vs", "fc", "sc", "university", "state", "college")
+private fun teamWords(value: String) = channelText(value).split(' ').filter { it.length >= 3 && it !in stopWords }.toSet()
+
+/**
+ * An event channel named after one game ("VTSU_Castleton vs Eastern") whose guide still
+ * shows another game ("Sharjah vs Dubai") is stale. It must not be offered for that game.
+ */
+internal fun sportsChannelNamesOtherEvent(title: String, channelName: String): Boolean {
+    if (!channelMatchup.containsMatchIn(channelName.replace('_', ' '))) return false
+    val channelWords = teamWords(channelName.replace('_', ' '))
+    return channelWords.isNotEmpty() && channelWords.none { it in teamWords(title) }
+}
+
+internal val nonEvent = Regex("\\b(highlights?|hoogtepunten|samenvatting|resumen|replay|replica|herhaling|wiederholung|repeticion|repetición|rediffusion|re-?run|classic|news|magazine|review|preview|cancelled|canceled|postponed|abandoned|sendepause|off air|no signal|best of|teleshopping|infomercial|documentary)\\b", RegexOption.IGNORE_CASE)
+private val collegeRanking = Regex("(^|[\\s|:])#\\d{1,2}\\s+\\p{L}")
 private val eventMatchup = Regex("\\s+(?:vs?\\.?|versus|at|[-–—])\\s+", RegexOption.IGNORE_CASE)
 private val liveEventCue = Regex("\\b(live|on air|match|game|race|grand prix|qualifying|tournament|coverage|championship|event)\\b", RegexOption.IGNORE_CASE)
 private val genericSportsChannel = Regex("\\b(sports?|espn|eurosport|dazn|bein sports?|sky sports?|bt sports?|tnt sports?|fox sports?|supersports?|sportsnet|star sports?|eleven sports?|willow)\\b", RegexOption.IGNORE_CASE)
@@ -214,9 +273,12 @@ internal class SportsEventIndex {
         add(event.sport, event.identity, event.programme, event.channels, event.schedules, event.competition, event.channelOnly, event.artwork)
     }
     fun add(sport: GuideSport, identity: String, programme: IptvProgram, channel: IptvChannel, competition: String?) {
+        if (sportsPlaceholderChannel.containsMatchIn(channel.name) || sportsTitleIsChannelName(programme.title, channel.name) ||
+            sportsChannelNamesOtherEvent(programme.title, channel.name)) return
         add(sport, identity, programme, listOf(channel), null, competition)
     }
     fun addChannelOnly(sport: GuideSport, programme: IptvProgram, channel: IptvChannel) {
+        if (sportsPlaceholderChannel.containsMatchIn(channel.name) || sportsChannelNamesOtherEvent(programme.title, channel.name)) return
         add(sport, sportsEventIdentity(programme.title), programme, listOf(channel), null, null,
             channelOnly = true, artwork = channel.logo)
     }
@@ -248,22 +310,37 @@ internal class SportsProgrammeResolver {
     data class Metadata(val sport: GuideSport, val identity: String, val competition: String?)
     private data class Key(val title: String, val category: String?, val fallback: GuideSport?)
     private val cache = object : LinkedHashMap<Key, Metadata?>(512, .75f, true) {
-        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Key, Metadata?>?) = size > 4096
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Key, Metadata?>?) = size > 32_768
     }
     fun resolve(programme: IptvProgram, fallback: GuideSport?): Metadata? {
         val key = Key(programme.title, programme.category, fallback)
-        if (cache.containsKey(key)) return cache[key]
-        val metadata = if (nonEvent.containsMatchIn(programme.title)) null else {
+        val metadata = if (cache.containsKey(key)) cache[key] else classify(programme, fallback).also { cache[key] = it }
+        // A team game is over in a few hours. A guide block of half a day or more with a
+        // matchup title is an event channel's placeholder, not a game on now.
+        return metadata?.takeUnless {
+            (it.sport in timedTeamSports || (it.sport == GuideSport.OTHER && eventMatchup.containsMatchIn(programme.title))) &&
+                programme.endUtcMillis - programme.startUtcMillis >= 6 * 60 * 60_000L
+        }
+    }
+    private fun classify(programme: IptvProgram, fallback: GuideSport?): Metadata? {
+        val metadata = if (nonEvent.containsMatchIn(programme.title) || guidePlaceholder.containsMatchIn(programme.title)) null else {
             val text = "${programme.category.orEmpty()} ${programme.title}"
             // Channel genre alone does not make advertising or downtime a sporting event.
             (GuideSport.fromText(text) ?: fallback?.takeIf {
                 eventMatchup.containsMatchIn(programme.title) ||
                     (it == GuideSport.OTHER && liveEventCue.containsMatchIn(programme.title))
+            }?.let { sport ->
+                // "#8 Tennessee vs #1 Ohio State": poll rankings are US college sport, not
+                // soccer, even on a channel filed under Football.
+                if (sport == GuideSport.FOOTBALL && collegeRanking.containsMatchIn(programme.title)) GuideSport.AMERICAN_FOOTBALL else sport
             })
                 ?.let { Metadata(it, sportsEventIdentity(programme.title), competition(text)) }
         }
-        cache[key] = metadata
         return metadata
+    }
+    private companion object {
+        val timedTeamSports = setOf(GuideSport.FOOTBALL, GuideSport.BASKETBALL, GuideSport.AMERICAN_FOOTBALL, GuideSport.BASEBALL,
+            GuideSport.HOCKEY, GuideSport.RUGBY, GuideSport.AUSTRALIAN_FOOTBALL, GuideSport.VOLLEYBALL, GuideSport.HANDBALL)
     }
 }
 
@@ -309,7 +386,7 @@ internal fun accumulateSportsGuideEvents(
             val meta = resolver.resolve(programme, fallback)
             if (meta != null) events.add(meta.sport, meta.identity, programme, channel, meta.competition)
             else if (allowsChannelOnlyFallback(programme, fallback) && programme.isLive(now) &&
-                !nonEvent.containsMatchIn(programme.title)) {
+                !nonEvent.containsMatchIn(programme.title) && !guidePlaceholder.containsMatchIn(programme.title)) {
                 // Providers often classify a channel as Football, ESPN, or Sports
                 // while the current EPG entry contains only a show name. Keep the
                 // live source discoverable without inventing a fixture.
@@ -319,11 +396,25 @@ internal fun accumulateSportsGuideEvents(
     }
 }
 
+/**
+ * When a growing guide should trigger a new sports scan. Small guides rescan every 64
+ * channels; large ones only each time they grow by about half, so a 50,000-channel
+ * playlist that fills its guide in the background is scanned a handful of times
+ * instead of hundreds.
+ */
+internal fun sportsGuideSizeBucket(size: Int): Int {
+    if (size < 1024) return size / 64
+    val top = Integer.highestOneBit(size)
+    return 16 + 2 * Integer.numberOfTrailingZeros(top) + if (size and (top shr 1) != 0) 1 else 0
+}
+
 internal fun sportsUpcomingProgrammes(slice: IptvNowNext): List<IptvProgram> =
     listOfNotNull(slice.now, slice.next, slice.later) + slice.upcoming
 
 @Immutable
-internal data class SportsGuideRow(val id: String, val title: String, val events: List<SportsGuideEvent>)
+internal data class SportsGuideRow(val id: String, val title: String, val events: List<SportsGuideEvent>,
+    // How many games the row stands for; a row can show fewer cards than that (see SPORTS_ROW_CAP).
+    val total: Int = events.size)
 
 /**
  * Compose requires keys to be unique within each lazy container. Provider data

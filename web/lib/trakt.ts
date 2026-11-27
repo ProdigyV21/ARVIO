@@ -477,7 +477,14 @@ export class TraktClient {
         body: JSON.stringify({ ...media, progress: Number.isFinite(item.progress) ? Math.min(100, Math.max(0, item.progress)) : 0 })
       });
     } catch (error) {
-      if (action !== "stop" || (error as { status?: number }).status !== 409) throw error;
+      const status = (error as { status?: number }).status;
+      // Not failures of the connection: 409 = Trakt already has this scrobble
+      // (a repeat within its dedupe window), 422 = progress_too_low, which
+      // Trakt answers to any pause/stop in the first ~1 % of a title (every
+      // source switch and early pause). Reporting these toasted "A tracking
+      // service could not save playback" on nearly every web playback.
+      if (status === 409 || status === 422) return;
+      throw error;
     }
   }
 

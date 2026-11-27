@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -776,6 +777,10 @@ fun MobileSubtitlesSheet(
                     delayMs = subtitleDelayMs,
                     minMs = -MAX_SUBTITLE_OFFSET_MS,
                     maxMs = MAX_SUBTITLE_OFFSET_MS,
+                    // Fine-grained ±15 s slider plus quick steps; typed values and the step
+                    // buttons still reach the full ±120 s.
+                    sliderRangeMs = 15_000L,
+                    quickStepsMs = listOf(1_000L, 5_000L, 10_000L),
                     onUpdateDelay = onUpdateSubtitleDelay
                 )
             }
@@ -1484,7 +1489,12 @@ private fun getFullLanguageName(code: String?): String {
 
     val mapped = when {
         normalizedCode in listOf("en", "eng", "english") -> "English"
-        normalizedCode in listOf("es", "spa", "spanish") -> "Spanish"
+        normalizedCode in listOf("es", "spa", "spanish", "spn") -> "Spanish"
+        // OpenSubtitles' own two-letter codes
+        normalizedCode == "sp" -> "Spanish (Spain)"
+        normalizedCode == "ea" -> "Spanish (Latin America)"
+        normalizedCode == "pb" -> "Portuguese (Brazil)"
+        normalizedCode == "ze" -> "Chinese (Bilingual)"
         normalizedCode in listOf("es-419", "es-la") -> "Spanish (Latin America)"
         normalizedCode in listOf("es-es") -> "Spanish (Spain)"
         normalizedCode in listOf("nl", "nld", "dut", "dutch") -> "Dutch"
@@ -2002,14 +2012,50 @@ private fun ExactDelayInputDialog(
 }
 
 @Composable
+private fun RowScope.DelayStepChip(
+    label: String,
+    enabled: Boolean = true,
+    onClick: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .weight(1f)
+            .clip(RoundedCornerShape(8.dp))
+            .background(Color.White.copy(alpha = if (enabled) 0.10f else 0.05f))
+            .then(if (enabled) Modifier.clickable(onClick = onClick) else Modifier)
+            .padding(vertical = 10.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = label,
+            color = if (enabled) MobilePlayerTokens.InkPrimary else MobilePlayerTokens.InkTertiary,
+            fontSize = 12.5.sp,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1
+        )
+    }
+}
+
+/**
+ * Delay readout, slider and reset.
+ *
+ * When [sliderRangeMs] is set, the slider covers only ±[sliderRangeMs] (snapped to 50 ms) for
+ * finer control, while typed values and [quickStepsMs] still reach the full [minMs]..[maxMs].
+ * With [quickStepsMs], a row of -/+ step chips is shown with a Reset chip in the middle.
+ */
+@Composable
 private fun DelayAdjusterContent(
     title: String,
     delayMs: Long,
     minMs: Long = -5000L,
     maxMs: Long = 5000L,
+    sliderRangeMs: Long? = null,
+    quickStepsMs: List<Long> = emptyList(),
     onUpdateDelay: (Long) -> Unit
 ) {
     var showInputDialog by remember { mutableStateOf(false) }
+    val sliderMin = sliderRangeMs?.let { -it } ?: minMs
+    val sliderMax = sliderRangeMs ?: maxMs
 
     Column(
         modifier = Modifier
@@ -2018,7 +2064,7 @@ private fun DelayAdjusterContent(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
-        // Big Readout with Amber Accent when != 0
+        // Big readout
         Column(
             modifier = Modifier
                 .clip(RoundedCornerShape(12.dp))
@@ -2032,7 +2078,7 @@ private fun DelayAdjusterContent(
         ) {
             Text(
                 text = if (delayMs > 0) "+$delayMs ms" else "$delayMs ms",
-                color = if (delayMs != 0L) Color(0xFFFFB300) else MobilePlayerTokens.InkPrimary,
+                color = MobilePlayerTokens.InkPrimary,
                 fontSize = 30.sp,
                 fontWeight = FontWeight.Bold
             )
@@ -2056,12 +2102,15 @@ private fun DelayAdjusterContent(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Slider(
-                value = delayMs.toFloat().coerceIn(minMs.toFloat(), maxMs.toFloat()),
-                onValueChange = { onUpdateDelay(it.roundToLong()) },
-                valueRange = minMs.toFloat()..maxMs.toFloat(),
+                value = delayMs.toFloat().coerceIn(sliderMin.toFloat(), sliderMax.toFloat()),
+                onValueChange = {
+                    val raw = it.roundToLong()
+                    onUpdateDelay(if (sliderRangeMs != null) (raw / 50L) * 50L else raw)
+                },
+                valueRange = sliderMin.toFloat()..sliderMax.toFloat(),
                 colors = SliderDefaults.colors(
-                    thumbColor = if (delayMs != 0L) Color(0xFFFFB300) else Color.White,
-                    activeTrackColor = if (delayMs != 0L) Color(0xFFFFB300) else Color.White,
+                    thumbColor = Color.White,
+                    activeTrackColor = Color.White,
                     inactiveTrackColor = Color.White.copy(alpha = 0.2f)
                 ),
                 modifier = Modifier
@@ -2075,7 +2124,7 @@ private fun DelayAdjusterContent(
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Text(
-                    text = "${minMs / 1000}s",
+                    text = "${sliderMin / 1000}s",
                     color = MobilePlayerTokens.InkTertiary,
                     fontSize = 11.sp
                 )
@@ -2086,15 +2135,41 @@ private fun DelayAdjusterContent(
                     fontWeight = FontWeight.SemiBold
                 )
                 Text(
-                    text = "+${maxMs / 1000}s",
+                    text = "+${sliderMax / 1000}s",
                     color = MobilePlayerTokens.InkTertiary,
                     fontSize = 11.sp
                 )
             }
         }
 
-        // Reset Button if != 0
-        if (delayMs != 0L) {
+        if (quickStepsMs.isNotEmpty()) {
+            // -10s -5s -1s  Reset  +1s +5s +10s
+            val negatives = quickStepsMs.sortedDescending().map { -it }
+            val positives = quickStepsMs.sorted()
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                negatives.forEach { step ->
+                    DelayStepChip(
+                        label = "-${abs(step) / 1000}s",
+                        onClick = { onUpdateDelay((delayMs + step).coerceIn(minMs, maxMs)) }
+                    )
+                }
+                DelayStepChip(
+                    label = stringResource(R.string.mplayer_reset),
+                    enabled = delayMs != 0L,
+                    onClick = { onUpdateDelay(0L) }
+                )
+                positives.forEach { step ->
+                    DelayStepChip(
+                        label = "+${step / 1000}s",
+                        onClick = { onUpdateDelay((delayMs + step).coerceIn(minMs, maxMs)) }
+                    )
+                }
+            }
+        } else if (delayMs != 0L) {
+            // Reset button if != 0
             Box(
                 modifier = Modifier
                     .fillMaxWidth()

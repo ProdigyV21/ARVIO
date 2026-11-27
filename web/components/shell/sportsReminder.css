@@ -1,0 +1,15 @@
+.sports-reminder { position: fixed; inset-inline-end: 24px; bottom: 24px; z-index: 2147483000; width: min(420px, calc(100vw - 32px)); background: #161616f2; color: #eee; border: 1px solid #383838; border-radius: 14px; padding: 18px; box-shadow: 0 18px 50px #000a; }
+.sports-reminder p { margin: 0; color: #aaa; font-size: 13px; display: flex; align-items: center; gap: 8px; }
+.sports-reminder p svg { color: var(--accent, #2ec4b6); }
+.sports-reminder strong { display: block; font-size: 18px; margin: 6px 0 4px; }
+.sports-reminder small { display: block; color: #aaa; font-size: 13px; }
+.sports-reminder div { display: flex; gap: 10px; margin-top: 14px; }
+.sports-reminder button { width: auto; min-height: 42px; padding: 8px 16px; border-radius: 8px; }
+@media (max-width: 600px) { .sports-reminder { inset-inline: 16px; bottom: calc(16px + env(safe-area-inset-bottom)); width: auto; } }
+.sports-score-alert { position: fixed; inset-inline-end: 20px; top: 20px; z-index: 2147482990; width: min(360px, calc(100vw - 32px)); background: #161616f2; color: #eee; border: 1px solid #383838; border-radius: 12px; padding: 12px 16px; box-shadow: 0 12px 40px #0009; pointer-events: none; animation: sports-score-alert-in 180ms ease-out; }
+.sports-score-alert p { margin: 0; color: #aaa; font-size: 12px; display: flex; align-items: center; gap: 8px; }
+.sports-score-alert p svg { color: var(--accent, #2ec4b6); }
+.sports-score-alert strong { display: block; font-size: 16px; margin-top: 4px; font-variant-numeric: tabular-nums; }
+@keyframes sports-score-alert-in { from { opacity: 0; transform: translateY(-6px); } }
+@media (prefers-reduced-motion: reduce) { .sports-score-alert { animation: none; } }
+@media (max-width: 600px) { .sports-score-alert { inset-inline: 16px; top: calc(12px + env(safe-area-inset-top)); width: auto; } }

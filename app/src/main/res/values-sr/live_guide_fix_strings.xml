@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="live_menu_fix_guide">Исправи водич</string>
+    <string name="live_guide_fix_title">Исправи водич</string>
+    <string name="live_guide_fix_source_heading">Користи водич канала</string>
+    <string name="live_guide_fix_automatic">Аутоматски</string>
+    <string name="live_guide_fix_automatic_desc">Водич који је доделио провајдер</string>
+    <string name="live_guide_fix_none">Без водича</string>
+    <string name="live_guide_fix_none_desc">Сакриј погрешан водич</string>
+    <string name="live_guide_fix_search_hint">Претражи канал</string>
+    <string name="live_guide_fix_no_suggestions">Нема сличних канала. Претражите по називу.</string>
+    <string name="live_guide_fix_no_results">Нису пронађени канали</string>
+    <string name="live_guide_fix_offset_title">Времена у водичу</string>
+    <string name="live_guide_fix_offset_desc">Помера сваку емисију из %1$s. Користите када емисије почињу раније или касније од наведеног.</string>
+    <string name="live_guide_fix_earlier">Раније</string>
+    <string name="live_guide_fix_later">Касније</string>
+    <string name="settings_iptv_start_last_channel">Покрени на последњем каналу</string>
+    <string name="settings_iptv_start_last_channel_desc">Отварање апликације пушта последњи гледани канал преко целог екрана</string>
+</resources>

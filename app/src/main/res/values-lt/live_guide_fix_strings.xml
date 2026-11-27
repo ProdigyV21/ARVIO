@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="live_menu_fix_guide">Taisyti programą</string>
+    <string name="live_guide_fix_title">Taisyti programą</string>
+    <string name="live_guide_fix_source_heading">Naudoti programą iš</string>
+    <string name="live_guide_fix_automatic">Automatiškai</string>
+    <string name="live_guide_fix_automatic_desc">Teikėjo susieta programa</string>
+    <string name="live_guide_fix_none">Be programos</string>
+    <string name="live_guide_fix_none_desc">Slėpti klaidingą programą</string>
+    <string name="live_guide_fix_search_hint">Ieškoti kanalo</string>
+    <string name="live_guide_fix_no_suggestions">Panašių kanalų nėra. Ieškokite pagal pavadinimą.</string>
+    <string name="live_guide_fix_no_results">Kanalų nerasta</string>
+    <string name="live_guide_fix_offset_title">Programos laikai</string>
+    <string name="live_guide_fix_offset_desc">Perkelia kiekvieną %1$s laidą. Naudokite, kai laidos prasideda anksčiau ar vėliau nei nurodyta.</string>
+    <string name="live_guide_fix_earlier">Anksčiau</string>
+    <string name="live_guide_fix_later">Vėliau</string>
+    <string name="settings_iptv_start_last_channel">Pradėti nuo paskutinio kanalo</string>
+    <string name="settings_iptv_start_last_channel_desc">Atidarius programėlę paskutinis žiūrėtas kanalas rodomas per visą ekraną</string>
+</resources>

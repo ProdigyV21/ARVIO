@@ -60,6 +60,9 @@ import com.arflix.tv.ui.theme.ErrorRed
 import com.arflix.tv.ui.theme.TextSecondary
 import com.arflix.tv.util.LocalDeviceType
 import com.arflix.tv.util.PinUtil
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalTvMaterial3Api::class)
@@ -126,6 +129,9 @@ fun PinEntryDialog(
             }
         } else {
             onPinConfirmed(current)
+            // A rejected PIN starts over instead of leaving the wrong digits in the boxes;
+            // an accepted one closes the dialog anyway.
+            pinInput = ""
         }
     }
 
@@ -138,7 +144,27 @@ fun PinEntryDialog(
                 .fillMaxSize()
                 .background(Color.Black.copy(alpha = 0.90f))
                 .navigationBarsPadding()
-                .imePadding(),
+                .imePadding()
+                .onPreviewKeyEvent { event ->
+                    // The remote's number keys type the PIN directly, wherever focus is.
+                    if (isTouchDevice) return@onPreviewKeyEvent false
+                    val code = event.nativeKeyEvent.keyCode
+                    val digit = when (code) {
+                        in android.view.KeyEvent.KEYCODE_0..android.view.KeyEvent.KEYCODE_9 -> code - android.view.KeyEvent.KEYCODE_0
+                        in android.view.KeyEvent.KEYCODE_NUMPAD_0..android.view.KeyEvent.KEYCODE_NUMPAD_9 -> code - android.view.KeyEvent.KEYCODE_NUMPAD_0
+                        else -> null
+                    }
+                    val isDelete = code == android.view.KeyEvent.KEYCODE_DEL
+                    if (digit == null && !isDelete) return@onPreviewKeyEvent false
+                    if (event.type == KeyEventType.KeyDown) {
+                        val editingConfirm = isSetup && isConfirmingSetup
+                        val current = if (editingConfirm) confirmPin else pinInput
+                        val next = if (isDelete) current.dropLast(1) else (current + digit).take(5)
+                        if (editingConfirm) confirmPin = next else pinInput = next
+                        errorMessage = ""
+                    }
+                    true
+                },
             contentAlignment = Alignment.Center
         ) {
             Column(
@@ -172,7 +198,9 @@ fun PinEntryDialog(
                     textAlign = TextAlign.Center
                 )
 
-                Text(
+                // An unlock prompt titled "Enter PIN" / "Enter PIN to unlock" needs no second line repeating it.
+                val unlockTitles = setOf(stringResource(R.string.profile_enter_pin), stringResource(R.string.enter_pin_to_unlock))
+                if (isSetup || title !in unlockTitles) Text(
                     text = when {
                         isSetup && !isConfirmingSetup -> setupHint ?: stringResource(R.string.profile_pin_setup_hint)
                         isSetup && isConfirmingSetup -> stringResource(R.string.profile_pin_reenter)

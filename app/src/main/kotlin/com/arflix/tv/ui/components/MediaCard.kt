@@ -31,6 +31,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import coil.imageLoader
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
@@ -515,13 +516,11 @@ fun MediaCard(
 
             Text(
                 text = item.title,
+                // Phone cards sit on a solid background, so the title needs no shadow.
                 style = if (isMobile) ArvioSkin.typography.cardTitle.copy(
                     fontSize = 14.sp,
-                    shadow = androidx.compose.ui.graphics.Shadow(
-                        color = androidx.compose.ui.graphics.Color.Black,
-                        offset = androidx.compose.ui.geometry.Offset(2f, 2f),
-                        blurRadius = 6f
-                    )
+                    lineHeight = 18.sp,
+                    fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
                 ) else ArvioSkin.typography.cardTitle.copy(
                     shadow = androidx.compose.ui.graphics.Shadow(
                         color = androidx.compose.ui.graphics.Color.Black,
@@ -554,9 +553,12 @@ fun MediaCard(
                     val year = item.releaseDate?.takeIf { it.isNotBlank() }
                         ?: item.year.takeIf { it.isNotBlank() }
                     val dateLabel = if (isMobile && year != null) formatEpisodeAirDateLabel(year) ?: year else year
-                    if (dateLabel != null) mediaCardSubtitle(typeLabel, dateLabel)
+                    // Rows already say "Movies" or "Shows", so phones show only the date there.
+                    if (dateLabel != null) mobileAwareCardSubtitle(isMobile, typeLabel, dateLabel)
                     else item.subtitle.ifBlank { typeLabel }
                 }
+                val cardRating = rememberMobileCardRating(item, enabled = isMobile)
+                androidx.compose.foundation.layout.Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     text = subtitle,
                     style = ArvioSkin.typography.caption.copy(
@@ -569,7 +571,31 @@ fun MediaCard(
                     color = ArvioSkin.colors.textMuted.copy(alpha = 0.85f),
                     maxLines = subtitleMaxLines,
                     overflow = TextOverflow.Ellipsis,
+                    modifier = if (cardRating != null) Modifier.weight(1f, fill = false) else Modifier,
                 )
+                // Phones: the score sits next to the date. An IMDb score carries the IMDb badge;
+                // a TMDB vote (only when IMDb has none) keeps the small gold star.
+                if (cardRating != null && cardRating.isImdb) {
+                    androidx.compose.foundation.layout.Spacer(Modifier.width(6.dp))
+                    androidx.compose.foundation.layout.Box(Modifier.testTag("media_card_rating")) {
+                        ImdbSvgRatingBadge(
+                            rating = cardRating.value,
+                            imageLoader = LocalContext.current.imageLoader,
+                            ratingFontSize = 11,
+                            logoWidth = 22.dp,
+                            logoHeight = 11.dp,
+                        )
+                    }
+                } else if (cardRating != null) {
+                    Text(
+                        text = "  \u2605 ${cardRating.value}",
+                        style = ArvioSkin.typography.caption,
+                        color = androidx.compose.ui.graphics.Color(0xFFF5C518),
+                        maxLines = 1,
+                        modifier = Modifier.testTag("media_card_rating"),
+                    )
+                }
+                }
             }
         }
     }
@@ -584,6 +610,16 @@ fun MediaCard(
  * and left-to-right languages are unaffected.
  */
 internal fun mediaCardSubtitle(typeLabel: String, dateLabel: String): String = "$typeLabel · \u200E$dateLabel"
+
+/** Phones drop the type and keep the quieter date line; TV keeps "{type} · {date}". */
+/** The best score a card already carries (IMDb, else TMDB), as "7.4"; null when it has none. */
+internal fun mobileCardRating(vararg candidates: String?): String? = candidates.asSequence()
+    .mapNotNull { it?.trim()?.substringBefore('/')?.replace(',', '.')?.toFloatOrNull() }
+    .firstOrNull { it > 0f && it <= 10f }
+    ?.let { String.format(java.util.Locale.US, "%.1f", it) }
+
+internal fun mobileAwareCardSubtitle(isMobile: Boolean, typeLabel: String, dateLabel: String): String =
+    if (isMobile) dateLabel else mediaCardSubtitle(typeLabel, dateLabel)
 
 /** Narrower posters show the short Continue Watching badges ("Neu", "25 Min."); the full ones overlap there. */
 private val CONTINUE_WATCHING_FULL_BADGE_MIN_WIDTH = 140.dp

@@ -1,0 +1,30 @@
+.tv-multiview { position: fixed; inset: 0; z-index: 60; display: flex; flex-direction: column; background: #000; color: #eee; outline: none; }
+.tv-multiview > header { display: flex; align-items: center; gap: 16px; padding: 10px 16px; padding-top: max(10px, env(safe-area-inset-top)); }
+.tv-multiview > header h2 { flex: 1; font-size: 20px; margin: 0; }
+.tv-multiview > header button { display: inline-flex; align-items: center; gap: 6px; min-height: 40px; padding: 0 12px; border: 0; border-radius: 6px; color: #eee; background: #242424; }
+.tv-multiview-grid { flex: 1; min-height: 0; display: grid; gap: 4px; padding: 0 4px 4px; padding-bottom: max(4px, env(safe-area-inset-bottom)); }
+.tv-multiview-grid.is-1 { grid-template: 1fr / 1fr; }
+.tv-multiview-grid.is-2 { grid-template: 1fr / 1fr 1fr; align-content: center; }
+.tv-multiview-grid.is-2 .tv-multiview-tile { aspect-ratio: 16 / 9; }
+.tv-multiview-grid.is-3 { grid-template: 1fr 1fr / 2fr 1fr; }
+.tv-multiview-grid.is-3 .tv-multiview-tile:first-child { grid-row: span 2; }
+.tv-multiview-grid.is-4 { grid-template: 1fr 1fr / 1fr 1fr; }
+.tv-multiview-tile { position: relative; min-width: 0; min-height: 0; background: #070809; border: 2px solid #2c2c2c; border-radius: 6px; overflow: hidden; cursor: pointer; outline: none; }
+.tv-multiview-tile.has-audio { border-color: #fff; }
+.tv-multiview-tile:focus-visible { box-shadow: 0 0 0 3px #fff; }
+.tv-multiview-tile video { width: 100%; height: 100%; object-fit: contain; background: #000; display: block; }
+.tv-multiview-label { position: absolute; top: 8px; left: 8px; max-width: calc(100% - 100px); display: flex; align-items: center; gap: 6px; padding: 4px 8px; border-radius: 4px; background: #000a; font-size: 13px; }
+.tv-multiview-label span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tv-multiview-actions { position: absolute; top: 6px; right: 6px; display: flex; gap: 6px; opacity: 0; transition: opacity 120ms; }
+.tv-multiview-tile:hover .tv-multiview-actions, .tv-multiview-tile:focus-within .tv-multiview-actions, .tv-multiview-tile.has-audio .tv-multiview-actions { opacity: 1; }
+.tv-multiview-actions button { width: 34px; height: 34px; display: grid; place-items: center; border: 0; border-radius: 6px; color: #eee; background: #000b; }
+.tv-multiview-status { position: absolute; inset: auto 12px 12px; padding: 6px 10px; border-radius: 4px; background: #000b; color: #cfd3da; font-size: 13px; text-align: center; }
+.tv-multiview-picker { position: absolute; inset: 60px max(16px, calc(50% - 300px)) auto; max-height: 70dvh; overflow: auto; padding: 16px; background: #111315; border: 1px solid #555; border-radius: 6px; }
+.tv-multiview-picker header { display: flex; justify-content: space-between; align-items: center; }
+.tv-multiview-picker h3 { margin: 0 0 8px; font-size: 18px; }
+.tv-multiview-picker header button { width: 40px; height: 40px; border: 0; border-radius: 6px; color: #eee; background: #242424; }
+.tv-multiview-picker p { color: #b9c0cb; }
+@media (max-width: 700px) {
+  .tv-multiview-grid.is-2 { grid-template: 1fr 1fr / 1fr; }
+  .tv-multiview-grid.is-2 .tv-multiview-tile { aspect-ratio: auto; }
+}

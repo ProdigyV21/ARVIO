@@ -19,6 +19,11 @@ import com.arflix.tv.music.MusicServerType
 import com.arflix.tv.music.MusicShelf
 import com.arflix.tv.music.MusicSource
 import com.arflix.tv.music.MusicTrack
+import com.arflix.tv.music.MusicLucky
+import com.arflix.tv.music.MusicLyrics
+import com.arflix.tv.music.MusicPin
+import com.arflix.tv.music.MusicPinType
+import com.arflix.tv.music.MusicTaste
 import android.net.Uri
 import com.arflix.tv.music.SpotifyImport
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -55,7 +60,7 @@ sealed interface MusicPage {
     data class Playlist(val id: String) : MusicPage
 
     companion object {
-        const val LIKED = "liked"
+        const val LIKED = MusicCollections.LIKED_ID
     }
 }
 
@@ -83,10 +88,22 @@ data class MusicUiState(
     /** Songs looked up so far and in all, while a Spotify import runs. */
     val importProgress: Pair<Int, Int>? = null,
     val importResult: SpotifyImportResult? = null,
+    /** What the profile listened to; its recently played songs make a home row. */
+    val taste: MusicTaste = MusicTaste(),
+    /** The lyrics shown in the player, for the song [LyricsUi.trackId]. */
+    val lyrics: LyricsUi? = null,
 ) {
     val config: MusicServerConfig? get() = library.server
     val hasSources: Boolean get() = !library.isEmpty
 }
+
+/** Lyrics of one song: still loading, found ([lyrics] may be empty), or [failed] to load. */
+data class LyricsUi(
+    val trackId: String,
+    val loading: Boolean = true,
+    val lyrics: MusicLyrics? = null,
+    val failed: Boolean = false,
+)
 
 /** How a Spotify import went; [error] when it could not run at all. */
 data class SpotifyImportResult(
@@ -137,6 +154,19 @@ interface MusicActions {
     /** Reads Spotify export files the user picked and rebuilds those playlists from their own sources. */
     fun importSpotify(files: List<Uri>)
     fun dismissImportResult()
+
+    // Speed dial, Surprise me, queue, sleep timer and lyrics; no-ops for screenshot stand-ins.
+    fun togglePin(pin: MusicPin) = Unit
+    fun openPin(pin: MusicPin) = Unit
+    fun surpriseMe() = Unit
+    fun playNext(track: MusicTrack) = Unit
+    fun addToQueue(track: MusicTrack) = Unit
+    fun removeFromQueue(index: Int) = Unit
+    fun moveInQueue(from: Int, to: Int) = Unit
+    fun setSleepTimer(minutes: Int) = Unit
+    fun sleepAtEndOfTrack() = Unit
+    fun cancelSleepTimer() = Unit
+    fun loadLyrics(track: MusicTrack) = Unit
 }
 
 @HiltViewModel
@@ -151,6 +181,11 @@ class MusicViewModel @Inject constructor(
 
     private var searchJob: Job? = null
 
+    private companion object {
+        /** How long a search's results stay on screen before it counts as one the user meant. */
+        const val SEARCH_SETTLED_MS = 2_500L
+    }
+
     init {
         viewModelScope.launch {
             repository.library.collect { library ->
@@ -158,7 +193,10 @@ class MusicViewModel @Inject constructor(
                 if (!changed && _state.value.configLoaded) return@collect
                 // A new or removed source starts the library over, but keeps the open player.
                 _state.update {
-                    MusicUiState(configLoaded = true, library = library, playerOpen = it.playerOpen, collections = it.collections)
+                    MusicUiState(
+                        configLoaded = true, library = library, playerOpen = it.playerOpen,
+                        collections = it.collections, taste = it.taste, lyrics = it.lyrics,
+                    )
                 }
                 if (!library.isEmpty) loadHome()
             }
@@ -170,6 +208,54 @@ class MusicViewModel @Inject constructor(
         viewModelScope.launch {
             com.arflix.tv.music.MusicNowPlaying.openPlayerRequest.collect { requested ->
                 if (requested && com.arflix.tv.music.MusicNowPlaying.takeOpenPlayerRequest()) setPlayerOpen(true)
+            }
+        }
+        viewModelScope.launch {
+            repository.taste.collect { taste -> _state.update { it.copy(taste = taste) } }
+        }
+    }
+
+    override fun togglePin(pin: MusicPin) = edit { it.togglePin(pin) }
+
+    override fun openPin(pin: MusicPin) = when (pin.type) {
+        MusicPinType.ALBUM -> openAlbum(pin.toAlbum())
+        MusicPinType.ARTIST -> openArtist(pin.toArtist())
+        MusicPinType.PLAYLIST -> openPlaylist(pin.id)
+    }
+
+    override fun surpriseMe() {
+        val current = _state.value
+        when (val pick = MusicLucky.pick(current.collections, current.taste, current.shelves)) {
+            is MusicLucky.Pick.Tracks -> player.playQueue(pick.tracks)
+            is MusicLucky.Pick.Album -> {
+                val source = source() ?: return
+                viewModelScope.launch {
+                    runCatching { source.albumTracks(pick.album.id) }
+                        .onSuccess { tracks -> if (tracks.isNotEmpty()) player.playQueue(tracks.shuffled()) }
+                }
+            }
+            null -> return
+        }
+        _state.update { it.copy(playerOpen = true) }
+    }
+
+    override fun playNext(track: MusicTrack) = player.playNext(track)
+    override fun addToQueue(track: MusicTrack) = player.addToQueue(track)
+    override fun removeFromQueue(index: Int) = player.removeFromQueue(index)
+    override fun moveInQueue(from: Int, to: Int) = player.moveInQueue(from, to)
+    override fun setSleepTimer(minutes: Int) = player.setSleepTimer(minutes)
+    override fun sleepAtEndOfTrack() = player.sleepAtEndOfTrack()
+    override fun cancelSleepTimer() = player.cancelSleepTimer()
+
+    override fun loadLyrics(track: MusicTrack) {
+        val shown = _state.value.lyrics
+        if (shown?.trackId == track.id && !shown.failed) return
+        _state.update { it.copy(lyrics = LyricsUi(track.id)) }
+        viewModelScope.launch {
+            val result = runCatching { repository.lyrics.find(track) }
+            _state.update { state ->
+                if (state.lyrics?.trackId != track.id) state
+                else state.copy(lyrics = LyricsUi(track.id, loading = false, lyrics = result.getOrNull(), failed = result.isFailure))
             }
         }
     }
@@ -324,6 +410,11 @@ class MusicViewModel @Inject constructor(
             val result = MusicNameLookup.search(source, query.trim(), repository::latinNames)
                 .let { it.copy(tracks = MusicSearchRanking.rankTracks(query, it.tracks, it.aliases)) }
             _state.update { it.copy(searching = false, results = result) }
+            // A search the user stays on (not one they are still typing) feeds the recommendations.
+            if (!result.isEmpty) {
+                delay(SEARCH_SETTLED_MS)
+                runCatching { repository.recordSearch(query) }
+            }
         }
     }
 

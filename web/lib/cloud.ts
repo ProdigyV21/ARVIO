@@ -12,6 +12,7 @@ import { discardPendingProgress, flushProgressOutbox, installProgressRetry, pend
 import { mergeTvSessions, normalizeTvSession } from "./iptvSession";
 import { normalizeIptvPlaylist as normalizeRuntimeIptvPlaylist } from "./iptv";
 import { normalizeGroupNames } from "./iptvGroups";
+import { normalizeGuideOffsets, normalizeGuideSources } from "./iptvGuideFixes";
 import { legacyStalkerFields, mergeStalkerPortalEdits, migrateIptvCloudState, migrateLegacyStalkerChannelIds, migrateLegacyStalkerKeys, normalizeStalkerPortals, portalsFromCloud } from "./stalkerPortals";
 import type { StalkerPortalEntry } from "./types";
 import { tmdbImageUrl } from "./mediaImages";
@@ -81,6 +82,11 @@ interface AndroidIptvProfileState {
   channelOrder?: Record<string, string[]>;
   /** { "<playlistId>|<group>": "<display name>" } — category names set by the user. */
   groupNames?: Record<string, string>;
+  /** { "<channelId>": "<source channel id>" | "none" } — the guide a channel shows instead. */
+  guideSources?: Record<string, string>;
+  /** { "<playlistId>": minutes } — guide time correction per playlist/portal. */
+  guideOffsets?: Record<string, number>;
+  startLastChannel?: boolean;
 }
 
 function canUseBackendSync(auth: AuthClient) {
@@ -509,6 +515,7 @@ function androidProfileSettings(settings: AppSettings) {
     subtitleStyle: androidSubtitleStyle(settings.subtitleStyle),
     subtitleStylized: settings.subtitleStylized,
     secondarySubtitle: settings.secondarySubtitle || "Off",
+    secondaryAudioLanguage: settings.secondaryAudioLanguage || "Off",
     filterSubtitlesByLanguage: settings.filterSubtitlesByLanguage,
     subtitleFont: settings.subtitleFont || "System",
     useForcedSubtitles: settings.useForcedSubtitles,
@@ -583,6 +590,10 @@ function settingsFromAndroidProfile(value: unknown): Partial<AppSettings> {
   if (state.autoPlayMaxQuality !== undefined && state.autoPlayMaxQuality !== null) partial.autoPlayMaxQuality = webMaxQuality(state.autoPlayMaxQuality);
   if (state.autoPlayMaxSizeGb !== undefined && state.autoPlayMaxSizeGb !== null && Number.isFinite(Number(state.autoPlayMaxSizeGb))) partial.autoPlayMaxSizeGb = Number(state.autoPlayMaxSizeGb);
   if ("secondarySubtitle" in state) partial.secondarySubtitle = String(state.secondarySubtitle || "");
+  if ("secondaryAudioLanguage" in state && state.secondaryAudioLanguage != null) {
+    const value = String(state.secondaryAudioLanguage || "");
+    partial.secondaryAudioLanguage = value.toLowerCase() === "off" ? "" : value;
+  }
   if ("filterSubtitlesByLanguage" in state) partial.filterSubtitlesByLanguage = Boolean(state.filterSubtitlesByLanguage);
   if ("homeServerConnectionJson" in state && typeof state.homeServerConnectionJson === "string" && state.homeServerConnectionJson.trim()) {
     // The Android app writes { connections: [...] } with its own field names;
@@ -659,6 +670,9 @@ function iptvFromAndroid(value: unknown, root?: RawPayload): Partial<AppSettings
     groupOrder: (state.groupOrderSchema ?? 0) >= 3 ? stringArray(state.groupOrder) : [],
     iptvChannelOrder: normalizeChannelOrder(state.channelOrder),
     iptvGroupNames: normalizeGroupNames(state.groupNames),
+    iptvGuideSources: normalizeGuideSources(state.guideSources),
+    iptvGuideOffsets: normalizeGuideOffsets(state.guideOffsets),
+    iptvStartLastChannel: state.startLastChannel === true,
     iptvSortOrder: state.sortOrder === "number" || state.sortOrder === "name" ? state.sortOrder : "provider",
     iptvStalkerPortals: stalkerPortals,
     iptvStalkerUrl: legacyStalker.stalkerPortalUrl,
@@ -1232,7 +1246,10 @@ function androidIptvSettings(settings: AppSettings): Record<string, unknown> {
     sortOrder: settings.iptvSortOrder ?? "provider",
     // Only once known, so a browser that never read it cannot blank the TV's.
     ...(settings.iptvChannelOrder !== undefined ? { channelOrder: settings.iptvChannelOrder } : {}),
-    ...(settings.iptvGroupNames !== undefined ? { groupNames: settings.iptvGroupNames } : {})
+    ...(settings.iptvGroupNames !== undefined ? { groupNames: settings.iptvGroupNames } : {}),
+    ...(settings.iptvGuideSources !== undefined ? { guideSources: settings.iptvGuideSources } : {}),
+    ...(settings.iptvGuideOffsets !== undefined ? { guideOffsets: settings.iptvGuideOffsets } : {}),
+    ...(settings.iptvStartLastChannel !== undefined ? { startLastChannel: settings.iptvStartLastChannel } : {})
   };
 }
 
@@ -1240,6 +1257,9 @@ function androidIptvSettings(settings: AppSettings): Record<string, unknown> {
 function sameIptvField(field: string, a: unknown, b: unknown) {
   if (field === "channelOrder") return sameFieldValue(normalizeChannelOrder(a), normalizeChannelOrder(b));
   if (field === "groupNames") return sameFieldValue(normalizeGroupNames(a), normalizeGroupNames(b));
+  if (field === "guideSources") return sameFieldValue(normalizeGuideSources(a), normalizeGuideSources(b));
+  if (field === "guideOffsets") return sameFieldValue(normalizeGuideOffsets(a), normalizeGuideOffsets(b));
+  if (field === "startLastChannel") return (a === true) === (b === true);
   if (field === "stalkerPortals") return sameFieldValue(normalizeStalkerPortals(a), normalizeStalkerPortals(b));
   return sameFieldValue(a, b);
 }
@@ -1289,9 +1309,11 @@ export function mergeIptvSettings(cloudState: Record<string, unknown>, settings:
       portalsMerged = true;
       continue;
     }
-    if (field === "channelOrder" || field === "groupNames") {
-      // Per category: only the categories this browser reordered / renamed (or reset) change.
-      const normalize = (input: unknown): Record<string, unknown> => field === "channelOrder" ? normalizeChannelOrder(input) : normalizeGroupNames(input);
+    if (field === "channelOrder" || field === "groupNames" || field === "guideSources" || field === "guideOffsets") {
+      // Per key: only the categories / channels / playlists this browser changed (or reset) change.
+      const normalize = (input: unknown): Record<string, unknown> => field === "channelOrder" ? normalizeChannelOrder(input)
+        : field === "groupNames" ? normalizeGroupNames(input)
+        : field === "guideSources" ? normalizeGuideSources(input) : normalizeGuideOffsets(input);
       const local = normalize(value);
       const previous = base ? normalize(base[field]) : {};
       const next = base ? normalize(existing[field]) : {};
@@ -2487,6 +2509,16 @@ export async function saveWatchedState(
         .filter((candidate) => !isWatchedRow(candidate));
       root.localContinueWatchingByProfile = byProfile;
     }
+
+    // Android TraktRepository.markContinueWatchingEntryWatched: stamp the exact entry (the movie,
+    // or this one episode) so paused tracker playback or another device's older progress cannot
+    // bring it back. Newer progress (a rewatch) still shows; the next episode's Up Next is untouched.
+    if (item.mediaType === "movie" || (item.seasonNumber != null && item.episodeNumber != null)) {
+      const { exactKey } = continueWatchingDismissalKeys(item);
+      updateProfileDismissals(root, targetProfileId, (values) => {
+        if (watched) values.set(exactKey, Date.now()); else values.delete(exactKey);
+      });
+    }
   });
 }
 
@@ -2497,4 +2529,47 @@ export async function markWatched(auth: AuthClient, entry: Omit<WatchHistoryEntr
     seasonNumber: entry.season,
     episodeNumber: entry.episode
   }, true, profileId);
+}
+
+/** Followed sports teams and leagues for a profile (Android's `sportsFollowsJson`), or null when never set. */
+export async function pullCloudSportsFollows(auth: AuthClient, profileId?: string | null): Promise<string | null> {
+  if (!auth.session || !profileId) return null;
+  const root = await pullRawPayload(auth);
+  const profile = scopedValue<Record<string, unknown>>(root, "profileSettingsById", profileId);
+  return typeof profile?.sportsFollowsJson === "string" ? profile.sportsFollowsJson : null;
+}
+
+/** Saves the followed teams and leagues with their own timestamp, so other devices adopt them. */
+export async function saveCloudSportsFollows(auth: AuthClient, profileId: string | null | undefined, json: string) {
+  if (!profileId) return;
+  await mutateCloudPayload(auth, root => {
+    const existing = { ...((scopedValue<Record<string, unknown>>(root, "profileSettingsById", profileId) ?? {}) as Record<string, unknown>) };
+    existing.sportsFollowsJson = json;
+    setScopedValue(root, "profileSettingsById", profileId, existing);
+    bumpFieldTs(root, `p:${profileId}:sportsFollowsJson`);
+  });
+}
+
+// ── Music tab (Android parity: profileSettingsById.<id>.musicAddonsJson / musicCollectionsJson / musicTasteJson) ──
+// Both are JSON strings the Android app writes with Gson. A web change bumps the field's own
+// timestamp ("p:<profileId>:<field>"), which the app's field-level merge then adopts.
+export type CloudMusicField = "musicAddonsJson" | "musicCollectionsJson" | "musicTasteJson";
+
+export async function pullCloudMusic(auth: AuthClient, profileId: string): Promise<Partial<Record<CloudMusicField, string>>> {
+  const root = await pullRawPayload(auth);
+  const profile = objectRecord(scopedValue(root, "profileSettingsById", profileId));
+  const out: Partial<Record<CloudMusicField, string>> = {};
+  for (const field of ["musicAddonsJson", "musicCollectionsJson", "musicTasteJson"] as const) {
+    const value = profile[field];
+    if (typeof value === "string" && value) out[field] = value;
+  }
+  return out;
+}
+
+export async function saveCloudMusic(auth: AuthClient, profileId: string, field: CloudMusicField, json: string) {
+  await mutateCloudPayload(auth, (root) => {
+    const existing = objectRecord(scopedValue(root, "profileSettingsById", profileId));
+    setScopedValue(root, "profileSettingsById", profileId, { ...existing, [field]: json });
+    bumpFieldTs(root, `p:${profileId}:${field}`);
+  });
 }

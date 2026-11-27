@@ -301,6 +301,8 @@ class SeekPreviewFrameProvider internal constructor(
         val cachedTargets = ConcurrentSkipListSet<Long>()
         val networkBytes = AtomicLong()
         val speculativeBytes = AtomicLong()
+        /** The addon's size, else the length the server reported once previews opened the file. */
+        fun knownSizeBytes(): Long? = source.sizeBytes ?: proxy?.contentLength?.takeIf { it > 0 }
         fun close() {
             images?.close()
             proxy?.close()
@@ -395,6 +397,31 @@ class SeekPreviewFrameProvider internal constructor(
         best
     }
 
+    /**
+     * The nearest frame already in memory (within [PREVIEW_APPROXIMATION_MS]), without disk or
+     * network: shown on every scrub step while the exact frame or a disk hit is still on its way.
+     */
+    fun memoryNearbyFrameAt(positionMs: Long): SeekPreviewFrame? {
+        val source = active ?: return null
+        if (source.memoryDisabled || closed) return null
+        val target = clamp(positionMs, source)
+        memoryFrame(source, target, 0)?.let { return it }
+        val lower = (target - PREVIEW_APPROXIMATION_MS - PREVIEW_INTERVAL_MS).coerceAtLeast(0)
+        val upper = (target + PREVIEW_APPROXIMATION_MS + PREVIEW_INTERVAL_MS).coerceAtMost(source.source.durationMs)
+        var best: SeekPreviewFrame? = null
+        for (at in source.cachedTargets.subSet(lower, true, upper, true).sortedBy { kotlin.math.abs(it - target) }.take(8)) {
+            val entry = memoryCache.get(frameKey(source, at)) ?: continue
+            val actual = entry.metadata.actualMs ?: continue
+            if (entry.metadata.validity != SeekPreviewValidity.TIMESTAMP ||
+                kotlin.math.abs(actual - target) > PREVIEW_APPROXIMATION_MS) continue
+            val frame = deliver(source, entry, entry.metadata.extractedForMs, 0, SeekPreviewOrigin.MEMORY) ?: continue
+            if (best == null || kotlin.math.abs(actual - target) < kotlin.math.abs(best.positionMs - target)) {
+                best = frame.copy(requestedPositionMs = target, approximate = !frame.isValidFor(target))
+            }
+        }
+        return best
+    }
+
     fun memoryFrameAt(positionMs: Long): SeekPreviewFrame? {
         val source = active ?: return null
         if (source.memoryDisabled) return null
@@ -485,7 +512,7 @@ class SeekPreviewFrameProvider internal constructor(
         if (SystemClock.elapsedRealtime() < source.warmRetryAtMs) return
         if (source.unavailable) return
         val target = withContext(Dispatchers.IO) {
-            source.coverage.next(positionMs, source.source.durationMs, source.source.sizeBytes,
+            source.coverage.next(positionMs, source.source.durationMs, source.knownSizeBytes(),
                 SystemClock.elapsedRealtime(), source.speculativeBytes.get(), preferWindow) { at ->
                 val key = frameKey(source, at)
                 memoryFrame(source, at, 0) != null ||
@@ -559,7 +586,7 @@ class SeekPreviewFrameProvider internal constructor(
                             NATIVE_BACKGROUND_PREVIEW_NETWORK_BYTES else BACKGROUND_PREVIEW_NETWORK_BYTES
                         source.extractionBudgetBytes = if (wideCoverage)
                             minOf(backgroundBudget,
-                                (PREVIEW_SPECULATIVE_BYTES - source.speculativeBytes.get()).coerceAtLeast(0))
+                                (previewSpeculativeBudget(source.knownSizeBytes()) - source.speculativeBytes.get()).coerceAtLeast(0))
                         else if (background && !playbackPaused) backgroundBudget
                         else MAX_EXTRACTION_NETWORK_BYTES
                         origin = SeekPreviewOrigin.DECODER

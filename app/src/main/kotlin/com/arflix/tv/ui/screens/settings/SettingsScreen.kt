@@ -1,5 +1,6 @@
 package com.arflix.tv.ui.screens.settings
 import androidx.compose.material.icons.filled.Storage
+import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.filled.TableRows
 import androidx.compose.ui.text.font.FontWeight
@@ -128,9 +129,11 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.TextFields
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Speaker
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Extension
+import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.Tune
 import com.arflix.tv.data.model.StreamIntegrationType
 import com.arflix.tv.data.model.StreamSearchMode
@@ -349,17 +352,25 @@ private val tvGeneralSectionIds = setOf(
 
 /** Row id of the News tab switch; 56..58 are the other optional tabs, in OPTIONAL_NAVIGATION_SECTIONS order. */
 internal const val NEWS_TAB_ROW = 61
+/** Settings > Playback: seek-bar thumbnails on/off. */
+internal const val SEEK_THUMBNAILS_ROW = 64
+/** Settings > Language: second-choice audio language. */
+internal const val SECONDARY_AUDIO_ROW = 65
+/** Settings > Playback: switch to the next source when one fails. */
+internal const val AUTO_SOURCE_FAILOVER_ROW = 66
+/** Settings > Playback: open streams in another video app. */
+internal const val EXTERNAL_PLAYER_ROW = 67
 
 /** Optional tabs whose switch sits on the tab's own settings page, not under Interface. */
 private val MOBILE_OWN_PAGE_SECTIONS = setOf("news", "music", "music_tv")
 
 /** Row ids of the Music tab switches: one for TV, one for phones and tablets. */
-internal const val MUSIC_TV_TAB_ROW = 64
-internal const val MUSIC_PHONE_TAB_ROW = 65
+internal const val MUSIC_TV_TAB_ROW = 68
+internal const val MUSIC_PHONE_TAB_ROW = 69
 
 /** Row id of Music's sources (adding and removing addons and servers). */
-internal const val MUSIC_SOURCES_ROW = 66
-internal const val MUSIC_CACHE_ROW = 67
+internal const val MUSIC_SOURCES_ROW = 70
+internal const val MUSIC_CACHE_ROW = 71
 
 /** The optional tab a navigation switch row controls. */
 internal fun navigationSectionForRow(rowId: Int): String = when (rowId) {
@@ -371,13 +382,13 @@ internal fun navigationSectionForRow(rowId: Int): String = when (rowId) {
 
 internal fun tvGeneralRowsForSection(section: String): List<Int> {
     return when (section) {
-        "language" -> listOf(0, 3, 1, 2)
+        "language" -> listOf(0, 3, SECONDARY_AUDIO_ROW, 1, 2)
         // 48 (sync by hearing) only where it exists: the sideload build.
         "subtitles" -> listOf(4, 5, 6, 7, 42, 8, 38) +
             (if (BuildConfig.AUDIO_SYNC_AVAILABLE) listOf(48) else emptyList()) +
             listOf(39, 9, 45)
         "ai_subtitles" -> listOf(28, 29, 30, 31, 32, 33) + LIVE_AI_SUBS_ROWS
-        "playback" -> listOf(10, 11, 12, 43, 44, 55, 13, 14, 34, 37, 16, 15, 40, 27, 53, 54, 60)
+        "playback" -> listOf(10, 11, AUTO_SOURCE_FAILOVER_ROW, EXTERNAL_PLAYER_ROW, 12, 43, 44, 55, SEEK_THUMBNAILS_ROW, 13, 14, 34, 37, 16, 15, 40, 27, 53, 54, 60)
         "appearance" -> listOf(17, 49, 50, 18, 20, 21, 24, 23, 22, 41, 46, 36, 47, 56, 57) +
             (if (com.arflix.tv.ui.components.KidsNavigation.hideLiveTv) emptyList() else listOf(58)) + 59
         // News: the tab switch, then what the tab shows. Kids profiles never get the section.
@@ -763,6 +774,8 @@ fun SettingsScreen(
     var secondarySubtitlePickerIndex by remember { mutableIntStateOf(0) }
     var showAudioLanguagePicker by remember { mutableStateOf(false) }
     var audioLanguagePickerIndex by remember { mutableIntStateOf(0) }
+    var showSecondaryAudioPicker by remember { mutableStateOf(false) }
+    var secondaryAudioPickerIndex by remember { mutableIntStateOf(0) }
     var showDnsProviderPicker by remember { mutableStateOf(false) }
     var dnsProviderPickerIndex by remember { mutableIntStateOf(0) }
     var showContentLanguagePicker by remember { mutableStateOf(false) }
@@ -834,8 +847,8 @@ fun SettingsScreen(
                 }
             } else {
                 // Add-Playlist + M3U rows + Stalker rows + order + VOD search
-                // + EPG actions + favorites-on-home + refresh + clear + fallback logos
-                7 + uiState.iptvPlaylists.size + uiState.iptvStalkerPortals.size
+                // + EPG actions + favorites-on-home + refresh + clear + fallback logos + start in last channel
+                8 + uiState.iptvPlaylists.size + uiState.iptvStalkerPortals.size
             }
             "stream_integrations" -> uiState.streamProviderItems.size
             "home_server" -> uiState.homeServerConnections.size + 3
@@ -872,6 +885,13 @@ fun SettingsScreen(
         audioLanguagePickerIndex = options.indexOfFirst { it.equals(uiState.defaultAudioLanguage, ignoreCase = true) }
             .coerceAtLeast(0)
         showAudioLanguagePicker = true
+    }
+    val openSecondaryAudioPicker = {
+        viewModel.refreshAudioLanguageOptions()
+        secondaryAudioPickerIndex = secondaryAudioLanguageOptions(uiState.audioLanguageOptions)
+            .indexOfFirst { it.equals(uiState.secondaryAudioLanguage, ignoreCase = true) }
+            .coerceAtLeast(0)
+        showSecondaryAudioPicker = true
     }
     val openDnsProviderPicker = {
         val options = uiState.dnsProviderOptions
@@ -1524,6 +1544,9 @@ fun SettingsScreen(
                                                 1 -> openSubtitlePicker()
                                                 2 -> openSecondarySubtitlePicker()
                                                 3 -> openAudioLanguagePicker()
+                                                SECONDARY_AUDIO_ROW -> openSecondaryAudioPicker()
+                                                AUTO_SOURCE_FAILOVER_ROW -> viewModel.setAutoSourceFailover(!uiState.autoSourceFailover)
+                                                EXTERNAL_PLAYER_ROW -> viewModel.setExternalPlayer(!uiState.externalPlayer)
                                                 4 -> viewModel.cycleSubtitleSize()
                                                 5 -> viewModel.cycleSubtitleColor()
                                                 6 -> viewModel.cycleSubtitleOffset()
@@ -1577,6 +1600,7 @@ fun SettingsScreen(
                                                 54 -> viewModel.clearPlaybackCache()
                                                 60 -> showPlaybackCompatibility = true
                                                 55 -> viewModel.setShowAddonStreamDetails(!uiState.showAddonStreamDetails)
+                                                SEEK_THUMBNAILS_ROW -> viewModel.setSeekThumbnailsEnabled(!uiState.seekThumbnailsEnabled)
                                                 62 -> newsDialog = com.arflix.tv.ui.screens.news.NewsSettingsDialog.TOPICS
                                                 63 -> newsDialog = com.arflix.tv.ui.screens.news.NewsSettingsDialog.SOURCES
                                                 MUSIC_SOURCES_ROW -> showMusicSources = true
@@ -1746,6 +1770,9 @@ fun SettingsScreen(
                                                     }
                                                     contentFocusIndex == m3uCount + stalkerCount + 7 -> {
                                                         viewModel.setFallbackChannelLogosEnabled(!uiState.fallbackChannelLogosEnabled)
+                                                    }
+                                                    contentFocusIndex == m3uCount + stalkerCount + 8 -> {
+                                                        viewModel.setIptvStartLastChannel(!uiState.iptvStartLastChannel)
                                                     }
                                                 }
                                             }
@@ -1981,6 +2008,7 @@ fun SettingsScreen(
                 openSubtitlePicker = openSubtitlePicker,
                 openSecondarySubtitlePicker = openSecondarySubtitlePicker,
                 openAudioLanguagePicker = openAudioLanguagePicker,
+                openSecondaryAudioPicker = openSecondaryAudioPicker,
                 openDnsProviderPicker = openDnsProviderPicker,
                 openUiModeWarningDialog = openUiModeWarningDialog,
                 openQualityFiltersModal = { showQualityFiltersModal = true },
@@ -2066,8 +2094,7 @@ fun SettingsScreen(
                         .padding(vertical = 18.dp, horizontal = 10.dp)
                 ) {
                     val availableUpdate = uiState.updateStatus as? com.arflix.tv.updater.UpdateStatus.UpdateAvailable
-                    val awaitingCompilation = com.arflix.tv.ui.components.rememberAwaitingProfileCompilation()
-                    SettingsSidebarHeader(availableUpdate?.update?.tag, awaitingCompilation)
+                    SettingsSidebarHeader(availableUpdate?.update?.tag)
 
                     Column(
                         modifier = Modifier
@@ -2284,6 +2311,14 @@ fun SettingsScreen(
                             onPlaybackCompatibilityClick = { showPlaybackCompatibility = true },
                             showAddonStreamDetails = uiState.showAddonStreamDetails,
                             onShowAddonStreamDetailsToggle = { viewModel.setShowAddonStreamDetails(it) },
+                            seekThumbnailsEnabled = uiState.seekThumbnailsEnabled,
+                            onSeekThumbnailsToggle = { viewModel.setSeekThumbnailsEnabled(it) },
+                            secondaryAudioLanguage = uiState.secondaryAudioLanguage,
+                            onSecondaryAudioClick = openSecondaryAudioPicker,
+                            autoSourceFailover = uiState.autoSourceFailover,
+                            onAutoSourceFailoverToggle = { viewModel.setAutoSourceFailover(it) },
+                            externalPlayer = uiState.externalPlayer,
+                            onExternalPlayerToggle = { viewModel.setExternalPlayer(it) },
                             hiddenNavigationSections = uiState.hiddenNavigationSections,
                             onNavigationSectionVisibleChange = viewModel::setNavigationSectionVisible,
                             newsTopicsSummary = com.arflix.tv.ui.screens.news.newsTopicsSummary(newsSelection),
@@ -2452,6 +2487,8 @@ fun SettingsScreen(
                             onEpgVodActionsToggle = viewModel::setEpgVodActionsEnabled,
                             fallbackChannelLogosEnabled = uiState.fallbackChannelLogosEnabled,
                             onFallbackChannelLogosToggle = viewModel::setFallbackChannelLogosEnabled,
+                            startLastChannelEnabled = uiState.iptvStartLastChannel,
+                            onStartLastChannelToggle = viewModel::setIptvStartLastChannel,
                             favoritesOnHomeEnabled = uiState.iptvFavoritesOnHome,
                             onFavoritesOnHomeToggle = viewModel::setIptvFavoritesOnHome,
                         )
@@ -2518,6 +2555,8 @@ fun SettingsScreen(
                             onEpgVodActionsToggle = viewModel::setEpgVodActionsEnabled,
                             fallbackChannelLogosEnabled = uiState.fallbackChannelLogosEnabled,
                             onFallbackChannelLogosToggle = viewModel::setFallbackChannelLogosEnabled,
+                            startLastChannelEnabled = uiState.iptvStartLastChannel,
+                            onStartLastChannelToggle = viewModel::setIptvStartLastChannel,
                             favoritesOnHomeEnabled = uiState.iptvFavoritesOnHome,
                             onFavoritesOnHomeToggle = viewModel::setIptvFavoritesOnHome,
                         )
@@ -3307,6 +3346,21 @@ fun SettingsScreen(
                     showAudioLanguagePicker = false
                 },
                 onDismiss = { showAudioLanguagePicker = false }
+            )
+        }
+
+        if (showSecondaryAudioPicker) {
+            SubtitlePickerModal(
+                title = stringResource(R.string.secondary_audio),
+                options = secondaryAudioLanguageOptions(uiState.audioLanguageOptions),
+                selected = uiState.secondaryAudioLanguage,
+                focusedIndex = secondaryAudioPickerIndex,
+                onFocusChange = { secondaryAudioPickerIndex = it },
+                onSelect = {
+                    viewModel.setSecondaryAudioLanguage(it)
+                    showSecondaryAudioPicker = false
+                },
+                onDismiss = { showSecondaryAudioPicker = false }
             )
         }
 
@@ -4772,6 +4826,7 @@ private fun MobileSettingsLayout(
     openSubtitlePicker: () -> Unit,
     openSecondarySubtitlePicker: () -> Unit = {},
     openAudioLanguagePicker: () -> Unit,
+    openSecondaryAudioPicker: () -> Unit,
     openDnsProviderPicker: () -> Unit,
     openUiModeWarningDialog: () -> Unit,
     openQualityFiltersModal: () -> Unit,
@@ -4925,7 +4980,7 @@ private fun MobileSettingsLayout(
             ) {
                 Text(
                     text = stringResource(R.string.settings),
-                    style = ArflixTypography.heroTitle.copy(fontSize = 24.sp),
+                    style = ArflixTypography.heroTitle.copy(fontSize = 28.sp, fontWeight = FontWeight.Bold),
                     color = TextPrimary,
                     modifier = Modifier.weight(1f)
                 )
@@ -4950,6 +5005,7 @@ private fun MobileSettingsLayout(
                 openSubtitlePicker = openSubtitlePicker,
                 openSecondarySubtitlePicker = openSecondarySubtitlePicker,
                 openAudioLanguagePicker = openAudioLanguagePicker,
+                openSecondaryAudioPicker = openSecondaryAudioPicker,
                 onSwitchProfile = onSwitchProfile,
                 onNavigateToTelegram = onNavigateToTelegram
             )
@@ -5098,6 +5154,7 @@ private fun MobileSettingsMainPage(
     openSubtitlePicker: () -> Unit,
     openSecondarySubtitlePicker: () -> Unit = {},
     openAudioLanguagePicker: () -> Unit,
+    openSecondaryAudioPicker: () -> Unit,
     onSwitchProfile: () -> Unit,
     onNavigateToTelegram: () -> Unit = {}
 ) {
@@ -5135,6 +5192,14 @@ private fun MobileSettingsMainPage(
                     onClick = openAudioLanguagePicker
                 )
                 MobileSettingsRow(
+                    icon = Icons.Default.VolumeUp,
+                    title = stringResource(R.string.secondary_audio),
+                    value = uiState.secondaryAudioLanguage,
+                    isToggle = false,
+                    isFocused = false,
+                    onClick = openSecondaryAudioPicker
+                )
+                MobileSettingsRow(
                     icon = Icons.Default.Subtitles,
                     title = stringResource(R.string.default_subtitle),
                     value = uiState.defaultSubtitle,
@@ -5165,7 +5230,7 @@ private fun MobileSettingsMainPage(
                     if (!uiState.isKidsProfile) add("Music" to Icons.Default.LibraryMusic)
                     add("Addons" to Icons.Default.Extension)
                     if (BuildConfig.FEATURE_PLUGINS_ENABLED) {
-                        add("Plugins & Extensions" to Icons.Default.Extension)
+                        add("Plugins & Extensions" to Icons.Default.Apps)
                     }
                     add("Catalogs" to Icons.Default.Widgets)
                     add("TV" to Icons.Default.LiveTv)
@@ -5440,6 +5505,33 @@ private fun MobileSettingsSubPage(
                         toggleChecked = uiState.autoPlayNext,
                         isFocused = false,
                         onClick = { viewModel.setAutoPlayNext(!uiState.autoPlayNext) }
+                    )
+                    MobileSettingsRow(
+                        icon = Icons.Default.SwapHoriz,
+                        title = stringResource(R.string.auto_source_failover),
+                        subtitle = stringResource(R.string.auto_source_failover_desc),
+                        value = stringResource(if (uiState.autoSourceFailover) R.string.on else R.string.off),
+                        toggleChecked = uiState.autoSourceFailover,
+                        isFocused = false,
+                        onClick = { viewModel.setAutoSourceFailover(!uiState.autoSourceFailover) }
+                    )
+                    MobileSettingsRow(
+                        icon = Icons.Default.OpenInNew,
+                        title = stringResource(R.string.external_player),
+                        subtitle = stringResource(R.string.external_player_desc),
+                        value = stringResource(if (uiState.externalPlayer) R.string.on else R.string.off),
+                        toggleChecked = uiState.externalPlayer,
+                        isFocused = false,
+                        onClick = { viewModel.setExternalPlayer(!uiState.externalPlayer) }
+                    )
+                    MobileSettingsRow(
+                        icon = Icons.Default.Image,
+                        title = stringResource(R.string.seek_thumbnails),
+                        subtitle = stringResource(R.string.seek_thumbnails_desc),
+                        value = stringResource(if (uiState.seekThumbnailsEnabled) R.string.on else R.string.off),
+                        toggleChecked = uiState.seekThumbnailsEnabled,
+                        isFocused = false,
+                        onClick = { viewModel.setSeekThumbnailsEnabled(!uiState.seekThumbnailsEnabled) }
                     )
                     MobileSettingsRow(
                         icon = Icons.Default.PlayArrow,
@@ -6093,6 +6185,8 @@ private fun MobileSettingsSubPage(
                     onEpgVodActionsToggle = viewModel::setEpgVodActionsEnabled,
                     fallbackChannelLogosEnabled = uiState.fallbackChannelLogosEnabled,
                     onFallbackChannelLogosToggle = viewModel::setFallbackChannelLogosEnabled,
+                    startLastChannelEnabled = uiState.iptvStartLastChannel,
+                    onStartLastChannelToggle = viewModel::setIptvStartLastChannel,
                     favoritesOnHomeEnabled = uiState.iptvFavoritesOnHome,
                     onFavoritesOnHomeToggle = viewModel::setIptvFavoritesOnHome,
                     onMovePlaylistBy = { id, steps -> viewModel.moveIptvPlaylistBy(id, steps) },
@@ -6983,6 +7077,8 @@ private fun tvSettingsFocusedHelp(section: String, focusedIndex: Int): TvSetting
     return when (section) {
         "language" -> when (focusedIndex) {
             0 -> TvSettingsHelp(stringResource(R.string.settings_fact_app_language), stringResource(R.string.settings_help_app_language_desc))
+            tvGeneralRowsForSection(section).indexOf(SECONDARY_AUDIO_ROW) ->
+                TvSettingsHelp(stringResource(R.string.secondary_audio), stringResource(R.string.secondary_audio_desc))
             else -> TvSettingsHelp(stringResource(R.string.default_audio), stringResource(R.string.settings_help_default_audio_desc))
         }
         "subtitles" -> when (focusedIndex) {
@@ -6991,12 +7087,16 @@ private fun tvSettingsFocusedHelp(section: String, focusedIndex: Int): TvSetting
             else -> TvSettingsHelp(stringResource(R.string.settings_help_subtitle_pref), stringResource(R.string.settings_help_subtitle_pref_desc))
         }
         "ai_subtitles" -> TvSettingsHelp(stringResource(R.string.ai_subtitles_section), stringResource(R.string.settings_help_ai_subtitles_desc))
-        "playback" -> when (focusedIndex) {
-            0 -> TvSettingsHelp(stringResource(R.string.settings_help_next_autoplay), stringResource(R.string.settings_help_next_autoplay_desc))
-            1 -> TvSettingsHelp(stringResource(R.string.settings_help_source_autoplay), stringResource(R.string.settings_help_source_autoplay_desc))
-            in 5..8 -> TvSettingsHelp(stringResource(R.string.settings_help_trailers), stringResource(R.string.settings_help_trailers_desc))
-            12 -> TvSettingsHelp(stringResource(R.string.volume_boost), stringResource(R.string.settings_help_volume_boost_desc))
-            13, 14 -> TvSettingsHelp(stringResource(R.string.playback_cache_size), stringResource(R.string.settings_help_playback_cache_desc))
+        // By row id, so inserting a row never shifts the help of the rows after it.
+        "playback" -> when (tvGeneralRowsForSection(section).getOrNull(focusedIndex)) {
+            10 -> TvSettingsHelp(stringResource(R.string.settings_help_next_autoplay), stringResource(R.string.settings_help_next_autoplay_desc))
+            11 -> TvSettingsHelp(stringResource(R.string.settings_help_source_autoplay), stringResource(R.string.settings_help_source_autoplay_desc))
+            13, 14, 34, 37 -> TvSettingsHelp(stringResource(R.string.settings_help_trailers), stringResource(R.string.settings_help_trailers_desc))
+            SEEK_THUMBNAILS_ROW -> TvSettingsHelp(stringResource(R.string.seek_thumbnails), stringResource(R.string.seek_thumbnails_desc))
+            AUTO_SOURCE_FAILOVER_ROW -> TvSettingsHelp(stringResource(R.string.auto_source_failover), stringResource(R.string.auto_source_failover_desc))
+            EXTERNAL_PLAYER_ROW -> TvSettingsHelp(stringResource(R.string.external_player), stringResource(R.string.external_player_desc))
+            27 -> TvSettingsHelp(stringResource(R.string.volume_boost), stringResource(R.string.settings_help_volume_boost_desc))
+            53, 54 -> TvSettingsHelp(stringResource(R.string.playback_cache_size), stringResource(R.string.settings_help_playback_cache_desc))
             else -> TvSettingsHelp(stringResource(R.string.playback), stringResource(R.string.settings_help_playback_desc))
         }
         "appearance" -> TvSettingsHelp(stringResource(R.string.interface_label), stringResource(R.string.settings_help_interface_desc))
@@ -7201,6 +7301,14 @@ private fun TvGeneralSettingsRows(
     onPlaybackCompatibilityClick: () -> Unit = {},
     showAddonStreamDetails: Boolean = false,
     onShowAddonStreamDetailsToggle: (Boolean) -> Unit = {},
+    seekThumbnailsEnabled: Boolean = true,
+    onSeekThumbnailsToggle: (Boolean) -> Unit = {},
+    secondaryAudioLanguage: String = "Off",
+    onSecondaryAudioClick: () -> Unit = {},
+    autoSourceFailover: Boolean = true,
+    onAutoSourceFailoverToggle: (Boolean) -> Unit = {},
+    externalPlayer: Boolean = false,
+    onExternalPlayerToggle: (Boolean) -> Unit = {},
     hiddenNavigationSections: Set<String> = emptySet(),
     onNavigationSectionVisibleChange: (String, Boolean) -> Unit = { _, _ -> },
     newsTopicsSummary: String = "",
@@ -7238,6 +7346,24 @@ private fun TvGeneralSettingsRows(
                 55 -> SettingsToggleRow(stringResource(R.string.show_addon_stream_details),
                     stringResource(R.string.show_addon_stream_details_desc), showAddonStreamDetails,
                     focusedIndex == localIndex, onShowAddonStreamDetailsToggle, Modifier.settingsFocusSlot(localIndex))
+                AUTO_SOURCE_FAILOVER_ROW -> SettingsToggleRow(stringResource(R.string.auto_source_failover),
+                    stringResource(R.string.auto_source_failover_desc), autoSourceFailover,
+                    focusedIndex == localIndex, onAutoSourceFailoverToggle, Modifier.settingsFocusSlot(localIndex))
+                EXTERNAL_PLAYER_ROW -> SettingsToggleRow(stringResource(R.string.external_player),
+                    stringResource(R.string.external_player_desc), externalPlayer,
+                    focusedIndex == localIndex, onExternalPlayerToggle, Modifier.settingsFocusSlot(localIndex))
+                SECONDARY_AUDIO_ROW -> SettingsRow(
+                    icon = Icons.Default.VolumeUp,
+                    title = stringResource(R.string.secondary_audio),
+                    subtitle = stringResource(R.string.secondary_audio_desc),
+                    value = secondaryAudioLanguage,
+                    isFocused = focusedIndex == localIndex,
+                    onClick = onSecondaryAudioClick,
+                    modifier = Modifier.settingsFocusSlot(localIndex)
+                )
+                SEEK_THUMBNAILS_ROW -> SettingsToggleRow(stringResource(R.string.seek_thumbnails),
+                    stringResource(R.string.seek_thumbnails_desc), seekThumbnailsEnabled,
+                    focusedIndex == localIndex, onSeekThumbnailsToggle, Modifier.settingsFocusSlot(localIndex))
                 0 -> SettingsRow(
                     icon = Icons.Default.Language,
                     title = stringResource(R.string.app_language),
@@ -8547,6 +8673,8 @@ internal fun IptvSettings(
     onEpgVodActionsToggle: (Boolean) -> Unit = {},
     fallbackChannelLogosEnabled: Boolean = false,
     onFallbackChannelLogosToggle: (Boolean) -> Unit = {},
+    startLastChannelEnabled: Boolean = false,
+    onStartLastChannelToggle: (Boolean) -> Unit = {},
     favoritesOnHomeEnabled: Boolean = true,
     onFavoritesOnHomeToggle: (Boolean) -> Unit = {},
     // Touch only: a row dragged by its handle moves several places in one go.
@@ -8793,6 +8921,14 @@ internal fun IptvSettings(
                     isFocused = false,
                     onClick = { onFallbackChannelLogosToggle(!fallbackChannelLogosEnabled) },
                 )
+                MobileSettingsRow(
+                    icon = Icons.Default.PlayArrow,
+                    title = stringResource(R.string.settings_iptv_start_last_channel),
+                    subtitle = stringResource(R.string.settings_iptv_start_last_channel_desc),
+                    value = stringResource(if (startLastChannelEnabled) R.string.on else R.string.off),
+                    isFocused = false,
+                    onClick = { onStartLastChannelToggle(!startLastChannelEnabled) },
+                )
             }
             MobileSettingsCategory(title = stringResource(R.string.settings_section_actions)) {
                 val refreshSubtitle = when { isLoading -> stringResource(R.string.settings_refreshing_channels_epg); error != null -> error; playlists.none { it.epgUrl.isNotBlank() || it.epgUrls.orEmpty().isNotEmpty() } -> stringResource(R.string.settings_reload_playlists_now); else -> stringResource(R.string.settings_reload_playlist_epg_now) }
@@ -8981,6 +9117,15 @@ internal fun IptvSettings(
                 onToggle = onFallbackChannelLogosToggle,
                 modifier = Modifier.settingsFocusSlot(trailingBase + 6),
             )
+            Spacer(modifier = Modifier.height(16.dp))
+            SettingsToggleRow(
+                title = stringResource(R.string.settings_iptv_start_last_channel),
+                subtitle = stringResource(R.string.settings_iptv_start_last_channel_desc),
+                isEnabled = startLastChannelEnabled,
+                isFocused = focusedIndex == trailingBase + 7,
+                onToggle = onStartLastChannelToggle,
+                modifier = Modifier.settingsFocusSlot(trailingBase + 7),
+            )
             if (isLoading && !progressText.isNullOrBlank()) {
                 Spacer(modifier = Modifier.height(12.dp))
                 Text(stringResource(R.string.settings_progress_format, progressText, progressPercent.coerceIn(0, 100)), style = ArflixTypography.caption, color = TextSecondary)
@@ -9046,7 +9191,7 @@ internal fun CatalogDiscoveryModal(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.86f))
+                    .background(Color.Black.copy(alpha = 0.96f))
                     .padding(
                         horizontal = if (isCompact) 10.dp else 48.dp,
                         vertical = if (isCompact) 10.dp else 34.dp
@@ -9057,10 +9202,20 @@ internal fun CatalogDiscoveryModal(
                 modifier = Modifier
                     .fillMaxSize()
                     .clip(RoundedCornerShape(if (isCompact) 12.dp else 18.dp))
-                    .background(Color.Black.copy(alpha = 0.34f), RoundedCornerShape(if (isCompact) 12.dp else 18.dp))
+                    .background(Color(0xFF0E0E10), RoundedCornerShape(if (isCompact) 12.dp else 18.dp))
                     .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(if (isCompact) 12.dp else 18.dp))
                     .padding(if (isCompact) 10.dp else 18.dp)
             ) {
+                if (LocalDeviceType.current.isTouchDevice()) {
+                    // Phones: a real heading so the sheet doesn't open straight onto a hint line.
+                    Text(
+                        stringResource(R.string.add_catalog),
+                        color = Color.White,
+                        fontSize = 22.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(start = 4.dp, top = 6.dp, bottom = 6.dp)
+                    )
+                }
                 Row(Modifier.fillMaxWidth().padding(bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text(stringResource(R.string.settings_simkl_lists_hint), style = ArflixTypography.caption,
                         color = TextSecondary, modifier = Modifier.weight(1f))
@@ -9084,7 +9239,7 @@ internal fun CatalogDiscoveryModal(
                             label = stringResource(R.string.settings_search_lists),
                             value = query,
                             modifier = Modifier.fillMaxWidth(),
-                            placeholder = stringResource(R.string.settings_search_lists),
+                            placeholder = "Trakt, MDBList, Simkl…",
                             onClick = { editingInput = CatalogDiscoveryInputTarget.Search }
                         )
                         Spacer(modifier = Modifier.height(8.dp))
@@ -9132,7 +9287,7 @@ internal fun CatalogDiscoveryModal(
                             label = stringResource(R.string.settings_search_lists),
                             value = query,
                             modifier = Modifier.weight(1f),
-                            placeholder = stringResource(R.string.settings_search_lists),
+                            placeholder = "Trakt, MDBList, Simkl…",
                             onClick = { editingInput = CatalogDiscoveryInputTarget.Search }
                         )
                         Spacer(modifier = Modifier.width(10.dp))
@@ -14657,3 +14812,9 @@ private fun YouTubeActionChip(
         )
     }
 }
+
+/** Secondary audio choices: "Off" plus every real language (no Auto/None). */
+internal fun secondaryAudioLanguageOptions(audioOptions: List<String>): List<String> =
+    (listOf("Off") + audioOptions.filterNot {
+        it.startsWith("Auto", ignoreCase = true) || it.equals("None", ignoreCase = true) || it.equals("Off", ignoreCase = true)
+    }).distinct()

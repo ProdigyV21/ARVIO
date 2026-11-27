@@ -34,13 +34,15 @@ private val Context.musicDataStore: DataStore<Preferences> by preferencesDataSto
 object MusicCloudKeys {
     fun addons(profileId: String) = stringPreferencesKey("profile_${profileId}_music_addons_v1")
     fun collections(profileId: String) = stringPreferencesKey("profile_${profileId}_music_collections_v1")
+    /** The artists the profile listened to and its music searches ([MusicTaste]). */
+    fun taste(profileId: String) = stringPreferencesKey("profile_${profileId}_music_taste_v1")
 }
 
 /** The sources the Music tab plays from. */
 data class MusicLibrary(
     val server: MusicServerConfig? = null,
     val addons: List<MusicAddon> = emptyList(),
-    /** The app language, which picks the country charts on the Music home. */
+    /** The app language, which names the Music home's rows (the device's country picks the charts). */
     val language: String = "en-US",
 ) {
     val isEmpty: Boolean get() = server == null && addons.isEmpty()
@@ -121,7 +123,11 @@ class MusicRepository @Inject constructor(
         }
         // The charts come last, so the user's own sources keep their place in ids and search.
         keys += ChartsSource.KEY
-        sources += ChartsSource(http, library.language, context.cacheDir)
+        sources += ChartsSource(
+            http, library.language, context.cacheDir,
+            deviceCountry = DeviceCountry.detect(context),
+            taste = { taste.first() },
+        )
         val source = CompositeMusicSource(sources, keys)
         cached = library to source
         return source
@@ -143,6 +149,39 @@ class MusicRepository @Inject constructor(
     private fun decodeCollections(json: String?): MusicCollections = json?.let {
         runCatching { gson.fromJson(it, MusicCollections::class.java)?.sanitized() }.getOrNull()
     } ?: MusicCollections()
+
+    /** What the profile listens to and searches for; the Music home's personal rows come from it. */
+    val taste: Flow<MusicTaste> = combine(profileManager.currentProfileId, context.settingsDataStore.data) { profileId, settings ->
+        decodeTaste(settings[MusicCloudKeys.taste(profileId)])
+    }.distinctUntilChanged()
+
+    private fun decodeTaste(json: String?): MusicTaste = json?.let {
+        runCatching { gson.fromJson(it, MusicTaste::class.java)?.sanitized() }.getOrNull()
+    } ?: MusicTaste()
+
+    private suspend fun updateTaste(reason: String, transform: (MusicTaste) -> MusicTaste) {
+        val profileId = profileManager.getProfileIdSync()
+        var changed = false
+        context.settingsDataStore.edit { prefs ->
+            val key = MusicCloudKeys.taste(profileId)
+            val before = decodeTaste(prefs[key])
+            val after = transform(before)
+            if (after != before) {
+                prefs[key] = gson.toJson(after)
+                changed = true
+            }
+        }
+        if (changed) invalidationBus.markUserDirty(CloudSyncScope.PROFILE_SETTINGS, profileId, reason)
+    }
+
+    /** A song was listened to (half of it, or four minutes). */
+    suspend fun recordPlay(track: MusicTrack) = updateTaste("music history") { it.recordPlay(track, System.currentTimeMillis()) }
+
+    /** Synced lyrics for the player, from LRCLIB. */
+    val lyrics: LyricsSource by lazy { LyricsSource(http) }
+
+    /** A music search the user stayed on. */
+    suspend fun recordSearch(query: String) = updateTaste("music search") { it.recordSearch(query, System.currentTimeMillis()) }
 
     /** A file the user picked: its name (which tells the format) and its bytes. */
     fun readDocument(uri: android.net.Uri): Pair<String, ByteArray> {

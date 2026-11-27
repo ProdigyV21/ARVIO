@@ -15,7 +15,18 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material3.Icon
+import androidx.compose.material3.ripple
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -69,8 +80,10 @@ internal fun MobileHeroScrim(
 ) {
     val immersiveScrim = remember(background, posterArtwork) {
         Brush.verticalGradient(
-            0f to Color.Black.copy(alpha = 0.10f),
-            0.16f to Color.Transparent,
+            // Darker top so the wordmark and avatar stay legible over titles printed in the artwork.
+            0f to Color.Black.copy(alpha = 0.55f),
+            0.08f to Color.Black.copy(alpha = 0.30f),
+            0.18f to Color.Transparent,
             0.40f to Color.Transparent,
             0.52f to background.copy(alpha = 0.06f),
             0.64f to background.copy(alpha = if (posterArtwork) 0.60f else 0.26f),
@@ -141,7 +154,7 @@ internal fun resolveMobileHeroLayout(
  *
  * Displays a full-bleed poster image with a layered dark scrim, a large title,
  * genre tags, and a metadata row showing the release year and IMDb rating.
- * No action buttons.
+ * The edge-to-edge style adds Play and More info buttons, like the web and TV billboards.
  *
  * @param imageUrl  URL of the backdrop / poster image.
  * @param title     Primary title shown as the visual anchor.
@@ -160,6 +173,8 @@ fun MobileHeroBanner(
     rating: String = "",
     logoUrl: String? = null,
     onClick: (() -> Unit)? = null,
+    onPlay: (() -> Unit)? = null,
+    onMoreInfo: (() -> Unit)? = null,
     compactContent: Boolean = false,
     immersive: Boolean = false,
     showPageIndicators: Boolean = false,
@@ -168,6 +183,8 @@ fun MobileHeroBanner(
 ) {
     val context = LocalContext.current
     var logoFailed by remember(title, logoUrl) { mutableStateOf(false) }
+    // Black title logos vanish on the dark scrim; those are drawn white instead.
+    var logoDark by remember(logoUrl) { mutableStateOf(false) }
 
     Box(
         modifier = modifier
@@ -202,12 +219,18 @@ fun MobileHeroBanner(
                     model = ImageRequest.Builder(context)
                         .data(logoUrl)
                         .precision(Precision.INEXACT)
-                        .allowHardware(true)
+                        .allowHardware(false)
                         .crossfade(300)
                         .build(),
                     contentDescription = title,
                     contentScale = ContentScale.Fit,
                     onError = { logoFailed = true },
+                    onSuccess = { state ->
+                        (state.result.drawable as? android.graphics.drawable.BitmapDrawable)?.bitmap?.let {
+                            logoDark = logoBitmapIsDark(it)
+                        }
+                    },
+                    colorFilter = if (logoDark) androidx.compose.ui.graphics.ColorFilter.tint(Color.White) else null,
                     alignment = Alignment.Center,
                     modifier = Modifier
                         .height(if (compactContent) 38.dp else 56.dp)
@@ -233,6 +256,11 @@ fun MobileHeroBanner(
 
             // Element C — Year and IMDb rating
             BannerMeta(year = year, rating = rating)
+
+            // Element D — Play / More info, only on the edge-to-edge hero (cards stay tappable).
+            if (immersive && onPlay != null) {
+                BannerActions(compact = compactContent, onPlay = onPlay, onMoreInfo = onMoreInfo ?: onClick)
+            }
         }
     }
 }
@@ -286,6 +314,50 @@ private fun BannerMeta(year: String, rating: String) {
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Bold
             )
+        }
+    }
+}
+
+/** Primary Play button plus a quieter More info button, centred under the metadata. */
+@Composable
+private fun BannerActions(compact: Boolean, onPlay: () -> Unit, onMoreInfo: (() -> Unit)?) {
+    val height = if (compact) 38.dp else 46.dp
+    Row(
+        modifier = Modifier
+            .padding(top = if (compact) 4.dp else 10.dp)
+            .widthIn(max = 340.dp)
+            .fillMaxWidth()
+            .testTag("mobile_hero_actions"),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        val playSource = remember { MutableInteractionSource() }
+        Row(
+            Modifier.weight(1f).mobilePressScale(playSource).height(height).clip(CircleShape).background(Color.White)
+                .clickable(interactionSource = playSource, indication = ripple(), role = Role.Button, onClick = onPlay)
+                .testTag("mobile_hero_play"),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(Icons.Filled.PlayArrow, null, tint = Color.Black, modifier = Modifier.size(24.dp))
+            Spacer(Modifier.width(6.dp))
+            Text(stringResource(R.string.play), color = Color.Black, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+        }
+        if (onMoreInfo != null) {
+            val infoSource = remember { MutableInteractionSource() }
+            Row(
+                Modifier.weight(1f).mobilePressScale(infoSource).height(height).clip(CircleShape)
+                    .background(Color.White.copy(alpha = 0.16f))
+                    .border(1.dp, Color.White.copy(alpha = 0.18f), CircleShape)
+                    .clickable(interactionSource = infoSource, indication = ripple(), role = Role.Button, onClick = onMoreInfo)
+                    .testTag("mobile_hero_info"),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(Icons.Outlined.Info, null, tint = Color.White, modifier = Modifier.size(21.dp))
+                Spacer(Modifier.width(6.dp))
+                Text(stringResource(R.string.home_more_info), color = Color.White, fontSize = 15.sp,
+                    fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
         }
     }
 }

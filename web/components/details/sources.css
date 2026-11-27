@@ -550,3 +550,10 @@
   .src-action.icon-only { width: 44px; }
   .src-menu button { min-height: 44px; }
 }
+
+/* Sort: what plays in this browser first, or the best releases first (VLC/Infuse). */
+.src-panel .source-toolbar:has(.src-sort) { grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 8px; }
+.src-sort { display: inline-flex; padding: 3px; border-radius: 999px; background: rgba(255, 255, 255, 0.07); border: 1px solid rgba(255, 255, 255, 0.12); }
+.src-sort button { min-height: 34px; padding: 0 12px; border: 0; border-radius: 999px; background: transparent; color: rgba(255, 255, 255, 0.78); font: inherit; font-size: 13px; font-weight: 750; cursor: pointer; white-space: nowrap; }
+.src-sort button[aria-pressed="true"] { background: #fff; color: #000; }
+.src-sort button:focus-visible { outline: 3px solid #fff; outline-offset: 2px; }

@@ -61,6 +61,27 @@ test('defers the video and autoplays muted only in view', async () => {
   assert.equal(f.video.paused, false);
 });
 
+test('streams the smaller AV1 tour where it decodes and falls back to the MP4 on error', async () => {
+  const f = fixture();
+  f.video.dataset.src = '/assets/promo/arvio-tour-web.mp4';
+  f.video.canPlayType = type => (type.includes('av01') ? 'probably' : '');
+  f.visible(true);
+  await settle();
+  assert.equal(f.video.src, '/assets/promo/arvio-tour-web-av1.webm');
+  f.video.emit('error');
+  await settle();
+  assert.equal(f.video.src, '/assets/promo/arvio-tour-web.mp4');
+  assert.equal(f.video.paused, false);
+
+  const noAv1 = fixture();
+  noAv1.video.dataset.src = '/assets/promo/arvio-tour-web.mp4';
+  noAv1.video.canPlayType = () => 'maybe';
+  noAv1.visible(true);
+  await settle();
+  assert.equal(noAv1.video.src, '/assets/promo/arvio-tour-web.mp4');
+  assert.ok(fs.statSync(path.join(root, 'assets/promo/arvio-tour-web-av1.webm')).size <= 2 * 1024 * 1024);
+});
+
 test('does not override a visitor pause after scrolling or switching tabs', async () => {
   const f = fixture();
   f.visible(true);
@@ -154,7 +175,7 @@ for (const file of ['index.html', 'es/index.html', 'pt-br/index.html']) {
     assert.match(html, /<video[^>]+controls autoplay muted loop playsinline preload="none"/);
     // Stream the lighter web encode; the download keeps the full-quality file the README links to.
     assert.match(html, /data-src="\/assets\/promo\/arvio-tour-web.mp4"/);
-    assert.match(html, /href="\/assets\/promo\/arvio-tour-720p.mp4" download/);
+    assert.match(html, /href="\/assets\/promo\/arvio-promo-1080p.mp4" download/);
     assert.match(html, /promo-video.js\?v=2/);
     const hero = html.match(/<section class="hero hero-v\d+"[^>]*>([\s\S]*?)<\/section>/)?.[1];
     assert.ok(hero?.includes('href="#demo"'), 'The hero links to the tour');

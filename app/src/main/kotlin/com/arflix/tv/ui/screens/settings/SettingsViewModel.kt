@@ -1,4 +1,7 @@
 package com.arflix.tv.ui.screens.settings
+import com.arflix.tv.ui.screens.player.preview.SEEK_THUMBNAILS_PREF
+import com.arflix.tv.ui.screens.player.SECONDARY_AUDIO_LANGUAGE_PREF
+import com.arflix.tv.ui.screens.player.AUTO_SOURCE_FAILOVER_PREF
 import com.arflix.tv.data.model.AnimeStructuringStyle
 import com.arflix.tv.data.model.AutoplayLimits
 
@@ -221,10 +224,14 @@ data class SettingsUiState(
     val defaultSubtitle: String = "Off",
     val subtitleOptions: List<String> = emptyList(),
     val defaultAudioLanguage: String = "Auto (Original)",
+    val secondaryAudioLanguage: String = "Off",
     val audioLanguageOptions: List<String> = emptyList(),
     val cardLayoutMode: String = CARD_LAYOUT_MODE_LANDSCAPE,
     val frameRateMatchingMode: String = "Off",
     val autoPlayNext: Boolean = true,
+    val seekThumbnailsEnabled: Boolean = true,
+    val autoSourceFailover: Boolean = true,
+    val externalPlayer: Boolean = false,
     val autoPlaySingleSource: Boolean = true,
     val autoPlayMinQuality: String = "Any",
     val autoPlayMaxQuality: String = "Unlimited",
@@ -257,6 +264,8 @@ data class SettingsUiState(
     val animeStructuringStyle: AnimeStructuringStyle = AnimeStructuringStyle.BROADCAST,
     /** Pin the IPTV "Favorite TV" row to the top of the home screen. */
     val iptvFavoritesOnHome: Boolean = true,
+    /** Open the app straight into the last watched channel (synced with the profile's Live TV settings). */
+    val iptvStartLastChannel: Boolean = false,
     // Volume boost in decibels (0 = off, up to 15 dB). Applied via system LoudnessEnhancer
     // attached to the ExoPlayer audio session. Issue #88.
     val volumeBoostDb: Int = 0,
@@ -586,6 +595,10 @@ class SettingsViewModel @Inject constructor(
     private fun frameRateMatchingModeKey() = profileManager.profileStringKey("frame_rate_matching_mode")
     private fun frameRateMatchingModeKeyFor(profileId: String) = profileManager.profileStringKeyFor(profileId, "frame_rate_matching_mode")
     private fun autoPlayNextKey() = profileManager.profileBooleanKey("auto_play_next")
+    private fun seekThumbnailsKey() = profileManager.profileBooleanKey(SEEK_THUMBNAILS_PREF)
+    private fun secondaryAudioLanguageKey() = profileManager.profileStringKey(SECONDARY_AUDIO_LANGUAGE_PREF)
+    private fun autoSourceFailoverKey() = profileManager.profileBooleanKey(AUTO_SOURCE_FAILOVER_PREF)
+    private fun externalPlayerKey() = profileManager.profileBooleanKey(com.arflix.tv.ui.screens.player.EXTERNAL_PLAYER_PREF)
     private fun autoPlayNextKeyFor(profileId: String) = profileManager.profileBooleanKeyFor(profileId, "auto_play_next")
     private fun autoPlaySingleSourceKey() = profileManager.profileBooleanKey("auto_play_single_source")
     private fun autoPlaySingleSourceKeyFor(profileId: String) = profileManager.profileBooleanKeyFor(profileId, "auto_play_single_source")
@@ -804,6 +817,11 @@ class SettingsViewModel @Inject constructor(
             }
         }
         viewModelScope.launch {
+            iptvRepository.observeStartLastChannel().collect { enabled ->
+                _uiState.value = _uiState.value.copy(iptvStartLastChannel = enabled)
+            }
+        }
+        viewModelScope.launch {
             kotlinx.coroutines.flow.combine(
                 iptvRepository.observeHiddenStalkerCategories(StalkerCatalogKind.MOVIES),
                 iptvRepository.observeHiddenStalkerCategories(StalkerCatalogKind.SERIES)
@@ -885,6 +903,10 @@ class SettingsViewModel @Inject constructor(
             // Apply content language to MediaRepository immediately
             mediaRepository.contentLanguage = contentLang
             var autoPlay = prefs[autoPlayNextKey()] ?: true
+            val seekThumbnailsEnabled = prefs[seekThumbnailsKey()] ?: true
+            val secondaryAudio = prefs[secondaryAudioLanguageKey()]?.trim()?.takeIf { it.isNotBlank() } ?: "Off"
+            val autoSourceFailover = prefs[autoSourceFailoverKey()] ?: true
+            val externalPlayer = prefs[externalPlayerKey()] ?: false
             var autoPlaySingleSource = prefs[autoPlaySingleSourceKey()] ?: true
             // Ensure defaults are persisted on first launch so they're never ambiguous
             if (prefs[autoPlaySingleSourceKey()] == null) {
@@ -1019,6 +1041,10 @@ class SettingsViewModel @Inject constructor(
                 cardLayoutMode = cardLayoutMode,
                 frameRateMatchingMode = frameRateMode,
                 autoPlayNext = autoPlay,
+                seekThumbnailsEnabled = seekThumbnailsEnabled,
+                secondaryAudioLanguage = secondaryAudio,
+                autoSourceFailover = autoSourceFailover,
+                externalPlayer = externalPlayer,
                 autoPlaySingleSource = autoPlaySingleSource,
                 autoPlayMinQuality = autoPlayMinQuality,
                 autoPlayMaxQuality = autoPlayMaxQuality,
@@ -1933,6 +1959,31 @@ class SettingsViewModel @Inject constructor(
             syncLocalStateToCloud(silent = true)
             authRepository.saveAutoPlayNextToProfile(enabled)
         }
+    }
+
+    fun setAutoSourceFailover(enabled: Boolean) {
+        if (!canManage("playback")) return
+        preferenceWriter.save(autoSourceFailoverKey(), enabled, { it.autoSourceFailover },
+            { state, value -> state.copy(autoSourceFailover = value) })
+    }
+
+    fun setExternalPlayer(enabled: Boolean) {
+        if (!canManage("playback")) return
+        preferenceWriter.save(externalPlayerKey(), enabled, { it.externalPlayer },
+            { state, value -> state.copy(externalPlayer = value) })
+    }
+
+    fun setSecondaryAudioLanguage(language: String) {
+        if (!canManage("playback")) return
+        val value = language.trim().ifBlank { "Off" }
+        preferenceWriter.save(secondaryAudioLanguageKey(), value, { it.secondaryAudioLanguage },
+            { state, saved -> state.copy(secondaryAudioLanguage = saved) })
+    }
+
+    fun setSeekThumbnailsEnabled(enabled: Boolean) {
+        if (!canManage("playback")) return
+        preferenceWriter.save(seekThumbnailsKey(), enabled, { it.seekThumbnailsEnabled },
+            { state, value -> state.copy(seekThumbnailsEnabled = value) })
     }
 
     fun setAutoPlaySingleSource(enabled: Boolean) {
@@ -4247,6 +4298,14 @@ class SettingsViewModel @Inject constructor(
                     }
                 }
             }
+        }
+    }
+
+    fun setIptvStartLastChannel(enabled: Boolean) {
+        _uiState.value = _uiState.value.copy(iptvStartLastChannel = enabled)
+        viewModelScope.launch {
+            iptvRepository.setStartLastChannel(enabled)
+            syncLocalStateToCloud(silent = true)
         }
     }
 

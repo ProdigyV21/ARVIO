@@ -60,6 +60,8 @@ internal enum class EpgInteractionAction {
     PlayCatchup,
     ResolveVodOrPlayFullscreen,
     ShowVodDialog,
+    /** A show that has not started, or one that aired without catch-up: its details and Remind me. */
+    ShowProgrammeInfo,
     NoOp,
 }
 
@@ -97,9 +99,9 @@ internal fun epgProgramInteractionAction(
     EpgTemporalState.Past -> if (isCatchupSupported) {
         EpgInteractionAction.PlayCatchup
     } else {
-        EpgInteractionAction.NoOp
+        EpgInteractionAction.ShowProgrammeInfo
     }
-    EpgTemporalState.Future -> EpgInteractionAction.NoOp
+    EpgTemporalState.Future -> EpgInteractionAction.ShowProgrammeInfo
     EpgTemporalState.Live -> when {
         !isSamePlayingChannel -> EpgInteractionAction.PlayLiveMini
         vodActionsEnabled -> EpgInteractionAction.ResolveVodOrPlayFullscreen

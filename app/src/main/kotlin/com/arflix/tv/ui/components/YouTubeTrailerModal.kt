@@ -295,7 +295,7 @@ private fun TrailerEmbedFallback(onOpenExternally: () -> Unit, onClose: (() -> U
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Text(
-            text = "This trailer cannot be embedded directly by YouTube.",
+            text = androidx.compose.ui.res.stringResource(com.arflix.tv.R.string.trailer_embed_blocked),
             style = ArvioSkin.typography.body.copy(color = Color.White.copy(alpha = 0.8f)),
             modifier = Modifier.padding(bottom = 16.dp)
         )
@@ -320,7 +320,7 @@ private fun TrailerEmbedFallback(onOpenExternally: () -> Unit, onClose: (() -> U
                 .padding(horizontal = 20.dp, vertical = 10.dp)
         ) {
             Text(
-                text = "Watch on YouTube",
+                text = androidx.compose.ui.res.stringResource(com.arflix.tv.R.string.trailer_watch_on_youtube),
                 style = ArvioSkin.typography.button.copy(
                     fontWeight = FontWeight.Bold,
                     color = Color.White

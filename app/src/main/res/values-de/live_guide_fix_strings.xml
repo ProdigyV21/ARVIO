@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="live_menu_fix_guide">Programmführer anpassen</string>
+    <string name="live_guide_fix_title">Programmführer anpassen</string>
+    <string name="live_guide_fix_source_heading">Programmführer verwenden von</string>
+    <string name="live_guide_fix_automatic">Automatisch</string>
+    <string name="live_guide_fix_automatic_desc">Der Programmführer deines Anbieters</string>
+    <string name="live_guide_fix_none">Kein Programmführer</string>
+    <string name="live_guide_fix_none_desc">Einen falschen Programmführer ausblenden</string>
+    <string name="live_guide_fix_search_hint">Sender suchen</string>
+    <string name="live_guide_fix_no_suggestions">Keine ähnlichen Sender. Suche einen nach Namen.</string>
+    <string name="live_guide_fix_no_results">Keine Sender gefunden</string>
+    <string name="live_guide_fix_offset_title">Zeiten im Programmführer</string>
+    <string name="live_guide_fix_offset_desc">Verschiebt jede Sendung von %1$s. Nutze das, wenn Sendungen früher oder später beginnen als angegeben.</string>
+    <string name="live_guide_fix_earlier">Früher</string>
+    <string name="live_guide_fix_later">Später</string>
+    <string name="settings_iptv_start_last_channel">Im letzten Sender starten</string>
+    <string name="settings_iptv_start_last_channel_desc">Beim Öffnen läuft der zuletzt gesehene Sender im Vollbild</string>
+</resources>

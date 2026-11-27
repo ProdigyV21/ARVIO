@@ -1121,8 +1121,6 @@
     <string name="home_sports_opening">Abriendo evento en vivo...</string>
     <string name="home_sports_playback_failed">No se pudo reproducir este evento en vivo</string>
     <string name="home_sports_event_not_live">Este evento aún no está en vivo</string>
-    <string name="home_optimizing_notice">ARVIO aún se está optimizando para este dispositivo. Por ahora, el desplazamiento puede ir lento.</string>
-    <string name="settings_optimizing_notice">Aún se está optimizando para este dispositivo. Por ahora, el desplazamiento puede ir lento.</string>
     <string name="home_cd_primary_provider">Proveedor de streaming principal</string>
     <string name="home_cd_rank">Puesto #%1$d</string>
     <string name="search_filter_all">Todo</string>
@@ -2177,4 +2175,6 @@
     <string name="service_home_top_rated_movies">Películas mejor valoradas</string>
     <string name="service_home_filter_all">Todo</string>
     <string name="service_home_filter_grid">Filtrar</string>
+    <string name="seek_thumbnails">Miniaturas al avanzar</string>
+    <string name="seek_thumbnails_desc">Muestra pequeñas imágenes del vídeo mientras avanzas o retrocedes. Se crean en este dispositivo en segundo plano durante la reproducción y se pausan cuando la reproducción necesita red o memoria.</string>
 </resources>

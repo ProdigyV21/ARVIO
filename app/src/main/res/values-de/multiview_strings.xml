@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="multiview_title">Multiview</string>
+    <string name="multiview_add_to">In Multiview ansehen</string>
+    <string name="multiview_add_game">Spiel hinzufügen</string>
+    <string name="multiview_hint_touch">Bis zu %1$d Spiele hinzufügen. Tippe auf ein Spiel, um es zu hören, und noch einmal für Optionen.</string>
+    <string name="multiview_hint">Bis zu %1$d Spiele hinzufügen. Mit den Pfeilen wählst du den Ton, OK für Optionen.</string>
+    <string name="multiview_no_connection">Keine freie Verbindung: Dein Abo erlaubt %1$d Stream(s) gleichzeitig auf diesem Gerät. Erlaubt dein Abo mehr, erhöhe es unter Einstellungen › TV › deine Playlist › Bearbeiten › %2$s.</string>
+    <string name="multiview_tile_failed">Dieser Sender ist nicht gestartet.</string>
+    <string name="multiview_fullscreen">Vollbild</string>
+    <string name="multiview_swap_game">Anderes Spiel</string>
+    <string name="multiview_remove_tile">Aus Multiview entfernen</string>
+    <string name="multiview_exit">Multiview schließen</string>
+    <string name="multiview_pick_title">Live-Spiele</string>
+    <string name="multiview_no_candidates">Gerade keine anderen Live-Spiele mit Sender.</string>
+    <string name="multiview_full">Multiview ist voll: Dieses Gerät zeigt %1$d Spiele gleichzeitig.</string>
+    <string name="recordings_title">Aufnahmen</string>
+    <string name="recordings_storage_hint">Auf diesem Gerät im Speicher der App gesichert. Eine Aufnahme nutzt eine Verbindung deines Abos.</string>
+    <string name="recordings_empty">Noch keine Aufnahmen. Öffne ein Spiel und wähle Aufnehmen.</string>
+    <string name="recordings_play">Abspielen</string>
+    <string name="recordings_cancel">Aufnahme abbrechen</string>
+    <string name="recordings_delete">Löschen</string>
+    <string name="recordings_status_scheduled">Geplant · %1$s</string>
+    <string name="recordings_status_recording">Nimmt auf… %1$s · %2$s</string>
+    <string name="recordings_status_cancelled">Abgebrochen · %1$s</string>
+    <string name="recordings_status_failed">Fehlgeschlagen: %1$s</string>
+    <string name="recording_record">Aufnehmen</string>
+    <string name="recording_scheduled_chip">Aufnahme geplant</string>
+    <string name="recording_stop">Aufnahme stoppen</string>
+    <string name="recording_waiting_connection">Warte auf eine freie Verbindung…</string>
+    <string name="recording_error_missed">Das Spiel wurde nicht aufgenommen (das Gerät war aus oder die App konnte nicht starten).</string>
+    <string name="recording_error_protected">Dieser Sender ist geschützt und kann nicht aufgenommen werden.</string>
+    <string name="recording_error_disk_full">Gestoppt: Das Gerät ist fast voll.</string>
+    <string name="recording_error_stream">Sender gestoppt (%1$s)</string>
+    <string name="recording_notification_recording">Nimmt auf: %1$s</string>
+    <string name="recording_notification_scheduled">Aufnahme bald: %1$s</string>
+    <string name="recording_notification_idle">Aufnahmen</string>
+    <string name="recording_notification_tap_to_start">Tippen, um %1$s aufzunehmen</string>
+    <string name="recording_notification_tap_hint">Android hat ARVIO den Start der Aufnahme im Hintergrund nicht erlaubt.</string>
+    <string name="recording_channel_name">Aufnahmen</string>
+    <string name="recording_cancelled_toast">Aufnahme abgebrochen</string>
+    <string name="recording_started_toast">%1$s wird aufgenommen</string>
+    <string name="recording_scheduled_toast">%1$s wird aufgenommen</string>
+    <string name="recording_notification_permission">Die Aufnahme braucht die Berechtigung für Benachrichtigungen, damit du sie auch außerhalb der App siehst und stoppen kannst.</string>
+</resources>

@@ -1,6 +1,6 @@
 export type MediaType = "movie" | "tv";
 
-export type NavSection = "home" | "tv" | "search" | "watchlist" | "addons" | "settings";
+export type NavSection = "home" | "tv" | "music" | "search" | "watchlist" | "addons" | "settings";
 
 export interface MediaItem {
   id: number;
@@ -535,6 +535,8 @@ export interface AppSettings {
   defaultSubtitle: string;
   secondarySubtitle: string;
   audioLanguage: string;
+  /** Used when the preferred audio language is not on the stream; "" = off. */
+  secondaryAudioLanguage: string;
   // Subtitles
   subtitleSize: number;
   subtitleColor: string;
@@ -620,6 +622,12 @@ export interface AppSettings {
   iptvChannelOrder?: Record<string, string[]>;
   /** Category display names: { "<playlistId>|<group>": "<name>" } (iptvByProfile.groupNames). Keys keep the playlist's name. */
   iptvGroupNames?: Record<string, string>;
+  /** Guide fixes per channel: { "<channelId>": "<channel whose guide it shows>" | "none" } (iptvByProfile.guideSources). */
+  iptvGuideSources?: Record<string, string>;
+  /** Guide time correction per playlist/portal, in minutes (iptvByProfile.guideOffsets). */
+  iptvGuideOffsets?: Record<string, number>;
+  /** Open the app straight into the last watched channel (iptvByProfile.startLastChannel). */
+  iptvStartLastChannel?: boolean;
   /** Android/TV source priority (profileSettingsById). Undefined = keep the app's value. */
   streamProvidersCustomOrder?: string;
   streamIntegrationsMacroOrder?: string;

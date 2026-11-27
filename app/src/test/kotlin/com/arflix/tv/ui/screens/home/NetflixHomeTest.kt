@@ -16,18 +16,31 @@ class NetflixHomeTest {
         assertEquals(enriched, stableNetflixBillboard(first, listOf(enriched)) { picks++; it.first() })
         assertEquals(1, picks)
     }
-    @Test fun billboardPrefersTodaysTopTenRows() {
+    @Test fun billboardPoolsTodaysTopTenAndTrendingByRank() {
         val rows = listOf(
             row("continue_watching", 1),
-            row("trending_movies", 2),
-            row("top10_movies_today", 3),
-            row("top10_shows_today", 4, mediaType = MediaType.TV),
+            row("trending_movies", 2, 12),
+            row("top10_movies_today", 3, 13),
+            row("top10_shows_today", 4, 14, mediaType = MediaType.TV),
+            row("popular", 5),
         )
-        assertEquals(listOf(3, 4), candidateIds(rows))
+        // Every row's #1 first, then every row's #2; other rows stay out.
+        assertEquals(listOf(2, 3, 4, 12, 13, 14), candidateIds(rows))
+    }
+
+    @Test fun billboardSkipsTitlesShownOnRecentVisits() {
+        val candidates = (1..20).map { item(it) }
+        val recent = candidates.take(16).map(::homeRowItemKey)
+        repeat(20) { seed ->
+            assertTrue(chooseNetflixBillboard(candidates, recent, kotlin.random.Random(seed)).id > 16)
+        }
+        // When every title was shown recently, one of the top ones comes back.
+        val all = candidates.map(::homeRowItemKey)
+        assertTrue(chooseNetflixBillboard(candidates, all, kotlin.random.Random(1)).id <= 16)
     }
 
     @Test fun billboardFallsBackToOtherTopTenThenTrending() {
-        val otherTopTen = listOf(row("addon_catalog", 5, title = "Top 10 in Israel"), row("trending_tv", 6))
+        val otherTopTen = listOf(row("addon_catalog", 5, title = "Top 10 in Israel"), row("popular", 7))
         assertEquals(listOf(5), candidateIds(otherTopTen))
         assertEquals(listOf(6), candidateIds(listOf(row("popular", 7), row("trending_tv", 6))))
     }

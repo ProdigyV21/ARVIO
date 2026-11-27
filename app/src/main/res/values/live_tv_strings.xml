@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="live_menu_watch_from_start">Watch from the start</string>
+    <string name="live_menu_next_show">Next show · Remind me</string>
+    <string name="live_picture_fit">Picture: Fit</string>
+    <string name="live_picture_fill">Picture: Fill</string>
+    <string name="live_picture_stretch">Picture: Stretch</string>
+    <string name="live_sleep_off">Sleep timer</string>
+    <string name="live_sleep_minutes">Sleep: %1$d min</string>
+    <string name="live_player_loading">Loading…</string>
+    <string name="live_player_slow">Still connecting…</string>
+    <string name="live_player_next_at">Next %1$s</string>
+    <string name="live_player_minutes_left">%1$d min left</string>
+    <string name="live_player_hours_left">%1$d h %2$d min left</string>
+    <string name="live_player_back_to_live">Back to live</string>
+    <string name="live_player_guide">Guide</string>
+    <string name="live_player_back_10">Back 10 s</string>
+    <string name="live_player_forward_10">Forward 10 s</string>
+    <string name="live_player_restart">Restart</string>
+</resources>

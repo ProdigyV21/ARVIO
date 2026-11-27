@@ -14,6 +14,23 @@
   video.autoplay = false;
   video.muted = true;
 
+  // The same tour as AV1 is about a third of the MP4's size, and this file is the
+  // largest share of the site's bandwidth. Browsers that cannot decode it, or fail
+  // to, get the MP4.
+  const av1Versions = {'/assets/promo/arvio-tour-web.mp4': '/assets/promo/arvio-tour-web-av1.webm'};
+  function source() {
+    const av1 = av1Versions[video.dataset.src];
+    const support = av1 && typeof video.canPlayType === 'function'
+      ? video.canPlayType('video/webm; codecs="av01.0.05M.08, opus"') : '';
+    return support === 'probably' ? av1 : video.dataset.src;
+  }
+  video.addEventListener('error', () => {
+    if (video.getAttribute('src') !== video.dataset.src && Object.values(av1Versions).includes(video.getAttribute('src'))) {
+      video.src = video.dataset.src;
+      update();
+    }
+  });
+
   function pause() {
     if (!video.paused) {
       internalPauses++;
@@ -26,7 +43,7 @@
       pause();
       return;
     }
-    if (!video.getAttribute('src')) video.src = video.dataset.src;
+    if (!video.getAttribute('src')) video.src = source();
     if (userPaused || motionPaused || reducedMotion.matches || connection?.saveData || playPending || !video.paused) return;
     playPending = true;
     try {
@@ -66,6 +83,6 @@
     }, {threshold: [0, 0.25]});
     observer.observe(video);
   } else {
-    video.src = video.dataset.src;
+    video.src = source();
   }
 })();

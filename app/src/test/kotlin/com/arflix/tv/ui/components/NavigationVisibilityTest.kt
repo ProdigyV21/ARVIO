@@ -82,11 +82,11 @@ class NavigationVisibilityTest {
         // Row 59 was appended after the existing appearance slots.
         assertEquals(listOf(56, 57, 58, 59), appearance.takeLast(4))
         // Music has its own section, like News: the two switches, then its sources.
-        assertEquals(listOf(64, 65, 66, 67), tvGeneralRowsForSection("music"))
+        assertEquals(listOf(68, 69, 70, 71), tvGeneralRowsForSection("music"))
         // The News switch opens its own section, followed by the topics and sources pickers.
         assertEquals(listOf(61, 62, 63), tvGeneralRowsForSection("news"))
         assertEquals(listOf("search", "watchlist", "tv", "news"), listOf(56, 57, 58, 61).map(::navigationSectionForRow))
-        assertEquals(listOf("music_tv", "music"), listOf(64, 65).map(::navigationSectionForRow))
+        assertEquals(listOf("music_tv", "music"), listOf(68, 69).map(::navigationSectionForRow))
         val all = listOf("language", "subtitles", "ai_subtitles", "playback", "appearance", "news", "music", "profiles", "network")
             .flatMap(::tvGeneralRowsForSection)
         assertEquals(all.size, all.distinct().size)
