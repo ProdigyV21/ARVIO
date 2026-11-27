@@ -323,7 +323,9 @@ fun TvSubtitleMenu(
                                 verticalArrangement = Arrangement.spacedBy(4.dp)
                             ) {
                                 itemsIndexed(selectedGroup.second) { idx, (globalIdx, sub) ->
-                                    val label = sub.label?.takeIf { it.isNotBlank() } ?: "Track ${idx + 1}"
+                                    // A bare provider id ("14209890") says nothing: number the track instead.
+                                    val label = sub.label?.trim()?.takeIf { it.isNotBlank() && !it.all(Char::isDigit) }
+                                        ?: stringResource(R.string.subtitle_track_number, idx + 1)
                                     val isTrackSelected = selectedSubtitle != null &&
                                         ((sub.id != null && sub.id == selectedSubtitle.id) ||
                                             (selectedSubtitle.id.isNullOrBlank() && sub.url == selectedSubtitle.url))

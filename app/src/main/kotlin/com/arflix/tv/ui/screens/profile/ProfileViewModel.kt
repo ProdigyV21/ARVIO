@@ -611,7 +611,7 @@ class ProfileViewModel @Inject constructor(
             // PIN incorrect - show error message in dialog
             _uiState.value = _uiState.value.copy(pinError = "")
             _uiState.value = _uiState.value.copy(
-                pinError = "Incorrect PIN. Please try again."
+                pinError = this@ProfileViewModel.context.getString(com.arflix.tv.R.string.live_group_pin_incorrect)
             )
         }
     }

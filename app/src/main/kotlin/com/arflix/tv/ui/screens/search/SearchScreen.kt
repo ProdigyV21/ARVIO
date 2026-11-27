@@ -194,10 +194,11 @@ fun SearchScreen(
     val activeCategories: List<Category> = when {
         hasSearchResults || youTubeRow != null -> {
             val list = mutableListOf<Category>()
-            if (!isTouchDevice) youTubeRow?.let(list::add)
             val topResultsTitle = if (isTouchDevice) stringResource(R.string.search_top_results)
-                else "${stringResource(R.string.search)} (${searchTopResults.size})"
+                else "${stringResource(R.string.search_top_results)} (${searchTopResults.size})"
             if (searchTopResults.isNotEmpty()) list.add(Category("s_all", topResultsTitle, searchTopResults))
+            // On TV the YouTube row follows the top results, so the real results open first.
+            if (!isTouchDevice) youTubeRow?.let(list::add)
             if (uiState.movieResults.isNotEmpty()) list.add(Category("s_m", "${stringResource(R.string.movies)} (${uiState.movieResults.size})", uiState.movieResults))
             if (uiState.tvResults.isNotEmpty()) list.add(Category("s_t", "${stringResource(R.string.tv_shows)} (${uiState.tvResults.size})", uiState.tvResults))
             list.addAll(uiState.personResults)

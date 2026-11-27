@@ -2359,4 +2359,5 @@
     <string name="external_player_missing">Nie znaleziono aplikacji wideo do otwarcia tego strumienia. Odtwarzam tutaj.</string>
     <string name="auto_source_failover">Przełączaj źródło automatycznie</string>
     <string name="auto_source_failover_desc">Gdy źródło nie wystartuje lub się zatrzyma, spróbuj następnego. Wył.: zostań przy źródle i pokaż błąd, aby można było ponowić lub wybrać inne.</string>
+    <string name="subtitle_track_number">Ścieżka %1$d</string>
 </resources>

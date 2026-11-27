@@ -242,6 +242,19 @@ private fun ProfileDialogContent(
     val nameBringIntoView = remember { BringIntoViewRequester() }
     var editTextRef by remember { mutableStateOf<EditText?>(null) }
     val confirmButtonFocusRequester = remember { FocusRequester() }
+    val lockButtonFocusRequester = remember { FocusRequester() }
+    // Setting or removing a PIN swaps the lock buttons; keep focus on that row instead of
+    // letting it fall back to the first avatar (where the next OK would change the avatar).
+    var lastPin by remember { mutableStateOf(profile?.pin) }
+    LaunchedEffect(profile?.pin) {
+        if (profile?.pin != lastPin) {
+            lastPin = profile?.pin
+            if (!isTouchDevice) {
+                kotlinx.coroutines.delay(120)
+                runCatching { lockButtonFocusRequester.requestFocus() }
+            }
+        }
+    }
 
 
     fun showKeyboard(editText: EditText) {
@@ -748,7 +761,7 @@ private fun ProfileDialogContent(
                                                 hideKeyboard()
                                                 onShowPinSetup()
                                             },
-                                            modifier = Modifier.weight(1f)
+                                            modifier = Modifier.weight(1f).focusRequester(lockButtonFocusRequester)
                                         )
                                     } else {
                                         DialogButton(
@@ -758,7 +771,7 @@ private fun ProfileDialogContent(
                                                 hideKeyboard()
                                                 onShowPinSetup()
                                             },
-                                            modifier = Modifier.weight(1f)
+                                            modifier = Modifier.weight(1f).focusRequester(lockButtonFocusRequester)
                                         )
                                         DialogButton(
                                             text = stringResource(R.string.profile_remove_pin),
@@ -1350,14 +1363,18 @@ private fun DialogButton(
     val isTouchDevice = LocalDeviceType.current.isTouchDevice()
     var isFocused by remember { mutableIntStateOf(0) }
 
+    // On TV only the focused button is filled white; an unfocused primary is a light tint so it
+    // doesn't read as focused, and a disabled one stays visible instead of vanishing.
     val containerColor = when {
-        isPrimary -> Color.White
+        isPrimary && isTouchDevice -> Color.White
+        isPrimary -> Color.White.copy(alpha = 0.14f)
         else -> Color.Transparent
     }
     val focusedContainerColor = Color.White
     val contentColor = when {
-        isDestructive -> if (isFocused > 0) ErrorRed else ErrorRed
-        isPrimary || isFocused > 0 -> Color.Black
+        isDestructive -> ErrorRed
+        isFocused > 0 -> Color.Black
+        isPrimary && isTouchDevice -> Color.Black
         else -> Color.White
     }.copy(alpha = if (enabled) 1f else 0.4f)
 
@@ -1411,7 +1428,8 @@ private fun DialogButton(
             shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(8.dp)),
             colors = ClickableSurfaceDefaults.colors(
                 containerColor = containerColor,
-                focusedContainerColor = focusedContainerColor
+                focusedContainerColor = focusedContainerColor,
+                disabledContainerColor = containerColor
             ),
             border = if (!isPrimary && !isDestructive) {
                 ClickableSurfaceDefaults.border(

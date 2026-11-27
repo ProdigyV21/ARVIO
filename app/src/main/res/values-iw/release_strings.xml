@@ -341,4 +341,5 @@
     <string name="sports_your_teams_empty">כרגע אין משחקים של הקבוצות שאתה עוקב אחריהן. יש לפתוח משחק כלשהו ולבחור מעקב.</string>
     <string name="sports_live_status">חי עכשיו</string>
     <string name="news_add_feed_hint">https://example.com/feed.xml</string>
+    <string name="subtitle_track_number">רצועה %1$d</string>
 </resources>

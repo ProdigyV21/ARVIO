@@ -2359,4 +2359,5 @@
     <string name="external_player_missing">Не найдено видеоприложение для этого потока. Воспроизвожу здесь.</string>
     <string name="auto_source_failover">Переключать источник автоматически</string>
     <string name="auto_source_failover_desc">Если источник не запускается или останавливается, пробовать следующий. Выкл.: оставаться на источнике и показывать ошибку, чтобы вы могли повторить или выбрать другой.</string>
+    <string name="subtitle_track_number">Дорожка %1$d</string>
 </resources>

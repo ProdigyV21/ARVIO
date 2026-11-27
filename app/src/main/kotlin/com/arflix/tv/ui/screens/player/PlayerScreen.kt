@@ -4881,7 +4881,7 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
                         val isPaused = hasPlaybackStarted && !isPlaying && !isBuffering
 
                         PlayerMetadataChrome(
-                            uiState = uiState,
+                            playerUiState = uiState,
                             mediaType = args.mediaType,
                             seasonNumber = args.seasonNumber,
                             episodeNumber = args.episodeNumber,
@@ -6257,7 +6257,12 @@ private fun getFullLanguageName(code: String?): String {
 
     val mapped = when {
         normalizedCode in listOf("en", "eng", "english") -> "English"
-        normalizedCode in listOf("es", "spa", "spanish") -> "Spanish"
+        normalizedCode in listOf("es", "spa", "spanish", "spn") -> "Spanish"
+        // OpenSubtitles' own two-letter codes
+        normalizedCode == "sp" -> "Spanish (Spain)"
+        normalizedCode == "ea" -> "Spanish (Latin America)"
+        normalizedCode == "pb" -> "Portuguese (Brazil)"
+        normalizedCode == "ze" -> "Chinese (Bilingual)"
         normalizedCode in listOf("es-419", "es-la") -> "Spanish (Latin America)"
         normalizedCode in listOf("es-es") -> "Spanish (Spain)"
         normalizedCode in listOf("nl", "nld", "dut", "dutch") -> "Dutch"
@@ -7868,7 +7873,7 @@ private fun buildSeekPreviewCacheIdentity(
 
 @Composable
 internal fun PlayerMetadataChrome(
-    uiState: PlayerUiState,
+    playerUiState: PlayerUiState,
     mediaType: MediaType,
     seasonNumber: Int?,
     episodeNumber: Int?,
@@ -7876,6 +7881,8 @@ internal fun PlayerMetadataChrome(
     accentColor: Color,
     modifier: Modifier = Modifier
 ) {
+    // A YouTube clip picked from a title's sources shows its own name, not the title's logo and plot.
+    val uiState = playerUiState.asYouTubeClipChrome()
     val displayTitle = when {
         mediaType == MediaType.TV && !uiState.episodeTitle.isNullOrBlank() -> uiState.episodeTitle
         else -> uiState.title

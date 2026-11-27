@@ -1336,4 +1336,5 @@
     <string name="external_player_missing">Aucune application vidéo trouvée pour ouvrir ce flux. Lecture ici.</string>
     <string name="auto_source_failover">Changer de source automatiquement</string>
     <string name="auto_source_failover_desc">Lorsqu\'une source ne démarre pas ou s\'arrête, essaie la suivante. Désactivé : reste sur la source et affiche l\'erreur, pour que vous puissiez réessayer ou en choisir une autre.</string>
+    <string name="subtitle_track_number">Piste %1$d</string>
 </resources>

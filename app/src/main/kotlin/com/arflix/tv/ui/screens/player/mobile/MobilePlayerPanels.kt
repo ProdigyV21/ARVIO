@@ -1489,7 +1489,12 @@ private fun getFullLanguageName(code: String?): String {
 
     val mapped = when {
         normalizedCode in listOf("en", "eng", "english") -> "English"
-        normalizedCode in listOf("es", "spa", "spanish") -> "Spanish"
+        normalizedCode in listOf("es", "spa", "spanish", "spn") -> "Spanish"
+        // OpenSubtitles' own two-letter codes
+        normalizedCode == "sp" -> "Spanish (Spain)"
+        normalizedCode == "ea" -> "Spanish (Latin America)"
+        normalizedCode == "pb" -> "Portuguese (Brazil)"
+        normalizedCode == "ze" -> "Chinese (Bilingual)"
         normalizedCode in listOf("es-419", "es-la") -> "Spanish (Latin America)"
         normalizedCode in listOf("es-es") -> "Spanish (Spain)"
         normalizedCode in listOf("nl", "nld", "dut", "dutch") -> "Dutch"

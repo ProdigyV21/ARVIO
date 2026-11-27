@@ -2359,4 +2359,5 @@
     <string name="external_player_missing">Nessuna app video trovata per aprire questo stream. Lo riproduco qui.</string>
     <string name="auto_source_failover">Cambia fonte automaticamente</string>
     <string name="auto_source_failover_desc">Quando una fonte non parte o si interrompe, prova la successiva. Disattivato: resta sulla fonte e mostra l\'errore, così puoi riprovare o sceglierne un\'altra.</string>
+    <string name="subtitle_track_number">Traccia %1$d</string>
 </resources>

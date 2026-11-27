@@ -25,4 +25,5 @@
     <!-- YouTube trailer fallback -->
     <string name="trailer_embed_blocked">This trailer cannot be embedded directly by YouTube.</string>
     <string name="trailer_watch_on_youtube">Watch on YouTube</string>
+    <string name="subtitle_track_number">Track %1$d</string>
 </resources>

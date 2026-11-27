@@ -959,4 +959,5 @@
     <string name="external_player_missing">Nenhum app de vídeo encontrado para abrir esta transmissão. Reproduzindo aqui.</string>
     <string name="auto_source_failover">Trocar de fonte automaticamente</string>
     <string name="auto_source_failover_desc">Quando uma fonte não inicia ou para, tenta a próxima. Desativado: permanece na fonte e mostra o erro, para você tentar de novo ou escolher outra.</string>
+    <string name="subtitle_track_number">Faixa %1$d</string>
 </resources>
