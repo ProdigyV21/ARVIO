@@ -188,8 +188,23 @@ internal enum class GuideSport(val title: String, val asset: String, val terms: 
  * "Next | ...", "- NO EVENT STREAMING -", "24/7 ...". Those are not games.
  */
 internal val guidePlaceholder = Regex(
-    "^\\W*(end(ed)?|finished|full ?time|next|up ?next|coming up|upcoming|starts? (at|soon)|no event|offline|closed)\\b|\\bno (live )?events?\\b|\\b24/7\\b|\\bevent (starts|begins)\\b|@\\s*(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\\.?\\s+\\d{1,2}\\b",
+    "^\\W*(end(ed)?|finished|full ?time|next|up ?next|coming up|upcoming|starts? (at|soon)|no event|offline|closed)\\b|\\bno (live )?events?\\b|\\b24/7\\b|\\bevent (starts|begins)\\b|@\\s*(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\\.?\\s+\\d{1,2}\\b|\\|\\s*all\\s*\\||\\b8k exclusive\\b|\\(\\d{4}-\\d{2}-\\d{2}[ t]\\d{1,2}:\\d{2}",
     RegexOption.IGNORE_CASE)
+
+/** Event channels that are parked between games ("NO EVENT STREAMING", "No event"). */
+internal val sportsPlaceholderChannel = Regex("\\bno (live )?events?\\b|\\bno stream", RegexOption.IGNORE_CASE)
+
+private val channelPrefix = Regex("^\\s*[a-z]{2,3}\\s*[:|]\\s*", RegexOption.IGNORE_CASE)
+private val channelQuality = Regex("\\b(hd|fhd|uhd|sd|4k|8k|hevc|raw|backup)\\b", RegexOption.IGNORE_CASE)
+private val nonWord = Regex("[^\\p{L}\\p{N}]+")
+private fun channelText(value: String) = value.replace(channelPrefix, "").replace(channelQuality, " ")
+    .lowercase(Locale.ROOT).replace(nonWord, " ").trim()
+
+/** A guide that only repeats the channel's own name ("IT: CHAMPIONS LEAGUE INFINITY 1 HD") is not a game. */
+internal fun sportsTitleIsChannelName(title: String, channelName: String): Boolean {
+    val a = channelText(title)
+    return a.isNotEmpty() && a == channelText(channelName)
+}
 
 internal val nonEvent = Regex("\\b(highlights?|hoogtepunten|samenvatting|resumen|replay|re-?run|classic|news|magazine|review|preview|cancelled|canceled|postponed|abandoned|sendepause|off air|no signal|best of|teleshopping|infomercial|documentary)\\b", RegexOption.IGNORE_CASE)
 private val eventMatchup = Regex("\\s+(?:vs?\\.?|versus|at|[-–—])\\s+", RegexOption.IGNORE_CASE)
@@ -233,9 +248,11 @@ internal class SportsEventIndex {
         add(event.sport, event.identity, event.programme, event.channels, event.schedules, event.competition, event.channelOnly, event.artwork)
     }
     fun add(sport: GuideSport, identity: String, programme: IptvProgram, channel: IptvChannel, competition: String?) {
+        if (sportsPlaceholderChannel.containsMatchIn(channel.name) || sportsTitleIsChannelName(programme.title, channel.name)) return
         add(sport, identity, programme, listOf(channel), null, competition)
     }
     fun addChannelOnly(sport: GuideSport, programme: IptvProgram, channel: IptvChannel) {
+        if (sportsPlaceholderChannel.containsMatchIn(channel.name)) return
         add(sport, sportsEventIdentity(programme.title), programme, listOf(channel), null, null,
             channelOnly = true, artwork = channel.logo)
     }
@@ -276,7 +293,7 @@ internal class SportsProgrammeResolver {
         // matchup title is an event channel's placeholder, not a game on now.
         return metadata?.takeUnless {
             (it.sport in timedTeamSports || (it.sport == GuideSport.OTHER && eventMatchup.containsMatchIn(programme.title))) &&
-                programme.endUtcMillis - programme.startUtcMillis > 6 * 60 * 60_000L
+                programme.endUtcMillis - programme.startUtcMillis >= 6 * 60 * 60_000L
         }
     }
     private fun classify(programme: IptvProgram, fallback: GuideSport?): Metadata? {

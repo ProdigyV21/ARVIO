@@ -149,4 +149,33 @@ class SportsHubTest {
         assertEquals(SportsScanRequest(key, emptyMap(), 0, 0), SportsScanRequest(key, mapOf("a" to com.arflix.tv.data.model.IptvNowNext()), 0, 0))
         assertNotEquals(SportsScanRequest(key, emptyMap(), 0, 0), SportsScanRequest(key.copy(window = 2L), emptyMap(), 0, 0))
     }
+
+    @Test fun channelNamesAndParkedChannelsAreNotGames() {
+        assertTrue(sportsTitleIsChannelName("IT: CHAMPIONS LEAGUE INFINITY 1 HD", "IT: CHAMPIONS LEAGUE INFINITY 1 HD"))
+        assertTrue(sportsTitleIsChannelName("Champions League Infinity 1", "IT | CHAMPIONS LEAGUE INFINITY 1 FHD"))
+        assertFalse(sportsTitleIsChannelName("Arsenal vs Chelsea", "UK: Sky Sports Main Event HD"))
+        assertTrue(sportsPlaceholderChannel.containsMatchIn("NO EVENT STREAMING"))
+        assertTrue(guidePlaceholder.containsMatchIn("Live | China - Great Britain | all | 8K EXCLUSIVE | ES: SOC"))
+        assertTrue(guidePlaceholder.containsMatchIn("(MX) (VIX 15) | NFL Blitz (2026-11-29 12:45:00)"))
+        val index = SportsEventIndex()
+        val programme = IptvProgram("Ajax vs PSV", startUtcMillis = now, endUtcMillis = now + hour)
+        index.add(GuideSport.FOOTBALL, "ajax psv", programme, IptvChannel("x", "No event 3", "http://x", "Sports"), null)
+        index.add(GuideSport.FOOTBALL, "cl", programme.copy(title = "IT: CHAMPIONS LEAGUE INFINITY 1 HD"),
+            IptvChannel("y", "IT: CHAMPIONS LEAGUE INFINITY 1 HD", "http://y", "Sports"), null)
+        assertTrue(index.events().isEmpty())
+    }
+
+    @Test fun refreshKeepsTheShownOrder() {
+        val a = game("a", "A vs B", -minute); val b = game("b", "C vs D", -minute); val c = game("c", "E vs F", -minute)
+        val before = listOf(SportsGuideRow(SPORTS_ROW_LIVE, "Live", listOf(a, b)))
+        val after = stabilizeSportsRows(before, listOf(SportsGuideRow(SPORTS_ROW_LIVE, "Live", listOf(c, b, a))))
+        assertEquals(listOf("a", "b", "c"), after.single().events.map { it.id })
+    }
+
+    @Test fun scoresSurviveARefreshWithoutTheirFixture() {
+        val fixture = com.arflix.tv.data.model.SportsFixture("1", null, null, null, null, "live", now - minute, 2, 1, emptyList())
+        val memory = HashMap<String, com.arflix.tv.data.model.SportsFixture>()
+        carrySportsFixtures(listOf(game("g", "A vs B", -minute).copy(fixture = fixture)), memory, now)
+        assertEquals(2, carrySportsFixtures(listOf(game("g", "A vs B", -minute)), memory, now).single().fixture?.homeScore)
+    }
 }
