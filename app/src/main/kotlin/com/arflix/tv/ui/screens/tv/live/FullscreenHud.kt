@@ -144,7 +144,7 @@ fun FullscreenHud(
     showControls: Boolean = true,
     /** False when the stream cannot be seeked (no catch-up, no live window): rewind/forward are left out. */
     seekable: Boolean = true,
-    /** Forward 10 s: only in a recording or a seekable live window, never at the live edge. */
+    /** Forward 10 s: only in a recording, never at the live edge. */
     forwardEnabled: Boolean = seekable,
     /** The sleep timer is running: its button carries a dot. */
     sleepActive: Boolean = false,
@@ -268,6 +268,8 @@ fun FullscreenHud(
         buffering = isBuffering,
         loadingLabel = stringResource(R.string.live_player_loading),
         slowLabel = stringResource(R.string.live_player_slow),
+        // With the controls up the label would sit on the seek bar; the ring alone says enough.
+        showSlowLabel = !(visible && showControls),
     )
 
     AnimatedVisibility(

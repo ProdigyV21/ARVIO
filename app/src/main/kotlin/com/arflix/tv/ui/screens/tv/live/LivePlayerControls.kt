@@ -225,6 +225,7 @@ internal fun PlayerBufferingIndicator(
     loadingLabel: String,
     slowLabel: String,
     modifier: Modifier = Modifier,
+    showSlowLabel: Boolean = true,
 ) {
     var shown by remember { mutableStateOf(false) }
     var slow by remember { mutableStateOf(false) }
@@ -265,7 +266,7 @@ internal fun PlayerBufferingIndicator(
                         strokeWidth = 3.dp,
                     )
                 }
-                if (slow) {
+                if (slow && showSlowLabel) {
                     Text(
                         text = slowLabel,
                         style = LiveType.ChannelName.copy(color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Medium),

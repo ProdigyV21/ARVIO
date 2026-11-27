@@ -5427,7 +5427,8 @@ fun LiveTvScreen(
                         streamBitrate = streamStats.bitrate,
                         categoryName = categoryTitle,
                         isCatchupMode = playingCatchupProgram != null,
-                        isPlaying = if (playingCatchupProgram != null) playerPlayWhenReady else playerIsPlaying,
+                        // A live channel that is loading is not paused: keep the Pause icon up.
+                        isPlaying = if (playingCatchupProgram != null) playerPlayWhenReady else (playerIsPlaying || playerIsBuffering),
                         isBuffering = playerIsBuffering,
                         playbackPositionMs = playerPositionMs,
                         playbackDurationMs = playerDurationMs,
@@ -5457,13 +5458,8 @@ fun LiveTvScreen(
                         sleepLabel = if (liveSleepMinutes == 0) stringResource(R.string.live_sleep_off)
                             else stringResource(R.string.live_sleep_minutes, liveSleepMinutes),
                         sleepActive = liveSleepMinutes != 0,
-                        // Forward only means something inside a recording or a seekable live window.
-                        forwardEnabled = playingCatchupProgram != null || livePlayerSeekable(
-                            catchup = false,
-                            canReplayNow = false,
-                            playerSeekable = exoPlayer.isCurrentMediaItemSeekable,
-                            playerDurationMs = exoPlayer.duration,
-                        ),
+                        // Forward only means something inside a recording; live is already at the edge.
+                        forwardEnabled = playingCatchupProgram != null,
                         seekable = livePlayerSeekable(
                             catchup = playingCatchupProgram != null,
                             canReplayNow = currentNowNext?.now?.let {

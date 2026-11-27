@@ -33,6 +33,7 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.res.stringResource
@@ -58,18 +59,21 @@ internal fun FullscreenSourcesDialog(
         val targetKey = if (hasAlternatives) "source:${variants.first().id}" else "cancel"
         val firstFocus = remember(targetKey) { FocusRequester() }
         var targetPlaced by remember(targetKey) { mutableStateOf(false) }
+        var targetFocused by remember(targetKey) { mutableStateOf(false) }
         LaunchedEffect(firstFocus, targetPlaced, touchDevice) {
             if (!touchDevice && targetPlaced) {
-                // The dialog window may not hold focus on its first frames; ask until it lands.
-                repeat(10) {
+                // requestFocus() fails silently until the window has focus, so check that it landed.
+                repeat(20) {
                     withFrameNanos { }
+                    if (targetFocused) return@LaunchedEffect
                     // The dialog may close or replace its lazy items before this frame.
-                    if (runCatching { firstFocus.requestFocus() }.isSuccess) return@LaunchedEffect
-                    kotlinx.coroutines.delay(50)
+                    runCatching { firstFocus.requestFocus() }
+                    kotlinx.coroutines.delay(75)
                 }
             }
         }
-        val initialFocus = Modifier.focusRequester(firstFocus)
+        val initialFocus = Modifier.onFocusChanged { targetFocused = it.hasFocus }
+            .focusRequester(firstFocus)
             .onGloballyPositioned { if (it.isAttached) targetPlaced = true }
         Column(
             modifier = Modifier.widthIn(max = 560.dp).fillMaxWidth()
@@ -116,7 +120,10 @@ internal fun FullscreenSourcesDialog(
                 label = stringResource(android.R.string.cancel),
                 onClick = onDismiss,
                 focusRequester = if (!hasAlternatives) firstFocus else null,
-                modifier = if (!hasAlternatives) Modifier.onGloballyPositioned { if (it.isAttached) targetPlaced = true } else Modifier,
+                modifier = if (!hasAlternatives) {
+                    Modifier.onFocusChanged { targetFocused = it.hasFocus }
+                        .onGloballyPositioned { if (it.isAttached) targetPlaced = true }
+                } else Modifier,
             )
         }
     }
