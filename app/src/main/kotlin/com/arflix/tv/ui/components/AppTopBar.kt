@@ -21,6 +21,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -232,10 +234,12 @@ private fun TopBarNavChip(
         animationSpec = tween(if (isFocused) 100 else 0),
         label = "topbar_scale"
     )
-    val label = if (item == SidebarItem.TV) {
-        stringResource(R.string.topbar_tv)
-    } else {
-        stringResource(item.labelRes)
+    // While Music holds a song, its chip shows the song and bounces while it plays.
+    val song = if (item == SidebarItem.MUSIC) com.arflix.tv.music.MusicNowPlaying.song.collectAsState().value else null
+    val label = when {
+        song != null -> song.title
+        item == SidebarItem.TV -> stringResource(R.string.topbar_tv)
+        else -> stringResource(item.labelRes)
     }
 
     Row(
@@ -251,7 +255,9 @@ private fun TopBarNavChip(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        Icon(
+        if (song != null) {
+            NowPlayingBars(iconColor, song.isPlaying, Modifier.size(15.dp))
+        } else Icon(
             imageVector = item.icon,
             contentDescription = label,
             tint = iconColor,
@@ -259,6 +265,7 @@ private fun TopBarNavChip(
         )
         Text(
             text = label,
+            modifier = if (song != null) Modifier.widthIn(max = 180.dp) else Modifier,
             fontSize = 14.sp,
             // Keep label metrics stable when selection/focus moves between pages.
             fontWeight = FontWeight.SemiBold,

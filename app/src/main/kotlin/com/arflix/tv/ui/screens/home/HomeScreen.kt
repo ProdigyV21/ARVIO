@@ -3052,6 +3052,7 @@ internal fun HomeInputLayer(
                                     SidebarItem.WATCHLIST -> onNavigateToWatchlist()
                                     SidebarItem.TV -> onNavigateToTv(null, null)
                                     SidebarItem.NEWS -> com.arflix.tv.ui.components.NewsNavigation.open()
+                                    SidebarItem.MUSIC -> com.arflix.tv.ui.components.MusicNavigation.open()
                                     SidebarItem.SETTINGS -> onNavigateToSettings()
                                     null -> Unit
                                 }

@@ -69,6 +69,11 @@ object ChartCatalog {
         "zh" to Local("Top Taiwan", "排行榜", listOf(
             "C-Pop" to "C-Pop", "Mandopop" to "Mandopop", "Cantopop" to "Cantopop",
         )),
+        // Hebrew searches find few Deezer playlists, so the Israeli rows search in English.
+        "he" to Local("Top Israel", "מצעדים", listOf(
+            "להיטים ישראליים" to "Israeli hits", "פופ ישראלי" to "Israeli pop", "מזרחית" to "Mizrahi",
+            "רוק ישראלי" to "Israeli rock", "היפ הופ ישראלי" to "Israeli rap", "קלאסיקות ישראליות" to "Israeli classics",
+        )),
         "en-GB" to Local("Top UK", "Charts", listOf(
             "UK hits" to "UK hits", "UK rap" to "UK rap", "Britpop" to "Britpop",
         )),
@@ -94,6 +99,20 @@ object ChartCatalog {
 
     /** Row titles for the general rows, per language; missing ones keep the English title. */
     private val TITLES: Map<String, Map<String, String>> = mapOf(
+        "he" to mapOf(
+            "top40" to "טופ 40", "worldwide" to "המובילים בעולם", "new" to "יציאות חדשות", "viral" to "להיטים ויראליים",
+            "gym" to "חדר כושר", "workout" to "אימון", "running" to "ריצה", "chill" to "צ'יל",
+            "party" to "מסיבה", "throwback" to "נוסטלגיה", "80s" to "להיטי שנות ה-80", "90s" to "להיטי שנות ה-90",
+            "2000s" to "להיטי שנות ה-2000", "2010s" to "להיטי שנות ה-2010", "hiphop" to "היפ הופ", "rnb" to "R&B",
+            "dance" to "להיטי דאנס", "house" to "האוס", "techno" to "טכנו", "edm" to "EDM",
+            "rock" to "רוק", "classicrock" to "רוק קלאסי", "metal" to "מטאל", "indie" to "אינדי",
+            "pop" to "להיטי פופ", "latin" to "להיטים לטיניים", "afro" to "אפרוביטס", "reggae" to "רגאיי",
+            "jazz" to "ג'אז", "classical" to "מוזיקה קלאסית", "lofi" to "לו-פיי", "focus" to "ריכוז",
+            "sleep" to "שינה", "acoustic" to "אקוסטי", "love" to "שירי אהבה", "sad" to "שירים עצובים",
+            "roadtrip" to "בדרכים", "soul" to "סול", "piano" to "פסנתר", "kids" to "ילדים",
+            "summer" to "להיטי הקיץ", "feelgood" to "מצב רוח טוב", "christmas" to "שירי חג המולד",
+            "year" to "להיטי %d",
+        ),
         "nl" to mapOf(
             "worldwide" to "Wereldwijd top", "new" to "Nieuwe releases", "viral" to "Viral hits", "gym" to "Sportschool",
             "running" to "Hardlopen", "party" to "Feest", "throwback" to "Throwback", "love" to "Liefdesliedjes",
@@ -132,7 +151,7 @@ object ChartCatalog {
     private val COUNTRY_TITLES = mapOf(
         "nl" to "Top Nederland", "de" to "Top Deutschland", "fr" to "Top France", "es" to "Top España",
         "it" to "Top Italia", "pt-BR" to "Top Brasil", "pt-PT" to "Top Portugal", "pl" to "Top Polska",
-        "tr" to "Top Türkiye",
+        "tr" to "Top Türkiye", "he" to "המובילים בישראל",
     )
 
     /** Rows that lead every day: the country's chart, the charts row and the local rows. */
@@ -140,7 +159,8 @@ object ChartCatalog {
 
     fun rows(languageTag: String, date: LocalDate): List<Row> {
         val tag = languageTag.replace('_', '-')
-        val language = tag.substringBefore('-').lowercase()
+        // Android still reports Hebrew by its old code, "iw".
+        val language = tag.substringBefore('-').lowercase().let { if (it == "iw") "he" else it }
         val local = LOCAL[tag] ?: LOCAL[language] ?: LOCAL.getValue("en")
         val titles = TITLES[language].orEmpty()
         val general = GENERAL
@@ -154,7 +174,7 @@ object ChartCatalog {
             Row("charts", local.chartsTitle, "Top 50 " + local.countryChart.removePrefix("Top ")),
         ) + local.local.mapIndexed { i, (title, query) -> Row("local$i", title, query) } +
             general.take(PINNED_GENERAL) +
-            Row("year", "Hits $year", "Hits $year")
+            Row("year", titles["year"]?.format(year) ?: "Hits $year", "Hits $year")
         // The rest changes order every day, so the home looks different each time.
         val rotating = general.drop(PINNED_GENERAL).shuffled(Random(date.toEpochDay()))
         return pinned + rotating

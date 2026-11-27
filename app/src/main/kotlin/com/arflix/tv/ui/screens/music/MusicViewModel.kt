@@ -8,6 +8,7 @@ import com.arflix.tv.music.MusicAddon
 import com.arflix.tv.music.MusicCollections
 import com.arflix.tv.music.MusicArtist
 import com.arflix.tv.music.MusicLibrary
+import com.arflix.tv.music.MusicNameLookup
 import com.arflix.tv.music.MusicPlaybackState
 import com.arflix.tv.music.MusicPlayer
 import com.arflix.tv.music.MusicRepository
@@ -165,6 +166,12 @@ class MusicViewModel @Inject constructor(
         viewModelScope.launch {
             repository.collections.collect { collections -> _state.update { it.copy(collections = collections) } }
         }
+        // The now-playing bar outside Music was tapped: show the song.
+        viewModelScope.launch {
+            com.arflix.tv.music.MusicNowPlaying.openPlayerRequest.collect { requested ->
+                if (requested && com.arflix.tv.music.MusicNowPlaying.takeOpenPlayerRequest()) setPlayerOpen(true)
+            }
+        }
     }
 
     private fun edit(transform: (MusicCollections) -> MusicCollections) {
@@ -314,8 +321,8 @@ class MusicViewModel @Inject constructor(
         searchJob = viewModelScope.launch {
             delay(300)
             _state.update { it.copy(searching = true) }
-            val result = runCatching { source.search(query.trim()) }.getOrDefault(MusicSearchResult())
-                .let { it.copy(tracks = MusicSearchRanking.rankTracks(query, it.tracks)) }
+            val result = MusicNameLookup.search(source, query.trim(), repository::latinNames)
+                .let { it.copy(tracks = MusicSearchRanking.rankTracks(query, it.tracks, it.aliases)) }
             _state.update { it.copy(searching = false, results = result) }
         }
     }

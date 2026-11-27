@@ -32,6 +32,9 @@
     <string name="music_back">Terug</string>
     <string name="music_more">Meer</string>
     <string name="music_close_player">Speler sluiten</string>
+    <string name="music_stop_close">Stoppen en sluiten</string>
+    <string name="music_cache_clear">Muziekcache wissen</string>
+    <string name="music_cache_desc">Nummers worden tijdens het afspelen op dit apparaat bewaard, zodat vooruitspoelen direct werkt. Tot %1$s; de oudste gaan eerst weg.</string>
     <string name="music_next">Volgende</string>
     <string name="music_previous">Vorige</string>
     <string name="music_pause">Pauzeren</string>
@@ -39,7 +42,6 @@
     <string name="music_addon_url">Addon-adres</string>
     <string name="music_add_addon">Addon toevoegen</string>
     <string name="music_add_source">Bron toevoegen</string>
-    <string name="music_remove_addon">%1$s verwijderen</string>
     <string name="music_addon_failed">Addon toevoegen mislukt: %1$s</string>
     <string name="music_tab_mine">Mijn muziek</string>
     <string name="music_liked_songs">Favoriete nummers</string>

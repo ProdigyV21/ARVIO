@@ -33,8 +33,12 @@ object MusicSearchRanking {
         return words.any { it in PLAYLIST_WORDS } || DECADE.containsMatchIn(query.lowercase())
     }
 
-    /** How well a song fits the query: its title typed exactly beats a title that only contains the words. */
-    internal fun trackScore(query: String, track: MusicTrack): Int {
+    /**
+     * How well a song fits the query: its title typed exactly beats a title that only contains the words.
+     * [aliases] are the Latin names of an artist typed in another script; their songs beat a title
+     * that merely shares a letter with the query.
+     */
+    internal fun trackScore(query: String, track: MusicTrack, aliases: List<String> = emptyList()): Int {
         val q = SpotifyImport.normalize(query)
         val title = SpotifyImport.normalize(track.title)
         val artist = SpotifyImport.normalize(track.artist)
@@ -49,18 +53,20 @@ object MusicSearchRanking {
             else -> 0
         }
         if (artist.isNotEmpty() && (q.contains(artist) || artist.contains(q))) score += 2
+        if (aliases.any { MusicNameLookup.isArtist(track.artist, it) }) score += 4
         // The plain song beats a remix or live take whose title only differs in brackets.
         if (score > 0 && query.trim().lowercase().contains(track.title.trim().lowercase())) score += 1
         return score
     }
 
-    fun rankTracks(query: String, tracks: List<MusicTrack>): List<MusicTrack> =
-        tracks.withIndex().sortedWith(compareByDescending<IndexedValue<MusicTrack>> { trackScore(query, it.value) }.thenBy { it.index })
+    fun rankTracks(query: String, tracks: List<MusicTrack>, aliases: List<String> = emptyList()): List<MusicTrack> =
+        tracks.withIndex().sortedWith(compareByDescending<IndexedValue<MusicTrack>> { trackScore(query, it.value, aliases) }.thenBy { it.index })
             .map { it.value }
 
     fun order(query: String, result: MusicSearchResult): List<SearchSection> {
         val q = SpotifyImport.normalize(query)
-        val artistExact = result.artists.any { SpotifyImport.normalize(it.name) == q }
+        val names = (result.aliases.map { SpotifyImport.normalize(it) } + q).toSet()
+        val artistExact = result.artists.any { SpotifyImport.normalize(it.name) in names }
         val songTyped = result.tracks.any { trackScore(query, it) >= 6 }
         return when {
             result.playlists.isNotEmpty() && wantsPlaylists(query) && !songTyped ->

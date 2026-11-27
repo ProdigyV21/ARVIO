@@ -36,6 +36,20 @@ class MusicChartsTest {
         assertEquals("Top Nederland", ChartCatalog.rows("nl-NL", day)[0].title)
     }
 
+    @Test fun hebrewAppGetsIsraeliChartsWithHebrewTitles() {
+        // Both of Android's codes for Hebrew.
+        for (tag in listOf("iw-IL", "he")) {
+            val rows = ChartCatalog.rows(tag, day)
+            assertEquals("Top Israel", rows[0].query)
+            assertEquals("המובילים בישראל", rows[0].title)
+            assertEquals("Top 50 Israel", rows[1].query)
+            assertEquals("מצעדים", rows[1].title)
+            assertEquals("Israeli hits", rows[2].query)
+            assertEquals("להיטי 2026", rows.single { it.key == "year" }.title)
+            assertEquals("Hits 2026", rows.single { it.key == "year" }.query)
+        }
+    }
+
     private fun playlists(prefix: String, count: Int) = (1..count).joinToString(",", "[", "]") {
         """{"id":$prefix$it,"title":"$prefix list $it","nb_tracks":50,"picture_xl":"https://img/$prefix$it","user":{"name":"Deezer"}}"""
     }

@@ -41,6 +41,7 @@ import androidx.compose.material.icons.filled.Newspaper
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -260,6 +261,13 @@ fun AppBottomBar(
     val items = bottomBarItems.filter {
         com.arflix.tv.util.isNavigationSectionVisible(it.route, NavigationVisibility.hiddenSections, KidsNavigation.hideLiveTv)
     }
+    // Music keeps playing on other screens; Music itself has its own mini player.
+    val song by com.arflix.tv.music.MusicNowPlaying.song.collectAsState()
+    val onMusic = currentRoute?.substringBefore('?') == "music"
+    val openMusicPlayer = {
+        com.arflix.tv.music.MusicNowPlaying.requestOpenPlayer()
+        if (!onMusic) onNavigate("music")
+    }
     if (isRail) {
         Column(
             modifier = baseModifier
@@ -286,7 +294,7 @@ fun AppBottomBar(
                     }
                 }
                 items.filter { it.route != "settings" }.forEach { item ->
-                    BottomBarItemButton(item, currentRoute, onNavigate, spec, accent, Modifier.height(48.dp))
+                    BottomBarItemButton(item, currentRoute, onNavigate, spec, accent, Modifier.height(48.dp), song)
                 }
             }
             items.firstOrNull { it.route == "settings" }?.let { item ->
@@ -298,13 +306,17 @@ fun AppBottomBar(
             modifier = baseModifier.fillMaxWidth()
                 .navigationBarsPadding()
         ) {
+            song?.takeIf { !onMusic }?.let {
+                Spacer(Modifier.height(6.dp))
+                MobileNowPlayingBar(it, accent, onOpen = openMusicPlayer)
+            }
             Row(
                 modifier = Modifier.fillMaxWidth().height(barHeight),
                 horizontalArrangement = Arrangement.SpaceEvenly,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 items.forEach { item ->
-                    BottomBarItemButton(item, currentRoute, onNavigate, spec, accent, Modifier.weight(1f).fillMaxHeight())
+                    BottomBarItemButton(item, currentRoute, onNavigate, spec, accent, Modifier.weight(1f).fillMaxHeight(), song)
                 }
             }
         }
@@ -319,6 +331,7 @@ private fun BottomBarItemButton(
     spec: AppBottomBarSpec,
     accent: Color,
     modifier: Modifier,
+    song: com.arflix.tv.music.MusicNowPlaying.Song? = null,
 ) {
     val isSelected = currentRoute?.substringBefore('?') == item.route
     val haptic = LocalHapticFeedback.current
@@ -352,7 +365,12 @@ private fun BottomBarItemButton(
         contentAlignment = Alignment.Center
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(3.dp)) {
-        Icon(
+        if (item.route == "music" && song != null) {
+            // Something is playing: the tab's icon bounces with it.
+            Box(Modifier.size(spec.iconSizeDp.dp), contentAlignment = Alignment.Center) {
+                NowPlayingBars(iconColor, song.isPlaying, Modifier.size((spec.iconSizeDp * 0.75f).dp))
+            }
+        } else Icon(
             imageVector = item.icon,
             contentDescription = null,
             tint = iconColor,

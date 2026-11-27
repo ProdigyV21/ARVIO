@@ -36,6 +36,7 @@
     <string name="music_back">Back</string>
     <string name="music_more">More</string>
     <string name="music_close_player">Close player</string>
+    <string name="music_stop_close">Stop and close</string>
     <string name="music_next">Next</string>
     <string name="music_previous">Previous</string>
     <string name="music_pause">Pause</string>
@@ -46,7 +47,12 @@
     <string name="music_addon_url_hint">https://…/manifest.json</string>
     <string name="music_add_addon">Add addon</string>
     <string name="music_add_source">Add source</string>
-    <string name="music_remove_addon">Remove %1$s</string>
+    <string name="music_sources_title">Music sources</string>
+    <string name="music_sources_desc">The addons and servers Music plays from</string>
+    <string name="music_sources_none">No sources yet</string>
+    <string name="music_remove">Remove</string>
+    <string name="music_cache_clear">Clear music cache</string>
+    <string name="music_cache_desc">Songs are kept on this device as they play, so skipping ahead is instant. Up to %1$s; the oldest go first.</string>
     <string name="music_addon_failed">Could not add the addon: %1$s</string>
     <string name="music_tab_mine">My music</string>
     <string name="music_liked_songs">Liked songs</string>
@@ -87,4 +93,14 @@
         <item quantity="one">Imported %1$d playlist: %2$d of %3$d songs found in your sources.</item>
         <item quantity="other">Imported %1$d playlists: %2$d of %3$d songs found in your sources.</item>
     </plurals>
+    <string name="music_preparing">Preparing the song…</string>
+    <string name="music_preparing_slow">Still preparing. Some addons fetch a song the first time it plays, which can take a minute or two.</string>
+    <string name="music_error_addon_timeout">The addon took too long to prepare this song. It may be ready if you try again in a minute.</string>
+    <string name="music_error_addon_code">The addon couldn\'t prepare this song (error %1$d). Try again in a minute.</string>
+    <string name="music_error_addon">The addon couldn\'t prepare this song. Try again in a minute.</string>
+    <string name="music_error_stream">The music server couldn\'t send this song. Try again, or pick another song.</string>
+    <string name="music_error_offline">Can\'t reach the music source. Check the internet connection.</string>
+    <string name="music_error_not_found">None of your sources has \"%1$s\".</string>
+    <string name="music_error_format">This song\'s audio format can\'t be played on this device.</string>
+    <string name="music_error_other">Couldn\'t play this song.</string>
 </resources>

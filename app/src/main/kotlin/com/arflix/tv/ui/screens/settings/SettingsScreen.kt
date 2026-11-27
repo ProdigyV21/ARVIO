@@ -342,6 +342,7 @@ private val tvGeneralSectionIds = setOf(
     "playback",
     "appearance",
     "news",
+    "music",
     "profiles",
     "network"
 )
@@ -349,9 +350,24 @@ private val tvGeneralSectionIds = setOf(
 /** Row id of the News tab switch; 56..58 are the other optional tabs, in OPTIONAL_NAVIGATION_SECTIONS order. */
 internal const val NEWS_TAB_ROW = 61
 
+/** Optional tabs whose switch sits on the tab's own settings page, not under Interface. */
+private val MOBILE_OWN_PAGE_SECTIONS = setOf("news", "music", "music_tv")
+
+/** Row ids of the Music tab switches: one for TV, one for phones and tablets. */
+internal const val MUSIC_TV_TAB_ROW = 64
+internal const val MUSIC_PHONE_TAB_ROW = 65
+
+/** Row id of Music's sources (adding and removing addons and servers). */
+internal const val MUSIC_SOURCES_ROW = 66
+internal const val MUSIC_CACHE_ROW = 67
+
 /** The optional tab a navigation switch row controls. */
-internal fun navigationSectionForRow(rowId: Int): String =
-    if (rowId == NEWS_TAB_ROW) "news" else com.arflix.tv.util.OPTIONAL_NAVIGATION_SECTIONS[rowId - 56]
+internal fun navigationSectionForRow(rowId: Int): String = when (rowId) {
+    NEWS_TAB_ROW -> "news"
+    MUSIC_TV_TAB_ROW -> "music_tv"
+    MUSIC_PHONE_TAB_ROW -> "music"
+    else -> com.arflix.tv.util.OPTIONAL_NAVIGATION_SECTIONS[rowId - 56]
+}
 
 internal fun tvGeneralRowsForSection(section: String): List<Int> {
     return when (section) {
@@ -366,6 +382,8 @@ internal fun tvGeneralRowsForSection(section: String): List<Int> {
             (if (com.arflix.tv.ui.components.KidsNavigation.hideLiveTv) emptyList() else listOf(58)) + 59
         // News: the tab switch, then what the tab shows. Kids profiles never get the section.
         "news" -> if (com.arflix.tv.ui.components.KidsNavigation.hideLiveTv) emptyList() else listOf(NEWS_TAB_ROW, 62, 63)
+        // Music: where the tab shows, TV and phones separately. Kids profiles never get the section.
+        "music" -> if (com.arflix.tv.ui.components.KidsNavigation.hideLiveTv) emptyList() else listOf(MUSIC_TV_TAB_ROW, MUSIC_PHONE_TAB_ROW, MUSIC_SOURCES_ROW, MUSIC_CACHE_ROW)
         "profiles" -> listOf(19)
         "network" -> listOf(25, 26, 35)
         else -> emptyList()
@@ -618,6 +636,7 @@ fun SettingsScreen(
             }
             add("appearance")
             if (!com.arflix.tv.ui.components.KidsNavigation.hideLiveTv) add("news")
+            if (!com.arflix.tv.ui.components.KidsNavigation.hideLiveTv) add("music")
             add("network")
         }
     }
@@ -755,6 +774,13 @@ fun SettingsScreen(
     val newsSelection by newsSettingsViewModel.selection.collectAsStateWithLifecycle()
     var newsDialog by remember { mutableStateOf<com.arflix.tv.ui.screens.news.NewsSettingsDialog?>(null) }
     com.arflix.tv.ui.screens.news.NewsSettingsDialogHost(newsDialog, newsSettingsViewModel) { newsDialog = null }
+    val musicSourcesViewModel: com.arflix.tv.ui.screens.music.MusicSourcesViewModel = hiltViewModel()
+    val musicLibrary by musicSourcesViewModel.library.collectAsStateWithLifecycle()
+    val musicCacheBytes by musicSourcesViewModel.cacheBytes.collectAsStateWithLifecycle()
+    var showMusicSources by remember { mutableStateOf(false) }
+    if (showMusicSources) {
+        com.arflix.tv.ui.screens.music.MusicSourcesDialog(musicSourcesViewModel) { showMusicSources = false }
+    }
     var showQualityFilterEditor by remember { mutableStateOf(false) }
     var editingQualityFilterId by remember { mutableStateOf<String?>(null) }
     var qualityFilterDeviceName by remember { mutableStateOf("") }
@@ -1063,6 +1089,7 @@ fun SettingsScreen(
         showUiModeWarningDialog ||
         showQualityFiltersModal ||
         newsDialog != null ||
+        showMusicSources ||
         showQualityFilterEditor ||
         showCredits || showPlaybackCompatibility ||
         addonConfigureTarget != null ||
@@ -1482,6 +1509,7 @@ fun SettingsScreen(
                                             SidebarItem.TV -> onNavigateToTv()
                                             SidebarItem.WATCHLIST -> onNavigateToWatchlist()
                                             SidebarItem.NEWS -> com.arflix.tv.ui.components.NewsNavigation.open()
+                                            SidebarItem.MUSIC -> com.arflix.tv.ui.components.MusicNavigation.open()
                                             SidebarItem.SETTINGS -> { /* Already here */ }
                                             null -> Unit
                                         }
@@ -1551,7 +1579,9 @@ fun SettingsScreen(
                                                 55 -> viewModel.setShowAddonStreamDetails(!uiState.showAddonStreamDetails)
                                                 62 -> newsDialog = com.arflix.tv.ui.screens.news.NewsSettingsDialog.TOPICS
                                                 63 -> newsDialog = com.arflix.tv.ui.screens.news.NewsSettingsDialog.SOURCES
-                                                in 56..58, NEWS_TAB_ROW -> {
+                                                MUSIC_SOURCES_ROW -> showMusicSources = true
+                                                MUSIC_CACHE_ROW -> musicSourcesViewModel.clearCache()
+                                                in 56..58, NEWS_TAB_ROW, MUSIC_TV_TAB_ROW, MUSIC_PHONE_TAB_ROW -> {
                                                     val section = navigationSectionForRow(
                                                         tvGeneralRowsForSection(currentSection)[contentFocusIndex])
                                                     viewModel.setNavigationSectionVisible(section, section in uiState.hiddenNavigationSections)
@@ -2062,6 +2092,7 @@ fun SettingsScreen(
                                     "playback" -> Icons.Default.PlayArrow
                                     "appearance" -> Icons.Default.Palette
                                     "news" -> Icons.Default.Newspaper
+                                    "music" -> Icons.Default.LibraryMusic
                                     "profiles" -> Icons.Default.SwitchAccount
                                     "network" -> Icons.Default.Settings
                                     "stream_integrations" -> Icons.Default.Tune
@@ -2079,6 +2110,7 @@ fun SettingsScreen(
                                     "playback" -> stringResource(R.string.playback)
                                     "appearance" -> stringResource(R.string.interface_label)
                                     "news" -> stringResource(R.string.nav_news)
+                                    "music" -> stringResource(R.string.nav_music)
                                     "profiles" -> stringResource(R.string.profiles)
                                     "network" -> stringResource(R.string.network)
                                     "stream_integrations" -> stringResource(R.string.settings_stream_integrations)
@@ -2257,7 +2289,12 @@ fun SettingsScreen(
                             newsTopicsSummary = com.arflix.tv.ui.screens.news.newsTopicsSummary(newsSelection),
                             newsSourcesSummary = com.arflix.tv.ui.screens.news.newsSourcesSummary(newsSelection),
                             onNewsTopicsClick = { newsDialog = com.arflix.tv.ui.screens.news.NewsSettingsDialog.TOPICS },
-                            onNewsSourcesClick = { newsDialog = com.arflix.tv.ui.screens.news.NewsSettingsDialog.SOURCES }
+                            onNewsSourcesClick = { newsDialog = com.arflix.tv.ui.screens.news.NewsSettingsDialog.SOURCES },
+                            musicSourcesSummary = com.arflix.tv.ui.screens.music.musicSourcesSummary(musicLibrary),
+                            onMusicSourcesClick = { showMusicSources = true },
+                            musicCacheSize = com.arflix.tv.ui.screens.music.musicCacheSize(musicCacheBytes),
+                            musicCacheDescription = com.arflix.tv.ui.screens.music.musicCacheDescription(musicSourcesViewModel.cacheLimitBytes),
+                            onMusicCacheClear = musicSourcesViewModel::clearCache
                         )
                         if (showAiModelDialog) {
                             AiModelDialog(
@@ -5038,6 +5075,7 @@ private fun mobileCategoryTitle(page: String): String = when (page) {
     "Audio & Subtitles" -> stringResource(R.string.settings_cat_audio_subtitles)
     "Appearance" -> stringResource(R.string.interface_label)
     "News" -> stringResource(R.string.nav_news)
+    "Music" -> stringResource(R.string.nav_music)
     "Addons" -> stringResource(R.string.addons)
     "Plugins & Extensions" -> stringResource(R.string.settings_cat_plugins_extensions)
     "Catalogs" -> stringResource(R.string.catalogs)
@@ -5124,6 +5162,7 @@ private fun MobileSettingsMainPage(
                     add("Audio & Subtitles" to Icons.Default.Speaker)
                     add("Appearance" to Icons.Default.Palette)
                     if (!uiState.isKidsProfile) add("News" to Icons.Default.Newspaper)
+                    if (!uiState.isKidsProfile) add("Music" to Icons.Default.LibraryMusic)
                     add("Addons" to Icons.Default.Extension)
                     if (BuildConfig.FEATURE_PLUGINS_ENABLED) {
                         add("Plugins & Extensions" to Icons.Default.Extension)
@@ -5775,6 +5814,41 @@ private fun MobileSettingsSubPage(
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                 )
             }
+            "Music" -> {
+                val musicSources: com.arflix.tv.ui.screens.music.MusicSourcesViewModel = hiltViewModel()
+                val library by musicSources.library.collectAsStateWithLifecycle()
+                val cacheBytes by musicSources.cacheBytes.collectAsStateWithLifecycle()
+                var sourcesOpen by remember { mutableStateOf(false) }
+                if (sourcesOpen) com.arflix.tv.ui.screens.music.MusicSourcesDialog(musicSources) { sourcesOpen = false }
+                MobileSettingsCategory(title = stringResource(R.string.nav_music)) {
+                    listOf("music_tv", "music").forEach { section ->
+                        val visible = section !in uiState.hiddenNavigationSections
+                        MobileSettingsRow(
+                            icon = Icons.Default.LibraryMusic,
+                            title = navigationVisibilityTitle(section),
+                            subtitle = stringResource(R.string.settings_profile_scoped),
+                            value = stringResource(if (visible) R.string.on else R.string.off),
+                            toggleChecked = visible,
+                            onClick = { viewModel.setNavigationSectionVisible(section, !visible) }
+                        )
+                    }
+                    MobileSettingsRow(
+                        icon = Icons.Default.LibraryMusic,
+                        title = stringResource(R.string.music_sources_title),
+                        subtitle = com.arflix.tv.ui.screens.music.musicSourcesSummary(library),
+                        value = null,
+                        onClick = { sourcesOpen = true }
+                    )
+                    MobileSettingsRow(
+                        icon = Icons.Default.Delete,
+                        title = stringResource(R.string.music_cache_clear),
+                        subtitle = com.arflix.tv.ui.screens.music.musicCacheDescription(musicSources.cacheLimitBytes),
+                        value = com.arflix.tv.ui.screens.music.musicCacheSize(cacheBytes),
+                        showDivider = false,
+                        onClick = musicSources::clearCache
+                    )
+                }
+            }
             "Appearance" -> {
                 MobileSettingsCategory(title = stringResource(R.string.settings_section_appearance)) {
                     com.arflix.tv.ui.components.MobileHomeHeroStyleSetting()
@@ -5889,16 +5963,14 @@ private fun MobileSettingsSubPage(
                 MobileSettingsCategory(title = stringResource(R.string.navigation_sections)) {
                     com.arflix.tv.util.OPTIONAL_NAVIGATION_SECTIONS
                         .filter { it !in com.arflix.tv.util.KIDS_HIDDEN_NAVIGATION_SECTIONS || !uiState.isKidsProfile }
-                        // The News switch lives on its own News page.
-                        .filter { it != "news" }
+                        // The News and Music switches live on their own pages.
+                        .filter { it !in MOBILE_OWN_PAGE_SECTIONS }
                         .forEach { section ->
                             val visible = section !in uiState.hiddenNavigationSections
                             MobileSettingsRow(
                                 icon = when (section) {
                                     "search" -> Icons.Default.Search
                                     "watchlist" -> Icons.Default.Bookmark
-                                    "news" -> Icons.Default.Newspaper
-                                    "music" -> Icons.Default.LibraryMusic
                                     else -> Icons.Default.LiveTv
                                 },
                                 title = navigationVisibilityTitle(section),
@@ -6734,6 +6806,7 @@ private fun tvSettingsSectionTitle(section: String): String {
         "playback" -> stringResource(R.string.playback)
         "appearance" -> stringResource(R.string.interface_label)
         "news" -> stringResource(R.string.nav_news)
+        "music" -> stringResource(R.string.nav_music)
         "profiles" -> stringResource(R.string.profiles)
         "network" -> stringResource(R.string.network)
         "stream_integrations" -> stringResource(R.string.settings_stream_integrations)
@@ -6755,6 +6828,7 @@ private fun tvSettingsSectionDescription(section: String): String {
         "playback" -> stringResource(R.string.settings_desc_playback)
         "appearance" -> stringResource(R.string.settings_desc_appearance)
         "news" -> stringResource(R.string.news_saved_on_device)
+        "music" -> stringResource(R.string.settings_desc_music)
         "profiles" -> stringResource(R.string.settings_desc_profiles)
         "network" -> stringResource(R.string.settings_desc_network)
         "stream_integrations" -> stringResource(R.string.settings_desc_stream_integrations)
@@ -6931,6 +7005,12 @@ private fun tvSettingsFocusedHelp(section: String, focusedIndex: Int): TvSetting
             2 -> TvSettingsHelp(stringResource(R.string.news_sources_section), stringResource(R.string.news_sources_desc))
             else -> TvSettingsHelp(stringResource(R.string.nav_news), stringResource(R.string.settings_desc_news))
         }
+        "music" -> when (focusedIndex) {
+            2 -> TvSettingsHelp(stringResource(R.string.music_sources_title), stringResource(R.string.music_sources_desc))
+            3 -> TvSettingsHelp(stringResource(R.string.music_cache_clear),
+                com.arflix.tv.ui.screens.music.musicCacheDescription(com.arflix.tv.music.MusicAudioCache.limitBytes(androidx.compose.ui.platform.LocalContext.current)))
+            else -> TvSettingsHelp(stringResource(R.string.nav_music), stringResource(R.string.settings_desc_music))
+        }
         "profiles" -> TvSettingsHelp(stringResource(R.string.profiles), stringResource(R.string.settings_help_profiles_desc))
         "network" -> TvSettingsHelp(stringResource(R.string.network), stringResource(R.string.settings_desc_network))
         "stream_integrations" -> when (focusedIndex) {
@@ -7000,7 +7080,8 @@ private fun navigationVisibilityTitle(section: String): String = stringResource(
     "search" -> R.string.navigation_show_search
     "watchlist" -> R.string.navigation_show_library
     "news" -> R.string.navigation_show_news
-    "music" -> R.string.navigation_show_music
+    "music" -> R.string.navigation_show_music_phone
+    "music_tv" -> R.string.navigation_show_music_tv
     else -> R.string.navigation_show_tv
 })
 
@@ -7125,13 +7206,18 @@ private fun TvGeneralSettingsRows(
     newsTopicsSummary: String = "",
     newsSourcesSummary: String = "",
     onNewsTopicsClick: () -> Unit = {},
-    onNewsSourcesClick: () -> Unit = {}
+    onNewsSourcesClick: () -> Unit = {},
+    musicSourcesSummary: String = "",
+    onMusicSourcesClick: () -> Unit = {},
+    musicCacheSize: String = "",
+    musicCacheDescription: String = "",
+    onMusicCacheClear: () -> Unit = {}
 ) {
     Column {
         tvGeneralRowsForSection(section).forEachIndexed { localIndex, rowId ->
             if (localIndex > 0) Spacer(modifier = Modifier.height(10.dp))
             when (rowId) {
-                in 56..58, NEWS_TAB_ROW -> {
+                in 56..58, NEWS_TAB_ROW, MUSIC_TV_TAB_ROW, MUSIC_PHONE_TAB_ROW -> {
                     val section = navigationSectionForRow(rowId)
                     SettingsToggleRow(navigationVisibilityTitle(section), stringResource(R.string.settings_profile_scoped),
                         section !in hiddenNavigationSections, focusedIndex == localIndex,
@@ -7143,6 +7229,12 @@ private fun TvGeneralSettingsRows(
                 63 -> SettingsRow(icon = Icons.Default.Newspaper, title = stringResource(R.string.news_sources_section),
                     subtitle = stringResource(R.string.news_sources_desc), value = newsSourcesSummary,
                     isFocused = focusedIndex == localIndex, onClick = onNewsSourcesClick, modifier = Modifier.settingsFocusSlot(localIndex))
+                MUSIC_SOURCES_ROW -> SettingsRow(icon = Icons.Default.LibraryMusic, title = stringResource(R.string.music_sources_title),
+                    subtitle = stringResource(R.string.music_sources_desc), value = musicSourcesSummary,
+                    isFocused = focusedIndex == localIndex, onClick = onMusicSourcesClick, modifier = Modifier.settingsFocusSlot(localIndex))
+                MUSIC_CACHE_ROW -> SettingsRow(icon = Icons.Default.Delete, title = stringResource(R.string.music_cache_clear),
+                    subtitle = musicCacheDescription, value = musicCacheSize,
+                    isFocused = focusedIndex == localIndex, onClick = onMusicCacheClear, modifier = Modifier.settingsFocusSlot(localIndex))
                 55 -> SettingsToggleRow(stringResource(R.string.show_addon_stream_details),
                     stringResource(R.string.show_addon_stream_details_desc), showAddonStreamDetails,
                     focusedIndex == localIndex, onShowAddonStreamDetailsToggle, Modifier.settingsFocusSlot(localIndex))

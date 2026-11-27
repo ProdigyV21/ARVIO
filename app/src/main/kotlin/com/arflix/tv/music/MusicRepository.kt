@@ -129,6 +129,9 @@ class MusicRepository @Inject constructor(
 
     suspend fun currentSource(): MusicSource? = sourceFor(library.first())
 
+    /** Latin artist names for a query typed in another script; see [MusicNameLookup]. */
+    suspend fun latinNames(query: String): List<String> = MusicNameLookup.latinNames(http, query)
+
     private val collectionsKey = stringPreferencesKey("collections_v1")
 
     /** Liked songs, favourite albums and the user's playlists, per profile and synced. */

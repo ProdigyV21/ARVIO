@@ -257,6 +257,13 @@ fun AppNavigation(
     }
 
     SideEffect { com.arflix.tv.ui.components.NewsNavigation.open = { navigateTopLevel(Screen.News.route) } }
+    SideEffect {
+        com.arflix.tv.ui.components.MusicNavigation.open = {
+            // The TV top bar's Music chip names the playing song, so it opens on that song.
+            if (com.arflix.tv.music.MusicNowPlaying.song.value != null) com.arflix.tv.music.MusicNowPlaying.requestOpenPlayer()
+            navigateTopLevel(Screen.Music.route)
+        }
+    }
 
     val navigateHome: () -> Unit = {
         // Pop back to the EXISTING Home entry rather than replacing it.
@@ -407,7 +414,7 @@ fun AppNavigation(
             }
         }
 
-        // Music: the user's own music server. A touch-only tab; TV has no entry to it.
+        // Music: the user's music sources and charts. Phones reach it from the bottom bar, TV from the top bar.
         composable(Screen.Music.route) {
             NavigationRailScreen(navigationRailInset, bottomInset = navigationRailBottomInset) {
                 MusicScreen(onFullscreenChanged = onOverlayFullscreenChanged, onBack = { navigateHome() })

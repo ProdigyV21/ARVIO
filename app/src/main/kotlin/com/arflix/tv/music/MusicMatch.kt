@@ -4,7 +4,7 @@ import java.net.URLEncoder
 import java.io.IOException
 
 /** No source of the user's has this song; the player skips to the next one. */
-class MusicMatchMissingException(title: String) : IOException("Not in your sources: $title")
+class MusicMatchMissingException(val title: String) : IOException("Not in your sources: $title")
 
 /**
  * A song known only by name (from the charts), played from whichever of the user's own sources

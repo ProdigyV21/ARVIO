@@ -13,6 +13,7 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.ResolvingDataSource
+import androidx.media3.datasource.cache.CacheDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.session.MediaSession
@@ -42,6 +43,25 @@ interface MusicServiceEntryPoint {
 class MusicPlaybackService : MediaSessionService() {
 
     private var session: MediaSession? = null
+    private var downloader: MusicAudioCache.SongDownloader? = null
+
+    /**
+     * Where a song's placeholder address led last time. Seeking past what is buffered opens the
+     * song again, and asking a slow addon again would stall every seek; links can expire, so
+     * this is forgotten after a while and whenever playback fails.
+     */
+    private class Resolved(val uri: Uri, val at: Long)
+    private val resolved = object : LinkedHashMap<String, Resolved>(16, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Resolved>?) = size > 50
+    }
+
+    private fun remembered(key: Uri, resolve: () -> Uri): Uri {
+        val now = System.currentTimeMillis()
+        synchronized(resolved) { resolved[key.toString()]?.takeIf { now - it.at < RESOLVED_TTL_MS }?.let { return it.uri } }
+        val uri = resolve()
+        synchronized(resolved) { resolved[key.toString()] = Resolved(uri, now) }
+        return uri
+    }
 
     @OptIn(UnstableApi::class)
     override fun onCreate() {
@@ -60,28 +80,50 @@ class MusicPlaybackService : MediaSessionService() {
             val base = uri.getQueryParameter("base") ?: throw IOException("Missing addon")
             val id = uri.getQueryParameter("id") ?: throw IOException("Missing track")
             val stream = runCatching { MusicAddonSource.resolveStream(http, base, id, uri.getQueryParameter("p")) }
-                .getOrElse { throw IOException(it.message, it) }
+                .getOrElse { throw MusicStreamException(MusicPlaybackProblem.classify(it), it) }
             return Uri.parse(stream)
+        }
+        // The player's screens only see an error's message, so it says what went wrong.
+        fun <T> describingFailure(block: () -> T): T = try {
+            block()
+        } catch (e: MusicStreamException) {
+            throw e
+        } catch (e: Exception) {
+            throw MusicStreamException(MusicPlaybackProblem.classify(e), e)
         }
         val dataSources = ResolvingDataSource.Factory(DefaultDataSource.Factory(this)) { spec ->
             val uri = spec.uri
             when (uri.scheme) {
-                MusicAddonSource.STREAM_SCHEME -> spec.withUri(addonStream(uri))
+                MusicAddonSource.STREAM_SCHEME -> spec.withUri(remembered(uri) { addonStream(uri) })
                 // A chart song: found in the user's own sources only now that it starts.
-                MusicMatch.SCHEME -> {
+                MusicMatch.SCHEME -> spec.withUri(remembered(uri) {
                     val title = uri.getQueryParameter("t").orEmpty()
-                    val track = runBlocking {
-                        val source = repository.currentSource() ?: throw MusicMatchMissingException(title)
-                        MusicMatch.find(source, title, uri.getQueryParameter("a").orEmpty(), uri.getQueryParameter("d")?.toIntOrNull() ?: 0)
+                    val track = describingFailure {
+                        runBlocking {
+                            val source = repository.currentSource() ?: throw MusicMatchMissingException(title)
+                            MusicMatch.find(source, title, uri.getQueryParameter("a").orEmpty(), uri.getQueryParameter("d")?.toIntOrNull() ?: 0)
+                        }
                     }
                     val stream = Uri.parse(track.streamUrl)
-                    spec.withUri(if (stream.scheme == MusicAddonSource.STREAM_SCHEME) addonStream(stream) else stream)
-                }
+                    if (stream.scheme == MusicAddonSource.STREAM_SCHEME) addonStream(stream) else stream
+                })
                 else -> spec
             }
         }
+        // The player reads songs kept on the device but never writes them: the downloader alone
+        // fetches each song whole, which a player holding the rest of the file open would block.
+        val cache = MusicAudioCache.get(this)
+        val playerSources = cache?.let {
+            downloader = MusicAudioCache.SongDownloader(
+                it, CacheDataSource.Factory().setCache(it).setUpstreamDataSourceFactory(dataSources)
+                    .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR),
+            )
+            CacheDataSource.Factory().setCache(it).setUpstreamDataSourceFactory(dataSources)
+                .setCacheWriteDataSinkFactory(null)
+                .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
+        } ?: dataSources
         val player = ExoPlayer.Builder(this, renderers)
-            .setMediaSourceFactory(DefaultMediaSourceFactory(dataSources))
+            .setMediaSourceFactory(DefaultMediaSourceFactory(playerSources))
             .setAudioAttributes(
                 AudioAttributes.Builder()
                     .setUsage(C.USAGE_MEDIA)
@@ -95,11 +137,24 @@ class MusicPlaybackService : MediaSessionService() {
         // A chart song none of the user's sources has is skipped instead of stopping the queue.
         player.addListener(object : Player.Listener {
             override fun onPlayerError(error: PlaybackException) {
+                // The remembered link may have expired; the next try asks the addon again.
+                synchronized(resolved) { resolved.clear() }
                 if (generateSequence<Throwable>(error) { it.cause }.none { it is MusicMatchMissingException }) return
                 if (!player.hasNextMediaItem()) return
                 player.seekToNextMediaItem()
                 player.prepare()
                 player.play()
+            }
+        })
+
+        // Once a song plays (its link is known by then), the rest of it downloads in the background.
+        player.addListener(object : Player.Listener {
+            override fun onEvents(player: Player, events: Player.Events) {
+                val uri = player.currentMediaItem?.localConfiguration?.uri
+                when {
+                    uri == null -> downloader?.follow(null)
+                    player.playbackState == Player.STATE_READY -> downloader?.follow(uri)
+                }
             }
         })
 
@@ -141,11 +196,17 @@ class MusicPlaybackService : MediaSessionService() {
     }
 
     override fun onDestroy() {
+        downloader?.release()
+        downloader = null
         session?.run {
             player.release()
             release()
         }
         session = null
         super.onDestroy()
+    }
+
+    private companion object {
+        const val RESOLVED_TTL_MS = 30 * 60_000L
     }
 }

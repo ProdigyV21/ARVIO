@@ -24,6 +24,11 @@ object NewsNavigation {
     var open: () -> Unit = {}
 }
 
+/** Opens the Music tab from any screen's top bar, like [NewsNavigation]. */
+object MusicNavigation {
+    var open: () -> Unit = {}
+}
+
 /** Shared with the plain D-pad index helpers, like [KidsNavigation]. */
 object NavigationVisibility {
     var hiddenSections by mutableStateOf<Set<String>>(emptySet())
@@ -49,6 +54,7 @@ fun SidebarItem.navigationSection(): String = when (this) {
     SidebarItem.WATCHLIST -> "watchlist"
     SidebarItem.TV -> "tv"
     SidebarItem.NEWS -> "news"
+    SidebarItem.MUSIC -> "music_tv"
     SidebarItem.SETTINGS -> "settings"
 }
 

@@ -2155,6 +2155,8 @@
     <string name="service_home_filter_grid">סינון</string>
     <string name="nav_news">חדשות</string>
     <string name="navigation_show_news">הצג חדשות</string>
+    <string name="navigation_show_music_phone">הצג מוזיקה בטלפונים ובטאבלטים</string>
+    <string name="navigation_show_music_tv">הצג מוזיקה בטלוויזיה</string>
     <string name="news_all">הכול</string>
     <string name="news_refresh">רענון</string>
     <string name="news_sources_desc">בחרו את המקורות שיוצגו בעמוד החדשות. הלשוניות מסודרות לפי סדר הבחירה.</string>
@@ -2170,6 +2172,7 @@
     <string name="news_load_failed">לא ניתן לטעון את %1$s</string>
     <string name="news_read_hint">לחצו OK לתקציר ולקישור לכתבה המלאה</string>
     <string name="settings_desc_news">לשונית החדשות, המקורות והנושאים שלה</string>
+    <string name="settings_desc_music">איפה לשונית המוזיקה מופיעה: בטלוויזיה, בטלפונים ובטאבלטים</string>
     <string name="news_topics_section">נושאים</string>
     <string name="news_topics_desc">הצגת כל הנושאים, או רק אלה שבחרתם. פידים שהוספתם בעצמכם מוצגים תמיד.</string>
     <string name="news_change_providers_hint">ניתן לשנות את המקורות בהגדרות ← חדשות</string>

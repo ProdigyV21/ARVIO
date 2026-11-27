@@ -4350,6 +4350,7 @@ fun LiveTvScreen(
                                                 SidebarItem.WATCHLIST -> onNavigateToWatchlist()
                                                 SidebarItem.TV -> Unit
                                                 SidebarItem.NEWS -> com.arflix.tv.ui.components.NewsNavigation.open()
+                                                SidebarItem.MUSIC -> com.arflix.tv.ui.components.MusicNavigation.open()
                                                 SidebarItem.SETTINGS -> onNavigateToSettings()
                                                 null -> Unit
                                             }
