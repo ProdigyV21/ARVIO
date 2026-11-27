@@ -2052,17 +2052,19 @@ fun LiveTvScreen(
             try {
                 // A copy from disk may hold only games that already started (no longer
                 // marked live), so it is replaced page by page like a first load.
-                val refreshing = addonEvents.isNotEmpty() && !fromDisk
-                fromDisk = false
-                val refreshed = viewModel.sportsAddons.load(latestSportsAddonInstallations) {
-                    if (!refreshing) addonEvents = it
-                }
                 val previous = addonEvents
+                val refreshing = previous.isNotEmpty() && !fromDisk
+                fromDisk = false
+                // An empty partial result (offline, first pages failing) never replaces
+                // what is on screen.
+                val refreshed = viewModel.sportsAddons.load(latestSportsAddonInstallations) {
+                    if (!refreshing && it.isNotEmpty()) addonEvents = it
+                }
                 // A load that failed outright (slow network, timeouts) keeps what is on
                 // screen, and a much smaller result is not written over the disk copy.
-                if (refreshed.isNotEmpty() || previous.isEmpty()) addonEvents = refreshed
+                addonEvents = if (refreshed.isNotEmpty() || previous.isEmpty()) refreshed else previous
                 addonReady = true
-                if (refreshed.size * 2 >= previous.size) viewModel.saveSportsAddonEvents(installations, refreshed)
+                if (refreshed.isNotEmpty() && refreshed.size * 2 >= previous.size) viewModel.saveSportsAddonEvents(installations, refreshed)
             } finally { addonLoading = false }
             delay(120_000)
         }
