@@ -11844,13 +11844,30 @@ class IptvRepository @Inject constructor(
 
     private fun normalizeChannelKey(value: String): String = value.trim().lowercase(Locale.US)
 
+    /** Lowercase, then keep only a-z and 0-9 (same result as removing `[^a-z0-9]`, without a regex). */
     private fun normalizeLooseKey(value: String): String {
-        return normalizeChannelKey(value).replaceLiteral(NON_ALPHA_NUM_REGEX_INLINE, "")
+        val lower = normalizeChannelKey(value)
+        val out = StringBuilder(lower.length)
+        for (c in lower) if (c in 'a'..'z' || c in '0'..'9') out.append(c)
+        return out.toString()
     }
+
+    /**
+     * The large-list lookup of the last channel list, while that list is still alive.
+     * Every XMLTV parse of a 50k-channel playlist rebuilt it from scratch (about a
+     * second of regex work per parse on TV hardware, several times per guide load).
+     */
+    @Volatile
+    private var largeChannelKeyLookupCache: Pair<java.lang.ref.WeakReference<List<IptvChannel>>, java.lang.ref.SoftReference<Map<String, List<IptvChannel>>>>? = null
 
     private fun buildChannelKeyLookup(channels: List<IptvChannel>): Map<String, List<IptvChannel>> {
         if (channels.size > LargeIptvListChannelCount) {
-            return buildLargeChannelKeyLookup(channels)
+            largeChannelKeyLookupCache?.let { (listRef, mapRef) ->
+                if (listRef.get() === channels) mapRef.get()?.let { return it }
+            }
+            return buildLargeChannelKeyLookup(channels).also {
+                largeChannelKeyLookupCache = java.lang.ref.WeakReference(channels) to java.lang.ref.SoftReference(it)
+            }
         }
         val map = LinkedHashMap<String, MutableList<IptvChannel>>(channels.size * 8)
         channels.forEach { channel ->
@@ -11918,10 +11935,12 @@ class IptvRepository @Inject constructor(
 
             // Numeric API EPG IDs often differ from the XMLTV IDs. Keep the
             // country prefix, but let HD/FHD/SD/LQ variants share its schedule.
-            addNormalized(normalizeLooseKey(stripQualitySuffixes(name)))
-            if (tvgName.isNotBlank()) addNormalized(normalizeLooseKey(stripQualitySuffixes(tvgName)))
+            val nameOwner = normalizeLooseKey(stripQualitySuffixes(name))
+            val tvgOwner = if (tvgName.isNotBlank()) normalizeLooseKey(stripQualitySuffixes(tvgName)) else ""
+            addNormalized(nameOwner)
+            if (tvgName.isNotBlank()) addNormalized(tvgOwner)
             listOf(name, tvgName).filter { it.isNotBlank() }.forEach { raw ->
-                val owner = normalizeLooseKey(stripQualitySuffixes(raw))
+                val owner = if (raw === name) nameOwner else tvgOwner
                 val alias = normalizeLooseKey(stripQualitySuffixes(stripGuidePrefix(raw)))
                 if (alias.isNotBlank() && alias != owner) {
                     val previous = aliasOwners.putIfAbsent(alias, owner)
