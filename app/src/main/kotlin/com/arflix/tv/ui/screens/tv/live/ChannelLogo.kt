@@ -1,5 +1,7 @@
 package com.arflix.tv.ui.screens.tv.live
 
+import com.arflix.tv.util.replaceLiteral
+
 import android.util.Base64
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -180,7 +182,7 @@ private val channelNameSeparators = Regex("[^\\p{L}\\p{N}]+")
 internal fun initialsFor(name: String): String {
     // "BVN (Europe)" or "NPO 1 [HD]": bracketed tags and punctuation are not part of the name,
     // so they must never end up in the placeholder ("B(").
-    val withoutTags = name.replace(channelNameBracketed, " ").trim()
+    val withoutTags = name.replaceLiteral(channelNameBracketed, " ").trim()
     val source = withoutTags.ifEmpty { name }
     val parts = source.split(channelNameSeparators).filter { it.isNotEmpty() }
     return when (parts.size) {

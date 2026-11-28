@@ -1,5 +1,7 @@
 package com.arflix.tv.ui.screens.tv.live
 
+import com.arflix.tv.util.replaceLiteral
+
 import androidx.compose.runtime.Immutable
 import com.arflix.tv.data.model.IptvChannel
 import com.arflix.tv.data.model.IptvNowNext
@@ -201,8 +203,8 @@ private val channelPrefix = Regex("^\\s*[a-z]{2,3}\\s*[:|]\\s*", RegexOption.IGN
 private val channelQuality = Regex("\\b(hd|fhd|uhd|sd|4k|8k|hevc|raw|backup)\\b", RegexOption.IGNORE_CASE)
 private val nonWord = Regex("[^\\p{L}\\p{N}]+")
 private val leadingZeros = Regex("\\b0+(\\d)")
-private fun channelText(value: String) = value.replace(channelPrefix, "").replace(channelQuality, " ")
-    .lowercase(Locale.ROOT).replace(nonWord, " ").replace(leadingZeros, "$1").trim()
+private fun channelText(value: String) = value.replaceLiteral(channelPrefix, "").replaceLiteral(channelQuality, " ")
+    .lowercase(Locale.ROOT).replaceLiteral(nonWord, " ").replace(leadingZeros, "$1").trim()
 
 /**
  * A guide that only repeats the channel's own name ("IT: CHAMPIONS LEAGUE INFINITY 1 HD",
@@ -350,7 +352,7 @@ internal fun retainSportsEventOrder(previous: List<SportsGuideEvent>, incoming: 
 }
 
 internal fun sportsProgrammeKey(programme: IptvProgram): String =
-    "${programme.title.trim().lowercase(Locale.ROOT).replace(space, " ")}|${programme.startUtcMillis}|${programme.endUtcMillis}"
+    "${programme.title.trim().lowercase(Locale.ROOT).replaceLiteral(space, " ")}|${programme.startUtcMillis}|${programme.endUtcMillis}"
 
 internal fun buildSportsGuideEvents(
     channels: List<IptvChannel>,

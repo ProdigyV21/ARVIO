@@ -1,5 +1,7 @@
 package com.arflix.tv.data.repository
 
+import com.arflix.tv.util.replaceLiteral
+
 import java.util.Locale
 
 /** Equivalent provider labels, without dropping the country or a +1 timeshift. */
@@ -26,7 +28,7 @@ internal object GuideChannelIdentity {
         val country = aliases[code] ?: code
         if (country !in countries) return null
         val name = start?.groupValues?.get(5) ?: end!!.groupValues[1]
-        val label = quality.replace(name, "").replace(punctuation, "")
+        val label = quality.replace(name, "").replaceLiteral(punctuation, "")
         if (label.isBlank()) return null
         return "guide-region:$country:$label"
     }

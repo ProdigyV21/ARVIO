@@ -467,8 +467,8 @@ private fun EnrichedChannel.guideFallbackKeys(): List<String> {
         "name",
         name
             .substringAfter('|', missingDelimiterValue = name)
-            .replace(LiveTvScreenRegexes.QUALITY_REMOVAL, " ")
-            .replace(LiveTvScreenRegexes.MULTI_SPACE, " ")
+            .replaceLiteral(LiveTvScreenRegexes.QUALITY_REMOVAL, " ")
+            .replaceLiteral(LiveTvScreenRegexes.MULTI_SPACE, " ")
             .trim()
     )
 
@@ -6285,8 +6285,8 @@ private val IptvGroupWhitespaceRegex = Regex("""\s+""")
 private fun looseIptvGroupKey(group: String?): String {
     return group.orEmpty()
         .trim()
-        .replace(IptvGroupPipeSpacingRegex, "|")
-        .replace(IptvGroupWhitespaceRegex, " ")
+        .replaceLiteral(IptvGroupPipeSpacingRegex, "|")
+        .replaceLiteral(IptvGroupWhitespaceRegex, " ")
         .lowercase()
 }
 
