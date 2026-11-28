@@ -5753,12 +5753,16 @@ class IptvRepository @Inject constructor(
          * provider (50k+ series) did not fit the old 50,000-entry prefs cap, so every
          * fresh start normalised all titles again (~60 s of a core on a TV).
          */
-        private val catalogDir by lazy { java.io.File(context.cacheDir, "iptv_series_catalog") }
-        private fun catalogFile(providerKey: String) =
-            java.io.File(catalogDir, "catalog_${providerKey.hashCode()}.json.gz")
+        private val catalogDir: java.io.File? by lazy {
+            runCatching { context.cacheDir?.path }.getOrNull()
+                ?.takeIf { it.isNotBlank() }
+                ?.let { java.io.File(it, "iptv_series_catalog") }
+        }
+        private fun catalogFile(providerKey: String): java.io.File? =
+            catalogDir?.let { java.io.File(it, "catalog_${providerKey.hashCode()}.json.gz") }
 
         private fun readCatalogFile(providerKey: String): ResolverPersistedCatalog? {
-            val file = catalogFile(providerKey)
+            val file = catalogFile(providerKey) ?: return null
             if (!file.isFile) return null
             val persisted = try {
                 java.io.InputStreamReader(
@@ -5774,10 +5778,11 @@ class IptvRepository @Inject constructor(
         }
 
         private fun writeCatalogFile(providerKey: String, payload: ResolverPersistedCatalog) {
-            val target = catalogFile(providerKey)
-            val tmp = java.io.File(catalogDir, target.name + ".tmp")
+            val dir = catalogDir ?: return
+            val target = catalogFile(providerKey) ?: return
+            val tmp = java.io.File(dir, target.name + ".tmp")
             try {
-                catalogDir.mkdirs()
+                dir.mkdirs()
                 java.io.OutputStreamWriter(
                     java.util.zip.GZIPOutputStream(java.io.BufferedOutputStream(tmp.outputStream())),
                     Charsets.UTF_8
@@ -6631,7 +6636,7 @@ class IptvRepository @Inject constructor(
          */
         fun clearAll() {
             catalogMemory.clear()
-            runCatching { catalogDir.deleteRecursively() }
+            runCatching { catalogDir?.deleteRecursively() }
             synchronized(seriesNamesLock) { persistedSeriesNames.clear() }
             synchronized(resolvedLock) { resolvedMemory.clear() }
             synchronized(seriesBindingLock) { seriesBindingMemory.clear() }
