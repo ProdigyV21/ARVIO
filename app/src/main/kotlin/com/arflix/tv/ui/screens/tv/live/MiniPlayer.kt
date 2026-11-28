@@ -3,11 +3,7 @@
 package com.arflix.tv.ui.screens.tv.live
 
 import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -445,13 +441,8 @@ private fun VideoCard(
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 private fun LiveBug(modifier: Modifier = Modifier) {
-    val transition = rememberInfiniteTransition(label = "live-bug")
-    val alpha by transition.animateFloat(
-        initialValue = 1f,
-        targetValue = 0.55f,
-        animationSpec = infiniteRepeatable(tween(900), RepeatMode.Reverse),
-        label = "live-alpha",
-    )
+    // A steady dot: a pulsing one redrew the whole guide 60 times a second while
+    // nothing else moved, which kept weak TV GPUs busy and made scrolling stutter.
     Row(
         modifier = modifier
             .clip(RoundedCornerShape(8.dp))
@@ -463,7 +454,6 @@ private fun LiveBug(modifier: Modifier = Modifier) {
         Box(
             modifier = Modifier
                 .size(8.dp)
-                .graphicsLayer { this.alpha = alpha }
                 .background(LiveColors.LiveRed, CircleShape),
         )
         Text(

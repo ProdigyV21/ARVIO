@@ -262,7 +262,9 @@ fun ChannelRow(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f, fill = false).then(if (visuallyFocused) Modifier.basicMarquee(
-                        iterations = Int.MAX_VALUE, initialDelayMillis = 1000,
+                        // Scroll a long name twice, then rest: an endless marquee kept
+                        // the whole guide redrawing every frame while idle.
+                        iterations = 2, initialDelayMillis = 1000,
                     ) else Modifier),
                 )
                 if (isFavorite) {

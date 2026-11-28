@@ -2247,7 +2247,10 @@ fun LiveTvScreen(
             sportsLoading = true
             sportsError = false
             try {
-                val result = withContext(Dispatchers.IO) {
+                // Low-priority sports worker: this SQLite pass over the 48-hour guide ran on
+                // the IO pool and kept several normal-priority threads busy for minutes on
+                // 50k-channel playlists, starving the guide and the player on TV boxes.
+                val result = withContext(LiveSportsWorkPolicy.dispatcher) {
                     val startedAt = android.os.SystemClock.elapsedRealtime()
                     val context = kotlinx.coroutines.currentCoroutineContext()
                     val candidateIds = linkedSetOf<String>()
