@@ -2,7 +2,6 @@ package com.arflix.tv.ui.screens.music
 
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.border
-import androidx.compose.foundation.focusGroup
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -12,14 +11,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
 import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.dp
-import com.arflix.tv.music.MusicAlbum
-import com.arflix.tv.music.MusicTrack
 import com.arflix.tv.util.LocalDeviceType
 import kotlinx.coroutines.delay
 
@@ -61,29 +57,4 @@ internal fun rememberTvInitialFocus(key: Any? = Unit): FocusRequester {
         }
     }
     return requester
-}
-
-/** Keeps the remote inside this part of the screen, e.g. the full player over the library behind it. */
-internal fun Modifier.trapTvFocus(): Modifier =
-    focusProperties { onExit = { cancelFocusChange() } }.focusGroup()
-
-/**
- * On TV, starting songs opens the full player, where the remote's controls are: the mini player
- * sits below lists that can run to hundreds of songs. A phone keeps the mini player a tap away.
- */
-internal class OpenPlayerOnPlay(private val actions: MusicActions) : MusicActions by actions {
-    override fun play(tracks: List<MusicTrack>, index: Int) {
-        actions.play(tracks, index)
-        actions.setPlayerOpen(true)
-    }
-
-    override fun shuffle(tracks: List<MusicTrack>) {
-        actions.shuffle(tracks)
-        actions.setPlayerOpen(true)
-    }
-
-    override fun playAlbum(album: MusicAlbum) {
-        actions.playAlbum(album)
-        actions.setPlayerOpen(true)
-    }
 }

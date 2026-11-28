@@ -410,6 +410,13 @@ class MainActivity : ComponentActivity() {
                 val config = Configuration(this@MainActivity.resources.configuration)
                 config.setLocale(locale)
                 val localizedRes = this@MainActivity.createConfigurationContext(config).resources
+                // Dialogs and bottom sheets are windows of their own whose LocalContext is the
+                // Activity, not the wrapper below, so their strings kept the language the app
+                // started in until a restart. Bring the Activity's own resources along.
+                runCatching {
+                    @Suppress("DEPRECATION")
+                    this@MainActivity.resources.updateConfiguration(config, this@MainActivity.resources.displayMetrics)
+                }
                 object : android.content.ContextWrapper(this@MainActivity) {
                     override fun getResources() = localizedRes
                 }

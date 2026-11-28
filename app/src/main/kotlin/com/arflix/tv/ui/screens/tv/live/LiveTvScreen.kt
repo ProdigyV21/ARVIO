@@ -4720,8 +4720,7 @@ fun LiveTvScreen(
                                                 SidebarItem.HOME -> onNavigateToHome()
                                                 SidebarItem.WATCHLIST -> onNavigateToWatchlist()
                                                 SidebarItem.TV -> Unit
-                                                SidebarItem.NEWS -> com.arflix.tv.ui.components.NewsNavigation.open()
-                                                SidebarItem.MUSIC -> com.arflix.tv.ui.components.MusicNavigation.open()
+                                                SidebarItem.NEWS -> com.arflix.tv.ui.components.NewsNavigation.open(); SidebarItem.MUSIC -> com.arflix.tv.ui.components.MusicNavigation.open()
                                                 SidebarItem.SETTINGS -> onNavigateToSettings()
                                                 null -> Unit
                                             }
@@ -4914,7 +4913,7 @@ fun LiveTvScreen(
                         )
                         Text(
                             text = if (sportsSelected) stringResource(R.string.live_quick_sports)
-                            else (sportsSidebarTree.byId(selectedCategoryId)?.label ?: "All channels"),
+                            else liveCategoryLabel(sportsSidebarTree.byId(selectedCategoryId)?.let { customGroupName(it, liveGroupNames) ?: it.label } ?: "All Channels"),
                             style = ArflixTypography.heroTitle.copy(fontSize = 24.sp),
                             color = TextPrimary,
                             modifier = Modifier.weight(1f),

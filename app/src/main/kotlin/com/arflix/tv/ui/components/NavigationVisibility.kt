@@ -24,7 +24,7 @@ object NewsNavigation {
     var open: () -> Unit = {}
 }
 
-/** Opens the Music tab from any screen's top bar, like [NewsNavigation]. */
+/** Opens the Music tab from a TV top bar, like [NewsNavigation]. */
 object MusicNavigation {
     var open: () -> Unit = {}
 }
@@ -59,7 +59,7 @@ fun SidebarItem.navigationSection(): String = when (this) {
     SidebarItem.WATCHLIST -> "watchlist"
     SidebarItem.TV -> "tv"
     SidebarItem.NEWS -> "news"
-    SidebarItem.MUSIC -> "music_tv"
+    SidebarItem.MUSIC -> "music"
     SidebarItem.SETTINGS -> "settings"
 }
 

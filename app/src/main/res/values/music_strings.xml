@@ -51,6 +51,7 @@
     <string name="music_sources_desc">The addons and servers Music plays from</string>
     <string name="music_sources_none">No sources yet</string>
     <string name="music_remove">Remove</string>
+    <string name="music_remove_addon">Remove %1$s</string>
     <string name="music_cache_clear">Clear music cache</string>
     <string name="music_cache_desc">Songs are kept on this device as they play, so skipping ahead is instant. Up to %1$s; the oldest go first.</string>
     <string name="music_addon_failed">Could not add the addon: %1$s</string>
@@ -127,4 +128,5 @@
     <string name="music_error_not_found">None of your sources has \"%1$s\".</string>
     <string name="music_error_format">This song\'s audio format can\'t be played on this device.</string>
     <string name="music_error_other">Couldn\'t play this song.</string>
+    <string name="music_tv_sources_hint">Music addons you add on your phone show up on this TV too. Or add a source here with the remote.</string>
 </resources>

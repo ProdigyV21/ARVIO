@@ -1957,6 +1957,10 @@ class PlayerViewModel @Inject constructor(
      * title itself (a trailer, review or clip). It must not write progress, watched state or
      * scrobbles onto that title.
      */
+    /** A YouTube video picked from a title's sources (trailer, review, clip), not a YouTube title. */
+    private fun isYouTubeClipSelection(): Boolean =
+        _uiState.value.selectedStream?.addonId == YouTubeCollection.ADDON_ID && !isYouTubeVideo()
+
     private fun isYouTubeClipOnTitle(durationMs: Long): Boolean {
         if (_uiState.value.selectedStream?.addonId != YouTubeCollection.ADDON_ID) return false
         if (isYouTubeVideo()) return false
@@ -2266,8 +2270,11 @@ class PlayerViewModel @Inject constructor(
         }
     }
 
-    private fun applyPreferredSubtitle(preference: String, subtitles: List<Subtitle>, fallbackLanguage: String?) {
+    private fun applyPreferredSubtitle(preference: String, allSubtitles: List<Subtitle>, fallbackLanguage: String?) {
         if (userLockedSubtitleKey != null) return
+        // A YouTube clip played from a title's sources is not that title's release: never
+        // auto-pick the title's add-on subtitles for it, only the clip's own tracks.
+        val subtitles = if (isYouTubeClipSelection()) allSubtitles.filter { it.isEmbedded } else allSubtitles
         val normalizedPref = normalizeLanguage(preference)
         if (normalizedPref.isNotBlank() && !isSubtitleDisabledPreference(preference)) {
             setTargetSubtitleLang(normalizedPref)
@@ -9089,5 +9096,21 @@ internal fun PlayerUiState.asYouTubeClipChrome(): PlayerUiState {
     if (stream.addonId != YouTubeCollection.ADDON_ID) return this
     val clipTitle = stream.source.trim()
     if (clipTitle.isBlank() || clipTitle == YouTubeCollection.ADDON_NAME) return this
-    return copy(title = clipTitle, logoUrl = null, overview = null, episodeTitle = null)
+    return copy(title = clipTitle, logoUrl = null, overview = null, episodeTitle = null, releaseYear = null)
+}
+
+/**
+ * What the player screen shows while a YouTube clip from a title's sources plays: the clip's
+ * own title, and only the clip's own subtitle tracks. The title's add-on subtitles (fetched with
+ * its sources, before the clip was picked) belong to the film, not to the clip.
+ */
+internal fun PlayerUiState.asYouTubeClipView(): PlayerUiState {
+    val stream = selectedStream ?: return this
+    if (stream.addonId != YouTubeCollection.ADDON_ID) return this
+    val chrome = asYouTubeClipChrome()
+    if (subtitles.none { !it.isEmbedded } && selectedSubtitle?.isEmbedded != false) return chrome
+    return chrome.copy(
+        subtitles = subtitles.filter { it.isEmbedded },
+        selectedSubtitle = selectedSubtitle?.takeIf { it.isEmbedded }
+    )
 }

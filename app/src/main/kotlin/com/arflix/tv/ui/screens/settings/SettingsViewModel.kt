@@ -547,6 +547,8 @@ class SettingsViewModel @Inject constructor(
      * (list and catalog approvals) for good. See [observeProfileChanges], which repairs it.
      */
     private val activeProfileIsKids = MutableStateFlow(false)
+    /** The active profile's hidden nav sections as stored; null until first read. */
+    private val storedHiddenNavigationSections = MutableStateFlow<Set<String>?>(null)
     private var kidsListApprovalJob: Job? = null
     private var kidsListApprovalSession: KidsListApprovalSession? = null
     private fun managedPermissions() = if (com.arflix.tv.BuildConfig.PARTNER_MANAGEMENT_ENABLED)
@@ -1248,7 +1250,17 @@ class SettingsViewModel @Inject constructor(
             kotlinx.coroutines.flow.combine(profileManager.activeProfileId, context.settingsDataStore.data) { profileId, prefs ->
                 com.arflix.tv.util.readHiddenNavigationSections(prefs[com.arflix.tv.util.hiddenNavigationSectionsKey(profileId)])
             }.distinctUntilChanged().collect { hidden ->
+                storedHiddenNavigationSections.value = hidden
                 _uiState.update { it.copy(hiddenNavigationSections = hidden) }
+            }
+        }
+        viewModelScope.launch {
+            // Same repair as the kids flag below: loadSettings and other updates build a state copy
+            // around a suspending call, and writing that back reset the toggles to "shown" (the
+            // default) while the nav bar kept hiding News, Search or Library.
+            _uiState.collect { state ->
+                val stored = storedHiddenNavigationSections.value ?: return@collect
+                if (state.hiddenNavigationSections != stored) _uiState.update { it.copy(hiddenNavigationSections = stored) }
             }
         }
         viewModelScope.launch {
@@ -2199,6 +2211,7 @@ class SettingsViewModel @Inject constructor(
         val hidden = _uiState.value.hiddenNavigationSections.toMutableSet().apply {
             if (visible) remove(section) else add(section)
         }
+        storedHiddenNavigationSections.value = com.arflix.tv.util.normalizeHiddenNavigationSections(hidden)
         preferenceWriter.save(
             com.arflix.tv.util.hiddenNavigationSectionsKey(profileManager.getProfileIdSync()),
             com.arflix.tv.util.encodeHiddenNavigationSections(hidden),
@@ -3855,7 +3868,8 @@ class SettingsViewModel @Inject constructor(
         }
         if (updated == _uiState.value.iptvStalkerPortals) return
         viewModelScope.launch {
-            iptvRepository.saveStalkerPortals(updated)
+            // Survives leaving Settings right after the tap (viewModelScope is cancelled then).
+            kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) { iptvRepository.saveStalkerPortals(updated) }
             _uiState.value = _uiState.value.copy(iptvStalkerPortals = updated)
             syncLocalStateToCloud(silent = true)
         }
@@ -3950,7 +3964,8 @@ class SettingsViewModel @Inject constructor(
     ) {
         val previous = _uiState.value.iptvStalkerPortals
         viewModelScope.launch {
-            iptvRepository.saveStalkerPortals(portals)
+            // Survives leaving Settings right after the tap (viewModelScope is cancelled then).
+            kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) { iptvRepository.saveStalkerPortals(portals) }
             // Compare what was actually stored: saving normalizes entries.
             val stored = iptvRepository.observePersonalConfig().first()
             saveNewSourceConnectionLimit(previous.map { it.id }, stored.stalkerPortals.map { it.id }, newSourceConnectionLimit)
@@ -4137,7 +4152,8 @@ class SettingsViewModel @Inject constructor(
         }
         val previous = _uiState.value.iptvPlaylists
         viewModelScope.launch {
-            iptvRepository.savePlaylists(playlists)
+            // Survives leaving Settings right after the tap (viewModelScope is cancelled then).
+            kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) { iptvRepository.savePlaylists(playlists) }
             // Compare what was actually stored: saving rewrites "host user pass"
             // into a get.php address, so the entry as typed never matches a row.
             val stored = iptvRepository.observePersonalConfig().first()
@@ -4304,7 +4320,8 @@ class SettingsViewModel @Inject constructor(
     fun setIptvStartLastChannel(enabled: Boolean) {
         _uiState.value = _uiState.value.copy(iptvStartLastChannel = enabled)
         viewModelScope.launch {
-            iptvRepository.setStartLastChannel(enabled)
+            // Survives leaving Settings right after the tap (viewModelScope is cancelled then).
+            kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) { iptvRepository.setStartLastChannel(enabled) }
             syncLocalStateToCloud(silent = true)
         }
     }
@@ -4313,7 +4330,8 @@ class SettingsViewModel @Inject constructor(
         val normalized = normalizeIptvSortOrder(mode)
         _uiState.value = _uiState.value.copy(iptvSortOrder = normalized)
         viewModelScope.launch {
-            iptvRepository.saveSortOrder(normalized)
+            // Survives leaving Settings right after the tap (viewModelScope is cancelled then).
+            kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) { iptvRepository.saveSortOrder(normalized) }
             syncLocalStateToCloud(silent = true)
         }
     }

@@ -2682,7 +2682,7 @@ internal fun MobileHeroCarousel(
                 if (!rd.isNullOrBlank()) {
                     runCatching {
                         val parsed = java.text.SimpleDateFormat("d MMM yyyy", java.util.Locale.ENGLISH).parse(rd)
-                        parsed?.let { java.text.SimpleDateFormat("d MMM", java.util.Locale.ENGLISH).format(it) }
+                        parsed?.let { java.text.SimpleDateFormat("d MMM", java.util.Locale.getDefault()).format(it) }
                     }.getOrNull() ?: item.year
                 } else {
                     item.year
@@ -3067,8 +3067,7 @@ internal fun HomeInputLayer(
                                     SidebarItem.HOME -> Unit
                                     SidebarItem.WATCHLIST -> onNavigateToWatchlist()
                                     SidebarItem.TV -> onNavigateToTv(null, null)
-                                    SidebarItem.NEWS -> com.arflix.tv.ui.components.NewsNavigation.open()
-                                    SidebarItem.MUSIC -> com.arflix.tv.ui.components.MusicNavigation.open()
+                                    SidebarItem.NEWS -> com.arflix.tv.ui.components.NewsNavigation.open(); SidebarItem.MUSIC -> com.arflix.tv.ui.components.MusicNavigation.open()
                                     SidebarItem.SETTINGS -> onNavigateToSettings()
                                     null -> Unit
                                 }

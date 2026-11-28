@@ -237,7 +237,6 @@ import dagger.hilt.android.EntryPointAccessors
 import androidx.compose.material.icons.filled.Cast
 import androidx.compose.material.icons.filled.CastConnected
 import androidx.compose.material.icons.filled.PictureInPicture
-import androidx.mediarouter.app.MediaRouteChooserDialog
 import android.app.PendingIntent
 import android.app.PictureInPictureParams
 import android.app.RemoteAction
@@ -401,7 +400,9 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
         val previewBlock = com.arflix.tv.ui.components.TrailerPlaybackPool.fullPlayback()
         onDispose { previewBlock.close() }
     }
-    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val rawUiState by viewModel.uiState.collectAsStateWithLifecycle()
+    // A YouTube clip from a title's sources shows its own title and tracks (see asYouTubeClipView).
+    val uiState = remember(rawUiState) { rawUiState.asYouTubeClipView() }
     val latestUiState by rememberUpdatedState(uiState)
     val startupTrace = remember { com.arflix.tv.ui.screens.player.engine.exoplayer.PlaybackStartupTrace() }
     val clockFormat = rememberPlayerClockFormat()
@@ -415,6 +416,21 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
     val castState by castManager.castState.collectAsStateWithLifecycle()
     val isCasting = castState is CastManager.CastState.Casting
     val castAvailable = castState !is CastManager.CastState.NotAvailable
+    // Own chooser listing Google Cast and DLNA TVs on the same Wi-Fi.
+    var showCastChooser by remember { mutableStateOf(false) }
+    if (showCastChooser) {
+        com.arflix.tv.cast.CastDeviceChooserDialog(
+            castManager = castManager,
+            canCast = { castManager.isCastableUrl(uiState.selectedStreamUrl) },
+            onDismiss = { showCastChooser = false }
+        )
+    }
+    val castError by castManager.castError.collectAsStateWithLifecycle()
+    LaunchedEffect(castError) {
+        val msgRes = castError ?: return@LaunchedEffect
+        android.widget.Toast.makeText(context, context.getString(msgRes), android.widget.Toast.LENGTH_LONG).show()
+        castManager.clearCastError()
+    }
     // Hide cast button for streams that require custom request headers (Authorization, Referer, etc.)
     // since the Chromecast default receiver fetches the URL directly without those headers.
     val streamNeedsHeaders = uiState.selectedStream
@@ -2592,6 +2608,7 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
     // Tracks the last confirmed position from the Chromecast so we can resume
     // ExoPlayer from it after disconnecting (remoteMediaClient is null by then).
     var lastCastPositionMs by remember { mutableStateOf(0L) }
+    var localPlaybackHandedOff by remember { mutableStateOf(false) }
 
     // When cast session starts: pause local ExoPlayer and hand the URL off to Chromecast.
     // When cast session ends: resume local ExoPlayer from the last reported cast position.
@@ -2600,8 +2617,12 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
             is CastManager.CastState.Casting -> {
                 val url = uiState.selectedStreamUrl ?: return@LaunchedEffect
                 val posMs = if (!playerReleased) exoPlayer.currentPosition else 0L
-                if (!playerReleased) exoPlayer.pause()
-                if (!playerReleased) iptvVodGate.closeForCast(exoPlayer)
+                if (!playerReleased) {
+                    lastCastPositionMs = posMs
+                    localPlaybackHandedOff = true
+                    exoPlayer.pause()
+                    iptvVodGate.closeForCast(exoPlayer)
+                }
                 castManager.loadMedia(
                     url = url,
                     title = uiState.title,
@@ -2615,10 +2636,11 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
                 val resumePos = lastCastPositionMs
                 if (!playerReleased && iptvVodGate.reopenAfterCast(resumePos)) {
                     // The stream effect reopens it at the cast's last position.
-                } else if (!playerReleased && resumePos > 0L && !exoPlayer.isPlaying) {
+                } else if (!playerReleased && localPlaybackHandedOff && !exoPlayer.isPlaying) {
                     exoPlayer.seekTo(resumePos)
                     exoPlayer.play()
                 }
+                localPlaybackHandedOff = false
                 lastCastPositionMs = 0L
             }
             else -> Unit
@@ -4740,9 +4762,7 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
                     if (isCasting) {
                         castManager.disconnect()
                     } else {
-                        val dialog = MediaRouteChooserDialog(context)
-                        dialog.routeSelector = castManager.getRouteSelector()
-                        dialog.show()
+                        showCastChooser = true
                     }
                 },
                 onRetryPlayback = {
@@ -4934,9 +4954,7 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
                                                 if (isCasting) {
                                                     castManager.disconnect()
                                                 } else {
-                                                    val dialog = MediaRouteChooserDialog(context)
-                                                    dialog.routeSelector = castManager.getRouteSelector()
-                                                    dialog.show()
+                                                    showCastChooser = true
                                                 }
                                             },
                                         contentAlignment = Alignment.Center

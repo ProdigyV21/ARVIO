@@ -28,7 +28,7 @@ class NavigationVisibilityTest {
         assertEquals(SidebarItem.entries, visibleNavigationItems())
         for (json in listOf(null, "broken", "{}", "null", "42")) assertTrue(readHiddenNavigationSections(json).isEmpty())
         assertEquals(setOf("search", "tv"), readHiddenNavigationSections("""["tv","home",null,42,"search","settings","tv"]"""))
-        NavigationVisibility.hiddenSections = setOf("home", "settings", "search", "watchlist", "tv", "news", "music_tv")
+        NavigationVisibility.hiddenSections = setOf("home", "settings", "search", "watchlist", "tv", "news", "music")
         assertEquals(listOf(SidebarItem.HOME, SidebarItem.SETTINGS), visibleNavigationItems())
     }
 
@@ -54,17 +54,21 @@ class NavigationVisibilityTest {
         assertFalse(visibleNavigationItems().contains(SidebarItem.MUSIC))
         assertFalse(tvGeneralRowsForSection("appearance").contains(58))
         assertTrue(tvGeneralRowsForSection("music").isEmpty())
+        assertFalse(tvGeneralRowsForSection("appearance").contains(68))
         assertTrue(tvGeneralRowsForSection("news").isEmpty())
     }
 
     @Test fun musicIsHiddenOnTvAndOnPhonesSeparately() {
-        NavigationVisibility.hiddenSections = setOf("music")
+        val phoneMusic = mobileNavigationSection("music")
+        assertEquals("music_phone", phoneMusic)
+        assertEquals("tv", mobileNavigationSection("tv"))
+        NavigationVisibility.hiddenSections = setOf("music_phone")
         assertTrue(visibleNavigationItems().contains(SidebarItem.MUSIC))
-        assertFalse(isNavigationSectionVisible("music", NavigationVisibility.hiddenSections))
-        NavigationVisibility.hiddenSections = setOf("music_tv")
+        assertFalse(isNavigationSectionVisible(phoneMusic, NavigationVisibility.hiddenSections))
+        NavigationVisibility.hiddenSections = setOf("music")
         assertFalse(visibleNavigationItems().contains(SidebarItem.MUSIC))
-        assertTrue(isNavigationSectionVisible("music", NavigationVisibility.hiddenSections))
-        assertEquals(setOf("music", "music_tv"), readHiddenNavigationSections("""["music_tv","music"]"""))
+        assertTrue(isNavigationSectionVisible(phoneMusic, NavigationVisibility.hiddenSections))
+        assertEquals(setOf("music", "music_phone"), readHiddenNavigationSections("""["music_phone","music"]"""))
     }
 
     @Test fun changingVisibilityKeepsFocusOnTheSameItemInsteadOfTheOldPosition() {
@@ -79,14 +83,14 @@ class NavigationVisibilityTest {
 
     @Test fun appearanceRowsHaveUniqueIdsWithoutChangingExistingSettingsSlots() {
         val appearance = tvGeneralRowsForSection("appearance")
-        // Row 59 was appended after the existing appearance slots.
-        assertEquals(listOf(56, 57, 58, 59), appearance.takeLast(4))
-        // Music has its own section, like News: the two switches, then its sources.
-        assertEquals(listOf(68, 69, 70, 71), tvGeneralRowsForSection("music"))
+        // Rows 59 and then 68 (Music tab) were appended after the existing appearance slots.
+        assertEquals(listOf(56, 57, 58, 59, 68), appearance.takeLast(5))
         // The News switch opens its own section, followed by the topics and sources pickers.
         assertEquals(listOf(61, 62, 63), tvGeneralRowsForSection("news"))
-        assertEquals(listOf("search", "watchlist", "tv", "news"), listOf(56, 57, 58, 61).map(::navigationSectionForRow))
-        assertEquals(listOf("music_tv", "music"), listOf(68, 69).map(::navigationSectionForRow))
+        assertEquals(listOf("search", "watchlist", "tv", "news", "music"), listOf(56, 57, 58, 61, 68).map(::navigationSectionForRow))
+        // Music has its own section, like News: the phone tab switch, then its sources and cache.
+        assertEquals(listOf(69, 70, 71), tvGeneralRowsForSection("music"))
+        assertEquals("music_phone", navigationSectionForRow(69))
         val all = listOf("language", "subtitles", "ai_subtitles", "playback", "appearance", "news", "music", "profiles", "network")
             .flatMap(::tvGeneralRowsForSection)
         assertEquals(all.size, all.distinct().size)

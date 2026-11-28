@@ -10,6 +10,27 @@ import org.junit.Assert.assertTrue
 
 class EpisodeAirDateTest {
 
+    // Dates follow the app language (Locale.getDefault()); these expectations are English.
+    private var originalLocale: java.util.Locale = java.util.Locale.getDefault()
+
+    @org.junit.Before
+    fun useEnglish() {
+        originalLocale = java.util.Locale.getDefault()
+        java.util.Locale.setDefault(java.util.Locale.US)
+    }
+
+    @org.junit.After
+    fun restoreLocale() {
+        java.util.Locale.setDefault(originalLocale)
+    }
+
+    @Test
+    fun localizesStoredEnglishReleaseDate() {
+        assertEquals("13 Oct 2026", formatEpisodeAirDateLabel("13 Oct 2026"))
+        java.util.Locale.setDefault(java.util.Locale.forLanguageTag("nl-NL"))
+        assertEquals("13 okt 2026", formatEpisodeAirDateLabel("13 Oct 2026")?.replace(".", ""))
+    }
+
     private fun withDefaultTimeZone(zoneId: String, block: () -> Unit) {
         val original = TimeZone.getDefault()
         try {

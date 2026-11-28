@@ -234,6 +234,9 @@ val bottomBarItems = listOf(
     BottomBarItem(R.string.nav_music, Icons.Default.LibraryMusic, "music", Icons.Outlined.LibraryMusic),
 )
 
+/** The tab switch a phone tab follows: Music has its own, apart from the TV one ("music"). */
+internal fun mobileNavigationSection(route: String): String = if (route == "music") "music_phone" else route
+
 /** The landscape rail has the height for Settings, pinned below the tabs. */
 internal val railSettingsItem = BottomBarItem(R.string.settings, Icons.Default.Settings, "settings")
 
@@ -271,7 +274,7 @@ fun AppBottomBar(
     val surfaceShape = RectangleShape
 
     val items = bottomBarItems.filter {
-        com.arflix.tv.util.isNavigationSectionVisible(it.route, NavigationVisibility.hiddenSections, KidsNavigation.hideLiveTv)
+        com.arflix.tv.util.isNavigationSectionVisible(mobileNavigationSection(it.route), NavigationVisibility.hiddenSections, KidsNavigation.hideLiveTv)
     }
     // Music keeps playing on other screens; Music itself has its own mini player.
     val song by com.arflix.tv.music.MusicNowPlaying.song.collectAsState()

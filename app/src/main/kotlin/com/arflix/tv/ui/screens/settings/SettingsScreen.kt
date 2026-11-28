@@ -360,12 +360,13 @@ internal const val SECONDARY_AUDIO_ROW = 65
 internal const val AUTO_SOURCE_FAILOVER_ROW = 66
 /** Settings > Playback: open streams in another video app. */
 internal const val EXTERNAL_PLAYER_ROW = 67
+/** Settings > Appearance: show or hide the Music tab. */
+internal const val MUSIC_TAB_ROW = 68
 
 /** Optional tabs whose switch sits on the tab's own settings page, not under Interface. */
-private val MOBILE_OWN_PAGE_SECTIONS = setOf("news", "music", "music_tv")
+private val MOBILE_OWN_PAGE_SECTIONS = setOf("news", "music", "music_phone")
 
-/** Row ids of the Music tab switches: one for TV, one for phones and tablets. */
-internal const val MUSIC_TV_TAB_ROW = 68
+/** Row id of the Music tab switch for phones and tablets; [MUSIC_TAB_ROW] is the TV one. */
 internal const val MUSIC_PHONE_TAB_ROW = 69
 
 /** Row id of Music's sources (adding and removing addons and servers). */
@@ -373,12 +374,13 @@ internal const val MUSIC_SOURCES_ROW = 70
 internal const val MUSIC_CACHE_ROW = 71
 
 /** The optional tab a navigation switch row controls. */
-internal fun navigationSectionForRow(rowId: Int): String = when (rowId) {
-    NEWS_TAB_ROW -> "news"
-    MUSIC_TV_TAB_ROW -> "music_tv"
-    MUSIC_PHONE_TAB_ROW -> "music"
-    else -> com.arflix.tv.util.OPTIONAL_NAVIGATION_SECTIONS[rowId - 56]
-}
+internal fun navigationSectionForRow(rowId: Int): String =
+    when (rowId) {
+        NEWS_TAB_ROW -> "news"
+        MUSIC_TAB_ROW -> "music"
+        MUSIC_PHONE_TAB_ROW -> "music_phone"
+        else -> com.arflix.tv.util.OPTIONAL_NAVIGATION_SECTIONS[rowId - 56]
+    }
 
 internal fun tvGeneralRowsForSection(section: String): List<Int> {
     return when (section) {
@@ -390,11 +392,13 @@ internal fun tvGeneralRowsForSection(section: String): List<Int> {
         "ai_subtitles" -> listOf(28, 29, 30, 31, 32, 33) + LIVE_AI_SUBS_ROWS
         "playback" -> listOf(10, 11, AUTO_SOURCE_FAILOVER_ROW, EXTERNAL_PLAYER_ROW, 12, 43, 44, 55, SEEK_THUMBNAILS_ROW, 13, 14, 34, 37, 16, 15, 40, 27, 53, 54, 60)
         "appearance" -> listOf(17, 49, 50, 18, 20, 21, 24, 23, 22, 41, 46, 36, 47, 56, 57) +
-            (if (com.arflix.tv.ui.components.KidsNavigation.hideLiveTv) emptyList() else listOf(58)) + 59
+            (if (com.arflix.tv.ui.components.KidsNavigation.hideLiveTv) emptyList() else listOf(58)) + 59 +
+            (if (com.arflix.tv.ui.components.KidsNavigation.hideLiveTv) emptyList() else listOf(MUSIC_TAB_ROW))
         // News: the tab switch, then what the tab shows. Kids profiles never get the section.
         "news" -> if (com.arflix.tv.ui.components.KidsNavigation.hideLiveTv) emptyList() else listOf(NEWS_TAB_ROW, 62, 63)
-        // Music: where the tab shows, TV and phones separately. Kids profiles never get the section.
-        "music" -> if (com.arflix.tv.ui.components.KidsNavigation.hideLiveTv) emptyList() else listOf(MUSIC_TV_TAB_ROW, MUSIC_PHONE_TAB_ROW, MUSIC_SOURCES_ROW, MUSIC_CACHE_ROW)
+        // Music: the phone tab switch (the TV one is under Appearance), then the sources and the
+        // cache. Kids profiles never get the section.
+        "music" -> if (com.arflix.tv.ui.components.KidsNavigation.hideLiveTv) emptyList() else listOf(MUSIC_PHONE_TAB_ROW, MUSIC_SOURCES_ROW, MUSIC_CACHE_ROW)
         "profiles" -> listOf(19)
         "network" -> listOf(25, 26, 35)
         else -> emptyList()
@@ -1605,7 +1609,7 @@ fun SettingsScreen(
                                                 63 -> newsDialog = com.arflix.tv.ui.screens.news.NewsSettingsDialog.SOURCES
                                                 MUSIC_SOURCES_ROW -> showMusicSources = true
                                                 MUSIC_CACHE_ROW -> musicSourcesViewModel.clearCache()
-                                                in 56..58, NEWS_TAB_ROW, MUSIC_TV_TAB_ROW, MUSIC_PHONE_TAB_ROW -> {
+                                                in 56..58, NEWS_TAB_ROW, MUSIC_TAB_ROW, MUSIC_PHONE_TAB_ROW -> {
                                                     val section = navigationSectionForRow(
                                                         tvGeneralRowsForSection(currentSection)[contentFocusIndex])
                                                     viewModel.setNavigationSectionVisible(section, section in uiState.hiddenNavigationSections)
@@ -3381,7 +3385,7 @@ fun SettingsScreen(
 
         if (showContentLanguagePicker) {
             SubtitlePickerModal(
-                title = stringResource(R.string.content_language),
+                title = stringResource(R.string.app_language),
                 options = TMDB_LANGUAGES.map { it.second },
                 selected = TMDB_LANGUAGES.firstOrNull { it.first == uiState.contentLanguage }?.second ?: "English",
                 focusedIndex = contentLanguagePickerIndex,
@@ -5177,7 +5181,7 @@ private fun MobileSettingsMainPage(
             MobileSettingsCategory(title = stringResource(R.string.settings_section_languages)) {
                 MobileSettingsRow(
                     icon = Icons.Default.Language,
-                    title = stringResource(R.string.content_language),
+                    title = stringResource(R.string.app_language),
                     value = TMDB_LANGUAGES.firstOrNull { it.first == uiState.contentLanguage }?.second ?: uiState.contentLanguage,
                     isToggle = false,
                     isFocused = false,
@@ -5913,7 +5917,7 @@ private fun MobileSettingsSubPage(
                 var sourcesOpen by remember { mutableStateOf(false) }
                 if (sourcesOpen) com.arflix.tv.ui.screens.music.MusicSourcesDialog(musicSources) { sourcesOpen = false }
                 MobileSettingsCategory(title = stringResource(R.string.nav_music)) {
-                    listOf("music_tv", "music").forEach { section ->
+                    listOf("music", "music_phone").forEach { section ->
                         val visible = section !in uiState.hiddenNavigationSections
                         MobileSettingsRow(
                             icon = Icons.Default.LibraryMusic,
@@ -7180,8 +7184,8 @@ private fun navigationVisibilityTitle(section: String): String = stringResource(
     "search" -> R.string.navigation_show_search
     "watchlist" -> R.string.navigation_show_library
     "news" -> R.string.navigation_show_news
-    "music" -> R.string.navigation_show_music_phone
-    "music_tv" -> R.string.navigation_show_music_tv
+    "music" -> R.string.navigation_show_music_tv
+    "music_phone" -> R.string.navigation_show_music_phone
     else -> R.string.navigation_show_tv
 })
 
@@ -7325,7 +7329,7 @@ private fun TvGeneralSettingsRows(
         tvGeneralRowsForSection(section).forEachIndexed { localIndex, rowId ->
             if (localIndex > 0) Spacer(modifier = Modifier.height(10.dp))
             when (rowId) {
-                in 56..58, NEWS_TAB_ROW, MUSIC_TV_TAB_ROW, MUSIC_PHONE_TAB_ROW -> {
+                in 56..58, NEWS_TAB_ROW, MUSIC_TAB_ROW, MUSIC_PHONE_TAB_ROW -> {
                     val section = navigationSectionForRow(rowId)
                     SettingsToggleRow(navigationVisibilityTitle(section), stringResource(R.string.settings_profile_scoped),
                         section !in hiddenNavigationSections, focusedIndex == localIndex,

@@ -179,8 +179,7 @@ internal fun MusicContent(
     actions: MusicActions,
     onBack: () -> Unit = {},
 ) {
-    val tvDevice = isMusicTv()
-    val viewModel = remember(actions, tvDevice) { if (tvDevice) OpenPlayerOnPlay(actions) else actions }
+    val viewModel = actions
     val accent = resolveAccentColor(fallback = Color.White)
 
     BackHandler {
@@ -188,13 +187,7 @@ internal fun MusicContent(
     }
 
     Box(
-        Modifier.fillMaxSize().background(Color.Black)
-            // A remote's media keys work anywhere in the tab while something is playing.
-            .onKeyEvent { event ->
-                tvDevice && event.type == KeyEventType.KeyDown && playback.current != null &&
-                    remoteMediaKey(event.key, playback, viewModel)
-            }
-            .testTag("music-screen"),
+        Modifier.fillMaxSize().background(Color.Black).testTag("music-screen"),
     ) {
         when {
             !state.configLoaded -> Unit
@@ -208,11 +201,9 @@ internal fun MusicContent(
             )
             else -> {
                 val miniSpace = if (playback.current != null) MiniPlayerHeight + 8.dp else 0.dp
-                // On a phone the lists scroll on under the mini player. On TV they end above it: a
-                // list reaching under it is not "above" the mini player, so the remote's Up would
-                // find nothing to go to.
-                val bottomPadding = LocalBottomBarInset.current + (if (tvDevice) 0.dp else miniSpace) + 16.dp
-                Box(Modifier.fillMaxSize().padding(bottom = if (tvDevice) miniSpace + 8.dp else 0.dp)) {
+                // The lists scroll on under the mini player.
+                val bottomPadding = LocalBottomBarInset.current + miniSpace + 16.dp
+                Box(Modifier.fillMaxSize()) {
                     when (val page = state.pages.lastOrNull()) {
                         is MusicPage.Album -> AlbumPageView(page, state.collections, playback, accent, bottomPadding, viewModel)
                         is MusicPage.Artist -> ArtistPageView(page, state.collections, accent, bottomPadding, viewModel)
@@ -224,14 +215,6 @@ internal fun MusicContent(
         }
 
         val current = playback.current
-        // On TV, closing the full player hands the remote to the mini player instead of to nothing.
-        val miniFocus = remember { FocusRequester() }
-        val tv = isMusicTv()
-        var playerWasOpen by remember { mutableStateOf(false) }
-        LaunchedEffect(state.playerOpen) {
-            if (tv && playerWasOpen && !state.playerOpen) runCatching { miniFocus.requestFocus() }
-            playerWasOpen = state.playerOpen
-        }
         if (current != null && state.hasSources) {
             MiniPlayer(
                 track = current,
@@ -242,8 +225,7 @@ internal fun MusicContent(
                 onNext = viewModel::next,
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
-                    .padding(bottom = LocalBottomBarInset.current + 8.dp, start = 8.dp, end = 8.dp)
-                    .focusRequester(miniFocus),
+                    .padding(bottom = LocalBottomBarInset.current + 8.dp, start = 8.dp, end = 8.dp),
             )
         }
 
@@ -252,7 +234,7 @@ internal fun MusicContent(
             enter = slideInVertically { it },
             exit = slideOutVertically { it },
         ) {
-            if (current != null) FullPlayer(current, playback, state, accent, viewModel, trapFocus = state.playerOpen)
+            if (current != null) FullPlayer(current, playback, state, accent, viewModel)
         }
 
         state.addingToPlaylist?.let { tracks -> AddToPlaylistDialog(tracks, state.collections, viewModel) }
@@ -1223,8 +1205,6 @@ private fun FullPlayer(
     state: MusicUiState,
     appAccent: Color,
     viewModel: MusicActions,
-    /** Off while it slides away, so the remote can move on to the mini player. */
-    trapFocus: Boolean = true,
 ) {
     val collections = state.collections
     // The player takes its colours from the cover: a dark tint behind, a bright one for the controls.
@@ -1238,25 +1218,20 @@ private fun FullPlayer(
     BackHandler(enabled = queueOpen || panel == PlayerPanel.LYRICS) {
         if (queueOpen) queueOpen = false else panel = PlayerPanel.COVER
     }
-    // On TV the remote starts on Play and stays in the player, not on the library behind it.
     val playFocus = rememberTvInitialFocus()
-    val tv = isMusicTv()
 
     Box(
         Modifier.fillMaxSize().background(Color.Black).clickable(enabled = false) {}
-            .then(if (trapFocus) Modifier.trapTvFocus() else Modifier)
             .testTag("music-player"),
     ) {
         Cover(track.coverUrl, Modifier.fillMaxSize().blur(80.dp), shape = RoundedCornerShape(0.dp), icon = Icons.Default.MusicNote)
-        // Many TVs run Android 11 or older, which cannot blur, so the cover behind is darkened more there.
-        val shade = if (tv) listOf(0.8f, 0.9f) else listOf(0.6f, 0.85f)
         Box(
             Modifier.fillMaxSize().background(
-                Brush.verticalGradient(listOf(tint.copy(alpha = shade[0]), tint.copy(alpha = shade[1]), Color.Black))
+                Brush.verticalGradient(listOf(tint.copy(alpha = 0.6f), tint.copy(alpha = 0.85f), Color.Black))
             )
         )
         Column(
-            Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(horizontal = if (tv) 48.dp else 24.dp),
+            Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(horizontal = 24.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Row(Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -1293,55 +1268,27 @@ private fun FullPlayer(
                     onQueue = { queueOpen = true },
                 )
             }
-            if (tv) {
-                // A landscape TV: the cover (or the lyrics) beside the song and its controls.
-                Row(
-                    Modifier.weight(1f).fillMaxWidth().padding(bottom = 24.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.Center,
-                ) {
-                    if (panel == PlayerPanel.LYRICS) {
-                        LyricsPanel(
-                            lyrics = lyrics,
-                            positionMs = playback.positionMs,
-                            accent = accent,
-                            onSeek = viewModel::seekTo,
-                            modifier = Modifier.weight(1f).fillMaxHeight().widthIn(max = 560.dp),
-                        )
-                    } else {
-                        Cover(
-                            track.coverUrl,
-                            Modifier.fillMaxHeight(0.9f).aspectRatio(1f),
-                            shape = RoundedCornerShape(18.dp),
-                            icon = Icons.Default.MusicNote,
-                        )
-                    }
-                    Spacer(Modifier.width(48.dp))
-                    PlayerControls(track, playback, collections, accent, viewModel, playFocus, Modifier.weight(1f).widthIn(max = 560.dp), extras)
-                }
+            if (panel == PlayerPanel.LYRICS) {
+                LyricsPanel(
+                    lyrics = lyrics,
+                    positionMs = playback.positionMs,
+                    accent = accent,
+                    onSeek = viewModel::seekTo,
+                    modifier = Modifier.weight(1f).fillMaxWidth().widthIn(max = 560.dp),
+                )
             } else {
-                if (panel == PlayerPanel.LYRICS) {
-                    LyricsPanel(
-                        lyrics = lyrics,
-                        positionMs = playback.positionMs,
-                        accent = accent,
-                        onSeek = viewModel::seekTo,
-                        modifier = Modifier.weight(1f).fillMaxWidth().widthIn(max = 560.dp),
-                    )
-                } else {
-                    Spacer(Modifier.weight(0.6f))
-                    Cover(
-                        track.coverUrl,
-                        Modifier.fillMaxWidth().widthIn(max = 420.dp).aspectRatio(1f)
-                            .clickable { panel = PlayerPanel.LYRICS },
-                        shape = RoundedCornerShape(18.dp),
-                        icon = Icons.Default.MusicNote,
-                    )
-                    Spacer(Modifier.weight(0.5f))
-                }
-                PlayerControls(track, playback, collections, accent, viewModel, playFocus, Modifier.fillMaxWidth().widthIn(max = 520.dp), extras)
-                Spacer(Modifier.weight(if (panel == PlayerPanel.LYRICS) 0.05f else 0.4f))
+                Spacer(Modifier.weight(0.6f))
+                Cover(
+                    track.coverUrl,
+                    Modifier.fillMaxWidth().widthIn(max = 420.dp).aspectRatio(1f)
+                        .clickable { panel = PlayerPanel.LYRICS },
+                    shape = RoundedCornerShape(18.dp),
+                    icon = Icons.Default.MusicNote,
+                )
+                Spacer(Modifier.weight(0.5f))
             }
+            PlayerControls(track, playback, collections, accent, viewModel, playFocus, Modifier.fillMaxWidth().widthIn(max = 520.dp), extras)
+            Spacer(Modifier.weight(if (panel == PlayerPanel.LYRICS) 0.05f else 0.4f))
         }
 
         AnimatedVisibility(visible = queueOpen, enter = slideInVertically { it }, exit = slideOutVertically { it }) {
@@ -1363,7 +1310,6 @@ private fun PlayerControls(
     modifier: Modifier,
     extras: @Composable () -> Unit,
 ) {
-    val tv = isMusicTv()
     Column(modifier) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
@@ -1389,8 +1335,6 @@ private fun PlayerControls(
         val value = if (dragging) dragValue else (playback.positionMs.toFloat() / duration).coerceIn(0f, 1f)
         Slider(
             value = value,
-            // A remote seeks with its rewind and fast-forward keys; on the bar its Left and Right would be lost.
-            modifier = Modifier.focusProperties { canFocus = !tv },
             onValueChange = { dragging = true; dragValue = it },
             onValueChangeFinished = {
                 viewModel.seekTo((dragValue * duration).toLong())
@@ -1437,22 +1381,6 @@ private fun PlayerControls(
         }
         extras()
     }
-}
-
-/** A remote's media keys: play/pause, rewind or fast-forward by ten seconds, and next or previous song. */
-private fun remoteMediaKey(key: Key, playback: MusicPlaybackState, viewModel: MusicActions): Boolean {
-    val step = 10_000L
-    when (key) {
-        Key.MediaPlayPause -> viewModel.togglePlay()
-        Key.MediaPlay -> if (!playback.isPlaying) viewModel.togglePlay()
-        Key.MediaPause -> if (playback.isPlaying) viewModel.togglePlay()
-        Key.MediaFastForward -> viewModel.seekTo((playback.positionMs + step).coerceAtMost(playback.durationMs.coerceAtLeast(0L)))
-        Key.MediaRewind -> viewModel.seekTo((playback.positionMs - step).coerceAtLeast(0L))
-        Key.MediaNext -> viewModel.next()
-        Key.MediaPrevious -> viewModel.previous()
-        else -> return false
-    }
-    return true
 }
 
 /** Black text on a light accent (the default white), white text on a dark one. */
@@ -1811,16 +1739,7 @@ private fun NameDialog(title: String, initial: String, confirm: String, onConfir
         containerColor = BackgroundElevated,
         title = { Text(title, color = Color.White) },
         text = {
-            if (isMusicTv()) MusicField(
-                value = name, onValue = { name = it },
-                label = "",
-                placeholder = stringResource(R.string.music_playlist_name),
-                accent = Color.White,
-                keyboard = KeyboardOptions(imeAction = ImeAction.Done),
-                onDone = { if (name.isNotBlank()) onConfirm(name) },
-                modifier = Modifier.testTag("music-playlist-name"),
-                tvFocus = rememberTvInitialFocus(),
-            ) else OutlinedTextField(
+            OutlinedTextField(
                 value = name,
                 onValueChange = { name = it },
                 singleLine = true,
