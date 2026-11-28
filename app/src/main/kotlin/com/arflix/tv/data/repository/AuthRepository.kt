@@ -1540,7 +1540,10 @@ class AuthRepository @Inject constructor(
         }
     }
 
-    suspend fun loadAccountSyncPayload(): Result<String?> {
+    suspend fun loadAccountSyncPayload(): Result<String?> =
+        withContext(Dispatchers.IO) { loadAccountSyncPayloadOffMain() }
+
+    private suspend fun loadAccountSyncPayloadOffMain(): Result<String?> {
         val userId = getCurrentUserIdForSync() ?: return Result.failure(Exception("Not logged in"))
         val netlifyResult = if (Constants.USE_NETLIFY_CLOUD_SYNC) {
             loadAccountSyncPayloadFromNetlify()
