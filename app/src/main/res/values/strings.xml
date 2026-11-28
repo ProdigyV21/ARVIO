@@ -2249,4 +2249,11 @@
     <string name="external_player_missing">No video app found to open this stream. Playing it here.</string>
     <string name="auto_source_failover">Switch source automatically</string>
     <string name="auto_source_failover_desc">When a source fails to start or stops, try the next one. Off: stay on the source and show the error, so you can retry or pick another.</string>
+    <string name="player_audio_sync_action">Sync to Audio</string>
+    <string name="player_audio_sync_stop">Stop audio sync</string>
+    <string name="player_audio_sync_action_hint">Time the selected online subtitle using the audio</string>
+    <string name="player_audio_sync_unavailable">Audio sync is not available in this build</string>
+    <string name="player_audio_sync_pick_external">Select an online text subtitle first</string>
+    <string name="player_audio_sync_no_match">Audio sync could not confirm the timing; the subtitle keeps its own timing</string>
+    <string name="player_audio_sync_stopped">Audio sync stopped</string>
 </resources>
