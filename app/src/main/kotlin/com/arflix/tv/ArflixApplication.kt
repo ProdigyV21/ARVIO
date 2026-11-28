@@ -261,7 +261,13 @@ class ArflixApplication : Application(), Configuration.Provider, ImageLoaderFact
             .crossfade(false)
             .respectCacheHeaders(false)
             .allowRgb565(true)
-            .bitmapConfig(Bitmap.Config.RGB_565)
+            // Hardware bitmaps: the decoded image lives only on the GPU. A global RGB_565
+            // config silently disabled them for every request (allowHardware(true) has no
+            // effect then), so every new poster or logo was uploaded to the GPU on the
+            // RenderThread during the frame that first drew it: "slow bitmap uploads"
+            // and dropped frames on every row scroll on TV boxes. It also kept a second
+            // copy of each bitmap in the native heap. Requests that read pixels opt out.
+            .bitmapConfig(if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) Bitmap.Config.HARDWARE else Bitmap.Config.RGB_565)
             // No global placeholder — card composables use their own surface
             // background color as the visual placeholder. A global placeholder
             // causes a dark-rectangle flash behind transparent clearlogo PNGs
