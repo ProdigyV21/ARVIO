@@ -4,6 +4,7 @@ import android.app.ActivityManager
 import android.content.Context
 import com.arflix.tv.data.repository.effectiveSettingsDataStore as settingsDataStore
 import com.arflix.tv.util.traktDataStore
+import com.arflix.tv.updater.installableApk
 import com.arflix.tv.util.IPTV_FAVORITES_ON_HOME
 import com.arflix.tv.util.WATCHLIST_ON_HOME
 import androidx.compose.runtime.mutableStateMapOf
@@ -6169,11 +6170,7 @@ class HomeViewModel @Inject constructor(
     }
 
     fun installAppUpdateOrRequestPermission() {
-        val currentStatus = updateStatusManager.status.value
-        if (currentStatus !is com.arflix.tv.updater.UpdateStatus.ReadyToInstall && currentStatus !is com.arflix.tv.updater.UpdateStatus.Failure) return
-
-        val apkPath = if (currentStatus is com.arflix.tv.updater.UpdateStatus.ReadyToInstall) currentStatus.apkPath else return
-        val update = currentStatus.update
+        val (apkPath, update) = updateStatusManager.status.value.installableApk() ?: return
         val apkFile = java.io.File(apkPath)
 
         if (!apkFile.exists()) {
@@ -6181,24 +6178,40 @@ class HomeViewModel @Inject constructor(
             return
         }
 
+        // Ask for "install unknown apps" before copying the APK, not after: otherwise Android
+        // refuses only once the copy is done. The install continues when the screen comes back.
         if (!com.arflix.tv.updater.ApkInstaller.canRequestPackageInstalls(context)) {
-            // If we can't request package installs, we should let the user know, but for now
-            // launchInstall handles falling back to Intent.ACTION_VIEW
+            val intent = com.arflix.tv.updater.ApkInstaller.buildUnknownSourcesSettingsIntent(context)
+            if (intent != null) {
+                updateStatusManager.awaitInstallPermission()
+                if (runCatching { context.startActivity(intent) }.isSuccess) return
+                updateStatusManager.takeInstallAfterPermission()
+            }
         }
 
-        val conflictMsg = com.arflix.tv.updater.ApkInstaller.checkSignatureConflict(context, apkFile)
-        if (conflictMsg != null) {
-            updateStatusManager.updateStatus(com.arflix.tv.updater.UpdateStatus.Failure(conflictMsg, update))
-            return
-        }
-
-        com.arflix.tv.updater.ApkInstaller.launchInstall(context, apkFile)
-        updateStatusManager.updateStatus(com.arflix.tv.updater.UpdateStatus.Installing(update))
-
-        // Mark this release as ignored so it doesn't pop up again if the user cancels the install
+        // Shows at once; checking the APK's signature reads the whole file, off the main thread.
+        updateStatusManager.updateStatus(
+            com.arflix.tv.updater.UpdateStatus.Installing(update, preparing = 0f, apkPath = apkPath)
+        )
         viewModelScope.launch {
+            val conflictMsg = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                com.arflix.tv.updater.ApkInstaller.checkSignatureConflict(context, apkFile)
+            }
+            if (conflictMsg != null) {
+                updateStatusManager.updateStatus(com.arflix.tv.updater.UpdateStatus.Failure(conflictMsg, update))
+                return@launch
+            }
+            com.arflix.tv.updater.ApkInstaller.launchInstall(context, apkFile)
+            // Mark this release as ignored so it doesn't pop up again if the user cancels the install
             updatePreferences.setIgnoredTag(update.tag)
         }
+    }
+
+    /** Home is back on screen: continue an install that was waiting for the permission. */
+    fun continueInstallAfterPermission() {
+        if (!updateStatusManager.takeInstallAfterPermission()) return
+        if (!com.arflix.tv.updater.ApkInstaller.canRequestPackageInstalls(context)) return
+        installAppUpdateOrRequestPermission()
     }
 
     fun dismissAppUpdateDialog() {

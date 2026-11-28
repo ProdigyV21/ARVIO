@@ -1842,6 +1842,12 @@ fun HomeScreen(
             onQuietUpdateDismiss = viewModel::dismissQuietUpdateNotice
         )
 
+        // Back from Android's "install unknown apps" screen: continue the update install.
+        androidx.lifecycle.compose.LifecycleResumeEffect(Unit) {
+            viewModel.continueInstallAfterPermission()
+            onPauseOrDispose { }
+        }
+
         // App Update Modal
         if (uiState.showAppUpdateDialog) {
             com.arflix.tv.ui.components.AppUpdateModal(

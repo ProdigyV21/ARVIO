@@ -9,6 +9,7 @@ import com.arflix.tv.data.model.AnimeStructuringStyle
 import androidx.activity.compose.BackHandler
 import com.arflix.tv.server.PhoneInputServer
 import com.arflix.tv.ui.components.LocalBottomBarInset
+import com.arflix.tv.updater.installableApk
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.navigationBars
@@ -598,6 +599,11 @@ fun SettingsScreen(
     onSubPageChanged: (Boolean) -> Unit = {}
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    // Back from Android's "install unknown apps" screen: continue the update install.
+    androidx.lifecycle.compose.LifecycleResumeEffect(Unit) {
+        viewModel.continueInstallAfterPermission()
+        onPauseOrDispose { }
+    }
     var showCredits by remember { mutableStateOf(false) }
     var showPlaybackCompatibility by remember { mutableStateOf(false) }
     if (showPlaybackCompatibility) {
@@ -1937,10 +1943,14 @@ fun SettingsScreen(
                                                 13 -> viewModel.forceCloudSyncNow()
                                                 14 -> viewModel.forceTraktSync()
                                                 15 -> {
-                                                    if (uiState.updateStatus is com.arflix.tv.updater.UpdateStatus.ReadyToInstall) {
-                                                        viewModel.installAppUpdateOrRequestPermission()
-                                                    } else {
-                                                        viewModel.checkForAppUpdates(force = true, showNoUpdateFeedback = true)
+                                                    val status = uiState.updateStatus
+                                                    when {
+                                                        // Also retries after Android's confirmation was cancelled.
+                                                        status.installableApk() != null ->
+                                                            viewModel.installAppUpdateOrRequestPermission()
+                                                        // Still handing the APK to Android.
+                                                        status is com.arflix.tv.updater.UpdateStatus.Installing -> Unit
+                                                        else -> viewModel.checkForAppUpdates(force = true, showNoUpdateFeedback = true)
                                                     }
                                                 }
                                                 16 -> viewModel.setQuietUpdateNotifications(!uiState.quietUpdateNotifications)
@@ -11011,6 +11021,10 @@ private fun AccountsSettings(
             description = when {
                 !isSelfUpdateSupported -> stringResource(R.string.settings_update_managed_play)
                 updateStatus is com.arflix.tv.updater.UpdateStatus.ReadyToInstall -> stringResource(R.string.settings_update_ready_install)
+                updateStatus is com.arflix.tv.updater.UpdateStatus.Installing && updateStatus.preparing != null ->
+                    stringResource(R.string.update_msg_preparing_install)
+                updateStatus is com.arflix.tv.updater.UpdateStatus.Installing ->
+                    stringResource(R.string.update_msg_android_installing)
                 updateStatus is com.arflix.tv.updater.UpdateStatus.Checking -> stringResource(R.string.settings_update_checking)
                 updateStatus is com.arflix.tv.updater.UpdateStatus.UpdateAvailable -> stringResource(R.string.settings_update_available_format, updateStatus.update.title.ifBlank { updateStatus.update.tag })
                 updateStatus is com.arflix.tv.updater.UpdateStatus.Success -> stringResource(R.string.settings_update_latest)
@@ -11019,6 +11033,8 @@ private fun AccountsSettings(
             actionLabel = when {
                 !isSelfUpdateSupported -> stringResource(R.string.settings_badge_play)
                 updateStatus is com.arflix.tv.updater.UpdateStatus.ReadyToInstall -> stringResource(R.string.settings_badge_install)
+                updateStatus is com.arflix.tv.updater.UpdateStatus.Installing && updateStatus.preparing != null ->
+                    "${((updateStatus.preparing ?: 0f) * 100).toInt()}%"
                 updateStatus is com.arflix.tv.updater.UpdateStatus.Checking -> stringResource(R.string.settings_badge_checking)
                 updateStatus is com.arflix.tv.updater.UpdateStatus.UpdateAvailable -> stringResource(R.string.settings_badge_update)
                 else -> stringResource(R.string.settings_badge_check)

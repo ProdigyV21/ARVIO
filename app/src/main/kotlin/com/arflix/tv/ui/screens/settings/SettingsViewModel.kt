@@ -98,6 +98,7 @@ import com.arflix.tv.updater.AppUpdate
 import com.arflix.tv.updater.AppUpdateRepository
 import com.arflix.tv.updater.UpdatePreferences
 import com.arflix.tv.updater.VersionUtils
+import com.arflix.tv.updater.installableApk
 import com.arflix.tv.util.AuthEmailValidator
 import com.arflix.tv.util.LAST_APP_LANGUAGE_KEY
 import com.arflix.tv.util.resolveAppLanguage
@@ -5328,11 +5329,7 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun installAppUpdateOrRequestPermission() {
-        val currentStatus = updateStatusManager.status.value
-        if (currentStatus !is com.arflix.tv.updater.UpdateStatus.ReadyToInstall && currentStatus !is com.arflix.tv.updater.UpdateStatus.Failure) return
-
-        val apkPath = if (currentStatus is com.arflix.tv.updater.UpdateStatus.ReadyToInstall) currentStatus.apkPath else return
-        val update = currentStatus.update
+        val (apkPath, update) = updateStatusManager.status.value.installableApk() ?: return
         val apkFile = File(apkPath)
 
         if (!apkFile.exists()) {
@@ -5345,24 +5342,39 @@ class SettingsViewModel @Inject constructor(
             return
         }
 
-        val conflictMsg = ApkInstaller.checkSignatureConflict(context, apkFile)
-        if (conflictMsg != null) {
-            updateStatusManager.updateStatus(com.arflix.tv.updater.UpdateStatus.Failure(conflictMsg, update))
-            return
-        }
-
-        ApkInstaller.launchInstall(context, apkFile)
-        updateStatusManager.updateStatus(com.arflix.tv.updater.UpdateStatus.Installing(update))
-
+        // Shows at once; checking the APK's signature reads the whole file, off the main thread.
+        updateStatusManager.updateStatus(
+            com.arflix.tv.updater.UpdateStatus.Installing(update, preparing = 0f, apkPath = apkPath)
+        )
         viewModelScope.launch {
+            val conflictMsg = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                ApkInstaller.checkSignatureConflict(context, apkFile)
+            }
+            if (conflictMsg != null) {
+                updateStatusManager.updateStatus(com.arflix.tv.updater.UpdateStatus.Failure(conflictMsg, update))
+                return@launch
+            }
+            ApkInstaller.launchInstall(context, apkFile)
             updatePreferences.setIgnoredTag(update.tag)
         }
     }
 
     fun openUnknownSourcesSettings() {
         ApkInstaller.buildUnknownSourcesSettingsIntent(context)?.let { intent ->
+            updateStatusManager.awaitInstallPermission()
             context.startActivity(intent)
         }
+    }
+
+    /**
+     * Settings is back on screen: once ARVIO may install apps, continue the install instead of
+     * leaving the permission dialog up for a second Install press.
+     */
+    fun continueInstallAfterPermission() {
+        if (!updateStatusManager.takeInstallAfterPermission()) return
+        if (!ApkInstaller.canRequestPackageInstalls(context)) return
+        _uiState.value = _uiState.value.copy(showUnknownSourcesDialog = false, showAppUpdateDialog = true)
+        installAppUpdateOrRequestPermission()
     }
 
     // ========== Trakt Authentication ==========

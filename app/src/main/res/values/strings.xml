@@ -1494,6 +1494,8 @@
     <string name="update_msg_downloading">Downloading update...</string>
     <string name="update_msg_ready_subtitle">%1$s is ready to install.</string>
     <string name="update_msg_installing">Installing update... Please follow the system prompt.</string>
+    <string name="update_msg_preparing_install">Handing the update to Android. This can take up to a minute on some TVs.</string>
+    <string name="update_msg_android_installing">Android is installing the update. ARVIO will close when it\'s done.</string>
     <string name="update_msg_failed">Update failed.</string>
     <string name="update_msg_uptodate">You already have the latest version installed.</string>
     <string name="update_msg_no_info">No release information available.</string>

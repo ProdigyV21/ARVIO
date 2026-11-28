@@ -57,7 +57,7 @@ class ApkInstallWorkerTest {
         assertEquals(ApkInstallWorker::class.java.name, request.captured.workSpec.workerClassName)
         assertEquals(apk.absolutePath, request.captured.workSpec.input.getString(ApkInstaller.EXTRA_APK_PATH))
         assertTrue(request.captured.workSpec.input.getBoolean(ApkInstaller.EXTRA_WITH_DEX_METADATA, false))
-        verify(exactly = 0) { ApkInstaller.installNow(any(), any(), any()) }
+        verify(exactly = 0) { ApkInstaller.installNow(any(), any(), any(), any()) }
     }
 
     @Test fun receiverRetryOnlyEnqueuesAnApkOnlyJob() {
@@ -65,7 +65,7 @@ class ApkInstallWorkerTest {
         every { manager.enqueue(capture(request)) } returns mockk(relaxed = true)
         assertTrue(ApkInstallReceiver().retryWithoutDexMetadata(context, failureIntent()))
         assertFalse(request.captured.workSpec.input.getBoolean(ApkInstaller.EXTRA_WITH_DEX_METADATA, true))
-        verify(exactly = 0) { ApkInstaller.installNow(any(), any(), any()) }
+        verify(exactly = 0) { ApkInstaller.installNow(any(), any(), any(), any()) }
     }
 
     @Test fun cancelledInstallDoesNotEnqueueARetry() {
@@ -81,32 +81,64 @@ class ApkInstallWorkerTest {
     }
 
     @Test fun workerStagesTheApkOffTheMainThread() = runBlocking {
-        every { ApkInstaller.installNow(context, apk, true) } answers {
+        every { ApkInstaller.installNow(context, apk, true, any()) } answers {
             assertNotSame(Looper.getMainLooper().thread, Thread.currentThread())
             true
         }
         assertEquals(ListenableWorker.Result.success(), worker(true).doWork())
-        verify(exactly = 1) { ApkInstaller.installNow(context, apk, true) }
+        verify(exactly = 1) { ApkInstaller.installNow(context, apk, true, any()) }
     }
 
     @Test fun workerHonorsAnApkOnlyRetry() = runBlocking {
-        every { ApkInstaller.installNow(context, apk, false) } returns true
+        every { ApkInstaller.installNow(context, apk, false, any()) } returns true
         assertEquals(ListenableWorker.Result.success(), worker(false).doWork())
-        verify(exactly = 1) { ApkInstaller.installNow(context, apk, false) }
+        verify(exactly = 1) { ApkInstaller.installNow(context, apk, false, any()) }
     }
 
     @Test fun failedInstallerReportsFailureInsteadOfLeavingInstallingStatus() = runBlocking {
-        every { ApkInstaller.installNow(context, apk, true) } returns false
+        every { ApkInstaller.installNow(context, apk, true, any()) } returns false
         status.updateStatus(UpdateStatus.Installing(null))
         assertEquals(ListenableWorker.Result.failure(), worker(true).doWork())
         assertTrue(status.status.value is UpdateStatus.Failure)
+    }
+
+    @Test fun workerShowsTheCopyAndThenWaitsForAndroid() = runBlocking {
+        status.updateStatus(UpdateStatus.Installing(null, preparing = 0f))
+        val seen = mutableListOf<Float?>()
+        every { ApkInstaller.installNow(context, apk, true, any()) } answers {
+            val onProgress = arg<(Float) -> Unit>(3)
+            onProgress(0.5f)
+            seen += (status.status.value as UpdateStatus.Installing).preparing
+            true
+        }
+        assertEquals(ListenableWorker.Result.success(), worker(true).doWork())
+        assertEquals(listOf<Float?>(0.5f), seen)
+        // Android has the whole APK: the screen now waits for its confirmation.
+        assertNull((status.status.value as UpdateStatus.Installing).preparing)
+    }
+
+    @Test fun copyProgressIsIgnoredOnceTheInstallMovedOn() {
+        status.updateStatus(UpdateStatus.Failure("cancelled"))
+        status.setInstallPreparing(0.4f)
+        assertTrue(status.status.value is UpdateStatus.Failure)
+    }
+
+    @Test fun copyReportsEachPercentOnceAndEndsAtTheWhole() {
+        val data = ByteArray(1_000_000) { it.toByte() }
+        val out = java.io.ByteArrayOutputStream()
+        val reported = mutableListOf<Float>()
+        ApkInstaller.copyWithProgress(data.inputStream(), out, data.size.toLong()) { reported += it }
+        assertArrayEquals(data, out.toByteArray())
+        assertEquals(reported.sorted(), reported)
+        assertEquals(reported.distinct(), reported)
+        assertEquals(1f, reported.last())
     }
 
     @Test fun missingApkFailsWithoutCallingTheInstaller() = runBlocking {
         apk.delete()
         assertEquals(ListenableWorker.Result.failure(), worker(true).doWork())
         assertTrue(status.status.value is UpdateStatus.Failure)
-        verify(exactly = 0) { ApkInstaller.installNow(any(), any(), any()) }
+        verify(exactly = 0) { ApkInstaller.installNow(any(), any(), any(), any()) }
     }
 
     private fun worker(withMetadata: Boolean): ApkInstallWorker {
