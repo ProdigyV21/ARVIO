@@ -339,6 +339,8 @@ private fun isRepeatedSettingsSelect(event: androidx.compose.ui.input.key.KeyEve
  * (categories / hide / sort / bulk toggle) without a separate code path.
  */
 
+internal const val BILINGUAL_SUBTITLES_ROW = 70
+
 private val tvGeneralSectionIds = setOf(
     "language",
     "subtitles",
@@ -389,7 +391,7 @@ internal fun tvGeneralRowsForSection(section: String): List<Int> {
         // 48 (sync by hearing) only where it exists: the sideload build.
         "subtitles" -> listOf(4, 5, 6, 7, 42, 8, 38) +
             (if (BuildConfig.AUDIO_SYNC_AVAILABLE) listOf(48) else emptyList()) +
-            listOf(39, 9, 45)
+            listOf(39, 9, 45, BILINGUAL_SUBTITLES_ROW)
         "ai_subtitles" -> listOf(28, 29, 30, 31, 32, 33) + LIVE_AI_SUBS_ROWS
         "playback" -> listOf(10, 11, AUTO_SOURCE_FAILOVER_ROW, EXTERNAL_PLAYER_ROW, 12, 43, 44, 55, SEEK_THUMBNAILS_ROW, 13, 14, 34, 37, 16, 15, 40, 27, 53, 54, 60)
         "appearance" -> listOf(17, 49, 50, 18, 20, 21, 24, 23, 22, 41, 46, 36, 47, 56, 57) +
@@ -809,6 +811,7 @@ fun SettingsScreen(
     var qualityFilterDeviceName by remember { mutableStateOf("") }
     var showAiModelDialog by remember { mutableStateOf(false) }
     var showAiApiKeyDialog by remember { mutableStateOf(false) }
+    var showBilingualSettingsDialog by remember { mutableStateOf(false) }
     var showCustomUserAgentDialog by remember { mutableStateOf(false) }
     var qualityFilterRegexPattern by remember { mutableStateOf("") }
     var showHomeServerInput by remember { mutableStateOf(false) }
@@ -1125,6 +1128,7 @@ fun SettingsScreen(
         addonConfigureTarget != null ||
         showAiModelDialog ||
         showAiApiKeyDialog ||
+        showBilingualSettingsDialog ||
         showCustomUserAgentDialog ||
         uiState.aiKeyServerState.isActive ||
         uiState.showCloudPairDialog ||
@@ -1565,6 +1569,7 @@ fun SettingsScreen(
                                                 8 -> viewModel.toggleSubtitleStylized()
                                                 9 -> viewModel.setFilterSubtitlesByLanguage(!uiState.filterSubtitlesByLanguage)
                                                 45 -> viewModel.setUseForcedSubtitles(!uiState.useForcedSubtitles)
+                                                BILINGUAL_SUBTITLES_ROW -> showBilingualSettingsDialog = true
                                                 10 -> viewModel.setAutoPlayNext(!uiState.autoPlayNext)
                                                 11 -> viewModel.setAutoPlaySingleSource(!uiState.autoPlaySingleSource)
                                                 12 -> viewModel.cycleAutoPlayMinQuality()
@@ -2313,6 +2318,7 @@ fun SettingsScreen(
                             onSubtitlePreloadToggle = { viewModel.setSubtitlePreloadEnabled(it) },
                             onDolbyVisionCompatToggle = { viewModel.setDolbyVisionCompatEnabled(it) },
                             onSubtitleRemoveHearingImpairedToggle = { viewModel.setSubtitleRemoveHearingImpaired(it) },
+                            onBilingualSubtitlesClick = { showBilingualSettingsDialog = true },
                             onSubtitleAiApiKeyClick = { showAiApiKeyDialog = true },
                             onSubtitleAiQrClick = { viewModel.startAiKeyServer() },
                             customUserAgent = uiState.customUserAgent,
@@ -2353,6 +2359,12 @@ fun SettingsScreen(
                                     showAiModelDialog = false
                                 },
                                 onDismiss = { showAiModelDialog = false }
+                            )
+                        }
+                        if (showBilingualSettingsDialog) {
+                            com.arflix.tv.ui.screens.player.subtitles.bilingual.BilingualSettingsDialog(
+                                onDismiss = { showBilingualSettingsDialog = false },
+                                inPlayer = false,
                             )
                         }
                         if (showAiApiKeyDialog) {
@@ -5678,6 +5690,9 @@ private fun MobileSettingsSubPage(
                 }
             }
             "Audio & Subtitles" -> {
+                // Bilingual subtitles: style of the two-language subtitles (separate from the
+                // Secondary Subtitle setting).
+                com.arflix.tv.ui.screens.player.subtitles.bilingual.BilingualSettingsEntry()
                 MobileSettingsCategory(title = stringResource(R.string.settings_section_subtitles)) {
                     MobileSettingsRow(
                         icon = Icons.Default.Subtitles,
@@ -7303,6 +7318,7 @@ private fun TvGeneralSettingsRows(
     onSubtitlePreloadToggle: (Boolean) -> Unit = {},
     onDolbyVisionCompatToggle: (Boolean) -> Unit = {},
     onSubtitleRemoveHearingImpairedToggle: (Boolean) -> Unit = {},
+    onBilingualSubtitlesClick: () -> Unit = {},
     onSubtitleAiApiKeyClick: () -> Unit = {},
     onSubtitleAiQrClick: () -> Unit = {},
     customUserAgent: String = "",
@@ -7422,6 +7438,11 @@ private fun TvGeneralSettingsRows(
                 8 -> SettingsToggleRow(stringResource(R.string.subtitle_stylized), stringResource(R.string.subtitle_stylized_desc), subtitleStylized, focusedIndex == localIndex, { onSubtitleStylizedToggle() }, Modifier.settingsFocusSlot(localIndex))
                 9 -> SettingsToggleRow(stringResource(R.string.filter_subtitles), stringResource(R.string.filter_subtitles_desc), filterSubtitlesByLanguage, focusedIndex == localIndex, onFilterSubtitlesByLanguageToggle, Modifier.settingsFocusSlot(localIndex))
                 45 -> SettingsToggleRow(stringResource(R.string.use_forced_subtitles), stringResource(R.string.use_forced_subtitles_desc), useForcedSubtitles, focusedIndex == localIndex, onUseForcedSubtitlesToggle, Modifier.settingsFocusSlot(localIndex))
+                BILINGUAL_SUBTITLES_ROW -> com.arflix.tv.ui.screens.player.subtitles.bilingual.BilingualTvSettingsRow(
+                    isFocused = focusedIndex == localIndex,
+                    onClick = onBilingualSubtitlesClick,
+                    modifier = Modifier.settingsFocusSlot(localIndex)
+                )
                 10 -> SettingsToggleRow(stringResource(R.string.auto_play_next_title), stringResource(R.string.auto_play_desc), autoPlayNext, focusedIndex == localIndex, onAutoPlayToggle, Modifier.settingsFocusSlot(localIndex))
                 11 -> SettingsToggleRow(stringResource(R.string.autoplay), stringResource(R.string.autoplay_desc), autoPlaySingleSource, focusedIndex == localIndex, onAutoPlaySingleSourceToggle, Modifier.settingsFocusSlot(localIndex))
                 12 -> SettingsRow(Icons.Default.HighQuality, stringResource(R.string.auto_play_min_quality), stringResource(R.string.auto_play_quality_desc), autoPlayMinQuality, focusedIndex == localIndex, onAutoPlayMinQualityClick, Modifier.settingsFocusSlot(localIndex))

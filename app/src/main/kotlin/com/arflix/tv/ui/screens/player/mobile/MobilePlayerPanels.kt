@@ -47,6 +47,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateListOf
@@ -750,6 +751,7 @@ fun MobileSubtitlesSheet(
         currentView == "tracks" -> selectedLanguageName?.let { stringResource(R.string.mplayer_language_subtitles, subtitleLanguageDisplayName(it)) }
             ?: stringResource(R.string.subtitles)
         currentView == "substyle" -> stringResource(R.string.subtitle_settings_title)
+        currentView == "bilingual" -> com.arflix.tv.ui.screens.player.subtitles.bilingual.bt("Bilingual Subtitles")
         else -> stringResource(R.string.subtitles)
     }
     val showBack = viewStack.size > 1
@@ -784,6 +786,15 @@ fun MobileSubtitlesSheet(
                     onUpdateDelay = onUpdateSubtitleDelay
                 )
             }
+            currentView == "bilingual" -> {
+                com.arflix.tv.ui.screens.player.subtitles.bilingual.BilingualSubtitleSettingsPanel(
+                    modifier = Modifier.fillMaxWidth(),
+                    aiAvailable = isAiAvailable || isAiTranslating,
+                    aiTranslating = isAiTranslating,
+                    onEnableAiTranslation = { onActivateAiTranslation() },
+                    inPlayer = true,
+                )
+            }
             currentView == "substyle" -> {
                 SubtitleSettingsContent(
                     subtitleSizePct = subtitleSizePct,
@@ -806,7 +817,8 @@ fun MobileSubtitlesSheet(
                     onToggleFilterSubtitlesByLanguage = onToggleFilterSubtitlesByLanguage,
                     subtitleRemoveHearingImpaired = subtitleRemoveHearingImpaired,
                     onToggleSubtitleRemoveHearingImpaired = onToggleSubtitleRemoveHearingImpaired,
-                    onOpenFonts = { viewStack.add("fonts") }
+                    onOpenFonts = { viewStack.add("fonts") },
+                    onOpenBilingual = { viewStack.add("bilingual") },
                 )
             }
             currentView == "fonts" -> {
@@ -974,6 +986,10 @@ fun MobileSubtitlesSheet(
                             }
                             SubtitleBadge(text = if (isFindingBestMatch) stringResource(R.string.mplayer_badge_scanning) else stringResource(R.string.mplayer_badge_auto_sync))
                         }
+                    }
+
+                    item {
+                        BilingualEntryRow(onClick = { viewStack.add("bilingual") })
                     }
 
                     if (isAiAvailable || isAiTranslating) {
@@ -1172,6 +1188,7 @@ private fun SubtitleSettingsContent(
     subtitleRemoveHearingImpaired: Boolean,
     onToggleSubtitleRemoveHearingImpaired: (Boolean) -> Unit,
     onOpenFonts: () -> Unit,
+    onOpenBilingual: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -1198,6 +1215,9 @@ private fun SubtitleSettingsContent(
             .padding(horizontal = 14.dp, vertical = 4.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
+        item {
+            BilingualEntryRow(onClick = onOpenBilingual)
+        }
         item {
             SectionHeader(stringResource(R.string.mplayer_section_preview))
             Box(
@@ -2665,5 +2685,46 @@ fun MobileSubtitleRepositionOverlay(
                 }
             }
         }
+    }
+}
+
+/** Entry into the bilingual subtitle settings panel (generation mode, languages, display mode, styles). */
+@Composable
+private fun BilingualEntryRow(onClick: () -> Unit) {
+    val context = LocalContext.current
+    val store = remember {
+        com.arflix.tv.ui.screens.player.subtitles.bilingual.BilingualSubtitleSettingsStore.from(context)
+    }
+    val settings by store.settings.collectAsState()
+    val statusLabel = com.arflix.tv.ui.screens.player.subtitles.bilingual.bilingualSummaryValue(settings)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(MobilePlayerTokens.ShapeCard)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onClick
+            )
+            .padding(horizontal = 14.dp, vertical = 11.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = com.arflix.tv.ui.screens.player.subtitles.bilingual.bt("Bilingual Subtitles"),
+                color = MobilePlayerTokens.InkPrimary,
+                fontSize = 13.5.sp,
+                fontWeight = FontWeight.SemiBold
+            )
+            Text(
+                text = com.arflix.tv.ui.screens.player.subtitles.bilingual.bt(
+                    "Generation mode (Auto / Merge / AI Translate), languages, display mode, styles"
+                ),
+                color = MobilePlayerTokens.InkTertiary,
+                fontSize = 11.sp
+            )
+        }
+        SubtitleBadge(text = statusLabel)
     }
 }

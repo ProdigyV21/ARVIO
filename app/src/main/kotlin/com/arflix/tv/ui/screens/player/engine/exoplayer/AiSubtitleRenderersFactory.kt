@@ -220,6 +220,7 @@ private class TranslatingTextOutput(
 
     private val handler = Handler(outputLooper)
     @Volatile private var lastCueGroup: CueGroup? = null
+    private val publisher = com.arflix.tv.ui.screens.player.subtitles.bilingual.BilingualCuePublisher(manager, scope)
     var onFirstCueOnPlaybackThread: (() -> Unit)? = null
     private var hasFiredFirstCue = false
     private var cueSerial = 0
@@ -229,13 +230,16 @@ private class TranslatingTextOutput(
 
         // Fire once when the first non-empty cue arrives while TextRenderer.render() is on the
         // call stack — the cue buffer is populated at that moment, enabling lookahead.
-        if (!hasFiredFirstCue && cues.isNotEmpty() && manager.isEnabled) {
+        if (!hasFiredFirstCue && cues.isNotEmpty() && manager.translationNeeded) {
             hasFiredFirstCue = true
             onFirstCueOnPlaybackThread?.invoke()
             onFirstCueOnPlaybackThread = null
         }
 
         if (!manager.isEnabled) {
+            if (manager.bilingualBus.frame.value != null) {
+                publisher.clear(cueGroup.presentationTimeUs)
+            }
             lastCueGroup = cueGroup
             delegate.onCues(
                 if (manager.removeSubtitleHearingImpaired)
@@ -244,6 +248,50 @@ private class TranslatingTextOutput(
             )
             return
         }
+
+        // Smart bilingual mode owns the Compose BilingualSubtitleOverlay: hand Media3's SubtitleView
+        // an empty group for text cues and publish the primary cue (and attached second language
+        // from either the embedded-track aligner or AI translation) to BilingualCueBus.
+        if (manager.bilingualActive) {
+            if (cues.isEmpty()) {
+                lastCueGroup = cueGroup
+                publisher.clear(cueGroup.presentationTimeUs)
+                delegate.onCues(cueGroup)
+                return
+            }
+            val rawText = extractRawText(cues)
+            if (rawText.isBlank()) {
+                if (manager.translationNeeded) manager.onUntranslatableSource?.invoke()
+                lastCueGroup = cueGroup
+                publisher.clear(cueGroup.presentationTimeUs)
+                delegate.onCues(cueGroup)
+                return
+            }
+            val text = if (manager.removeHearingImpaired) stripHearingImpaired(rawText) else rawText
+            if (text.isBlank()) {
+                lastCueGroup = cueGroup
+                publisher.clear(cueGroup.presentationTimeUs)
+                delegate.onCues(CueGroup(emptyList(), cueGroup.presentationTimeUs))
+                return
+            }
+            lastCueGroup = cueGroup
+            delegate.onCues(CueGroup(emptyList(), cueGroup.presentationTimeUs))
+            publisher.publish(text, cueGroup.presentationTimeUs)
+            return
+        }
+
+        // Defensive pass-through when translation is not needed outside smart bilingual mode
+        // (e.g., EMBEDDED_TRACK without active bilingual overlay).
+        if (!manager.translationNeeded) {
+            lastCueGroup = cueGroup
+            delegate.onCues(
+                if (manager.removeSubtitleHearingImpaired)
+                    CueGroup(cleanSdhCues(cues), cueGroup.presentationTimeUs)
+                else cueGroup
+            )
+            return
+        }
+
         if (cues.isEmpty()) {
             // Genuine end-of-subtitle marker — update so pending translations know display cleared.
             lastCueGroup = cueGroup
@@ -308,6 +356,16 @@ private class TranslatingTextOutput(
         if (rawText.isBlank()) {
             // No translatable text (e.g. bitmap subtitles) — show originals rather than hiding.
             delegate.onCues(cues)
+            return
+        }
+        if (manager.bilingualActive) {
+            // The CueGroup path owns the bilingual overlay; SubtitleView shows nothing for text
+            // cues while smart bilingual is active.
+            delegate.onCues(emptyList())
+            return
+        }
+        if (!manager.translationNeeded) {
+            delegate.onCues(if (manager.removeSubtitleHearingImpaired) cleanSdhCues(cues) else cues)
             return
         }
         val text = if (manager.removeHearingImpaired) stripHearingImpaired(rawText) else rawText
@@ -447,7 +505,7 @@ private class SubtitleOffsetRenderer(
     }
 
     private fun tryPeriodicLookahead() {
-        if (!translationManager.isEnabled) return
+        if (!translationManager.translationNeeded) return
         val now = System.currentTimeMillis()
         val isFreshSeek = pendingSeek
         // Periodic check every 5 s; seeks always proceed immediately
@@ -472,7 +530,7 @@ private class SubtitleOffsetRenderer(
         // No AI translation active → no lookahead. tryPeriodicLookahead already checks this;
         // this first-cue trigger fires for any newly selected track (e.g. the reference track
         // "find best match" selects with AI off) and must not spend API requests either.
-        if (!translationManager.isEnabled) return
+        if (!translationManager.translationNeeded) return
         if (preTranslatedUpToUs != Long.MIN_VALUE &&
             preTranslatedUpToUs > currentPositionUs + PREFETCH_TRIGGER_US) {
             return

@@ -732,7 +732,8 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
     var subtitlePanelFocus by remember { mutableIntStateOf(0) } // 0=lang panel, 1=track panel
     // In-player subtitle settings panel state
     var showSubtitleSettings by remember { mutableStateOf(false) }
-    var subtitleSettingsRow by remember { mutableIntStateOf(0) }  // 0=Delay, 1=Size, 2=Vertical
+    var showBilingualSettingsDialog by remember { mutableStateOf(false) }
+    var subtitleSettingsRow by remember { mutableIntStateOf(0) }  // 0=Delay, 1=Size, 2=Vertical, 3=Bilingual
     var subtitleSyncOffsetMs by remember { mutableLongStateOf(0L) }
     var subtitleSizePct by remember { mutableIntStateOf(uiState.subtitleSizePct) }
     var subtitleVerticalPct by remember { mutableIntStateOf(uiState.subtitleVerticalPct) }
@@ -741,6 +742,42 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
     }
     LaunchedEffect(uiState.subtitleVerticalPct) {
         subtitleVerticalPct = uiState.subtitleVerticalPct
+    }
+    // One path for D-pad, TV buttons and touch controls: update the visible overlay now, then
+    // persist the same clamped value for ordinary subtitles and the next playback session.
+    val updateSubtitleSize: (Int) -> Unit = { percent ->
+        subtitleSizePct = percent.coerceIn(50, 250)
+        viewModel.setSubtitleSizePct(subtitleSizePct)
+    }
+    val updateSubtitleVertical: (Int) -> Unit = { percent ->
+        subtitleVerticalPct = percent.coerceIn(1, 88)
+        viewModel.setSubtitleVerticalPct(subtitleVerticalPct)
+    }
+    val bilingualSettingsStore = remember {
+        com.arflix.tv.ui.screens.player.subtitles.bilingual.BilingualSubtitleSettingsStore.from(context)
+    }
+    val bilingualSettings by bilingualSettingsStore.settings.collectAsState()
+    val bilingualFrame by viewModel.translationManager.bilingualBus.frame.collectAsState()
+    var restartingStreamForBilingual by remember { mutableStateOf(false) }
+    fun bilingualTapEnabledNow(): Boolean =
+        bilingualSettingsStore.settings.value.smartEnabled || latestUiState.smartBilingualRequest.requestedForVideo
+    val stepBilingualSetting: (Int) -> Unit = { delta ->
+        val modes = listOf(
+            null,
+            com.arflix.tv.ui.screens.player.subtitles.bilingual.BilingualGenerationMode.AUTO,
+            com.arflix.tv.ui.screens.player.subtitles.bilingual.BilingualGenerationMode.MERGE,
+            com.arflix.tv.ui.screens.player.subtitles.bilingual.BilingualGenerationMode.AI_TRANSLATE,
+        )
+        val curIdx = if (!bilingualSettings.smartEnabled) 0
+        else modes.indexOf(bilingualSettings.generationMode).coerceAtLeast(1)
+        val next = modes[(curIdx + delta + modes.size) % modes.size]
+        if (next == null) {
+            bilingualSettingsStore.update { it.copy(smartEnabled = false) }
+            com.arflix.tv.ui.screens.player.subtitles.bilingual.BilingualPlayerBridge.stopSmartMode()
+        } else {
+            bilingualSettingsStore.update { it.copy(smartEnabled = true, generationMode = next) }
+            com.arflix.tv.ui.screens.player.subtitles.bilingual.BilingualPlayerBridge.requestSmartMode()
+        }
     }
     var useVideoFrameSubtitleViewport by remember { mutableStateOf(false) }
     var hasActiveSubtitleCues by remember { mutableStateOf(false) }
@@ -1288,10 +1325,19 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
 
     // Sync by hearing (audiosync.ArvioAudioSync): every extractor also copies the playing stream's
     // audio to the audio sync — idle unless it is listening. DV stripping, when on, stays underneath.
+    // Bilingual subtitles: the second-subtitle text tap copies the text of every embedded subtitle
+    // track (selected or not) while the extractor demuxes it anyway, so the bilingual layer can
+    // merge a second embedded language without a second player/decoder or any AI call.
+    val embeddedSubtitleStore = remember { com.arflix.tv.ui.screens.player.subtitles.bilingual.EmbeddedSubtitleStore() }
     val audioTapExtractorsFactory = remember(dvStripExtractorsFactory) {
-        com.arflix.tv.ui.screens.player.audiosync.AudioSyncTaps.wrapExtractors(
-            dvStripExtractorsFactory ?: androidx.media3.extractor.DefaultExtractorsFactory()
-        ) { latestUiState.selectedStreamUrl }
+        com.arflix.tv.ui.screens.player.subtitles.bilingual.SubtitleTextTapExtractorsFactory(
+            com.arflix.tv.ui.screens.player.audiosync.AudioSyncTaps.wrapExtractors(
+                dvStripExtractorsFactory ?: androidx.media3.extractor.DefaultExtractorsFactory()
+            ) { latestUiState.selectedStreamUrl },
+            embeddedSubtitleStore,
+            currentSourceKey = { latestUiState.selectedStreamUrl },
+            enabledProvider = ::bilingualTapEnabledNow,
+        )
     }
 
     // Non-cached factory for heavy/debrid progressive streams to avoid disk I/O bottleneck.
@@ -1478,6 +1524,16 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
                         playbackFrameRate.onInputFormat(format.frameRate)
                         previewVideoFormat = format
                     }
+
+                    override fun onLoadStarted(
+                        eventTime: androidx.media3.exoplayer.analytics.AnalyticsListener.EventTime,
+                        loadEventInfo: androidx.media3.exoplayer.source.LoadEventInfo,
+                        mediaLoadData: androidx.media3.exoplayer.source.MediaLoadData,
+                    ) {
+                        if (mediaLoadData.dataType == C.DATA_TYPE_MEDIA && mediaLoadData.trackType != C.TRACK_TYPE_TEXT) {
+                            embeddedSubtitleStore.bindLoadSource(loadEventInfo.uri.toString())
+                        }
+                    }
                 })
 
                 // Add error listener to try next stream on codec errors
@@ -1486,6 +1542,11 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
                     override fun onPlaybackStateChanged(playbackState: Int) {
                         currentPlaybackState = playbackState
                         if (playbackState == Player.STATE_READY) iptvVodGate.noteReady(System.currentTimeMillis())
+                        if (restartingStreamForBilingual &&
+                            (playbackState == Player.STATE_READY || playbackState == Player.STATE_ENDED)
+                        ) {
+                            restartingStreamForBilingual = false
+                        }
                         if (playbackState == Player.STATE_READY || playbackState == Player.STATE_ENDED) {
                             duration = this@apply.duration.takeIf { it > 0L && it != C.TIME_UNSET } ?: 0L
                             currentSourceIsLive = this@apply.isCurrentMediaItemLive
@@ -1538,6 +1599,7 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
 
                     override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
                         if (playerReleasedAtomic.get()) return
+                        restartingStreamForBilingual = false
                         // This device closed that session on purpose, so it says nothing about the source.
                         if (com.arflix.tv.network.isIptvStreamSessionClosed(error)) return
 
@@ -2812,6 +2874,44 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
         }
     }
 
+    var wasBilingualTapActive by remember { mutableStateOf(bilingualTapEnabledNow()) }
+    LaunchedEffect(
+        bilingualSettings.smartEnabled,
+        uiState.smartBilingualRequest.requestedForVideo,
+        uiState.selectedStreamUrl,
+    ) {
+        val now = bilingualTapEnabledNow()
+        if (!now || uiState.selectedStreamUrl == null) {
+            restartingStreamForBilingual = false
+            embeddedSubtitleStore.clear()
+        } else if (!wasBilingualTapActive && hasPlaybackStarted && !isCasting &&
+            embeddedSubtitleStore.tracks().isEmpty() &&
+            uiState.subtitles.any { it.isEmbedded && !it.isBitmap } &&
+            exoPlayer.playbackState != Player.STATE_IDLE &&
+            exoPlayer.currentMediaItem != null &&
+            iptvVodGate.session == null
+        ) {
+            val pos = exoPlayer.currentPosition.coerceAtLeast(0L)
+            val wasPlaying = exoPlayer.isPlaying
+            viewModel.translationManager.bilingualNotice.value =
+                com.arflix.tv.ui.screens.player.subtitles.bilingual.BilingualNotice(
+                    com.arflix.tv.ui.screens.player.subtitles.bilingual.BilingualNotice.Kind.RESTARTING_FOR_BILINGUAL
+                )
+            embeddedSubtitleStore.openSource(
+                exoPlayer.currentMediaItem?.localConfiguration?.uri?.toString() ?: uiState.selectedStreamUrl
+            )
+            exoPlayer.stop()
+            exoPlayer.seekTo(pos)
+            exoPlayer.prepare()
+            exoPlayer.playWhenReady = wasPlaying
+            restartingStreamForBilingual = exoPlayer.playbackState != Player.STATE_READY
+        }
+        wasBilingualTapActive = now
+    }
+    DisposableEffect(embeddedSubtitleStore) {
+        onDispose { embeddedSubtitleStore.clear() }
+    }
+
     // Update player when stream URL changes. Attach currently-known external subtitle tracks once,
     // then switch subtitle tracks via track overrides (no media source rebuild needed).
     LaunchedEffect(uiState.selectedStreamUrl, uiState.streamSelectionNonce, exitTransition.isExiting, iptvVodGate.reopenSignal) {
@@ -3006,6 +3106,7 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
             val resumePosition = iptvVodReopen?.positionMs ?: uiState.savedPosition
             placeholderCheckedSource = null
             currentSourceIsLive = args.isLiveStream
+            embeddedSubtitleStore.openSource(mediaItem.localConfiguration?.uri?.toString() ?: url)
             if (resumePosition > 0L) {
                 exoPlayer.setMediaSource(mediaSource, resumePosition)
             } else {
@@ -3196,6 +3297,7 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
                 mediaItemBuilder.setMimeType(MimeTypes.APPLICATION_M3U8)
             }
             val mediaItem = mediaItemBuilder.build()
+            embeddedSubtitleStore.openSource(mediaItem.localConfiguration?.uri?.toString() ?: url)
             if (iptvVodGate.session != null) {
                 val urlLower = url.lowercase()
                 iptvVodGate.rebuildForSubtitle(exoPlayer) { iptvVodSession ->
@@ -4119,22 +4221,31 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
                                 true
                             }
                             Key.DirectionDown -> {
-                                subtitleSettingsRow = (subtitleSettingsRow + 1).coerceAtMost(2)
+                                subtitleSettingsRow = (subtitleSettingsRow + 1).coerceAtMost(3)
                                 true
                             }
                             Key.DirectionLeft -> {
                                 when (subtitleSettingsRow) {
                                     0 -> subtitleSyncOffsetMs = (subtitleSyncOffsetMs - SUBTITLE_OFFSET_STEP_MS).coerceAtLeast(-MAX_SUBTITLE_OFFSET_MS)
-                                    1 -> subtitleSizePct = (subtitleSizePct - 10).coerceAtLeast(50)
-                                    2 -> subtitleVerticalPct = (subtitleVerticalPct - 1).coerceAtLeast(0)
+                                    1 -> updateSubtitleSize(subtitleSizePct - 10)
+                                    2 -> updateSubtitleVertical(subtitleVerticalPct - 1)
+                                    3 -> stepBilingualSetting(-1)
                                 }
                                 true
                             }
                             Key.DirectionRight -> {
                                 when (subtitleSettingsRow) {
                                     0 -> subtitleSyncOffsetMs = (subtitleSyncOffsetMs + SUBTITLE_OFFSET_STEP_MS).coerceAtMost(MAX_SUBTITLE_OFFSET_MS)
-                                    1 -> subtitleSizePct = (subtitleSizePct + 10).coerceAtMost(300)
-                                    2 -> subtitleVerticalPct = (subtitleVerticalPct + 1).coerceAtMost(50)
+                                    1 -> updateSubtitleSize(subtitleSizePct + 10)
+                                    2 -> updateSubtitleVertical(subtitleVerticalPct + 1)
+                                    3 -> stepBilingualSetting(1)
+                                }
+                                true
+                            }
+                            Key.Enter, Key.DirectionCenter -> {
+                                if (subtitleSettingsRow == 3) {
+                                    showSubtitleSettings = false
+                                    showBilingualSettingsDialog = true
                                 }
                                 true
                             }
@@ -4464,8 +4575,9 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
                         // subtitle, so there is nothing to hide either. The in-player reference
                         // clears provisionalMatch when it takes the track, which is what re-enables
                         // hiding for the rest of the scan.
-                        visibility = if (uiState.isFindingBestMatch && !uiState.isAiTranslating &&
-                            uiState.provisionalMatch == null
+                        visibility = if (uiState.smartBilingualActive ||
+                            (uiState.isFindingBestMatch && !uiState.isAiTranslating &&
+                                uiState.provisionalMatch == null)
                         ) {
                             android.view.View.INVISIBLE
                         } else {
@@ -4474,6 +4586,36 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
                     }
                 },
                 modifier = Modifier.fillMaxSize()
+            )
+
+            // Bilingual subtitles: the smart bilingual layer draws the two lines above the video.
+            // Fed by the same single text track; ordinary subtitle tracks (including standalone AI)
+            // are drawn by the PlayerView's SubtitleView above.
+            com.arflix.tv.ui.screens.player.subtitles.bilingual.SmartBilingualController(
+                viewModel = viewModel,
+                uiState = uiState,
+                store = embeddedSubtitleStore,
+                audioLanguage = { exoPlayer.audioFormat?.language },
+                restartingStream = restartingStreamForBilingual,
+            )
+            com.arflix.tv.ui.screens.player.subtitles.bilingual.BilingualSubtitleOverlay(
+                manager = viewModel.translationManager,
+                aiActive = uiState.smartBilingualActive,
+                hidden = false,
+                isInPictureInPicture = isInPipMode,
+                modifier = Modifier.fillMaxSize(),
+                // Player-local values make the TV +/- controls visible before the DataStore write
+                // completes; the same numbers are what ordinary subtitles use.
+                legacyAppearance = com.arflix.tv.ui.screens.player.subtitles.bilingual.LegacySubtitleAppearance(
+                    size = subtitleSizePref,
+                    sizePercent = subtitleSizePct,
+                    color = subtitleColorPref,
+                    position = subtitleOffsetPref,
+                    verticalPercent = subtitleVerticalPct,
+                    style = subtitleStylePref,
+                    font = subtitleFontPref,
+                    stylized = subtitleStylizedPref,
+                ),
             )
         }
 
@@ -4806,17 +4948,10 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
                     subtitleSyncOffsetMs = delayMs
                 },
                 subtitleSizePct = subtitleSizePct,
-                onUpdateSubtitleSize = { sizePct ->
-                    val clamped = sizePct.coerceIn(50, 250)
-                    subtitleSizePct = clamped
-                    viewModel.setSubtitleSizePct(clamped)
-                },
+                onUpdateSubtitleSize = updateSubtitleSize,
                 subtitleVerticalPct = subtitleVerticalPct,
-                hasActiveSubtitleCues = hasActiveSubtitleCues,
-                onUpdateSubtitleVerticalPosition = { vertPct ->
-                    subtitleVerticalPct = vertPct
-                    viewModel.setSubtitleVerticalPct(vertPct)
-                },
+                hasActiveSubtitleCues = hasActiveSubtitleCues || (uiState.smartBilingualActive && bilingualFrame != null),
+                onUpdateSubtitleVerticalPosition = updateSubtitleVertical,
                 onUpdateSubtitlePreload = { enabled ->
                     viewModel.setSubtitlePreloadEnabled(enabled)
                 },
@@ -5405,10 +5540,27 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
                     onRowSelect = { subtitleSettingsRow = it },
                     onOffsetDecrease = { subtitleSyncOffsetMs = (subtitleSyncOffsetMs - SUBTITLE_OFFSET_STEP_MS).coerceAtLeast(-MAX_SUBTITLE_OFFSET_MS) },
                     onOffsetIncrease = { subtitleSyncOffsetMs = (subtitleSyncOffsetMs + SUBTITLE_OFFSET_STEP_MS).coerceAtMost(MAX_SUBTITLE_OFFSET_MS) },
-                    onSizeDecrease = { subtitleSizePct = (subtitleSizePct - 10).coerceAtLeast(50) },
-                    onSizeIncrease = { subtitleSizePct = (subtitleSizePct + 10).coerceAtMost(300) },
-                    onVerticalDecrease = { subtitleVerticalPct = (subtitleVerticalPct - 1).coerceAtLeast(0) },
-                    onVerticalIncrease = { subtitleVerticalPct = (subtitleVerticalPct + 1).coerceAtMost(50) }
+                    onSizeDecrease = { updateSubtitleSize(subtitleSizePct - 10) },
+                    onSizeIncrease = { updateSubtitleSize(subtitleSizePct + 10) },
+                    onVerticalDecrease = { updateSubtitleVertical(subtitleVerticalPct - 1) },
+                    onVerticalIncrease = { updateSubtitleVertical(subtitleVerticalPct + 1) },
+                    bilingualValue = com.arflix.tv.ui.screens.player.subtitles.bilingual.bilingualSummaryValue(bilingualSettings),
+                    onBilingualPrevious = { stepBilingualSetting(-1) },
+                    onBilingualNext = { stepBilingualSetting(1) },
+                    onOpenBilingualSettings = {
+                        showSubtitleSettings = false
+                        showBilingualSettingsDialog = true
+                    },
+                )
+            }
+
+            if (showBilingualSettingsDialog) {
+                com.arflix.tv.ui.screens.player.subtitles.bilingual.BilingualSettingsDialog(
+                    onDismiss = { showBilingualSettingsDialog = false },
+                    aiAvailable = uiState.isAiAvailable || uiState.isAiTranslating,
+                    aiTranslating = uiState.isAiTranslating,
+                    onEnableAiTranslation = { viewModel.activateAiTranslation() },
+                    inPlayer = true,
                 )
             }
 
@@ -8099,7 +8251,11 @@ private fun PlayerSubtitleSettingsPanel(
     onSizeDecrease: () -> Unit,
     onSizeIncrease: () -> Unit,
     onVerticalDecrease: () -> Unit,
-    onVerticalIncrease: () -> Unit
+    onVerticalIncrease: () -> Unit,
+    bilingualValue: String = "",
+    onBilingualPrevious: (() -> Unit)? = null,
+    onBilingualNext: (() -> Unit)? = null,
+    onOpenBilingualSettings: (() -> Unit)? = null,
 ) {
     val accent = LocalAccentColorOverride.current ?: Color.White
 
@@ -8148,6 +8304,21 @@ private fun PlayerSubtitleSettingsPanel(
             onDecrease = onVerticalDecrease,
             onIncrease = onVerticalIncrease
         )
+        if (onOpenBilingualSettings != null) {
+            PlayerSubtitleSettingRow(
+                label = com.arflix.tv.ui.screens.player.subtitles.bilingual.bt("Bilingual Subtitles"),
+                value = bilingualValue,
+                selected = selectedRow == 3,
+                accent = accent,
+                onClick = {
+                    onRowSelect(3)
+                    onOpenBilingualSettings()
+                },
+                onValueClick = onOpenBilingualSettings,
+                onDecrease = { onBilingualPrevious?.invoke() },
+                onIncrease = { onBilingualNext?.invoke() },
+            )
+        }
     }
 }
 
@@ -8160,7 +8331,8 @@ private fun PlayerSubtitleSettingRow(
     accent: Color,
     onClick: () -> Unit,
     onDecrease: () -> Unit,
-    onIncrease: () -> Unit
+    onIncrease: () -> Unit,
+    onValueClick: (() -> Unit)? = null,
 ) {
     val rowBg = if (selected) Color.White.copy(alpha = 0.08f) else Color.Transparent
     val valueColor = if (selected) accent else Color.White
@@ -8207,7 +8379,16 @@ private fun PlayerSubtitleSettingRow(
             Text(
                 text = value,
                 style = ArflixTypography.body.copy(fontWeight = FontWeight.Bold, fontSize = 16.sp),
-                color = valueColor
+                color = valueColor,
+                modifier = if (onValueClick != null) {
+                    Modifier.clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        onClick = onValueClick
+                    )
+                } else {
+                    Modifier
+                }
             )
             Box(
                 modifier = Modifier
