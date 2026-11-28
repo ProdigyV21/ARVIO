@@ -797,21 +797,32 @@ fun EpgGrid(
                                 }
                             }
                         }
+                        // Keys by reference and results reused when equal: a guide refresh
+                        // publishes new-but-equal IptvNowNext objects, and Compose then kept
+                        // the old key and deep-compared the whole programme list on every
+                        // recomposition of every visible row (~15% of the main thread per
+                        // horizontal step on a TV).
+                        val previousRow = remember(ch.id) { arrayOfNulls<Any>(2) }
                         val rowGuide = remember(
                             ch.id,
-                            nowNext[ch.id],
-                            indexedGuideNowNext[ch.id],
+                            ByReference(nowNext[ch.id]),
+                            ByReference(indexedGuideNowNext[ch.id]),
                             clockTickMillis,
                         ) {
-                            mergeGuideSlices(nowNext[ch.id], indexedGuideNowNext[ch.id], clockTickMillis)
+                            val merged = mergeGuideSlices(nowNext[ch.id], indexedGuideNowNext[ch.id], clockTickMillis)
+                            val previous = previousRow[0] as IptvNowNext?
+                            (if (previous != null && merged == previous) previous else merged).also { previousRow[0] = it }
                         }
                         val rowPrograms = remember(
-                            rowGuide,
+                            ByReference(rowGuide),
                             windowStartMillis,
                             windowEndMillis,
                         ) {
-                            rowGuide?.let { programsInWindow(it, windowStartMillis, windowEndMillis) }
-                                ?: emptyList()
+                            @Suppress("UNCHECKED_CAST")
+                            val previous = previousRow[1] as List<IptvProgram>?
+                            (rowGuide?.let { programsInWindow(it, windowStartMillis, windowEndMillis) } ?: emptyList())
+                                .reuseIfEqual(previous)
+                                .also { previousRow[1] = it }
                         }
                         val hasFocusable = remember(ch, rowPrograms, clockTickMillis) {
                             hasFocusablePrograms(ch, rowPrograms, clockTickMillis)
