@@ -1802,6 +1802,7 @@
     <string name="trakt_not_authenticated">לא מאומת מול Trakt</string>
     <string name="trakt_reconnect_required">ההרשאה שלך ב-Trakt פגה או בוטלה. יש לחבר את Trakt מחדש כדי להמשיך בסנכרון.</string>
     <string name="trakt_sync_refresh_failed">ההיסטוריה יובאה, אך לא ניתן היה לרענן במלואו את המשך הצפייה. הפריטים השמורים נשמרו; יש לנסות שוב מאוחר יותר.</string>
+    <string name="trakt_sync_paused_notice">Trakt לא סונכרן כבר יותר משעה. ARVIO ממשיכה לנסות; אם המצב נמשך, יש לחבר מחדש את Trakt בהגדרות.</string>
     <string name="trakt_session_unavailable">לא ניתן היה להגיע ל-Trakt, ולכן הסנכרון מושהה. ARVIO ממשיכה לנסות; אם המצב נמשך, יש לחבר מחדש את Trakt.</string>
     <string name="trakt_library_unavailable">לא ניתן להגיע ל-Trakt כרגע. יש לנסות שוב בעוד כמה דקות.</string>
     <string name="trakt_library_load_failed">לא ניתן לטעון את הרשימה הזו מ-Trakt. יש לנסות שוב.</string>

@@ -115,6 +115,7 @@ class TraktSessionTest {
             every { profileStringKeyFor(any(), any()) } answers { stringPreferencesKey("${firstArg<String>()}_${secondArg<String>()}") }
             every { profileLongKeyFor(any(), any()) } answers { longPreferencesKey("${firstArg<String>()}_${secondArg<String>()}") }
             every { profileBooleanKeyFor(any(), any()) } answers { booleanPreferencesKey("${firstArg<String>()}_${secondArg<String>()}") }
+            every { profileIntKeyFor(any(), any()) } answers { intPreferencesKey("${firstArg<String>()}_${secondArg<String>()}") }
         }
         session = TraktSession(RuntimeEnvironment.getApplication(), profiles, api)
         session.save(token(), "a")
@@ -163,6 +164,70 @@ class TraktSessionTest {
         assertNull(session.accessToken())
         assertTrue(session.connection.first().reconnectRequired)
         coVerify(exactly = 3) { api.refreshToken(any()) }
+    }
+
+    @Test fun refusalsCountAcrossAppRestartsUntilReconnectIsRequired() = runBlocking {
+        coEvery { api.refreshToken(any()) } throws http(403)
+        repeat(2) {
+            // A TV app restarts between retries: each attempt comes from a new process.
+            val restarted = TraktSession(RuntimeEnvironment.getApplication(), profiles, api)
+            assertNull(restarted.accessToken())
+            assertFalse(restarted.connection.first().reconnectRequired)
+        }
+        val third = TraktSession(RuntimeEnvironment.getApplication(), profiles, api)
+        assertNull(third.accessToken())
+        assertTrue(third.connection.first().reconnectRequired)
+        coVerify(exactly = 3) { api.refreshToken(any()) }
+    }
+
+    @Test fun aNewRefreshTokenStartsTheRefusalCountOver() = runBlocking {
+        coEvery { api.refreshToken(any()) } throws http(403)
+        repeat(2) { assertNull(TraktSession(RuntimeEnvironment.getApplication(), profiles, api).accessToken()) }
+        session.save(token(refresh = "fresh-login"), "a")
+        repeat(2) { assertNull(TraktSession(RuntimeEnvironment.getApplication(), profiles, api).accessToken()) }
+        assertFalse(session.connection.first().reconnectRequired)
+    }
+
+    @Test fun failedRenewalRecordsWhenSyncingPausedUntilARenewalWorks() = runBlocking {
+        val start = System.currentTimeMillis()
+        var now = start
+        session.clock = { now }
+        assertNull(session.syncPause.first())
+        coEvery { api.refreshToken(any()) } throws http(503)
+        assertNull(session.accessToken())
+        assertEquals(TraktSyncPause("a", start), session.syncPause.first())
+        // Later failures keep the first time, so a long outage is recognised as long.
+        now += 10 * 60_000L
+        assertNull(session.accessToken())
+        assertEquals(start, session.syncPause.first()?.since)
+        coEvery { api.refreshToken(any()) } returns token("new", "rotated", 86_400)
+        now += 10 * 60_000L  // past the retry wait
+        assertEquals("new", session.accessToken())
+        assertNull(session.syncPause.first())
+    }
+
+    @Test fun pauseIsNotRecordedWithoutAConnectionOrOnceReconnectIsRequired() = runBlocking {
+        coEvery { api.refreshToken(any()) } throws http(400, """{"error":"invalid_grant"}""")
+        assertNull(session.accessToken())
+        assertTrue(session.connection.first().reconnectRequired)
+        assertNull(session.syncPause.first())
+        session.disconnect()
+        assertNull(session.accessToken())
+        assertNull(session.syncPause.first())
+    }
+
+    @Test fun aSuccessfulRequestEndsARecordedPause() = runBlocking {
+        coEvery { api.refreshToken(any()) } throws http(503)
+        assertNull(session.accessToken())
+        assertNotNull(session.syncPause.first())
+        // Another device's rotation arrived with a working token.
+        session.save(token("cloud", "cloud-refresh", 86_400), "a")
+        assertNull(session.syncPause.first())
+        coEvery { api.refreshToken(any()) } throws http(503)
+        session.save(token(expires = 86_400), "a")
+        store.edit { it[longPreferencesKey("a_trakt_sync_paused_since")] = 5L }
+        assertEquals("ok", session.authorized { "ok" })
+        assertNull(session.syncPause.first())
     }
 
     @Test fun rotatedTokenIsPublishedToCloudForOtherDevices() = runBlocking {
