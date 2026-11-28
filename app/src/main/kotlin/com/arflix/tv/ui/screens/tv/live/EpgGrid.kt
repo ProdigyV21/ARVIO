@@ -797,21 +797,32 @@ fun EpgGrid(
                                 }
                             }
                         }
+                        // Keys by reference and results reused when equal: a guide refresh
+                        // publishes new-but-equal IptvNowNext objects, and Compose then kept
+                        // the old key and deep-compared the whole programme list on every
+                        // recomposition of every visible row (~15% of the main thread per
+                        // horizontal step on a TV).
+                        val previousRow = remember(ch.id) { arrayOfNulls<Any>(2) }
                         val rowGuide = remember(
                             ch.id,
-                            nowNext[ch.id],
-                            indexedGuideNowNext[ch.id],
+                            ByReference(nowNext[ch.id]),
+                            ByReference(indexedGuideNowNext[ch.id]),
                             clockTickMillis,
                         ) {
-                            mergeGuideSlices(nowNext[ch.id], indexedGuideNowNext[ch.id], clockTickMillis)
+                            val merged = mergeGuideSlices(nowNext[ch.id], indexedGuideNowNext[ch.id], clockTickMillis)
+                            val previous = previousRow[0] as IptvNowNext?
+                            (if (previous != null && merged == previous) previous else merged).also { previousRow[0] = it }
                         }
                         val rowPrograms = remember(
-                            rowGuide,
+                            ByReference(rowGuide),
                             windowStartMillis,
                             windowEndMillis,
                         ) {
-                            rowGuide?.let { programsInWindow(it, windowStartMillis, windowEndMillis) }
-                                ?: emptyList()
+                            @Suppress("UNCHECKED_CAST")
+                            val previous = previousRow[1] as List<IptvProgram>?
+                            (rowGuide?.let { programsInWindow(it, windowStartMillis, windowEndMillis) } ?: emptyList())
+                                .reuseIfEqual(previous)
+                                .also { previousRow[1] = it }
                         }
                         val hasFocusable = remember(ch, rowPrograms, clockTickMillis) {
                             hasFocusablePrograms(ch, rowPrograms, clockTickMillis)
@@ -1133,6 +1144,14 @@ private fun ProgramsRow(
                 val placementIsNow = placement.isNow(nowMillis)
                 val placementIsPast = placement.isPast(nowMillis)
                 key(placement.startMillis, placement.endMillis) {
+                    // The sticky-title shift only changes for the cell crossing the left
+                    // edge. Reading the scroll offset directly in every cell's layout
+                    // re-measured every programme of every visible row on each scroll
+                    // frame (95% janky horizontal steps on a TV); through derivedStateOf
+                    // only cells whose shift actually changes are invalidated.
+                    val contentShiftPx = remember(cellOffsetPx, maxShiftPx) {
+                        derivedStateOf { (hScrollOffsetPx() - cellOffsetPx).coerceIn(0f, maxShiftPx).toInt() }
+                    }
                     ProgramCell(
                         program = placement.program,
                         clockTickMillis = clockTickMillis,
@@ -1145,9 +1164,7 @@ private fun ProgramsRow(
                         isCatchupSupported = isCatchupSupported,
                         isReminded = remindedProgrammeIds.isNotEmpty() &&
                             programmeReminderId(channel.id, placement.program) in remindedProgrammeIds,
-                        contentStartOffsetPx = {
-                            (hScrollOffsetPx() - cellOffsetPx).coerceIn(0f, maxShiftPx).toInt()
-                        },
+                        contentStartOffsetPx = { contentShiftPx.value },
                         onClick = {
                             epgProgramActionTarget(
                                 program = placement.program,

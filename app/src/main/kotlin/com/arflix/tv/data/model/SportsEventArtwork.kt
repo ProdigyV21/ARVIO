@@ -1,5 +1,7 @@
 package com.arflix.tv.data.model
 
+import com.arflix.tv.util.replaceLiteral
+
 import com.arflix.tv.data.api.StremioMetaPreview
 import java.net.URI
 import java.text.Normalizer
@@ -45,24 +47,24 @@ private inline fun memo(cache: java.util.concurrent.ConcurrentHashMap<String, St
 fun sportsArtworkKey(title: String): String = memo(artworkKeyCache, title) { computeSportsArtworkKey(title) }
 
 private fun computeSportsArtworkKey(title: String): String = Normalizer.normalize(title, Normalizer.Form.NFD)
-    .replace(marks, "").lowercase(Locale.ROOT)
-    .replace(livePrefix, "").replace(sportPrefix, "")
-    .replace(versus, "vs ").replace(punctuation, " ").trim()
+    .replaceLiteral(marks, "").lowercase(Locale.ROOT)
+    .replaceLiteral(livePrefix, "").replaceLiteral(sportPrefix, "")
+    .replaceLiteral(versus, "vs ").replaceLiteral(punctuation, " ").trim()
 
 /** Only cosmetic title differences are ignored. Age/gender/round qualifiers remain. */
 fun sportsEventIdentity(title: String): String = memo(eventIdentityCache, title) { computeSportsEventIdentity(title) }
 
 private fun computeSportsEventIdentity(title: String): String {
-    val plain = title.replace(cosmeticTags, " ")
+    val plain = title.replaceLiteral(cosmeticTags, " ")
     val matchup = plain.substringAfterLast(':').substringBefore(',').trim()
     val normalized = sportsArtworkKey((if (matchupSeparator.containsMatchIn(matchup)) matchup else plain)
-        .replace(matchupSeparator, " vs "))
+        .replaceLiteral(matchupSeparator, " vs "))
     val sides = normalized.split(" vs ")
     return if (sides.size == 2 && sides.all { it.length >= 3 }) sides.sorted().joinToString(" vs ") else normalized
 }
 
 fun sportsQualifierKey(text: String): String = qualifierRegex
-    .findAll(text.lowercase(Locale.ROOT)).map { it.value.replace(womenPrefixRegex, "women").replace("under", "u").replace(hyphenSpaceRegex, "") }
+    .findAll(text.lowercase(Locale.ROOT)).map { it.value.replaceLiteral(womenPrefixRegex, "women").replace("under", "u").replaceLiteral(hyphenSpaceRegex, "") }
     .toSet().sorted().joinToString("|")
 
 fun safeSportsImage(image: String?): String? = image?.takeIf { it.length <= 2048 && !it.contains("_UTC", true) }?.let {

@@ -1,5 +1,7 @@
 package com.arflix.tv.ui.screens.tv.live
 
+import com.arflix.tv.util.replaceLiteral
+
 import com.arflix.tv.data.model.MediaItem
 import com.arflix.tv.data.model.MediaType
 import com.arflix.tv.data.model.IptvProgram
@@ -192,10 +194,10 @@ private val EPG_TITLE_NON_ALPHANUMERIC = Regex("""[^a-z0-9]+""")
 
 private fun normalizedEpgVodTitle(title: String): String = title
     .trim()
-    .replace(EPG_TITLE_YEAR_SUFFIX, "")
+    .replaceLiteral(EPG_TITLE_YEAR_SUFFIX, "")
     .lowercase()
     .replace("&", "and")
-    .replace(EPG_TITLE_NON_ALPHANUMERIC, "")
+    .replaceLiteral(EPG_TITLE_NON_ALPHANUMERIC, "")
 
 internal fun selectConfidentEpgVodMatch(
     programTitle: String,

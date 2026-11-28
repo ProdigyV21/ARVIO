@@ -1,5 +1,7 @@
 package com.arflix.tv.ui.screens.tv.live
 
+import com.arflix.tv.util.replaceLiteral
+
 import java.text.Normalizer
 
 /**
@@ -22,8 +24,8 @@ internal object GuideSourceSuggestions {
         var text = Normalizer.normalize(name, Normalizer.Form.NFD)
             .replace(Regex("\\p{Mn}+"), "")
             .lowercase()
-        repeat(2) { text = text.replace(tagPattern, "") }
-        text = text.replace(bracketPattern, " ")
+        repeat(2) { text = text.replaceLiteral(tagPattern, "") }
+        text = text.replaceLiteral(bracketPattern, " ")
         return text.split(nonWord).filter { it.isNotBlank() && it !in qualityWords }
     }
 

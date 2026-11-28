@@ -1,5 +1,7 @@
 package com.arflix.tv.data.model
 
+import com.arflix.tv.util.replaceLiteral
+
 /**
  * A team or competition the user follows on the Sports page. Synced with the
  * account per profile, so "My sports" is the same on every device.
@@ -39,7 +41,7 @@ private val leagueCountries = Regex("^(?:english|spanish|italian|german|french|d
 /** Names compare without accents, punctuation, club affixes or a league's country adjective. */
 fun sportsFollowKey(name: String, league: Boolean = false): String {
     val key = sportsArtworkKey(name)
-    return if (league) key.replace(leagueCountries, "").trim() else key.replace(followAffixes, "").trim()
+    return if (league) key.replaceLiteral(leagueCountries, "").trim() else key.replaceLiteral(followAffixes, "").trim()
 }
 
 /** Followed teams and competitions, at most this many, so the synced field stays small. */

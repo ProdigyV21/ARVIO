@@ -1,5 +1,7 @@
 package com.arflix.tv.ui.screens.tv.live
 
+import com.arflix.tv.util.replaceLiteral
+
 import android.content.Context
 import android.graphics.drawable.BitmapDrawable
 import androidx.compose.animation.animateColorAsState
@@ -429,7 +431,7 @@ internal fun sportsChannelBadge(name: String): String {
         if (next == rest || next.isBlank()) return@repeat
         rest = next
     }
-    return rest.replace(channelQualityTail, "").trim().ifBlank { name.trim() }
+    return rest.replaceLiteral(channelQualityTail, "").trim().ifBlank { name.trim() }
 }
 
 // ---------------------------------------------------------------------------------------
@@ -1015,7 +1017,7 @@ private val sportsTeamSuffix =
  */
 internal fun sportsCountryFlag(name: String): String? {
     val key = name.trim().lowercase(Locale.ROOT)
-        .replace(sportsTeamSuffix, "").trim()
+        .replaceLiteral(sportsTeamSuffix, "").trim()
     val code = countryCodes[key] ?: return null
     return when (code) {
         "GB-ENG" -> "\uD83C\uDFF4\uDB40\uDC67\uDB40\uDC62\uDB40\uDC65\uDB40\uDC6E\uDB40\uDC67\uDB40\uDC7F"

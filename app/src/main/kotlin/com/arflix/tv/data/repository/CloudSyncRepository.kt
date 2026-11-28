@@ -40,6 +40,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONException
 import org.json.JSONObject
@@ -796,7 +797,9 @@ class CloudSyncRepository @Inject constructor(
      * Builds the full cloud snapshot JSON for all profiles.
      * This replaces the SettingsViewModel version and does NOT reference any UI state.
      */
-    suspend fun buildCloudSnapshotJson(): String {
+    suspend fun buildCloudSnapshotJson(): String = withContext(Dispatchers.IO) { buildCloudSnapshotJsonOffMain() }
+
+    private suspend fun buildCloudSnapshotJsonOffMain(): String {
         val prefs = context.settingsDataStore.data.first()
         val root = JSONObject()
         val profiles = profileRepository.getProfiles()
@@ -1517,7 +1520,11 @@ class CloudSyncRepository @Inject constructor(
      * Restores the full cloud state to local repositories.
      * Returns [RestoreResult] indicating what happened.
      */
-    suspend fun pullFromCloud(pushPendingLocalFirst: Boolean = true): RestoreResult = cloudSyncMutex.withLock {
+    // JSON-heavy (payload parse, snapshot build): callers launch from the main thread.
+    suspend fun pullFromCloud(pushPendingLocalFirst: Boolean = true): RestoreResult =
+        withContext(Dispatchers.IO) { pullFromCloudOffMain(pushPendingLocalFirst) }
+
+    private suspend fun pullFromCloudOffMain(pushPendingLocalFirst: Boolean): RestoreResult = cloudSyncMutex.withLock {
         forgetOperationRemotePayload()
         val hasPendingLocalChanges = hasPendingLocalChanges()
         if (pushPendingLocalFirst && hasPendingLocalChanges) {

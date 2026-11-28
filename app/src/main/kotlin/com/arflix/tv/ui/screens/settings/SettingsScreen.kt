@@ -374,6 +374,16 @@ internal const val MUSIC_PHONE_TAB_ROW = 69
 internal const val MUSIC_SOURCES_ROW = 70
 internal const val MUSIC_CACHE_ROW = 71
 
+/**
+ * Gives [content] its own recompose scope, so state it reads (the selected section)
+ * restarts only this block instead of the whole SettingsScreen body.
+ */
+@Composable
+private fun SettingsRecomposeScope(content: @Composable () -> Unit) = content()
+
+/** Pause on a settings section before its panel is composed (TV section column). */
+private const val SETTINGS_SECTION_SETTLE_MS = 140L
+
 /** The optional tab a navigation switch row controls. */
 internal fun navigationSectionForRow(rowId: Int): String =
     when (rowId) {
@@ -684,6 +694,11 @@ fun SettingsScreen(
     var sidebarFocusIndex by remember { mutableIntStateOf(com.arflix.tv.ui.components.topBarSelectedIndex(SidebarItem.SETTINGS, hasProfile)) }
     com.arflix.tv.ui.components.ReconcileTopBarFocus(sidebarFocusIndex, hasProfile) { sidebarFocusIndex = it }
     var sectionIndex by remember { mutableIntStateOf(initialSectionIdx ?: 0) }
+    // The section the right-hand panel shows. The section column moves at once, but the
+    // panel only follows once the user pauses on a section: composing a full settings
+    // panel for every section passed while holding the D-pad cost 80-150 ms frames on
+    // real TVs.
+    var contentSectionIndex by remember { mutableIntStateOf(initialSectionIdx ?: 0) }
     var mobilePage by remember(initialSection) {
         mutableStateOf(
             when (initialSection) {
@@ -709,6 +724,15 @@ fun SettingsScreen(
     var pluginsEnterTrigger by remember { mutableIntStateOf(-1) }
     var pluginsModalOpen by remember { mutableStateOf(false) }
     var activeZone by remember { mutableStateOf(if (arrivesAtTopLevel) Zone.SIDEBAR else Zone.CONTENT) }
+    // sectionIndex is observed outside composition here and below: reading it in the
+    // SettingsScreen body restarted the whole (very large) screen on every section step.
+    LaunchedEffect(activeZone) {
+        snapshotFlow { sectionIndex }.collectLatest { index ->
+            if (contentSectionIndex == index) return@collectLatest
+            if (!isTouchDevice && activeZone == Zone.SECTION) kotlinx.coroutines.delay(SETTINGS_SECTION_SETTLE_MS)
+            contentSectionIndex = index
+        }
+    }
 
     // Sub-focus for stream integration rows: 0 = toggle, 1 = up, 2 = down, 3 = configure
     var integrationActionIndex by remember { mutableIntStateOf(0) }
@@ -871,9 +895,9 @@ fun SettingsScreen(
     }
 
     val focusRequester = remember { FocusRequester() }
-    val scrollState = key(sectionIndex, showIptvCategoriesSettings) { rememberScrollState() }
+    val scrollState = key(contentSectionIndex, showIptvCategoriesSettings) { rememberScrollState() }
     val sectionScrollState = rememberScrollState()
-    val focusTracker = remember(sectionIndex, showIptvCategoriesSettings) { SettingsFocusTracker() }
+    val focusTracker = remember(contentSectionIndex, showIptvCategoriesSettings) { SettingsFocusTracker() }
     val sectionFocusTracker = remember { SettingsFocusTracker() }
     val openSubtitlePicker = {
         viewModel.refreshSubtitleOptions()
@@ -975,32 +999,34 @@ fun SettingsScreen(
     }
 
     // Reset content scroll AND position cache when switching sections.
-    LaunchedEffect(sectionIndex, uiState.catalogs.size) {
-        if (sections[sectionIndex] == "catalogs") {
+    LaunchedEffect(contentSectionIndex, uiState.catalogs.size) {
+        if (sections[contentSectionIndex] == "catalogs") {
             contentFocusIndex = contentFocusIndex.coerceAtMost(uiState.catalogs.size + 2)
         }
     }
 
-    LaunchedEffect(sectionIndex, activeZone, sections.size) {
+    LaunchedEffect(activeZone, sections.size) {
         if (isTouchDevice || activeZone != Zone.SECTION) return@LaunchedEffect
-        androidx.compose.runtime.withFrameNanos { }
-        sectionFocusTracker.revealDelta(sectionIndex)?.let { delta ->
-            val target = (sectionScrollState.value + delta).toInt().coerceIn(0, sectionScrollState.maxValue)
-            if (target != sectionScrollState.value) sectionScrollState.animateScrollTo(target, tween(100, easing = FastOutSlowInEasing))
-            return@LaunchedEffect
-        }
-        val maxScroll = sectionScrollState.maxValue
-        if (maxScroll <= 0) return@LaunchedEffect
-        val maxIndex = sections.lastIndex.coerceAtLeast(1)
-        val ratio = sectionIndex.coerceIn(0, maxIndex).toFloat() / maxIndex.toFloat()
-        val targetScroll = (maxScroll * ratio).toInt().coerceIn(0, maxScroll)
-        if (abs(sectionScrollState.value - targetScroll) > 24) {
-            // Keep the transition short and cancellable. A long default spring
-            // makes rapid DPAD presses feel delayed and leaves the sidebar behind.
-            sectionScrollState.animateScrollTo(
-                targetScroll,
-                animationSpec = tween(100, easing = FastOutSlowInEasing)
-            )
+        snapshotFlow { sectionIndex }.collectLatest { index ->
+            androidx.compose.runtime.withFrameNanos { }
+            sectionFocusTracker.revealDelta(index)?.let { delta ->
+                val target = (sectionScrollState.value + delta).toInt().coerceIn(0, sectionScrollState.maxValue)
+                if (target != sectionScrollState.value) sectionScrollState.animateScrollTo(target, tween(100, easing = FastOutSlowInEasing))
+                return@collectLatest
+            }
+            val maxScroll = sectionScrollState.maxValue
+            if (maxScroll <= 0) return@collectLatest
+            val maxIndex = sections.lastIndex.coerceAtLeast(1)
+            val ratio = index.coerceIn(0, maxIndex).toFloat() / maxIndex.toFloat()
+            val targetScroll = (maxScroll * ratio).toInt().coerceIn(0, maxScroll)
+            if (abs(sectionScrollState.value - targetScroll) > 24) {
+                // Keep the transition short and cancellable. A long default spring
+                // makes rapid DPAD presses feel delayed and leaves the sidebar behind.
+                sectionScrollState.animateScrollTo(
+                    targetScroll,
+                    animationSpec = tween(100, easing = FastOutSlowInEasing)
+                )
+            }
         }
     }
 
@@ -1008,13 +1034,13 @@ fun SettingsScreen(
     // subpage gets its own tracker even if its first focused index is unchanged.
     LaunchedEffect(
         focusTracker,
-        sectionIndex,
+        contentSectionIndex,
         activeZone,
         uiState.catalogs.size,
         uiState.addons.size
     ) {
         if (activeZone != Zone.CONTENT) return@LaunchedEffect
-        if (!isTouchDevice && sections[sectionIndex] == "catalogs") return@LaunchedEffect
+        if (!isTouchDevice && sections[contentSectionIndex] == "catalogs") return@LaunchedEffect
 
         // Observe focus outside composition. Restarting the whole SettingsScreen for
         // every row move recreates unrelated panels and their callbacks on the UI thread.
@@ -1039,7 +1065,7 @@ fun SettingsScreen(
             val maxScroll = scrollState.maxValue
             val currentScroll = scrollState.value
             if (maxScroll <= 0) return@collectLatest
-            val currentSection = sections.getOrNull(sectionIndex).orEmpty()
+            val currentSection = sections.getOrNull(contentSectionIndex).orEmpty()
             val maxIndex = sectionMaxIndex(currentSection).coerceAtLeast(1)
             val clampedFocus = focusedIndex.coerceIn(0, maxIndex)
             val ratio = clampedFocus.toFloat() / maxIndex.toFloat()
@@ -2117,6 +2143,7 @@ fun SettingsScreen(
                             .onGloballyPositioned { sectionFocusTracker.viewport = it }
                             .verticalScroll(sectionScrollState)
                     ) {
+                      SettingsRecomposeScope {
                         sections.forEachIndexed { index, section ->
                             val group = tvSettingsSidebarGroup(section)
                             val previousGroup = sections.getOrNull(index - 1)?.let { tvSettingsSidebarGroup(it) }
@@ -2177,6 +2204,7 @@ fun SettingsScreen(
 
                             Spacer(modifier = Modifier.height(6.dp))
                         }
+                      }
                     }
 
                     Spacer(modifier = Modifier.height(12.dp))
@@ -2196,22 +2224,22 @@ fun SettingsScreen(
                         .fillMaxSize()
                         .testTag("settings-content")
                         .onGloballyPositioned { focusTracker.viewport = it }
-                        .then(if (sections[sectionIndex] == "catalogs") Modifier else Modifier.verticalScroll(scrollState))
+                        .then(if (sections[contentSectionIndex] == "catalogs") Modifier else Modifier.verticalScroll(scrollState))
                         .padding(start = 28.dp)
                 ) {
-                  if (sections[sectionIndex] != "catalogs") {
+                  if (sections[contentSectionIndex] != "catalogs") {
                     TvSettingsSectionHeader(
-                        section = sections[sectionIndex],
+                        section = sections[contentSectionIndex],
                         uiState = uiState,
                         addonCount = stremioAddons.size
                     )
                     Spacer(modifier = Modifier.height(12.dp))
                   }
                   CompositionLocalProvider(LocalSettingsFocusTracker provides focusTracker) {
-                    when (sections[sectionIndex]) {
+                    when (sections[contentSectionIndex]) {
                         in tvGeneralSectionIds -> {
                         TvGeneralSettingsRows(
-                            section = sections[sectionIndex],
+                            section = sections[contentSectionIndex],
                             defaultSubtitle = uiState.defaultSubtitle,
                             secondarySubtitle = uiState.secondarySubtitle,
                             defaultAudioLanguage = uiState.defaultAudioLanguage,

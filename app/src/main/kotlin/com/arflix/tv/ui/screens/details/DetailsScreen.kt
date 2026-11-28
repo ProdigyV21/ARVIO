@@ -7,7 +7,6 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.content.Intent
 import android.net.Uri
-import android.os.Build
 import android.os.SystemClock
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
@@ -74,7 +73,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.runtime.mutableStateMapOf
 import com.arflix.tv.data.repository.effectiveSettingsDataStore as settingsDataStore
@@ -4101,8 +4099,12 @@ internal fun EpisodeCard(
         else -> 0.dp
     }
 
-    val imageRequest = remember(episode.stillPath, cardWidth, context, density) {
-        val widthPx = with(density) { cardWidth.roundToPx() }
+    val spoilerStill = spoilerBlurEnabled && !episode.isWatched
+    val imageRequest = remember(episode.stillPath, cardWidth, context, density, spoilerStill) {
+        // A spoiler still is decoded tiny and scaled up, which blurs it for free. The
+        // RenderEffect blur it replaces re-ran on the GPU for every card on every frame
+        // of a row scroll, which TV GPUs cannot keep up with.
+        val widthPx = if (spoilerStill) 24 else with(density) { cardWidth.roundToPx() }
         val heightPx = (widthPx / aspectRatio).toInt().coerceAtLeast(1)
         ImageRequest.Builder(context)
             .data(episode.stillPath)
@@ -4150,9 +4152,7 @@ internal fun EpisodeCard(
                 contentScale = ContentScale.Crop,
                 modifier = Modifier
                     .fillMaxSize()
-                    .then(
-                        if (isSpoilerBlurred && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) Modifier.blur(20.dp) else Modifier
-                    )
+
             )
 
             Box(
@@ -4169,21 +4169,6 @@ internal fun EpisodeCard(
                         )
                     )
             )
-
-            if (isSpoilerBlurred && Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(Color.Black.copy(alpha = 0.85f)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = stringResource(R.string.details_spoiler),
-                        style = ArvioSkin.typography.caption.copy(fontWeight = FontWeight.Bold),
-                        color = Color.White.copy(alpha = 0.6f)
-                    )
-                }
-            }
 
             Row(
                 modifier = Modifier

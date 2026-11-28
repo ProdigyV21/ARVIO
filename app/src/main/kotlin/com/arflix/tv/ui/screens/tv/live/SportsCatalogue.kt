@@ -1,5 +1,7 @@
 package com.arflix.tv.ui.screens.tv.live
 
+import com.arflix.tv.util.replaceLiteral
+
 import com.arflix.tv.data.model.IptvChannel
 import com.arflix.tv.data.model.IptvProgram
 import com.arflix.tv.data.model.SportsEventArtwork
@@ -25,7 +27,7 @@ private val stationNumber = Regex("\\b(sports|espn)(\\d+)\\b")
 private val channelSpaces = Regex("\\s+")
 private val titlePrefixes = listOf("football", "soccer", "basketball", "baseball", "tennis", "ice hockey", "american football", "boxing", "mma", "cricket")
 internal fun sportsChannelKey(name: String): String {
-    val plain = name.replace(channelQuality, "").replace("+", " plus ")
+    val plain = name.replaceLiteral(channelQuality, "").replace("+", " plus ")
     val lower = plain.lowercase(java.util.Locale.ROOT)
     // Provider labels are mostly ASCII. Avoid Unicode normalization and the
     // event-title regex pipeline for every channel in a 50k-channel playlist.
@@ -42,10 +44,10 @@ internal fun sportsChannelKey(name: String): String {
         }
     }
     if (key.contains("nowtv")) key = key.replace(channelPackage, "$1 ")
-    if (key.contains("tnt sport")) key = key.replace(tntStation, "tnt sports")
+    if (key.contains("tnt sport")) key = key.replaceLiteral(tntStation, "tnt sports")
     if (key.contains("bein")) key = key.replace(beinStation, "bein sports $1")
     if (key.contains("sports") || key.contains("espn")) key = key.replace(stationNumber, "$1 $2")
-    return if (key.contains("  ") || key.endsWith(' ')) key.replace(channelSpaces, " ").trim() else key
+    return if (key.contains("  ") || key.endsWith(' ')) key.replaceLiteral(channelSpaces, " ").trim() else key
 }
 private val broadcasterRegions = java.util.Locale.getISOCountries().associate { code ->
     val locale = java.util.Locale("", code)

@@ -4,6 +4,8 @@
 
 package com.arflix.tv.ui.screens.tv.live
 
+import com.arflix.tv.util.replaceLiteral
+
 import com.arflix.tv.network.iptvProviderCooldownMs
 import com.arflix.tv.network.IptvProviderRequestGuard
 import com.arflix.tv.network.isIptvProviderRequestPaused
@@ -467,8 +469,8 @@ private fun EnrichedChannel.guideFallbackKeys(): List<String> {
         "name",
         name
             .substringAfter('|', missingDelimiterValue = name)
-            .replace(LiveTvScreenRegexes.QUALITY_REMOVAL, " ")
-            .replace(LiveTvScreenRegexes.MULTI_SPACE, " ")
+            .replaceLiteral(LiveTvScreenRegexes.QUALITY_REMOVAL, " ")
+            .replaceLiteral(LiveTvScreenRegexes.MULTI_SPACE, " ")
             .trim()
     )
 
@@ -2245,7 +2247,10 @@ fun LiveTvScreen(
             sportsLoading = true
             sportsError = false
             try {
-                val result = withContext(Dispatchers.IO) {
+                // Off screen this SQLite pass over the 48-hour guide runs on a low-priority
+                // thread: on the IO pool it kept normal-priority threads busy for minutes on
+                // 50k-channel playlists, starving the guide and the player on TV boxes.
+                val result = withContext(LiveSportsWorkPolicy.guideScanDispatcher(latestSportsSelected)) {
                     val startedAt = android.os.SystemClock.elapsedRealtime()
                     val context = kotlinx.coroutines.currentCoroutineContext()
                     val candidateIds = linkedSetOf<String>()
@@ -6286,8 +6291,8 @@ private val IptvGroupWhitespaceRegex = Regex("""\s+""")
 private fun looseIptvGroupKey(group: String?): String {
     return group.orEmpty()
         .trim()
-        .replace(IptvGroupPipeSpacingRegex, "|")
-        .replace(IptvGroupWhitespaceRegex, " ")
+        .replaceLiteral(IptvGroupPipeSpacingRegex, "|")
+        .replaceLiteral(IptvGroupWhitespaceRegex, " ")
         .lowercase()
 }
 

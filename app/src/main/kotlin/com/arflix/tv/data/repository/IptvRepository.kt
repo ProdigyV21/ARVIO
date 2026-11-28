@@ -1,5 +1,7 @@
 package com.arflix.tv.data.repository
 
+import com.arflix.tv.util.replaceLiteral
+
 import android.content.Context
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
@@ -45,6 +47,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.runInterruptible
@@ -175,6 +178,9 @@ private object IptvIdSentinels {
 }
 
 private const val LargeIptvListChannelCount = 10_000
+/** How long a channel a complete XMLTV parse had no programmes for is skipped by the visible-row fallback. */
+private const val VisibleXmlKnownMissingMs = 30 * 60_000L
+private const val VisibleXmlKnownMissingMaxEntries = 60_000
 private const val LargeListMemoryChannelLimit = 240
 private const val LargeListMemoryGuideLimit = 512
 private const val LargeListMemoryFavoriteGuideLimit = 256
@@ -252,9 +258,9 @@ internal object IptvTitleNormalizer {
         // provider named in those languages never matched any title.
         return foldLetters(stripTags(value))
             .lowercase(Locale.US)
-            .replace(NON_LETTER_DIGIT_REGEX, " ")
+            .replaceLiteral(NON_LETTER_DIGIT_REGEX, " ")
             .trim()
-            .replace(MULTI_SPACE_REGEX, " ")
+            .replaceLiteral(MULTI_SPACE_REGEX, " ")
     }
 
     private val NON_LETTER_DIGIT_REGEX = Regex("[^\\p{L}\\p{N}]+")
@@ -268,23 +274,23 @@ internal object IptvTitleNormalizer {
     fun searchQuery(value: String): String {
         if (value.isBlank()) return ""
         return stripTags(value)
-            .replace(NON_LETTER_DIGIT_REGEX, " ")
+            .replaceLiteral(NON_LETTER_DIGIT_REGEX, " ")
             .trim()
-            .replace(MULTI_SPACE_REGEX, " ")
+            .replaceLiteral(MULTI_SPACE_REGEX, " ")
     }
 
     private fun stripTags(value: String): String {
         return value
             .replace(BOX_DRAWING_BAR, '|')
-            .replace(LEADING_PIPE_TAG_REGEX, " ")
+            .replaceLiteral(LEADING_PIPE_TAG_REGEX, " ")
             .trimStart()
-            .replace(LANGUAGE_PREFIX_REGEX, " ")
-            .replace(BRACKET_CONTENT_REGEX, " ")
-            .replace(PAREN_CONTENT_REGEX, " ")
-            .replace(YEAR_PAREN_REGEX, " ")
-            .replace(SEASON_TOKEN_REGEX, " ")
-            .replace(EPISODE_TOKEN_REGEX, " ")
-            .replace(RELEASE_TAG_REGEX, " ")
+            .replaceLiteral(LANGUAGE_PREFIX_REGEX, " ")
+            .replaceLiteral(BRACKET_CONTENT_REGEX, " ")
+            .replaceLiteral(PAREN_CONTENT_REGEX, " ")
+            .replaceLiteral(YEAR_PAREN_REGEX, " ")
+            .replaceLiteral(SEASON_TOKEN_REGEX, " ")
+            .replaceLiteral(EPISODE_TOKEN_REGEX, " ")
+            .replaceLiteral(RELEASE_TAG_REGEX, " ")
     }
 
     /**
@@ -304,7 +310,7 @@ internal object IptvTitleNormalizer {
             val replacement = nonDecomposableReplacement(character)
             if (replacement != null) mapped.append(replacement) else mapped.append(character)
         }
-        return Normalizer.normalize(mapped, Normalizer.Form.NFD).replace(DIACRITICS_REGEX, "")
+        return Normalizer.normalize(mapped, Normalizer.Form.NFD).replaceLiteral(DIACRITICS_REGEX, "")
     }
 
     /**
@@ -775,6 +781,26 @@ class IptvRepository @Inject constructor(
     private var cachedNowNext: ConcurrentHashMap<String, IptvNowNext> = ConcurrentHashMap()
     private val emptyShortEpgCooldownUntil = ConcurrentHashMap<String, Long>()
     private val visibleXmlEpgCooldownUntil = ConcurrentHashMap<String, Long>()
+    /** One background-priority thread for [warmVodCachesIfPossible]. */
+    private val vodWarmDispatcher: kotlinx.coroutines.CoroutineDispatcher by lazy {
+        java.util.concurrent.Executors.newSingleThreadExecutor { runnable ->
+            Thread({
+                runCatching {
+                    android.os.Process.setThreadPriority(
+                        android.os.Process.THREAD_PRIORITY_BACKGROUND + android.os.Process.THREAD_PRIORITY_LESS_FAVORABLE
+                    )
+                }
+                runnable.run()
+            }, "VodWarmWork").apply { isDaemon = true }
+        }.asCoroutineDispatcher()
+    }
+    /**
+     * "<guide url>|<channel id>" -> until when a complete parse of that guide file is known
+     * not to have programmes for the channel. Scrolling a big list asks for every new window
+     * of guide-less channels; without this each window downloaded and parsed the whole XMLTV
+     * file again (about one core on TV hardware for as long as the user kept scrolling).
+     */
+    private val visibleXmlEpgKnownMissingUntil = ConcurrentHashMap<String, Long>()
 
     private val guideKeyCandidatesCache = java.util.Collections.synchronizedMap(
         object : java.util.LinkedHashMap<String, Set<String>>(512, 0.75f, true) {
@@ -4516,12 +4542,14 @@ class IptvRepository @Inject constructor(
             if (count >= 2) continue
             val requested = channelsForScopedEpgCandidate(candidate, pending.values.toList(), config)
                 .filter { !candidate.providerFallback || it.id !in xtreamIds }
+                .filter { (visibleXmlEpgKnownMissingUntil["${candidate.url}|${it.id}"] ?: 0L) <= nowMs }
             if (requested.isEmpty()) continue
             val candidateChannels = channelsForScopedEpgCandidate(candidate, guideChannels, config)
                 .filter { !candidate.providerFallback || it.id !in xtreamIds }
             attempts[candidate.playlistId] = count + 1
             System.err.println("[EPG-Refresh] XMLTV fallback for ${requested.size} missing channels")
             var isCached = false
+            var parseCompleted = false
             val parsed = runCatching {
                 guideRequestBudget.request(candidate.url) {
                     withTimeoutOrNull(12_000L) {
@@ -4531,7 +4559,7 @@ class IptvRepository @Inject constructor(
                                 candidate.url,
                                 candidateChannels,
                                 notModifiedCheckChannels = requested,
-                            ) { jobContext.ensureActive() }
+                            ) { jobContext.ensureActive() }.also { parseCompleted = true }
                         }
                     }
                 } ?: emptyMap()
@@ -4559,10 +4587,24 @@ class IptvRepository @Inject constructor(
                     pending.remove(id)
                 }
             }
+            if (parseCompleted) rememberXmlGuideMisses(candidate.url, requested, parsed)
         }
 
         visibleXmlEpgCooldownUntil[cooldownKey] = System.currentTimeMillis() + if (guide.isEmpty()) 5 * 60_000L else 30_000L
         return VisibleXmlGuide(guide, indexed)
+    }
+
+    /** Requested channels a completed parse of [url] gave no programmes are not asked for again for a while. */
+    private fun rememberXmlGuideMisses(url: String, requested: List<IptvChannel>, parsed: Map<String, IptvNowNext>) {
+        val now = System.currentTimeMillis()
+        if (visibleXmlEpgKnownMissingUntil.size > VisibleXmlKnownMissingMaxEntries) {
+            visibleXmlEpgKnownMissingUntil.entries.removeIf { it.value <= now }
+            if (visibleXmlEpgKnownMissingUntil.size > VisibleXmlKnownMissingMaxEntries) visibleXmlEpgKnownMissingUntil.clear()
+        }
+        val until = now + VisibleXmlKnownMissingMs
+        requested.forEach { channel ->
+            if (!hasProgramData(parsed[channel.id])) visibleXmlEpgKnownMissingUntil["$url|${channel.id}"] = until
+        }
     }
 
     /** Every channel of the active list when it is at most [LargeIptvListChannelCount], else null. */
@@ -4750,6 +4792,7 @@ class IptvRepository @Inject constructor(
         cachedNowNext = ConcurrentHashMap()
         cachedPlaylistAt = 0L
         cachedEpgAt = 0L
+        visibleXmlEpgKnownMissingUntil.clear()
         stalkerEpgCache.clear()
         stalkerShortEpgCache.clear()
         stalkerVodSearchCache.clear()
@@ -5705,7 +5748,59 @@ class IptvRepository @Inject constructor(
          */
         private val catalogFormatVersion = 1
 
+        /**
+         * The series index lives in a gzip file, not in SharedPreferences: a large
+         * provider (50k+ series) did not fit the old 50,000-entry prefs cap, so every
+         * fresh start normalised all titles again (~60 s of a core on a TV).
+         */
+        private val catalogDir: java.io.File? by lazy {
+            runCatching { context.cacheDir?.path }.getOrNull()
+                ?.takeIf { it.isNotBlank() }
+                ?.let { java.io.File(it, "iptv_series_catalog") }
+        }
+        private fun catalogFile(providerKey: String): java.io.File? =
+            catalogDir?.let { java.io.File(it, "catalog_${providerKey.hashCode()}.json.gz") }
+
+        private fun readCatalogFile(providerKey: String): ResolverPersistedCatalog? {
+            val file = catalogFile(providerKey) ?: return null
+            if (!file.isFile) return null
+            val persisted = try {
+                java.io.InputStreamReader(
+                    java.util.zip.GZIPInputStream(java.io.BufferedInputStream(file.inputStream())),
+                    Charsets.UTF_8
+                ).use { reader -> gson.fromJson(reader, ResolverPersistedCatalog::class.java) }
+            } catch (_: Throwable) { null }
+            if (persisted == null || persisted.formatVersion != catalogFormatVersion || persisted.entries.isNullOrEmpty()) {
+                runCatching { file.delete() }
+                return null
+            }
+            return persisted
+        }
+
+        private fun writeCatalogFile(providerKey: String, payload: ResolverPersistedCatalog) {
+            val dir = catalogDir ?: return
+            val target = catalogFile(providerKey) ?: return
+            val tmp = java.io.File(dir, target.name + ".tmp")
+            try {
+                dir.mkdirs()
+                java.io.OutputStreamWriter(
+                    java.util.zip.GZIPOutputStream(java.io.BufferedOutputStream(tmp.outputStream())),
+                    Charsets.UTF_8
+                ).use { writer -> gson.toJson(payload, writer) }
+                if (!tmp.renameTo(target)) {
+                    target.delete()
+                    if (!tmp.renameTo(target)) tmp.delete()
+                }
+                // The file replaces the legacy prefs copy, which was loaded into memory
+                // with every read of this preferences file.
+                runCatching { prefs.edit().remove(catalogPrefKey(providerKey)).apply() }
+            } catch (_: Throwable) {
+                runCatching { tmp.delete() }
+            }
+        }
+
         private fun readPersistedCatalog(providerKey: String): ResolverPersistedCatalog? {
+            readCatalogFile(providerKey)?.let { return it }
             val raw = try { prefs.getString(catalogPrefKey(providerKey), null) } catch (_: Exception) { null }
             if (raw.isNullOrBlank()) return null
             val persisted = try {
@@ -5726,7 +5821,14 @@ class IptvRepository @Inject constructor(
             providerKey: String,
             creds: XtreamCredentials
         ) {
-            loadCatalog(providerKey, creds, allowNetwork = true, forceRefresh = true)
+            // The warm-up runs every time the TV page loads its playlist. Rebuilding the
+            // index re-normalises every series title (regex heavy: about one core for tens
+            // of seconds on TV hardware) even when the series list has not changed, so
+            // only rebuild when the list on hand is newer than the index built from it.
+            loadCatalog(
+                providerKey, creds, allowNetwork = true, forceRefresh = false,
+                minCreatedAtMs = xtreamSeriesLoadedAtMs,
+            )
         }
 
         suspend fun prefetchSeriesInfo(
@@ -6045,12 +6147,14 @@ class IptvRepository @Inject constructor(
             providerKey: String,
             creds: XtreamCredentials,
             allowNetwork: Boolean,
-            forceRefresh: Boolean
+            forceRefresh: Boolean,
+            /** A cached index built before this time (the series list it reflects) is rebuilt. */
+            minCreatedAtMs: Long = 0L,
         ): ResolverCatalogIndex {
             // Fast path: check in-memory cache (no lock needed)
             val now = System.currentTimeMillis()
             val inMem = catalogMemory[providerKey]
-            if (!forceRefresh && inMem != null && now - inMem.createdAtMs < catalogTtlMs) return inMem
+            if (!forceRefresh && inMem != null && inMem.createdAtMs >= minCreatedAtMs && now - inMem.createdAtMs < catalogTtlMs) return inMem
 
             if (!allowNetwork) {
                 if (inMem != null) return inMem
@@ -6072,7 +6176,7 @@ class IptvRepository @Inject constructor(
                 // Re-check memory inside lock — another thread may have built it while we waited
                 val afterLockMem = catalogMemory[providerKey]
                 val lockNow = System.currentTimeMillis()
-                if (!forceRefresh && afterLockMem != null && lockNow - afterLockMem.createdAtMs < catalogTtlMs) {
+                if (!forceRefresh && afterLockMem != null && afterLockMem.createdAtMs >= minCreatedAtMs && lockNow - afterLockMem.createdAtMs < catalogTtlMs) {
                     System.err.println("[VOD-Resolver] loadCatalog: found in memory after lock wait (${afterLockMem.entries.size} entries)")
                     return@withLock afterLockMem
                 }
@@ -6083,7 +6187,7 @@ class IptvRepository @Inject constructor(
                     val persisted = readPersistedCatalog(providerKey)
                     if (persisted != null) {
                         stalePersisted = persisted
-                        if (lockNow - persisted.createdAtMs < catalogTtlMs) {
+                        if (persisted.createdAtMs >= minCreatedAtMs && lockNow - persisted.createdAtMs < catalogTtlMs) {
                             System.err.println("[VOD-Resolver] loadCatalog: building from persisted prefs (${persisted.entries.size} entries)")
                             val built = buildCatalogIndex(persisted.createdAtMs, persisted.entries)
                             catalogMemory[providerKey] = built
@@ -6131,16 +6235,16 @@ class IptvRepository @Inject constructor(
                 val built = buildCatalogIndex(lockNow, entries)
                 System.err.println("[VOD-Resolver] loadCatalog: buildCatalogIndex took ${System.currentTimeMillis() - buildStart}ms")
                 catalogMemory[providerKey] = built
-                // Persist to SharedPreferences in background — don't block resolution
-                if (entries.isNotEmpty() && entries.size <= 50_000) {
-                    runCatching {
-                        val payload = ResolverPersistedCatalog(
+                // Persist so the next process start loads the index instead of rebuilding it.
+                if (entries.isNotEmpty()) {
+                    writeCatalogFile(
+                        providerKey,
+                        ResolverPersistedCatalog(
                             formatVersion = catalogFormatVersion,
                             createdAtMs = lockNow,
                             entries = entries
                         )
-                        prefs.edit().putString(catalogPrefKey(providerKey), gson.toJson(payload)).apply()
-                    }
+                    )
                 }
                 built
             } }
@@ -6532,6 +6636,7 @@ class IptvRepository @Inject constructor(
          */
         fun clearAll() {
             catalogMemory.clear()
+            runCatching { catalogDir?.deleteRecursively() }
             synchronized(seriesNamesLock) { persistedSeriesNames.clear() }
             synchronized(resolvedLock) { resolvedMemory.clear() }
             synchronized(seriesBindingLock) { seriesBindingMemory.clear() }
@@ -8059,7 +8164,11 @@ class IptvRepository @Inject constructor(
      * this function exists for.
      */
     suspend fun warmVodCachesIfPossible() {
-        withContext(Dispatchers.IO) {
+        // Background priority: on a fresh start this normalises every series title of the
+        // provider (50k titles took ~60 s of a core on a TCL Android 14 TV) while the user
+        // is already browsing the TV page. It is a head start only, so it gets the CPU the
+        // UI leaves over.
+        withContext(vodWarmDispatcher) {
             if (!isVodSearchEnabled()) return@withContext
             val config = observeConfig().first()
             (activeStalkerVodPortals(config) + activeStalkerSeriesPortals(config))
@@ -9319,11 +9428,11 @@ class IptvRepository @Inject constructor(
                 val rawPreview = response.peekBody(512).string().replace('\n', ' ').trim()
                 // Strip HTML tags and CSS to produce a clean error message
                 val cleanPreview = rawPreview
-                    .replace(HTML_STYLE_REGEX, "")
-                    .replace(HTML_SCRIPT_REGEX, "")
-                    .replace(HTML_TAG_REGEX, " ")
-                    .replace(CSS_BRACE_REGEX, "")
-                    .replace(MULTI_SPACE_REGEX, " ")
+                    .replaceLiteral(HTML_STYLE_REGEX, "")
+                    .replaceLiteral(HTML_SCRIPT_REGEX, "")
+                    .replaceLiteral(HTML_TAG_REGEX, " ")
+                    .replaceLiteral(CSS_BRACE_REGEX, "")
+                    .replaceLiteral(MULTI_SPACE_REGEX, " ")
                     .trim()
                     .take(150)
                 val detail = when {
@@ -11797,8 +11906,8 @@ class IptvRepository @Inject constructor(
         val base = epgId?.takeIf { it.isNotBlank() } ?: name
         val normalizedBase = normalizeLooseKey(
             base
-                .replace(QUALITY_WORDS_REGEX, " ")
-                .replace(BRACKET_PAREN_REGEX, " ")
+                .replaceLiteral(QUALITY_WORDS_REGEX, " ")
+                .replaceLiteral(BRACKET_PAREN_REGEX, " ")
         )
         val normalizedGroup = normalizeLooseKey(group)
         return listOf(normalizedGroup, normalizedBase).filter { it.isNotBlank() }.joinToString(":")
@@ -11806,13 +11915,30 @@ class IptvRepository @Inject constructor(
 
     private fun normalizeChannelKey(value: String): String = value.trim().lowercase(Locale.US)
 
+    /** Lowercase, then keep only a-z and 0-9 (same result as removing `[^a-z0-9]`, without a regex). */
     private fun normalizeLooseKey(value: String): String {
-        return normalizeChannelKey(value).replace(NON_ALPHA_NUM_REGEX_INLINE, "")
+        val lower = normalizeChannelKey(value)
+        val out = StringBuilder(lower.length)
+        for (c in lower) if (c in 'a'..'z' || c in '0'..'9') out.append(c)
+        return out.toString()
     }
+
+    /**
+     * The large-list lookup of the last channel list, while that list is still alive.
+     * Every XMLTV parse of a 50k-channel playlist rebuilt it from scratch (about a
+     * second of regex work per parse on TV hardware, several times per guide load).
+     */
+    @Volatile
+    private var largeChannelKeyLookupCache: Pair<java.lang.ref.WeakReference<List<IptvChannel>>, java.lang.ref.SoftReference<Map<String, List<IptvChannel>>>>? = null
 
     private fun buildChannelKeyLookup(channels: List<IptvChannel>): Map<String, List<IptvChannel>> {
         if (channels.size > LargeIptvListChannelCount) {
-            return buildLargeChannelKeyLookup(channels)
+            largeChannelKeyLookupCache?.let { (listRef, mapRef) ->
+                if (listRef.get() === channels) mapRef.get()?.let { return it }
+            }
+            return buildLargeChannelKeyLookup(channels).also {
+                largeChannelKeyLookupCache = java.lang.ref.WeakReference(channels) to java.lang.ref.SoftReference(it)
+            }
         }
         val map = LinkedHashMap<String, MutableList<IptvChannel>>(channels.size * 8)
         channels.forEach { channel ->
@@ -11880,10 +12006,12 @@ class IptvRepository @Inject constructor(
 
             // Numeric API EPG IDs often differ from the XMLTV IDs. Keep the
             // country prefix, but let HD/FHD/SD/LQ variants share its schedule.
-            addNormalized(normalizeLooseKey(stripQualitySuffixes(name)))
-            if (tvgName.isNotBlank()) addNormalized(normalizeLooseKey(stripQualitySuffixes(tvgName)))
+            val nameOwner = normalizeLooseKey(stripQualitySuffixes(name))
+            val tvgOwner = if (tvgName.isNotBlank()) normalizeLooseKey(stripQualitySuffixes(tvgName)) else ""
+            addNormalized(nameOwner)
+            if (tvgName.isNotBlank()) addNormalized(tvgOwner)
             listOf(name, tvgName).filter { it.isNotBlank() }.forEach { raw ->
-                val owner = normalizeLooseKey(stripQualitySuffixes(raw))
+                val owner = if (raw === name) nameOwner else tvgOwner
                 val alias = normalizeLooseKey(stripQualitySuffixes(stripGuidePrefix(raw)))
                 if (alias.isNotBlank() && alias != owner) {
                     val previous = aliasOwners.putIfAbsent(alias, owner)
@@ -11996,9 +12124,9 @@ class IptvRepository @Inject constructor(
         if (cached != null) return cached
 
         val withoutBrackets = raw
-            .replace(BRACKET_CONTENT_REGEX, " ")
-            .replace(PAREN_CONTENT_REGEX, " ")
-            .replace(MULTI_SPACE_REGEX, " ")
+            .replaceLiteral(BRACKET_CONTENT_REGEX, " ")
+            .replaceLiteral(PAREN_CONTENT_REGEX, " ")
+            .replaceLiteral(MULTI_SPACE_REGEX, " ")
             .trim()
         val withoutPrefix = stripGuidePrefix(withoutBrackets)
         val afterPipe = withoutBrackets.substringAfterLast('|').trim()
@@ -12041,14 +12169,14 @@ class IptvRepository @Inject constructor(
     }
 
     private fun stripGuidePrefix(value: String): String {
-        return value.replace(GUIDE_PREFIX_REGEX, "").trim()
+        return value.replaceLiteral(GUIDE_PREFIX_REGEX, "").trim()
     }
 
     private fun stripQualitySuffixes(value: String): String {
         return value
             .lowercase(Locale.US)
-            .replace(QUALITY_SUFFIX_REGEX, "")
-            .replace(MULTI_SPACE_REGEX, " ")
+            .replaceLiteral(QUALITY_SUFFIX_REGEX, "")
+            .replaceLiteral(MULTI_SPACE_REGEX, " ")
             .trim()
     }
 

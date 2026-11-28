@@ -254,7 +254,7 @@ class CatalogRepository @Inject constructor(
         return PartnerCatalogs.overlay(getPersonalCatalogs(), managedDelivery())
     }
 
-    suspend fun getPersonalCatalogs(): List<CatalogConfig> = readCatalogsForActiveProfile()
+    suspend fun getPersonalCatalogs(): List<CatalogConfig> = withContext(Dispatchers.Default) { readCatalogsForActiveProfile() }
 
     private fun managedDelivery(): PartnerIptvDelivery? =
         if (BuildConfig.PARTNER_MANAGEMENT_ENABLED) partnerDelivery?.get()?.activeDelivery() else null
@@ -262,7 +262,7 @@ class CatalogRepository @Inject constructor(
     suspend fun getCatalogsForProfile(profileId: String): List<CatalogConfig> {
         val safeProfileId = profileId.trim().ifBlank { "default" }
         val prefs = context.settingsDataStore.data.first()
-        return sanitizeCollectionCatalogs(readCatalogsFromPrefs(safeProfileId, prefs))
+        return withContext(Dispatchers.Default) { sanitizeCollectionCatalogs(readCatalogsFromPrefs(safeProfileId, prefs)) }
     }
 
     private fun pruneKidsListApprovals(prefs: MutablePreferences, profileId: String, catalogsJson: String) {

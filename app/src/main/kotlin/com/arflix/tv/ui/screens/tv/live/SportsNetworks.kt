@@ -1,5 +1,7 @@
 package com.arflix.tv.ui.screens.tv.live
 
+import com.arflix.tv.util.replaceLiteral
+
 import com.arflix.tv.data.model.IptvChannel
 import com.arflix.tv.data.model.IptvProgram
 import com.arflix.tv.data.model.SportsFollow
@@ -51,7 +53,7 @@ private val networkCountryPrefix = Regex("^(?:uk|gb|us|usa|ca|au|nz|ie|nl|be|de|
 
 /** The network a normalized channel name ([sportsChannelKey]) belongs to, or null. */
 internal fun sportsNetworkFor(channelKey: String): SportsNetwork? {
-    val name = channelKey.replace(networkCountryPrefix, "")
+    val name = channelKey.replaceLiteral(networkCountryPrefix, "")
     return SPORTS_NETWORKS.firstOrNull { network ->
         network.prefixes.any { prefix -> name == prefix || name.startsWith("$prefix ") }
     }

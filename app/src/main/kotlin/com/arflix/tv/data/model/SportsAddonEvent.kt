@@ -1,5 +1,7 @@
 package com.arflix.tv.data.model
 
+import com.arflix.tv.util.replaceLiteral
+
 import com.arflix.tv.data.api.StremioMetaPreview
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import java.security.MessageDigest
@@ -84,13 +86,13 @@ private val liveTitle = Regex("^LIVE\\s*:?\\s+", RegexOption.IGNORE_CASE)
 private val livePrefix = Regex("^LIVE\\s*:\\s*", RegexOption.IGNORE_CASE)
 private val terminalLine = Regex("^(finished|ended|cancelled|canceled|postponed|replay)\\b", RegexOption.IGNORE_CASE)
 private val utcScheduleFormat = DateTimeFormatter.ofPattern("d MMM uuuu HH:mm", Locale.ENGLISH)
-private fun cleanSportsStatus(value: String) = value.replace(statusSymbols, "").trim()
+private fun cleanSportsStatus(value: String) = value.replaceLiteral(statusSymbols, "").trim()
 
 fun StremioMetaPreview.toSportsAddonEvent(addon: Addon, catalog: AddonCatalog, now: Long,
     installation: String = sportsAddonInstallation(addon)): SportsAddonEvent? {
     val id = id?.takeIf { it.isNotBlank() } ?: return null
-    val title = name?.replace(statusSymbols, "")
-        ?.replace(liveTitle, "")?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+    val title = name?.replaceLiteral(statusSymbols, "")
+        ?.replaceLiteral(liveTitle, "")?.trim()?.takeIf { it.isNotEmpty() } ?: return null
     if (id.startsWith("leaf:") || id.startsWith("recap:") || releaseInfo == "24/7" ||
         terminal.containsMatchIn("$title ${releaseInfo.orEmpty()}")) return null
     if (description.orEmpty().lineSequence().any { terminalLine.containsMatchIn(cleanSportsStatus(it)) }) return null
