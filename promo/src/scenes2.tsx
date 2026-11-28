@@ -432,7 +432,7 @@ export const MusicEverywhere: React.FC = () => {
           }}
         >
           <TV width={1100} stand={false}>
-            <Screen src={SCREENS.tvClipMusic} trimBefore={45} />
+            <Screen src={SCREENS.tvClipMusic} trimBefore={75} />
           </TV>
         </div>
         <div
