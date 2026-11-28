@@ -702,9 +702,18 @@ class TvViewModel @Inject constructor(
         }
     }
 
+    private companion object VodWarmup {
+        const val VOD_WARMUP_DELAY_MS = 8 * 60_000L
+    }
+
     private fun warmXtreamVodCache() {
         if (warmVodJob?.isActive == true) return
         warmVodJob = viewModelScope.launch(Dispatchers.IO) {
+            // Live TV never needs the VOD/series caches. Warming them at once read a 27 MB
+            // VOD cache and normalised 50k series titles (about a minute of a core plus GC)
+            // right while the guide opened on a fresh start, making it stutter at ~67% jank
+            // on TV boxes. Home already warms them after the same quiet period.
+            kotlinx.coroutines.delay(VOD_WARMUP_DELAY_MS)
             try { iptvRepository.warmVodCachesIfPossible() } catch (e: Exception) { if (e is kotlinx.coroutines.CancellationException) throw e }
         }.also { job ->
             job.invokeOnCompletion { warmVodJob = null }
