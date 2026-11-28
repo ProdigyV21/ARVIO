@@ -2315,8 +2315,9 @@ fun LiveTvScreen(
                         val channelOnlyMatches = hashMapOf<String, MutableList<Pair<IptvProgram, GuideSport>>>()
                         // Classify first; deserialize full channel records only for actual events.
                         viewModel.iptvRepository.visitCachedGuideWindow(ids.toSet(),
-                            scanNow, scanNow + 48 * 60 * 60_000L) { id, programme ->
+                            scanNow, scanNow + 48 * 60 * 60_000L) { id, listed ->
                             context.ensureActive()
+                            val programme = sportsListingProgramme(listed)
                             if (programme.title.isNotBlank() && programme.endUtcMillis > programme.startUtcMillis &&
                                 memoryStarts[id]?.contains(programme.startUtcMillis) == true) {
                                 indexedStarts.getOrPut(id) { HashSet() }.add(programme.startUtcMillis)

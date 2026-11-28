@@ -219,15 +219,60 @@ internal fun sportsTitleIsChannelName(title: String, channelName: String): Boole
 private val channelMatchup = Regex("\\s(?:vs?\\.?|versus|@)\\s", RegexOption.IGNORE_CASE)
 private val stopWords = setOf("the", "and", "live", "vs", "fc", "sc", "university", "state", "college")
 private fun teamWords(value: String) = channelText(value).split(' ').filter { it.length >= 3 && it !in stopWords }.toSet()
+private val channelNumber = Regex("^(?:\\d{1,3}\\s*[-.:]?\\s+)(?=\\p{L})")
+private val channelTail = Regex("\\s*(?:[(\\[|]|\\s@\\s|\\s-\\s|\\s\\d{1,2}[:.h]\\d{2}\\b).*$", RegexOption.IGNORE_CASE)
+private val channelTailQuality = Regex("(?:\\s+(?:hd|fhd|uhd|sd|4k|8k|hevc|raw|backup|ᴿᴬᵂ|ᴴᴰ|ᶠᴴᴰ|ᵁᴴᴰ))+\\s*$", RegexOption.IGNORE_CASE)
 
 /**
- * An event channel named after one game ("VTSU_Castleton vs Eastern") whose guide still
- * shows another game ("Sharjah vs Dubai") is stale. It must not be offered for that game.
+ * The game an event channel is named after: "US: VTSU_Castleton vs Eastern Nazarene" ->
+ * "VTSU Castleton vs Eastern Nazarene". Null for channels that do not name one game, also
+ * for a lone "V" in a brand ("SWE| V SPORT EXTRA"): both sides must name a team.
+ */
+internal fun sportsChannelMatchup(channelName: String): String? {
+    val plain = channelName.replace('_', ' ').trim()
+    val split = channelMatchup.find(plain) ?: return null
+    val left = plain.substring(0, split.range.first)
+        .substringAfterLast('|').substringAfterLast('·').substringAfterLast(':').trim()
+        .replace(channelNumber, "").trim()
+    val right = plain.substring(split.range.last + 1)
+        .replace(channelTail, "").replace(channelTailQuality, "").trim()
+    if (teamWords(left).isEmpty() || teamWords(right).isEmpty()) return null
+    return "$left vs $right"
+}
+
+/**
+ * An event channel named after one game ("VTSU_Castleton vs Eastern") whose guide shows
+ * another game ("Sharjah vs Dubai") carries the game in its name; its guide is a shared
+ * listing. That guide title must not be offered on this channel.
  */
 internal fun sportsChannelNamesOtherEvent(title: String, channelName: String): Boolean {
-    if (!channelMatchup.containsMatchIn(channelName.replace('_', ' '))) return false
-    val channelWords = teamWords(channelName.replace('_', ' '))
-    return channelWords.isNotEmpty() && channelWords.none { it in teamWords(title) }
+    val named = sportsChannelMatchup(channelName) ?: return false
+    val channelWords = teamWords(named)
+    return channelWords.none { it in teamWords(title) }
+}
+
+private val listingMarker = Regex("\\|\\s*all\\s*\\||\\b8k exclusive\\b", RegexOption.IGNORE_CASE)
+private val listingMatchup = Regex("\\s(?:vs?\\.?|versus|[-–—])\\s", RegexOption.IGNORE_CASE)
+private val listingSportCode = Regex("^[a-z]{2,3}\\s*:\\s*([a-z]{2,4})$", RegexOption.IGNORE_CASE)
+private val listingSportCodes = mapOf("soc" to "soccer", "fut" to "soccer", "bkb" to "basketball", "bsk" to "basketball",
+    "hoc" to "hockey", "hky" to "hockey", "ten" to "tennis", "cri" to "cricket", "crk" to "cricket", "rug" to "rugby",
+    "nfl" to "nfl", "nba" to "nba", "nhl" to "nhl", "mlb" to "mlb", "mma" to "mma", "box" to "boxing")
+
+/**
+ * Some providers list the game on their event channels between labels:
+ * "Live | China - Great Britain | all | 8K EXCLUSIVE | ES: SOC". The game is the
+ * matchup part. A listing without a matchup stays a placeholder (see [guidePlaceholder]).
+ */
+internal fun sportsListingProgramme(programme: IptvProgram): IptvProgram {
+    val title = programme.title
+    // Runs for every guide row of a big playlist: skip the regex for ordinary titles.
+    if ((title.indexOf('|') < 0 && !title.contains("8k", ignoreCase = true)) || !listingMarker.containsMatchIn(title)) return programme
+    val parts = programme.title.split('|').map { it.trim() }.filter { it.isNotEmpty() }
+    val game = parts.firstOrNull { listingMatchup.containsMatchIn(it) } ?: return programme
+    val sport = parts.firstNotNullOfOrNull { part ->
+        listingSportCode.find(part)?.groupValues?.get(1)?.lowercase(Locale.ROOT)?.let { listingSportCodes[it] }
+    }
+    return programme.copy(title = game, category = listOfNotNull(programme.category, sport).joinToString(" ").ifBlank { null })
 }
 
 internal val nonEvent = Regex("\\b(highlights?|hoogtepunten|samenvatting|resumen|replay|replica|herhaling|wiederholung|repeticion|repetición|rediffusion|re-?run|classic|news|magazine|review|preview|cancelled|canceled|postponed|abandoned|sendepause|off air|no signal|best of|teleshopping|infomercial|documentary)\\b", RegexOption.IGNORE_CASE)
@@ -273,14 +318,44 @@ internal class SportsEventIndex {
         add(event.sport, event.identity, event.programme, event.channels, event.schedules, event.competition, event.channelOnly, event.artwork)
     }
     fun add(sport: GuideSport, identity: String, programme: IptvProgram, channel: IptvChannel, competition: String?) {
-        if (sportsPlaceholderChannel.containsMatchIn(channel.name) || sportsTitleIsChannelName(programme.title, channel.name) ||
-            sportsChannelNamesOtherEvent(programme.title, channel.name)) return
+        if (sportsPlaceholderChannel.containsMatchIn(channel.name)) return
+        val named = sportsChannelMatchup(channel.name)
+        if (named != null) {
+            // An event channel named after a game shows that game. Its guide often lists a
+            // different one (a shared listing for all event channels); dropping those channels
+            // took most live games off the page, so the name wins over the guide title.
+            if (sportsChannelNamesOtherEvent(programme.title, channel.name)) addNamedEvent(named, programme, channel)
+            else add(sport, identity, programme, listOf(channel), null, competition)
+            return
+        }
+        if (sportsTitleIsChannelName(programme.title, channel.name)) return
         add(sport, identity, programme, listOf(channel), null, competition)
     }
     fun addChannelOnly(sport: GuideSport, programme: IptvProgram, channel: IptvChannel) {
-        if (sportsPlaceholderChannel.containsMatchIn(channel.name) || sportsChannelNamesOtherEvent(programme.title, channel.name)) return
+        if (sportsPlaceholderChannel.containsMatchIn(channel.name)) return
+        val named = sportsChannelMatchup(channel.name)
+        if (named != null) {
+            addNamedEvent(named, programme, channel)
+            return
+        }
         add(sport, sportsEventIdentity(programme.title), programme, listOf(channel), null, null,
             channelOnly = true, artwork = channel.logo)
+    }
+    // One game per named channel: the slot on air now, else the next one. Its guide repeats
+    // the shared listing all day, and each later slot would add the same game again.
+    private class Named(val title: String, val sport: GuideSport, val programme: IptvProgram, val channel: IptvChannel)
+    private val named = linkedMapOf<String, Named>()
+    private fun addNamedEvent(title: String, programme: IptvProgram, channel: IptvChannel) {
+        val old = named[channel.id]
+        if (old != null && old.programme.startUtcMillis <= programme.startUtcMillis) return
+        // The shared listing's sport says nothing about this channel's game.
+        val sport = GuideSport.fromText("${channel.group} ${channel.name}") ?: GuideSport.OTHER
+        named[channel.id] = Named(title, sport, programme.copy(title = title, description = null, artworkUrl = null), channel)
+    }
+    private fun flushNamed() {
+        if (named.isEmpty()) return
+        named.values.forEach { add(it.sport, sportsEventIdentity(it.title), it.programme, listOf(it.channel), null, null) }
+        named.clear()
     }
     private fun add(sport: GuideSport, identity: String, programme: IptvProgram,
         channels: List<IptvChannel>, schedules: Map<String, IptvProgram>?, competition: String?,
@@ -302,7 +377,10 @@ internal class SportsEventIndex {
         entry.artwork = entry.artwork ?: programme.artworkUrl ?: artwork
         entry.competition = entry.competition ?: competition
     }
-    fun events(): List<SportsGuideEvent> = groups.values.flatMap { group -> group.map { it.snapshot() } }
+    fun events(): List<SportsGuideEvent> {
+        flushNamed()
+        return groups.values.flatMap { group -> group.map { it.snapshot() } }
+    }
 }
 
 /** XMLTV variants share programme text. Classify it once per scan, with bounded memory. */
@@ -377,7 +455,7 @@ internal fun accumulateSportsGuideEvents(
         val slice = guide[channel.id] ?: continue
         val fallback = sportsChannelSport("${channel.group} ${channel.name}")
         val starts = indexedStarts[channel.id]
-        val programmes = sportsUpcomingProgrammes(slice)
+        val programmes = sportsUpcomingProgrammes(slice).map(::sportsListingProgramme)
             .distinctBy { Triple(it.title, it.startUtcMillis, it.endUtcMillis) }
         for (programme in programmes) {
             if (starts?.contains(programme.startUtcMillis) == true ||
