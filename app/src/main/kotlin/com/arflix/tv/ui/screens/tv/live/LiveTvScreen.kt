@@ -2031,6 +2031,16 @@ fun LiveTvScreen(
     var sportsError by remember { mutableStateOf(false) }
     var sportsRefresh by remember { mutableIntStateOf(0) }
     var sportsRetryOnOpen by remember(sportsScope) { mutableIntStateOf(0) }
+    // A new visit from the top bar restores this screen's saved state; open on the guide
+    // (Favorites first) instead of wherever the last visit ended, e.g. Sports.
+    LaunchedEffect(Unit) {
+        val fresh = LiveTvStartup.consumeFreshVisit()
+        if (fresh && startupCategoryApplied && initialChannelId.isNullOrBlank() && initialStreamUrl.isNullOrBlank()) {
+            sportsSelected = false
+            if (favSet.isNotEmpty()) selectedCategoryId = "fav"
+            currentMode = LiveTvStartup.initialMode(isTouchDevice, null, null)
+        }
+    }
     LaunchedEffect(sportsSelected) {
         if (sportsSelected && sportsError && !sportsLoading) sportsRetryOnOpen++
         if (sportsSelected && isTouchDevice) currentMode = LiveTvStartup.LiveTvMode.Guide

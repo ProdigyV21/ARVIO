@@ -12,6 +12,19 @@ object LiveTvStartup {
 
     enum class LiveTvMode { GroupHome, Guide }
 
+    /**
+     * Set when Live TV is opened from the top bar or another tab. Tab switches restore the
+     * screen's saved state (rememberSaveable), which would put the user back on Sports or
+     * the last group; a fresh visit should open on Favorites instead. Returning from a
+     * Details page pops back without this flag and keeps where the user was.
+     */
+    @Volatile
+    private var freshVisitPending = false
+
+    fun markFreshVisit() { freshVisitPending = true }
+
+    fun consumeFreshVisit(): Boolean = freshVisitPending.also { freshVisitPending = false }
+
     enum class GuideBackAction { OPEN_CATEGORIES, OPEN_GROUP_HOME, EXIT_TV }
 
     /**

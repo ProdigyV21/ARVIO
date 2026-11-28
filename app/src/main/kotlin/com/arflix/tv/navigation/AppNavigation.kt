@@ -259,6 +259,9 @@ fun AppNavigation(
     }
     val navigateTopLevel: (String) -> Unit = navigate@{ route ->
         if (isKidsProfile && route.substringBefore('?') in com.arflix.tv.util.KIDS_HIDDEN_NAVIGATION_SECTIONS) return@navigate
+        if (route.substringBefore('?') == "tv" && navController.currentDestination?.route?.startsWith("tv") != true) {
+            com.arflix.tv.ui.screens.tv.live.LiveTvStartup.markFreshVisit()
+        }
         navController.navigate(route) {
             popUpTo(Screen.Home.route) { saveState = true }
             launchSingleTop = true
