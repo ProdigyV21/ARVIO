@@ -153,6 +153,7 @@ import com.arflix.tv.music.ChartsSource
 import com.arflix.tv.music.MusicAlbum
 import com.arflix.tv.music.MusicArtist
 import com.arflix.tv.music.MusicCollections
+import com.arflix.tv.music.MusicNowPlaying
 import com.arflix.tv.music.MusicPin
 import com.arflix.tv.music.MusicPinType
 import com.arflix.tv.music.MusicPlaybackState
@@ -346,12 +347,13 @@ fun TvMusicScreen(
                 )
             }
         }
-        // Closing the player puts focus back on the now playing chip that opened it.
+        // Closing the player puts focus back on the now playing chip that opened it. After Stop
+        // the chip is gone, so focus goes into the tab instead of being left on nothing.
         var wasOpen by remember { mutableStateOf(false) }
         LaunchedEffect(playerOpen) {
             if (wasOpen && !playerOpen) {
                 delay(60)
-                runCatching { nowPlayingFocus.requestFocus() }
+                if (runCatching { nowPlayingFocus.requestFocus() }.isFailure) enterContent()
             }
             wasOpen = playerOpen
         }
@@ -1332,6 +1334,11 @@ private fun TvPlayer(
                         if (playback.repeatMode == Player.REPEAT_MODE_ONE) Icons.Default.RepeatOne else Icons.Default.Repeat,
                         stringResource(R.string.music_repeat), accent, active = playback.repeatMode != Player.REPEAT_MODE_OFF,
                     ) { viewModel.cycleRepeat() }
+                    // Stops the song for good: the player, the top bar chip and the media notification all go.
+                    TvIconButton(Icons.Default.Close, stringResource(R.string.music_stop_close), accent, tag = "tv-music-stop") {
+                        viewModel.setPlayerOpen(false)
+                        MusicNowPlaying.close()
+                    }
                 }
                 Spacer(Modifier.height(16.dp))
                 // Wraps instead of scrolling: in a scrolled row the last chip sat cut off at the
@@ -1452,6 +1459,11 @@ private fun TvSeekBar(playback: MusicPlaybackState, accent: Color, onSeek: (Long
     val duration = playback.durationMs.coerceAtLeast(1L)
     val progress = (playback.positionMs.toFloat() / duration).coerceIn(0f, 1f)
     val height by animateFloatAsState(if (focused) 8f else 4f, tween(160), label = "tv-seek-height")
+    // The bar fills from the start edge, which is the right in RTL (Hebrew, Arabic): there the
+    // Left key moves forward along it.
+    val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
+    val forwardKey = if (rtl) Key.DirectionLeft else Key.DirectionRight
+    val backKey = if (rtl) Key.DirectionRight else Key.DirectionLeft
     Column(Modifier.fillMaxWidth().widthIn(max = 760.dp)) {
         Box(
             Modifier.fillMaxWidth().height(24.dp)
@@ -1459,8 +1471,8 @@ private fun TvSeekBar(playback: MusicPlaybackState, accent: Color, onSeek: (Long
                 .onKeyEvent { event ->
                     if (event.type != KeyEventType.KeyDown) return@onKeyEvent false
                     when (event.key) {
-                        Key.DirectionRight -> { onSeek((playback.positionMs + 10_000).coerceAtMost(playback.durationMs)); true }
-                        Key.DirectionLeft -> { onSeek((playback.positionMs - 10_000).coerceAtLeast(0)); true }
+                        forwardKey -> { onSeek((playback.positionMs + 10_000).coerceAtMost(playback.durationMs)); true }
+                        backKey -> { onSeek((playback.positionMs - 10_000).coerceAtLeast(0)); true }
                         else -> false
                     }
                 }
