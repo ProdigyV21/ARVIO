@@ -47,6 +47,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.runInterruptible
@@ -780,6 +781,19 @@ class IptvRepository @Inject constructor(
     private var cachedNowNext: ConcurrentHashMap<String, IptvNowNext> = ConcurrentHashMap()
     private val emptyShortEpgCooldownUntil = ConcurrentHashMap<String, Long>()
     private val visibleXmlEpgCooldownUntil = ConcurrentHashMap<String, Long>()
+    /** One background-priority thread for [warmVodCachesIfPossible]. */
+    private val vodWarmDispatcher: kotlinx.coroutines.CoroutineDispatcher by lazy {
+        java.util.concurrent.Executors.newSingleThreadExecutor { runnable ->
+            Thread({
+                runCatching {
+                    android.os.Process.setThreadPriority(
+                        android.os.Process.THREAD_PRIORITY_BACKGROUND + android.os.Process.THREAD_PRIORITY_LESS_FAVORABLE
+                    )
+                }
+                runnable.run()
+            }, "VodWarmWork").apply { isDaemon = true }
+        }.asCoroutineDispatcher()
+    }
     /**
      * "<guide url>|<channel id>" -> until when a complete parse of that guide file is known
      * not to have programmes for the channel. Scrolling a big list asks for every new window
@@ -5734,7 +5748,54 @@ class IptvRepository @Inject constructor(
          */
         private val catalogFormatVersion = 1
 
+        /**
+         * The series index lives in a gzip file, not in SharedPreferences: a large
+         * provider (50k+ series) did not fit the old 50,000-entry prefs cap, so every
+         * fresh start normalised all titles again (~60 s of a core on a TV).
+         */
+        private val catalogDir by lazy { java.io.File(context.cacheDir, "iptv_series_catalog") }
+        private fun catalogFile(providerKey: String) =
+            java.io.File(catalogDir, "catalog_${providerKey.hashCode()}.json.gz")
+
+        private fun readCatalogFile(providerKey: String): ResolverPersistedCatalog? {
+            val file = catalogFile(providerKey)
+            if (!file.isFile) return null
+            val persisted = try {
+                java.io.InputStreamReader(
+                    java.util.zip.GZIPInputStream(java.io.BufferedInputStream(file.inputStream())),
+                    Charsets.UTF_8
+                ).use { reader -> gson.fromJson(reader, ResolverPersistedCatalog::class.java) }
+            } catch (_: Throwable) { null }
+            if (persisted == null || persisted.formatVersion != catalogFormatVersion || persisted.entries.isNullOrEmpty()) {
+                runCatching { file.delete() }
+                return null
+            }
+            return persisted
+        }
+
+        private fun writeCatalogFile(providerKey: String, payload: ResolverPersistedCatalog) {
+            val target = catalogFile(providerKey)
+            val tmp = java.io.File(catalogDir, target.name + ".tmp")
+            try {
+                catalogDir.mkdirs()
+                java.io.OutputStreamWriter(
+                    java.util.zip.GZIPOutputStream(java.io.BufferedOutputStream(tmp.outputStream())),
+                    Charsets.UTF_8
+                ).use { writer -> gson.toJson(payload, writer) }
+                if (!tmp.renameTo(target)) {
+                    target.delete()
+                    if (!tmp.renameTo(target)) tmp.delete()
+                }
+                // The file replaces the legacy prefs copy, which was loaded into memory
+                // with every read of this preferences file.
+                runCatching { prefs.edit().remove(catalogPrefKey(providerKey)).apply() }
+            } catch (_: Throwable) {
+                runCatching { tmp.delete() }
+            }
+        }
+
         private fun readPersistedCatalog(providerKey: String): ResolverPersistedCatalog? {
+            readCatalogFile(providerKey)?.let { return it }
             val raw = try { prefs.getString(catalogPrefKey(providerKey), null) } catch (_: Exception) { null }
             if (raw.isNullOrBlank()) return null
             val persisted = try {
@@ -6169,16 +6230,16 @@ class IptvRepository @Inject constructor(
                 val built = buildCatalogIndex(lockNow, entries)
                 System.err.println("[VOD-Resolver] loadCatalog: buildCatalogIndex took ${System.currentTimeMillis() - buildStart}ms")
                 catalogMemory[providerKey] = built
-                // Persist to SharedPreferences in background — don't block resolution
-                if (entries.isNotEmpty() && entries.size <= 50_000) {
-                    runCatching {
-                        val payload = ResolverPersistedCatalog(
+                // Persist so the next process start loads the index instead of rebuilding it.
+                if (entries.isNotEmpty()) {
+                    writeCatalogFile(
+                        providerKey,
+                        ResolverPersistedCatalog(
                             formatVersion = catalogFormatVersion,
                             createdAtMs = lockNow,
                             entries = entries
                         )
-                        prefs.edit().putString(catalogPrefKey(providerKey), gson.toJson(payload)).apply()
-                    }
+                    )
                 }
                 built
             } }
@@ -6570,6 +6631,7 @@ class IptvRepository @Inject constructor(
          */
         fun clearAll() {
             catalogMemory.clear()
+            runCatching { catalogDir.deleteRecursively() }
             synchronized(seriesNamesLock) { persistedSeriesNames.clear() }
             synchronized(resolvedLock) { resolvedMemory.clear() }
             synchronized(seriesBindingLock) { seriesBindingMemory.clear() }
@@ -8097,7 +8159,11 @@ class IptvRepository @Inject constructor(
      * this function exists for.
      */
     suspend fun warmVodCachesIfPossible() {
-        withContext(Dispatchers.IO) {
+        // Background priority: on a fresh start this normalises every series title of the
+        // provider (50k titles took ~60 s of a core on a TCL Android 14 TV) while the user
+        // is already browsing the TV page. It is a head start only, so it gets the CPU the
+        // UI leaves over.
+        withContext(vodWarmDispatcher) {
             if (!isVodSearchEnabled()) return@withContext
             val config = observeConfig().first()
             (activeStalkerVodPortals(config) + activeStalkerSeriesPortals(config))
