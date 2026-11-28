@@ -12,6 +12,19 @@ object LiveTvStartup {
 
     enum class LiveTvMode { GroupHome, Guide }
 
+    /**
+     * Set when Live TV is opened from the top bar or another tab. Tab switches restore the
+     * screen's saved state (rememberSaveable), which would put the user back on Sports or
+     * the last group; a fresh visit should open on Favorites instead. Returning from a
+     * Details page pops back without this flag and keeps where the user was.
+     */
+    @Volatile
+    private var freshVisitPending = false
+
+    fun markFreshVisit() { freshVisitPending = true }
+
+    fun consumeFreshVisit(): Boolean = freshVisitPending.also { freshVisitPending = false }
+
     enum class GuideBackAction { OPEN_CATEGORIES, OPEN_GROUP_HOME, EXIT_TV }
 
     /**
@@ -84,11 +97,24 @@ object LiveTvStartup {
         return firstAvailableChannelId
     }
 
-    fun resumeCategoryId(lastGroupName: String?, availableCategoryIds: Set<String>): String {
+    /**
+     * Category Live TV opens on. Favorites come first whenever the profile has any;
+     * otherwise the last group used, falling back to All channels.
+     */
+    fun resumeCategoryId(
+        lastGroupName: String?,
+        availableCategoryIds: Set<String>,
+        hasFavorites: Boolean = false,
+    ): String {
+        if (hasFavorites) return "fav"
         val remembered = lastGroupName?.trim().orEmpty()
         return remembered.takeIf { it.isNotBlank() && (it == "all" || it in availableCategoryIds) }
             ?: "all"
     }
+
+    /** First guess before the category tree is loaded; [resumeCategoryId] settles it. */
+    fun startupCategoryHint(lastGroupName: String?, hasFavorites: Boolean): String =
+        if (hasFavorites) "fav" else lastGroupName?.trim()?.takeIf { it.isNotBlank() } ?: "all"
 
     fun guideBackAction(
         isTouchDevice: Boolean,
