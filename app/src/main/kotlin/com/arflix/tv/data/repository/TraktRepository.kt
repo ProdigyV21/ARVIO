@@ -192,6 +192,9 @@ class TraktRepository @Inject constructor(
 
     val connection = traktSession.connection
 
+    /** Set while the connected profile has had no usable token; see [TraktSession.syncPause]. */
+    val syncPause = traktSession.syncPause
+
     /**
      * Get token expiration timestamp (seconds since epoch) for current profile
      */
@@ -329,6 +332,7 @@ class TraktRepository @Inject constructor(
                 changed = true
                 val accessToken = token.accessToken?.trim().orEmpty()
                 prefs.remove(profileManager.profileBooleanKeyFor(profileId, "trakt_reconnect_required"))
+                traktSession.clearHealth(prefs, profileId)
                 if (accessToken.isEmpty()) {
                     prefs.remove(accessKey)
                     prefs.remove(refreshKey)

@@ -583,6 +583,10 @@ class HomeViewModel @Inject constructor(
     companion object {
         /** Profiles already told this app run that Trakt needs reconnecting. */
         private val traktReconnectNoticeShown: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
+        /** Profiles already told this app run that Trakt syncing has been paused for a while. */
+        private val traktPauseNoticeShown: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
+        /** A short Trakt outage is not worth a warning; one that lasts this long is. */
+        private const val TRAKT_PAUSE_NOTICE_AFTER_MS = 60 * 60_000L
         private val mdbListReconnectNoticeShown: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
         const val FAVORITE_TV_CATEGORY_ID = "favorite_tv"
         /** Unfiltered titles a kids top-up may load for one grid before it gives up. */
@@ -1886,6 +1890,21 @@ class HomeViewModel @Inject constructor(
                         )
                     }
                 }
+        }
+        // Renewal can keep failing without Trakt ever saying the session is gone (server errors,
+        // refusals between app restarts). Settings showed that only as "could not be reached",
+        // so the user never knew; tell them once it has lasted a while.
+        viewModelScope.launch {
+            traktRepository.syncPause.collectLatest { pause ->
+                if (pause == null) return@collectLatest
+                delay((pause.since + TRAKT_PAUSE_NOTICE_AFTER_MS - System.currentTimeMillis()).coerceAtLeast(0L))
+                if (traktPauseNoticeShown.add(pause.profileId)) {
+                    _uiState.value = _uiState.value.copy(
+                        toastMessage = context.getString(R.string.trakt_sync_paused_notice),
+                        toastType = ToastType.ERROR
+                    )
+                }
+            }
         }
         viewModelScope.launch {
             personalListsRepository.mdbListConnection
