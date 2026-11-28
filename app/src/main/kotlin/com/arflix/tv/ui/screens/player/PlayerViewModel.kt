@@ -597,25 +597,79 @@ class PlayerViewModel @Inject constructor(
     private val bilingualSettingsStoreOrNull by lazy {
         runCatching { BilingualSubtitleSettingsStore.from(context) }.getOrNull()
     }
+    private data class DeferredPreferredSubtitle(
+        val preference: String,
+        val fallbackLanguage: String?,
+    )
+    private var deferredPreferredSubtitle: DeferredPreferredSubtitle? = null
+    private var deferredAutoAiActivation: Boolean = false
 
-    private val aiKeyReady: Boolean get() = aiApiKey.isNotBlank()
+    private val aiKeyReady: Boolean
+        get() = runCatching { translationService.isConfigured() }.getOrElse { aiApiKey.isNotBlank() }
+
+    private fun clearDeferredBilingualPolicyRetry() {
+        deferredPreferredSubtitle = null
+        deferredAutoAiActivation = false
+    }
+
+    private fun isBilingualPolicyPending(): Boolean {
+        val state = _uiState.value
+        val store = bilingualSettingsStoreOrNull ?: return false
+        return !state.isLiveAudioTranslating &&
+            !state.smartBilingualActive &&
+            !state.smartBilingualRequest.suppressedForVideo &&
+            !store.isLoadedForCurrentProfile
+    }
 
     /**
      * Automatic AI (startup auto-select, scan fallback, smart re-plan) is allowed only when the
-     * feature can actually run and the *persisted* generation mode authorizes AI. Merge mode and a
-     * still-loading profile must never make a billable request.
+     * feature can actually run and, if smart bilingual is active for this video, the *persisted*
+     * generation mode authorizes AI. Leaving smart bilingual off (even when the remembered
+     * generation mode is Merge) must never block regular AI auto-select.
      */
     private fun automaticAiActivationAllowed(): Boolean {
         val state = _uiState.value
-        val store = bilingualSettingsStoreOrNull
-        return !state.isLiveAudioTranslating && !state.smartBilingualActive &&
-            (store == null || (store.isLoadedForCurrentProfile && store.settings.value.generationMode.allowsAi))
+        if (state.isLiveAudioTranslating || state.smartBilingualActive) return false
+        val store = bilingualSettingsStoreOrNull ?: return true
+        if (state.smartBilingualRequest.suppressedForVideo) return true
+        if (!store.isLoadedForCurrentProfile) return false
+        val smartEnabledForVideo = store.settings.value.smartEnabled ||
+            state.smartBilingualRequest.requestedForVideo
+        return !smartEnabledForVideo || store.settings.value.generationMode.allowsAi
     }
 
     fun isAiTranslationConfigured(): Boolean = aiKeyReady
 
-    /** Revisit a deferred startup auto-select once the persisted policy is loaded (AI path, later PR). */
-    fun onBilingualPolicyReady() = Unit
+    /** Retry any automatic AI selection that was deferred while the bilingual profile policy loaded. */
+    fun onBilingualPolicyReady() {
+        val store = bilingualSettingsStoreOrNull
+        if (store != null && !store.isLoadedForCurrentProfile) return
+        val pendingPref = deferredPreferredSubtitle
+        val pendingAutoAi = deferredAutoAiActivation
+        clearDeferredBilingualPolicyRetry()
+        if (pendingPref != null) {
+            if (userLockedSubtitleKey == null &&
+                !hasManualSubtitleSelection &&
+                !_uiState.value.isLiveAudioTranslating &&
+                !_uiState.value.subtitleSelectionPending &&
+                !_uiState.value.smartBilingualActive
+            ) {
+                applyPreferredSubtitle(
+                    pendingPref.preference,
+                    _uiState.value.subtitles,
+                    pendingPref.fallbackLanguage,
+                )
+            }
+            return
+        }
+        if (pendingAutoAi &&
+            userLockedSubtitleKey == null &&
+            !_uiState.value.isAiTranslating &&
+            automaticAiActivationAllowed()
+        ) {
+            activateAiTranslation(isUserAction = false)
+        }
+    }
 
     /** Player menu: (re)start the smart bilingual mode for this video. */
     fun requestSmartBilingual() {
@@ -627,6 +681,7 @@ class PlayerViewModel @Inject constructor(
 
     /** Called when playback moves to a different media URI, never restores the old video's track. */
     fun resetSmartBilingualForStream() {
+        clearDeferredBilingualPolicyRetry()
         leaveSmartBilingual(restorePrevious = false)
         _uiState.value = _uiState.value.copy(smartBilingualRequest = SmartBilingualRequest())
     }
@@ -647,6 +702,7 @@ class PlayerViewModel @Inject constructor(
             state.smartBilingualRequest.suppressedForVideo ||
             !store.isLoadedForCurrentProfile
         ) return false
+        clearDeferredBilingualPolicyRetry()
         val firstClaim = !smartBilingualSession.isActive
         translationManager.displayMode = store.settings.value.mode
         smartBilingualSession.enter(
@@ -1040,6 +1096,7 @@ class PlayerViewModel @Inject constructor(
         hasManualSubtitleSelection = false
         userPickedSubtitle = false
         userLockedSubtitleKey = null
+        clearDeferredBilingualPolicyRetry()
         autoMatchAttempted = false
         aiSourceSubtitle = null
         val cachedItem = mediaRepository.getCachedItem(mediaType, mediaId)
@@ -2497,6 +2554,7 @@ class PlayerViewModel @Inject constructor(
                     (normalizeLanguage(it.lang) == normalizedPref || normalizeLanguage(it.label) == normalizedPref)
             }
             if (embeddedPref != null && _uiState.value.selectedSubtitle?.id != embeddedPref.id) {
+                clearDeferredBilingualPolicyRetry()
                 cancelFindBestMatch("preferred-language embedded track appeared")
                 // Forced mode must reconsider this automatic pick when the audio changes.
                 // Actual menu selections still set the manual-selection guard themselves.
@@ -2516,6 +2574,7 @@ class PlayerViewModel @Inject constructor(
 
         if (hasManualSubtitleSelection) return
         if (isSubtitleDisabledPreference(preference)) {
+            clearDeferredBilingualPolicyRetry()
             _uiState.value = _uiState.value.copy(selectedSubtitle = null)
             return
         }
@@ -2525,6 +2584,7 @@ class PlayerViewModel @Inject constructor(
             ?.takeIf { it.isNotBlank() && it != normalizedPref }
 
         if (forcedActive) {
+            clearDeferredBilingualPolicyRetry()
             selectForcedSubtitle(subtitles, normalizedPref, normalizedFallback)
             return
         }
@@ -2586,8 +2646,8 @@ class PlayerViewModel @Inject constructor(
 
         // When AI is active, only an embedded built-in subtitle suppresses AI.
         // External addon subtitles (WIZDOM, KTUVIT, etc.) do not count — AI takes priority over them.
-        val aiModeActive = aiSubtitleEnabled && aiSubtitleAutoSelect && normalizedPref.isNotBlank() &&
-            automaticAiActivationAllowed()
+        val wantsAutoAi = aiSubtitleEnabled && aiSubtitleAutoSelect && normalizedPref.isNotBlank()
+        val aiModeActive = wantsAutoAi && automaticAiActivationAllowed()
         // AI enabled regardless of auto-select — used to expose the AI option in the picker
         val aiEnabledForLanguage = aiSubtitleEnabled && normalizedPref.isNotBlank()
         val embeddedOnly = subtitles.filter { it.isEmbedded }
@@ -2600,6 +2660,7 @@ class PlayerViewModel @Inject constructor(
         val embeddedMatch = embeddedPrefMatch ?: embeddedFallbackMatch
 
         if (embeddedMatch != null) {
+            clearDeferredBilingualPolicyRetry()
             val current = _uiState.value.selectedSubtitle
             val isFallback = embeddedPrefMatch == null
             // Never auto-select a fallback-language embedded track — it would immediately block
@@ -2611,6 +2672,7 @@ class PlayerViewModel @Inject constructor(
                 _uiState.value = _uiState.value.copy(selectedSubtitle = embeddedMatch, isAiTranslating = false, isAiAvailable = false, aiTargetLanguageName = "")
             }
         } else if (aiModeActive) {
+            clearDeferredBilingualPolicyRetry()
             // No embedded preferred-language subtitle → activate AI (addon subs are ignored)
             val source = findAiSourceSubtitle(subtitles)
             val targetLangName = languageCodeToName(normalizedPref)
@@ -2644,7 +2706,21 @@ class PlayerViewModel @Inject constructor(
                     }
                 }
             }
+        } else if (wantsAutoAi && isBilingualPolicyPending()) {
+            // Defer automatic AI until the profile's bilingual policy finishes loading so a
+            // persisted Smart + Merge profile cannot make an early billable request, while
+            // onBilingualPolicyReady() immediately retries once loaded.
+            deferredPreferredSubtitle = DeferredPreferredSubtitle(preference, fallbackLanguage)
+            val source = findAiSourceSubtitle(subtitles)
+            if (source != null) {
+                aiSourceSubtitle = source
+                val targetLangName = languageCodeToName(normalizedPref)
+                translationManager.targetLanguage = targetLangName
+                _uiState.value = _uiState.value.copy(isAiAvailable = true, aiTargetLanguageName = targetLangName)
+            }
+            return
         } else {
+            clearDeferredBilingualPolicyRetry()
             // AI enabled but auto-select off — expose AI option in picker without activating it
             if (aiEnabledForLanguage) {
                 val source = findAiSourceSubtitle(subtitles)
@@ -3558,6 +3634,7 @@ class PlayerViewModel @Inject constructor(
             hasManualSubtitleSelection = false
             userPickedSubtitle = false
             userLockedSubtitleKey = null
+            clearDeferredBilingualPolicyRetry()
             autoMatchAttempted = false
             aiSourceSubtitle = null
             untranslatableSourceKeys.clear()
@@ -3878,6 +3955,7 @@ class PlayerViewModel @Inject constructor(
             return
         }
         if (isUserAction) {
+            clearDeferredBilingualPolicyRetry()
             smartBilingualSession.onUserPickedSubtitle(subtitle)
             userLockedSubtitleKey = SubtitleSelectionPolicy.key(subtitle)
             _uiState.value = _uiState.value.copy(
@@ -4355,23 +4433,27 @@ class PlayerViewModel @Inject constructor(
         }
     }
 
-    /** Explicit AI replaces the user's pick; automatic AI must never replace a locked pick. */
+    /** Explicit AI replaces the user's pick (and turns off Live Audio); automatic AI must never replace a locked pick or Live Audio. */
     fun activateAiTranslation(isUserAction: Boolean = true) {
-        // Live audio owns the screen: even an explicit AI request must not put a track back over it.
-        if (_uiState.value.isLiveAudioTranslating) return
-        if (!aiSubtitleEnabled || (!isUserAction && userLockedSubtitleKey != null)) return
-        // Automatic activations must never spend in Merge mode, nor before the profile's persisted
-        // policy has loaded (the startup default AUTO is not a licence to call a provider).
-        if (!isUserAction && !automaticAiActivationAllowed()) return
+        if (!aiSubtitleEnabled) return
+        if (!isUserAction && (_uiState.value.isLiveAudioTranslating || userLockedSubtitleKey != null)) return
+        // Automatic activations must never spend in Smart + Merge mode, nor before the profile's
+        // persisted bilingual policy has loaded.
+        if (!isUserAction && !automaticAiActivationAllowed()) {
+            if (isBilingualPolicyPending()) deferredAutoAiActivation = true
+            return
+        }
         // Cached sources obey the same rules as fresh ones: embedded text only, not the target
         // language, and never a source already observed to contain no text at runtime.
         val source = findAiSourceSubtitle(_uiState.value.subtitles)
             ?: findAiSourceSubtitle(listOfNotNull(aiSourceSubtitle)) ?: return
         if (isUserAction) {
-            // Explicit regular AI replaces smart bilingual; the per-video smart request must not
-            // reclaim the screen later just because the global switch is on.
+            clearDeferredBilingualPolicyRetry()
+            // Explicit regular AI replaces smart bilingual and Live Audio; the per-video smart
+            // request must not reclaim the screen later just because the global switch is on.
             stopSmartBilingualForVideo(restorePrevious = false)
             userLockedSubtitleKey = null
+            subtitleBeforeLiveAudio = null
             cancelFindBestMatch("user chose AI translation")
             subtitleSelectionJob?.cancel()
         }
@@ -4391,6 +4473,7 @@ class PlayerViewModel @Inject constructor(
         translationManager.isEnabled = true
         translationManager.reset()
         aiErrorToastShown = false
+        val changed = _uiState.value.selectedSubtitle?.id != source.id
         android.util.Log.i(
             "SubMatch",
             "AI translation activated: source=${source.lang}/${source.label} target=$targetLangName"
@@ -4400,7 +4483,8 @@ class PlayerViewModel @Inject constructor(
             isAiTranslating = true,
             isAiAvailable = true,
             aiTargetLanguageName = targetLangName,
-            aiErrorToast = null
+            aiErrorToast = null,
+            subtitleSelectionNonce = _uiState.value.subtitleSelectionNonce + if (changed) 1 else 0
         )
     }
 
@@ -4417,6 +4501,7 @@ class PlayerViewModel @Inject constructor(
             )
             subtitleBeforeLiveAudio = null
         } else {
+            clearDeferredBilingualPolicyRetry()
             // Clear current subtitle so ExoPlayer stops rendering it while live AI is active.
             // Must mark this as a manual selection — otherwise a subtitle-fetch job that
             // resolves after this point (scheduleSubtitleSelection) would silently re-select
@@ -7873,6 +7958,7 @@ class PlayerViewModel @Inject constructor(
     }
 
     fun disableSubtitles() {
+        clearDeferredBilingualPolicyRetry()
         // Turning subtitles Off is an explicit user action: it also ends smart bilingual for this
         // video and records the request as suppressed, so a later re-plan cannot take the screen
         // back and a pre-smart standalone AI is not restored over the user's Off.

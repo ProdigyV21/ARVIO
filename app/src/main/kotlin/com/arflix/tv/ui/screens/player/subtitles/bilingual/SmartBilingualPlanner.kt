@@ -64,11 +64,15 @@ data class BilingualNotice(val kind: Kind, val detail: String = "", val id: Long
         MERGE_UNRELIABLE,
         AI_FORCED,
         AI_NOT_CONFIGURED,
+        RESTARTING_FOR_BILINGUAL,
     }
 
     /** True for notices that tell the user something is missing or degraded. */
     val isWarning: Boolean
-        get() = kind != Kind.MERGING_EMBEDDED && kind != Kind.AI_NO_SECONDARY_TRACK && kind != Kind.AI_FORCED
+        get() = kind != Kind.MERGING_EMBEDDED &&
+            kind != Kind.AI_NO_SECONDARY_TRACK &&
+            kind != Kind.AI_FORCED &&
+            kind != Kind.RESTARTING_FOR_BILINGUAL
 
     fun message(): String = when (kind) {
         Kind.MERGING_EMBEDDED -> bt("Bilingual: merging embedded %s subtitles (no AI)").format(detail)
@@ -85,6 +89,7 @@ data class BilingualNotice(val kind: Kind, val detail: String = "", val id: Long
         Kind.MERGE_UNRELIABLE -> bt("Merge mode: the %s track doesn't line up with the primary (AI is off in this mode). Pick other tracks in Subtitles → Bilingual Subtitles.").format(detail)
         Kind.AI_FORCED -> bt("AI Translate mode: translating into %s").format(detail)
         Kind.AI_NOT_CONFIGURED -> bt("AI Translate mode needs a Gemini/Groq key (Settings → AI Subtitles) — showing one language")
+        Kind.RESTARTING_FOR_BILINGUAL -> bt("Restarting stream for bilingual subtitles…")
     }
 
     private companion object {

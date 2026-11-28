@@ -156,7 +156,7 @@ class SmartBilingualPlayerIntegrationTest {
         model.activateSmartBilingualMerge(primary)
         model.activateSmartBilingualPrimaryOnly(primary)
         model.activateSmartBilingualAi(primary, "Simplified Chinese")
-        model.activateAiTranslation(isUserAction = true)
+        model.activateAiTranslation(isUserAction = false)
         assertNull(model.uiState.value.selectedSubtitle)
         assertFalse(model.translationManager.isEnabled)
         assertFalse(model.uiState.value.smartBilingualActive)
@@ -165,6 +165,31 @@ class SmartBilingualPlayerIntegrationTest {
         assertEquals(original, model.uiState.value.selectedSubtitle)
         assertFalse(model.uiState.value.isAiTranslating)
         assertTrue(model.uiState.value.smartBilingualRequest.shouldRun(false, false))
+    }
+
+    @Test fun explicitAiTapTurnsOffLiveAudioAndActivatesTranslation() {
+        model.requestSmartBilingual()
+        model.toggleLiveAudioTranslation()
+        assertTrue(model.uiState.value.isLiveAudioTranslating)
+        assertNull(model.uiState.value.selectedSubtitle)
+
+        model.activateAiTranslation(isUserAction = true)
+        verify(exactly = 1) { live.disconnect() }
+        assertFalse(model.uiState.value.isLiveAudioTranslating)
+        assertTrue(model.uiState.value.isAiTranslating)
+        assertTrue(model.translationManager.isEnabled)
+        assertEquals(original, model.uiState.value.selectedSubtitle)
+        assertFalse(model.uiState.value.smartBilingualRequest.shouldRun(true, false))
+
+        // Without a readable text source, tapping AI must not silently turn Live Audio off.
+        model.toggleLiveAudioTranslation()
+        assertTrue(model.uiState.value.isLiveAudioTranslating)
+        state().value = state().value.copy(subtitles = emptyList())
+        field("aiSourceSubtitle").set(model, null)
+        model.activateAiTranslation(isUserAction = true)
+        verify(exactly = 1) { live.disconnect() }
+        assertTrue(model.uiState.value.isLiveAudioTranslating)
+        assertFalse(model.uiState.value.isAiTranslating)
     }
 
     @Test fun explicitOffDuringLiveClearsThePerVideoRequest() {
@@ -219,10 +244,20 @@ class SmartBilingualPlayerIntegrationTest {
     }
 
     @Test fun mergeGenerationCannotAutomaticallyActivateAi() {
-        settings.value = settings.value.copy(generationMode = BilingualGenerationMode.MERGE)
+        settings.value = settings.value.copy(
+            smartEnabled = true,
+            generationMode = BilingualGenerationMode.MERGE,
+        )
         model.activateSmartBilingualAi(primary, "Simplified Chinese")
         model.activateAiTranslation(isUserAction = false)
         assertEquals(original, model.uiState.value.selectedSubtitle)
+        assertFalse(model.translationManager.isEnabled)
+        assertFalse(model.uiState.value.isAiTranslating)
+
+        // A per-video smart request in Merge mode also blocks automatic AI when global smartEnabled is off.
+        settings.value = settings.value.copy(smartEnabled = false)
+        model.requestSmartBilingual()
+        model.activateAiTranslation(isUserAction = false)
         assertFalse(model.translationManager.isEnabled)
         assertFalse(model.uiState.value.isAiTranslating)
     }
@@ -241,16 +276,114 @@ class SmartBilingualPlayerIntegrationTest {
     @Test fun preferredSubtitleDirectAutoAiPathAlsoHonorsMergeAndUnloadedPolicy() {
         field("aiSubtitleAutoSelect").setBoolean(model, true)
         field("aiFindBestMatchFirst").setBoolean(model, false)
-        settings.value = settings.value.copy(generationMode = BilingualGenerationMode.MERGE)
+        settings.value = settings.value.copy(
+            smartEnabled = true,
+            generationMode = BilingualGenerationMode.MERGE,
+        )
         applyPreferred("he")
         assertFalse(model.translationManager.isEnabled)
         assertFalse(model.uiState.value.isAiTranslating)
-        settings.value = settings.value.copy(generationMode = BilingualGenerationMode.AUTO)
+        settings.value = settings.value.copy(
+            smartEnabled = false,
+            generationMode = BilingualGenerationMode.AUTO,
+        )
         every { bilingualStore.isLoadedForCurrentProfile } returns false
         applyPreferred("he")
         model.activateAiTranslation(isUserAction = false)
         assertFalse(model.translationManager.isEnabled)
         assertFalse(model.uiState.value.isAiTranslating)
+    }
+
+    @Test fun smartOffWithPersistedMergeModeStillAllowsRegularAiAutoSelect() {
+        field("aiSubtitleAutoSelect").setBoolean(model, true)
+        field("aiFindBestMatchFirst").setBoolean(model, false)
+        settings.value = settings.value.copy(
+            smartEnabled = false,
+            generationMode = BilingualGenerationMode.MERGE,
+        )
+        applyPreferred("he")
+        assertTrue(model.translationManager.isEnabled)
+        assertTrue(model.uiState.value.isAiTranslating)
+        assertEquals(original, model.uiState.value.selectedSubtitle)
+
+        // Direct automatic AI activation also works when smart bilingual is off and MERGE is persisted.
+        model.translationManager.isEnabled = false
+        state().value = state().value.copy(isAiTranslating = false, selectedSubtitle = primary)
+        model.activateAiTranslation(isUserAction = false)
+        assertTrue(model.translationManager.isEnabled)
+        assertTrue(model.uiState.value.isAiTranslating)
+        assertEquals(original, model.uiState.value.selectedSubtitle)
+    }
+
+    @Test fun deferredAutoSelectRetriesWhenBilingualPolicyLoadsAllowingAi() {
+        field("aiSubtitleAutoSelect").setBoolean(model, true)
+        field("aiFindBestMatchFirst").setBoolean(model, false)
+        every { bilingualStore.isLoadedForCurrentProfile } returns false
+        applyPreferred("he")
+        assertFalse(model.translationManager.isEnabled)
+        assertFalse(model.uiState.value.isAiTranslating)
+
+        settings.value = settings.value.copy(
+            smartEnabled = false,
+            generationMode = BilingualGenerationMode.MERGE,
+        )
+        every { bilingualStore.isLoadedForCurrentProfile } returns true
+        model.onBilingualPolicyReady()
+        assertTrue(model.translationManager.isEnabled)
+        assertTrue(model.uiState.value.isAiTranslating)
+        assertEquals(original, model.uiState.value.selectedSubtitle)
+    }
+
+    @Test fun deferredAutoSelectStaysOffWhenLoadedPolicyIsSmartMerge() {
+        field("aiSubtitleAutoSelect").setBoolean(model, true)
+        field("aiFindBestMatchFirst").setBoolean(model, false)
+        every { bilingualStore.isLoadedForCurrentProfile } returns false
+        applyPreferred("he")
+        assertFalse(model.translationManager.isEnabled)
+
+        settings.value = settings.value.copy(
+            smartEnabled = true,
+            generationMode = BilingualGenerationMode.MERGE,
+        )
+        every { bilingualStore.isLoadedForCurrentProfile } returns true
+        model.onBilingualPolicyReady()
+        assertFalse(model.translationManager.isEnabled)
+        assertFalse(model.uiState.value.isAiTranslating)
+    }
+
+    @Test fun deferredAutoSelectIsClearedByManualOffBeforePolicyLoads() {
+        field("aiSubtitleAutoSelect").setBoolean(model, true)
+        field("aiFindBestMatchFirst").setBoolean(model, false)
+        every { bilingualStore.isLoadedForCurrentProfile } returns false
+        applyPreferred("he")
+        model.disableSubtitles()
+
+        settings.value = settings.value.copy(
+            smartEnabled = false,
+            generationMode = BilingualGenerationMode.AUTO,
+        )
+        every { bilingualStore.isLoadedForCurrentProfile } returns true
+        model.onBilingualPolicyReady()
+        assertFalse(model.translationManager.isEnabled)
+        assertFalse(model.uiState.value.isAiTranslating)
+        assertNull(model.uiState.value.selectedSubtitle)
+    }
+
+    @Test fun deferredDirectAutoAiActivationRetriesWhenPolicyLoads() {
+        every { bilingualStore.isLoadedForCurrentProfile } returns false
+        model.activateAiTranslation(isUserAction = false)
+        assertFalse(model.translationManager.isEnabled)
+        assertFalse(model.uiState.value.isAiTranslating)
+
+        settings.value = settings.value.copy(
+            smartEnabled = false,
+            generationMode = BilingualGenerationMode.MERGE,
+        )
+        every { bilingualStore.isLoadedForCurrentProfile } returns true
+        model.onBilingualPolicyReady()
+        assertTrue(model.translationManager.isEnabled)
+        assertTrue(model.uiState.value.isAiTranslating)
+        assertEquals(original, model.uiState.value.selectedSubtitle)
     }
 
     @Test fun slowManualPickSuspendsSmartPlanningAndCannotBeStolen() {

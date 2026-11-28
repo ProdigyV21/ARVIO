@@ -33,12 +33,13 @@ fun SmartBilingualController(
     uiState: PlayerUiState,
     store: EmbeddedSubtitleStore,
     audioLanguage: () -> String?,
+    restartingStream: Boolean = false,
 ) {
     val context = LocalContext.current
     val settingsStore = remember { BilingualSubtitleSettingsStore.from(context) }
     val settings by settingsStore.settings.collectAsState()
     val loadedProfile by settingsStore.loadedProfileId.collectAsState()
-    LaunchedEffect(loadedProfile, settings.generationMode) {
+    LaunchedEffect(loadedProfile, settings.smartEnabled, settings.generationMode) {
         if (settingsStore.isLoadedForCurrentProfile) viewModel.onBilingualPolicyReady()
     }
     val manager = viewModel.translationManager
@@ -134,7 +135,7 @@ fun SmartBilingualController(
     }
 
     LaunchedEffect(
-        shouldStayActive, uiState.subtitleSelectionPending,
+        shouldStayActive, uiState.subtitleSelectionPending, restartingStream,
         settings.generationMode, settings.primaryLanguage, settings.secondaryLanguage,
         uiState.subtitles, tapSignature, unreliable, stream, primaryOverride, secondaryOverride,
         uiState.selectedSubtitle?.id, uiState.smartBilingualActive,
@@ -146,7 +147,7 @@ fun SmartBilingualController(
             if (latest.smartBilingualActive) viewModel.leaveSmartBilingual()
             return@LaunchedEffect
         }
-        if (uiState.subtitleSelectionPending) return@LaunchedEffect
+        if (uiState.subtitleSelectionPending || restartingStream) return@LaunchedEffect
         if (latest.subtitles.isEmpty()) return@LaunchedEffect
         delay(500) // let track lists settle (embedded tracks and addon lists arrive in bursts)
         val state = viewModel.uiState.value

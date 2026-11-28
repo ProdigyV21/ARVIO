@@ -89,7 +89,12 @@ fun BilingualSubtitleOverlay(
     val notice by manager.bilingualNotice.collectAsState()
     LaunchedEffect(notice?.id) {
         val shown = notice ?: return@LaunchedEffect
-        kotlinx.coroutines.delay(if (shown.isWarning) 7_000L else 4_000L)
+        val durationMs = when {
+            shown.isWarning -> 7_000L
+            shown.kind == BilingualNotice.Kind.RESTARTING_FOR_BILINGUAL -> 6_000L
+            else -> 4_000L
+        }
+        kotlinx.coroutines.delay(durationMs)
         if (manager.bilingualNotice.value?.id == shown.id) manager.bilingualNotice.value = null
     }
     if (!hidden && !isInPictureInPicture) {

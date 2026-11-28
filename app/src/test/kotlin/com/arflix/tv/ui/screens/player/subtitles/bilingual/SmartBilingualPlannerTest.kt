@@ -1,8 +1,10 @@
 package com.arflix.tv.ui.screens.player.subtitles.bilingual
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.util.Locale
 
 class SmartBilingualPlannerTest {
 
@@ -215,5 +217,20 @@ class SmartBilingualPlannerTest {
         assertEquals("3", primaryOf(SmartBilingualPlanner.plan(input(addonEn, en, zhHans))))
         // No embedded text track at all: an addon result is the only possible primary.
         assertEquals("addon-en", primaryOf(SmartBilingualPlanner.plan(input(addonEn, zhPgs))))
+    }
+
+    @Test fun `restarting notice is informational and localized`() {
+        val original = Locale.getDefault()
+        try {
+            val notice = BilingualNotice(BilingualNotice.Kind.RESTARTING_FOR_BILINGUAL)
+            assertFalse(notice.isWarning)
+            Locale.setDefault(Locale.US)
+            assertEquals("Restarting stream for bilingual subtitles…", notice.message())
+            Locale.setDefault(Locale.SIMPLIFIED_CHINESE)
+            val zh = notice.message()
+            assertTrue(zh.isNotBlank() && zh != "Restarting stream for bilingual subtitles…")
+        } finally {
+            Locale.setDefault(original)
+        }
     }
 }

@@ -133,6 +133,7 @@ object BilingualStrings {
         "%s · merging %s + %s (no AI)" to Pair("%s · 合并 %s + %s（不调用 AI）", "%s · 合併 %s + %s（不呼叫 AI）"),
         "%s · %s + AI %s" to Pair("%s · %s + AI %s", "%s · %s + AI %s"),
         "%s · %s only — %s" to Pair("%s · 仅%s — %s", "%s · 僅%s — %s"),
+        "Restarting stream for bilingual subtitles…" to Pair("正在重启视频流以启用双语字幕…", "正在重啟影片串流以啟用雙語字幕…"),
     )
 }
 

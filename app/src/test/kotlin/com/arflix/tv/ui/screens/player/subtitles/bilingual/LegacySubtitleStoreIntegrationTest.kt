@@ -14,6 +14,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -141,12 +142,16 @@ class LegacySubtitleStoreIntegrationTest {
         try {
             val ds = PreferenceDataStoreFactory.create(scope = scope, produceFile = { tmp.root.resolve("new.preferences_pb") })
             val store = BilingualSubtitleSettingsStore(ds, MutableStateFlow("p1"), scope)
-            // Verify that the store loaded and published its resolved legacy baseline. In DataStore 1.1.x,
-            // an in-flight first write may cause an independent, concurrently attached dataStore.data flow
-            // to observe an empty state associated with the in-flight version; waiting on the store's own
-            // loaded emission ensures the store's collector completed its migration write.
+            // Verify that the store loaded and persisted its baseline. In DataStore 1.1.x, a long-lived
+            // ds.data.first { predicate } attached while the first write is in flight can tag the empty
+            // state with the writer's new version and discard the committed write; polling fresh one-shot
+            // ds.data.first() reads observes the committed baseline reliably.
             withTimeout(15_000) { store.settings.first { it.legacyAppearance != null } }
-            withTimeout(15_000) { ds.data.first { it[BilingualSubtitleSettingsStore.keyFor("p1")] != null } }
+            withTimeout(15_000) {
+                while (ds.data.first()[BilingualSubtitleSettingsStore.keyFor("p1")] == null) {
+                    delay(20)
+                }
+            }
             ds.edit { it[intKey("subtitle_size_pct")] = 150 }
             val adjusted = withTimeout(15_000) { store.settings.first { it.original.sizeSp == 26 } }
             assertEquals(32, adjusted.translation.sizeSp)

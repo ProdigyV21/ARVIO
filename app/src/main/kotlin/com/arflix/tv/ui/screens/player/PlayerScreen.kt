@@ -758,6 +758,7 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
     }
     val bilingualSettings by bilingualSettingsStore.settings.collectAsState()
     val bilingualFrame by viewModel.translationManager.bilingualBus.frame.collectAsState()
+    var restartingStreamForBilingual by remember { mutableStateOf(false) }
     fun bilingualTapEnabledNow(): Boolean =
         bilingualSettingsStore.settings.value.smartEnabled || latestUiState.smartBilingualRequest.requestedForVideo
     val stepBilingualSetting: (Int) -> Unit = { delta ->
@@ -1541,6 +1542,11 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
                     override fun onPlaybackStateChanged(playbackState: Int) {
                         currentPlaybackState = playbackState
                         if (playbackState == Player.STATE_READY) iptvVodGate.noteReady(System.currentTimeMillis())
+                        if (restartingStreamForBilingual &&
+                            (playbackState == Player.STATE_READY || playbackState == Player.STATE_ENDED)
+                        ) {
+                            restartingStreamForBilingual = false
+                        }
                         if (playbackState == Player.STATE_READY || playbackState == Player.STATE_ENDED) {
                             duration = this@apply.duration.takeIf { it > 0L && it != C.TIME_UNSET } ?: 0L
                             currentSourceIsLive = this@apply.isCurrentMediaItemLive
@@ -1593,6 +1599,7 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
 
                     override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
                         if (playerReleasedAtomic.get()) return
+                        restartingStreamForBilingual = false
                         // This device closed that session on purpose, so it says nothing about the source.
                         if (com.arflix.tv.network.isIptvStreamSessionClosed(error)) return
 
@@ -2875,6 +2882,7 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
     ) {
         val now = bilingualTapEnabledNow()
         if (!now || uiState.selectedStreamUrl == null) {
+            restartingStreamForBilingual = false
             embeddedSubtitleStore.clear()
         } else if (!wasBilingualTapActive && hasPlaybackStarted && !isCasting &&
             embeddedSubtitleStore.tracks().isEmpty() &&
@@ -2885,6 +2893,10 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
         ) {
             val pos = exoPlayer.currentPosition.coerceAtLeast(0L)
             val wasPlaying = exoPlayer.isPlaying
+            viewModel.translationManager.bilingualNotice.value =
+                com.arflix.tv.ui.screens.player.subtitles.bilingual.BilingualNotice(
+                    com.arflix.tv.ui.screens.player.subtitles.bilingual.BilingualNotice.Kind.RESTARTING_FOR_BILINGUAL
+                )
             embeddedSubtitleStore.openSource(
                 exoPlayer.currentMediaItem?.localConfiguration?.uri?.toString() ?: uiState.selectedStreamUrl
             )
@@ -2892,6 +2904,7 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
             exoPlayer.seekTo(pos)
             exoPlayer.prepare()
             exoPlayer.playWhenReady = wasPlaying
+            restartingStreamForBilingual = exoPlayer.playbackState != Player.STATE_READY
         }
         wasBilingualTapActive = now
     }
@@ -4583,6 +4596,7 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
                 uiState = uiState,
                 store = embeddedSubtitleStore,
                 audioLanguage = { exoPlayer.audioFormat?.language },
+                restartingStream = restartingStreamForBilingual,
             )
             com.arflix.tv.ui.screens.player.subtitles.bilingual.BilingualSubtitleOverlay(
                 manager = viewModel.translationManager,
