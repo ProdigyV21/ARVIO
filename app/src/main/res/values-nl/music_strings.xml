@@ -42,6 +42,11 @@
     <string name="music_addon_url">Addon-adres</string>
     <string name="music_add_addon">Addon toevoegen</string>
     <string name="music_add_source">Bron toevoegen</string>
+    <string name="music_remove_addon">%1$s verwijderen</string>
+    <string name="music_sources_title">Muziekbronnen</string>
+    <string name="music_sources_desc">De addons en servers waar Muziek uit afspeelt</string>
+    <string name="music_sources_none">Nog geen bronnen</string>
+    <string name="music_remove">Verwijderen</string>
     <string name="music_addon_failed">Addon toevoegen mislukt: %1$s</string>
     <string name="music_tab_mine">Mijn muziek</string>
     <string name="music_liked_songs">Favoriete nummers</string>
@@ -107,4 +112,14 @@
         <item quantity="other">%1$d playlists geïmporteerd: %2$d van %3$d nummers gevonden in je bronnen.</item>
     </plurals>
     <string name="music_tv_sources_hint">Muziekaddons die je op je telefoon toevoegt, verschijnen ook op deze tv. Of voeg hier een bron toe met de afstandsbediening.</string>
+    <string name="music_preparing">Nummer wordt voorbereid…</string>
+    <string name="music_preparing_slow">Nog bezig. Sommige addons halen een nummer op de eerste keer dat het speelt, dat kan een minuut of twee duren.</string>
+    <string name="music_error_addon_timeout">De addon deed te lang over dit nummer. Probeer het over een minuut opnieuw, misschien is het dan klaar.</string>
+    <string name="music_error_addon_code">De addon kon dit nummer niet voorbereiden (fout %1$d). Probeer het over een minuut opnieuw.</string>
+    <string name="music_error_addon">De addon kon dit nummer niet voorbereiden. Probeer het over een minuut opnieuw.</string>
+    <string name="music_error_stream">De muziekserver kon dit nummer niet sturen. Probeer opnieuw of kies een ander nummer.</string>
+    <string name="music_error_offline">De muziekbron is niet bereikbaar. Controleer de internetverbinding.</string>
+    <string name="music_error_not_found">Geen van je bronnen heeft \"%1$s\".</string>
+    <string name="music_error_format">Het audioformaat van dit nummer kan op dit apparaat niet worden afgespeeld.</string>
+    <string name="music_error_other">Dit nummer kan niet worden afgespeeld.</string>
 </resources>

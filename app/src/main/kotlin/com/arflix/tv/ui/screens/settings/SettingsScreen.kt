@@ -7120,8 +7120,8 @@ private fun tvSettingsFocusedHelp(section: String, focusedIndex: Int): TvSetting
             else -> TvSettingsHelp(stringResource(R.string.nav_news), stringResource(R.string.settings_desc_news))
         }
         "music" -> when (focusedIndex) {
-            2 -> TvSettingsHelp(stringResource(R.string.music_sources_title), stringResource(R.string.music_sources_desc))
-            3 -> TvSettingsHelp(stringResource(R.string.music_cache_clear),
+            1 -> TvSettingsHelp(stringResource(R.string.music_sources_title), stringResource(R.string.music_sources_desc))
+            2 -> TvSettingsHelp(stringResource(R.string.music_cache_clear),
                 com.arflix.tv.ui.screens.music.musicCacheDescription(com.arflix.tv.music.MusicAudioCache.limitBytes(androidx.compose.ui.platform.LocalContext.current)))
             else -> TvSettingsHelp(stringResource(R.string.nav_music), stringResource(R.string.settings_desc_music))
         }
