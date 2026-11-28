@@ -4703,7 +4703,10 @@ fun LiveTvScreen(
                                         true
                                     }
                                     Key.DirectionDown -> {
-                                        if (!state.isConfigured && state.snapshot.channels.isEmpty() && sportsAddonInstallations.isEmpty()) {
+                                        if (sportsSelected) {
+                                            focusZone = LiveTvFocusZone.SPORTS
+                                            sportsFocusSignal++
+                                        } else if (!state.isConfigured && state.snapshot.channels.isEmpty() && sportsAddonInstallations.isEmpty()) {
                                             focusZone = LiveTvFocusZone.CATEGORY_LIST
                                             runCatching { emptyStateButtonFocus.requestFocus() }
                                         } else {
@@ -5180,6 +5183,10 @@ fun LiveTvScreen(
                         focusSignal = sportsFocusSignal,
                         onContentFocused = { focusZone = LiveTvFocusZone.SPORTS; categoryDrawerOpen = false },
                         onOpenCategories = { openCategoryDrawer() },
+                        onExitUp = {
+                            topBarFocusIndex = topBarSelectedIndex(SidebarItem.TV, hasProfile).coerceIn(0, maxTopBarIndex)
+                            focusZone = LiveTvFocusZone.TOPBAR
+                        },
                         onPlay = { channel -> playLiveFullscreen(channel.enrich(0)) },
                         onPlayFromEvent = ::playSportsChannel,
                         onMultiview = ::addToMultiview,
