@@ -1144,6 +1144,14 @@ private fun ProgramsRow(
                 val placementIsNow = placement.isNow(nowMillis)
                 val placementIsPast = placement.isPast(nowMillis)
                 key(placement.startMillis, placement.endMillis) {
+                    // The sticky-title shift only changes for the cell crossing the left
+                    // edge. Reading the scroll offset directly in every cell's layout
+                    // re-measured every programme of every visible row on each scroll
+                    // frame (95% janky horizontal steps on a TV); through derivedStateOf
+                    // only cells whose shift actually changes are invalidated.
+                    val contentShiftPx = remember(cellOffsetPx, maxShiftPx) {
+                        derivedStateOf { (hScrollOffsetPx() - cellOffsetPx).coerceIn(0f, maxShiftPx).toInt() }
+                    }
                     ProgramCell(
                         program = placement.program,
                         clockTickMillis = clockTickMillis,
@@ -1156,9 +1164,7 @@ private fun ProgramsRow(
                         isCatchupSupported = isCatchupSupported,
                         isReminded = remindedProgrammeIds.isNotEmpty() &&
                             programmeReminderId(channel.id, placement.program) in remindedProgrammeIds,
-                        contentStartOffsetPx = {
-                            (hScrollOffsetPx() - cellOffsetPx).coerceIn(0f, maxShiftPx).toInt()
-                        },
+                        contentStartOffsetPx = { contentShiftPx.value },
                         onClick = {
                             epgProgramActionTarget(
                                 program = placement.program,
