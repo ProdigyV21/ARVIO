@@ -216,6 +216,8 @@ internal fun SportsGuidePane(
     recordedEventIds: Set<String> = emptySet(),
     onOpenMultiview: (() -> Unit)? = null,
     onOpenRecordings: (() -> Unit)? = null,
+    // D-pad Up from the top of the page: hand focus to the app's top bar.
+    onExitUp: (() -> Unit)? = null,
 ) {
     // Scores stay on their games while the score feed catches up after a refresh.
     val fixtureMemory = remember { HashMap<String, com.arflix.tv.data.model.SportsFixture>() }
@@ -339,6 +341,9 @@ internal fun SportsGuidePane(
     val showScore = true
     var showDetails by remember { mutableStateOf(false) }
     val firstFocus = remember { FocusRequester() }
+    // Something for the remote to rest on while the schedule loads.
+    val loadingFocus = remember { FocusRequester() }
+    val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
     val categoriesFocus = remember { FocusRequester() }
     val dayChipsFocus = remember { FocusRequester() }
     var picker by remember { mutableStateOf<SportsPicker?>(null) }
@@ -469,7 +474,8 @@ internal fun SportsGuidePane(
             // Lazy cards are attached after the drawer starts its layout transition.
             withFrameNanos { }
             withFrameNanos { }
-            if (focusSignal > handledFocusSignal) runCatching { firstFocus.requestFocus() }
+            if (focusSignal > handledFocusSignal && runCatching { firstFocus.requestFocus() }.isFailure &&
+                runCatching { railFocus.requestFocus() }.isFailure) runCatching { loadingFocus.requestFocus() }
         }
     }
     LaunchedEffect(selected) {
@@ -621,7 +627,11 @@ internal fun SportsGuidePane(
         if (runCatching { heroFocus.requestFocus() }.isFailure && runCatching { jumpFocus.requestFocus() }.isFailure) focusRail()
     }
     CompositionLocalProvider(LocalTextStyle provides LocalTextStyle.current.copy(fontFamily = LiveFontFamily)) {
-    BoxWithConstraints(modifier.fillMaxSize().background(LiveColors.Bg)) {
+    BoxWithConstraints(modifier.fillMaxSize().background(LiveColors.Bg).onKeyEvent { key ->
+        // Up that nothing on the page used: move up inside the page, or leave it for the top bar.
+        if (touch || onExitUp == null || key.type != KeyEventType.KeyDown || key.key != Key.DirectionUp) false
+        else { if (!focusManager.moveFocus(androidx.compose.ui.focus.FocusDirection.Up)) onExitUp(); true }
+    }) {
     // Use full-screen dimensions so opening the drawer never resizes loaded artwork.
     val viewport = configuration.screenWidthDp.dp
     val cardWidth = if (narrow) {
@@ -668,6 +678,7 @@ internal fun SportsGuidePane(
         onRight = ::focusContent,
         onLeft = ::leaveCards,
         sectionLabel = stringResource(R.string.sports_rail_section),
+        onUpFromTop = onExitUp,
     )
     Column(Modifier.weight(1f).fillMaxHeight()) {
         if (showHeader && !railLayout) {
@@ -722,11 +733,13 @@ internal fun SportsGuidePane(
         val browsing = dayOffset != null || sportsFilter != SPORTS_FILTER_ALL
         if (rows.isEmpty() && !browsing && isProcessing) {
             // Shaped like the page that is coming, so it does not jump when rows arrive.
-            Column(Modifier.fillMaxSize().padding(top = 8.dp)) {
-                Text(stringResource(R.string.live_sports_reading_schedule), color = LiveColors.FgDim, fontSize = 13.sp,
-                    modifier = Modifier.padding(horizontal = 18.dp, vertical = 10.dp))
-                SportsSkeletonRows(cardWidth)
-            }
+            SportsSkeletonRows(cardWidth, Modifier.fillMaxSize().padding(top = 4.dp)
+                .then(if (touch) Modifier else Modifier.focusRequester(loadingFocus).focusable().onPreviewKeyEvent { key ->
+                    if (railLayout && key.type == KeyEventType.KeyDown && key.key.mirrorHorizontalForRtl(isRtl) == Key.DirectionLeft) {
+                        focusRail(); true
+                    } else false
+                }),
+                rows = if (railLayout) 2 else 3, hub = railLayout, label = stringResource(R.string.live_sports_reading_schedule))
         } else if (rows.isEmpty() && !browsing) {
             Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.Center,
                 horizontalAlignment = Alignment.CenterHorizontally) {
@@ -759,7 +772,7 @@ internal fun SportsGuidePane(
                         label = stringResource(R.string.sports_jump_to),
                         firstFocus = jumpFocus,
                         onJump = { id -> rows.indexOfFirst { it.id == id }.takeIf { it >= 0 }?.let { moveTo(it, 0) } },
-                        onUp = { runCatching { dayChipsFocus.requestFocus() } },
+                        onUp = { if (onExitUp != null) onExitUp() else runCatching { dayChipsFocus.requestFocus() } },
                         onDown = { if (runCatching { heroFocus.requestFocus() }.isFailure) focusContent() },
                         onLeftEdge = ::focusRail,
                     )
@@ -823,13 +836,15 @@ internal fun SportsGuidePane(
                 onPickDay = { picker = SportsPicker.Day },
                 onPickSport = { picker = SportsPicker.Sport },
                 onToggleLive = { pickFilter(if (sportsFilter == SPORTS_FILTER_LIVE) SPORTS_FILTER_ALL else SPORTS_FILTER_LIVE) },
-                onUp = { if (showHeader && !sidebarOpen) runCatching { categoriesFocus.requestFocus() } },
+                onUp = {
+                    if (!(showHeader && !sidebarOpen && runCatching { categoriesFocus.requestFocus() }.isSuccess)) onExitUp?.invoke()
+                },
                 onDown = { if (rows.isNotEmpty()) moveTo(0, 0) },
                 onLeaveStart = ::leaveCards,
                 onMultiview = onOpenMultiview,
                 onRecordings = onOpenRecordings,
             )
-            if (rows.isEmpty() && (dayLoading || isProcessing)) SportsSkeletonRows(cardWidth, Modifier.weight(1f).padding(top = 8.dp))
+            if (rows.isEmpty() && (dayLoading || isProcessing)) SportsSkeletonRows(cardWidth, Modifier.weight(1f).padding(top = 8.dp), rows = 2)
             else if (rows.isEmpty()) Column(Modifier.fillMaxWidth().weight(1f), verticalArrangement = Arrangement.Center,
                 horizontalAlignment = Alignment.CenterHorizontally) {
                 Icon(Icons.Default.SportsSoccer, null, tint = LiveColors.FgMute, modifier = Modifier.size(32.dp))

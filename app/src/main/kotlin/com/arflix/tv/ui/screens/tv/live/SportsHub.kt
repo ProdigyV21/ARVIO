@@ -466,35 +466,39 @@ internal fun SportsRail(
     onLeft: () -> Unit,
     sectionLabel: String,
     modifier: Modifier = Modifier,
+    // Up from the first entry: leaves the page for the app's top bar.
+    onUpFromTop: (() -> Unit)? = null,
 ) {
     val isRtl = LocalLayoutDirection.current == LayoutDirection.Rtl
-    val keys = Modifier.onPreviewKeyEvent { key ->
+    fun keys(top: Boolean) = Modifier.onPreviewKeyEvent { key ->
         if (key.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
         when (key.key.mirrorHorizontalForRtl(isRtl)) {
             Key.DirectionRight -> { onRight(); true }
             Key.DirectionLeft -> { onLeft(); true }
+            Key.DirectionUp -> if (top && onUpFromTop != null) { onUpFromTop(); true } else false
             else -> false
         }
     }
+    val topKey = if (onBack != null) "back" else (tools.firstOrNull() ?: filters.firstOrNull())?.key
     Column(modifier.width(SportsRailWidth).fillMaxHeight().verticalScroll(rememberScrollState())
         .padding(start = 14.dp, end = 8.dp, top = 12.dp, bottom = 16.dp).testTag("sports-rail")) {
         Row(Modifier.padding(bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
             if (onBack != null) {
                 SportsHeaderIcon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.back),
-                    modifier = Modifier.focusRequester(backFocus).then(keys), onClick = onBack)
+                    modifier = Modifier.focusRequester(backFocus).then(keys(top = true)), onClick = onBack)
                 Spacer(Modifier.width(8.dp))
             }
             Text(title, color = LiveColors.Fg, fontSize = 22.sp, lineHeight = 26.sp, fontWeight = FontWeight.Bold, maxLines = 1)
         }
         tools.forEach { entry ->
             SportsRailItem(entry, Modifier.then(entry.focus?.let { Modifier.focusRequester(it) } ?: Modifier)
-                .then(keys).testTag("sports-rail-${entry.key}")) { onPick(entry.key) }
+                .then(keys(top = entry.key == topKey)).testTag("sports-rail-${entry.key}")) { onPick(entry.key) }
         }
         Text(sectionLabel.uppercase(Locale.getDefault()), color = LiveColors.FgMute, fontSize = 10.sp, letterSpacing = 1.2.sp,
             fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(start = 10.dp, top = 14.dp, bottom = 6.dp))
         filters.forEach { entry ->
             SportsRailItem(entry, Modifier.then(entry.focus?.let { Modifier.focusRequester(it) } ?: Modifier)
-                .then(keys).testTag("sports-rail-${entry.key}")) { onPick(entry.key) }
+                .then(keys(top = entry.key == topKey)).testTag("sports-rail-${entry.key}")) { onPick(entry.key) }
         }
     }
 }
