@@ -4,6 +4,8 @@
 
 package com.arflix.tv.ui.screens.tv.live
 
+import com.arflix.tv.util.replaceLiteral
+
 import com.arflix.tv.network.iptvProviderCooldownMs
 import com.arflix.tv.network.IptvProviderRequestGuard
 import com.arflix.tv.network.isIptvProviderRequestPaused
