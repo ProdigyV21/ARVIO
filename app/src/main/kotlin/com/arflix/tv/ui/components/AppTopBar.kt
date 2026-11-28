@@ -191,6 +191,8 @@ fun AppTopBar(
     }
 }
 
+private val TopBarFocusedContent = Color(0xFF0B0B0D)
+
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 private fun TopBarNavChip(
@@ -202,7 +204,7 @@ private fun TopBarNavChip(
 
     val containerColor by animateColorAsState(
         targetValue = when {
-            isFocused -> Color.White.copy(alpha = 0.2f)
+            isFocused -> Color.White  // solid white pill: readable from the sofa on any artwork
             isSelected -> Color.White.copy(alpha = 0.1f)
             else -> Color.Transparent
         },
@@ -211,7 +213,7 @@ private fun TopBarNavChip(
     )
     val iconColor by animateColorAsState(
         targetValue = when {
-            isFocused -> Color.White  // focused icon stays white (wins over selected)
+            isFocused -> TopBarFocusedContent  // dark on the white focus pill (wins over selected)
             isSelected -> accent  // selected icon gets accent
             else -> Color.White.copy(alpha = 0.62f)
         },
@@ -220,7 +222,7 @@ private fun TopBarNavChip(
     )
     val textColor by animateColorAsState(
         targetValue = when {
-            isFocused -> Color.White  // focused text stays white (wins over selected)
+            isFocused -> TopBarFocusedContent  // dark on the white focus pill (wins over selected)
             isSelected -> accent  // selected text gets accent
             else -> Color.White.copy(alpha = 0.68f)
         },
@@ -283,7 +285,7 @@ private fun TopBarSettingsGear(
 
     val iconColor by animateColorAsState(
         targetValue = when {
-            isFocused -> Color.White  // focused stays white (wins over selected)
+            isFocused -> TopBarFocusedContent  // dark on the white focus circle (wins over selected)
             isSelected -> accent  // selected settings gear gets accent
             else -> Color.White.copy(alpha = 0.5f)
         },
@@ -292,7 +294,7 @@ private fun TopBarSettingsGear(
     )
     val containerColor by animateColorAsState(
         targetValue = when {
-            isFocused -> Color.White.copy(alpha = 0.2f)
+            isFocused -> Color.White  // solid white pill: readable from the sofa on any artwork
             isSelected -> Color.White.copy(alpha = 0.1f)
             else -> Color.Transparent
         },
@@ -349,7 +351,8 @@ private fun TopBarProfileAvatar(
     isFocused: Boolean
 ) {
     val containerColor by animateColorAsState(
-        targetValue = if (isFocused) Color.White.copy(alpha = 0.2f) else Color.Transparent,
+        // A white ring around the avatar: the picture itself stays visible.
+        targetValue = if (isFocused) Color.White else Color.Transparent,
         animationSpec = tween(if (isFocused) AnimationConstants.DURATION_FAST else 0),
         label = "topbar_profile_bg"
     )
