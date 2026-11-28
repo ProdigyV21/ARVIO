@@ -229,4 +229,53 @@ class SportsHubTest {
         assertFalse(sportsChannelNamesOtherEvent("Sharjah vs Dubai", "UK: Sky Sports - Cricket"))
         assertFalse(sportsChannelNamesOtherEvent("Arsenal vs Chelsea", "Sky Sports Main Event"))
     }
+
+    @Test
+    fun eventChannelNameNamesTheGame() {
+        assertEquals("VTSU Castleton vs Eastern Nazarene", sportsChannelMatchup("US: VTSU_Castleton vs Eastern Nazarene"))
+        assertEquals("West Florida vs W Carolina", sportsChannelMatchup("Strong8K · US EN: West Florida vs. W Carolina ᴿᴬᵂ"))
+        assertEquals("#12 Texas vs Oklahoma", sportsChannelMatchup("US| NCAAF 05: #12 Texas vs Oklahoma (2026-11-28 19:00)"))
+        assertEquals("Lakers vs Celtics", sportsChannelMatchup("US: Lakers @ Celtics 7:30 PM ET"))
+        assertEquals("Arsenal vs Chelsea", sportsChannelMatchup("UK: Arsenal v Chelsea HD"))
+        // A lone V in a brand is not a matchup: Viaplay's sports channels carry many live games.
+        assertEquals(null, sportsChannelMatchup("SWE| V SPORT EXTRA HD"))
+        assertFalse(sportsChannelNamesOtherEvent("Bundesliga: Augsburg-Heidenheim", "SWE| V SPORT EXTRA HD"))
+        assertEquals(null, sportsChannelMatchup("NBA 05 @ 19:30"))
+        assertEquals(null, sportsChannelMatchup("UK: Sky Sports Main Event"))
+    }
+
+    @Test
+    fun eventChannelShowsItsOwnGameInsteadOfTheSharedListing() {
+        val now = 1_800_000_000_000L
+        val hour = 3_600_000L
+        val listing = "NCAA Football: GT vs. #1 UGA • Survivor Series: WarGames"
+        val channel = IptvChannel("w", "US: West Florida vs. W Carolina", "http://w", "8K| SPORT ON AIR")
+        val guide = mapOf("w" to com.arflix.tv.data.model.IptvNowNext(upcoming = listOf(
+            IptvProgram(listing, startUtcMillis = now - hour, endUtcMillis = now + 2 * hour),
+            IptvProgram(listing, startUtcMillis = now + 2 * hour, endUtcMillis = now + 5 * hour))))
+        val events = buildSportsGuideEvents(listOf(channel), guide, now)
+        assertEquals(listOf("West Florida vs W Carolina"), events.map { it.title })
+        assertTrue(events.single().isOnAir(now))
+        assertFalse(events.single().channelOnly)
+        // A channel named after the game its guide shows keeps it, also when the title repeats the name.
+        val same = IptvChannel("t", "US: Texas vs Oklahoma", "http://t", "Sports")
+        val sameGuide = mapOf("t" to com.arflix.tv.data.model.IptvNowNext(upcoming = listOf(
+            IptvProgram("Texas vs Oklahoma", startUtcMillis = now - hour, endUtcMillis = now + 2 * hour, category = "American football"))))
+        assertEquals(listOf("Texas vs Oklahoma"), buildSportsGuideEvents(listOf(same), sameGuide, now).map { it.title })
+    }
+
+    @Test
+    fun listedGameOnAnEventChannelIsTheGame() {
+        val now = 1_800_000_000_000L
+        val listed = sportsListingProgramme(IptvProgram("Live | China - Great Britain | all | 8K EXCLUSIVE | ES: SOC",
+            startUtcMillis = now, endUtcMillis = now + 3_600_000L))
+        assertEquals("China - Great Britain", listed.title)
+        assertEquals(GuideSport.FOOTBALL, GuideSport.fromText("${listed.category} ${listed.title}"))
+        assertFalse(guidePlaceholder.containsMatchIn(listed.title))
+        // Without a matchup the listing stays a placeholder.
+        val plain = IptvProgram("Live | all | 8K EXCLUSIVE", startUtcMillis = now, endUtcMillis = now + 1)
+        assertEquals(plain, sportsListingProgramme(plain))
+        val ordinary = IptvProgram("Arsenal vs Chelsea", startUtcMillis = now, endUtcMillis = now + 1)
+        assertTrue(ordinary === sportsListingProgramme(ordinary))
+    }
 }
