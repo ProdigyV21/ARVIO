@@ -53,8 +53,22 @@ class NavigationVisibilityTest {
         assertFalse(visibleNavigationItems().contains(SidebarItem.NEWS))
         assertFalse(visibleNavigationItems().contains(SidebarItem.MUSIC))
         assertFalse(tvGeneralRowsForSection("appearance").contains(58))
+        assertTrue(tvGeneralRowsForSection("music").isEmpty())
         assertFalse(tvGeneralRowsForSection("appearance").contains(68))
         assertTrue(tvGeneralRowsForSection("news").isEmpty())
+    }
+
+    @Test fun musicIsHiddenOnTvAndOnPhonesSeparately() {
+        val phoneMusic = mobileNavigationSection("music")
+        assertEquals("music_phone", phoneMusic)
+        assertEquals("tv", mobileNavigationSection("tv"))
+        NavigationVisibility.hiddenSections = setOf("music_phone")
+        assertTrue(visibleNavigationItems().contains(SidebarItem.MUSIC))
+        assertFalse(isNavigationSectionVisible(phoneMusic, NavigationVisibility.hiddenSections))
+        NavigationVisibility.hiddenSections = setOf("music")
+        assertFalse(visibleNavigationItems().contains(SidebarItem.MUSIC))
+        assertTrue(isNavigationSectionVisible(phoneMusic, NavigationVisibility.hiddenSections))
+        assertEquals(setOf("music", "music_phone"), readHiddenNavigationSections("""["music_phone","music"]"""))
     }
 
     @Test fun changingVisibilityKeepsFocusOnTheSameItemInsteadOfTheOldPosition() {
@@ -74,7 +88,10 @@ class NavigationVisibilityTest {
         // The News switch opens its own section, followed by the topics and sources pickers.
         assertEquals(listOf(61, 62, 63), tvGeneralRowsForSection("news"))
         assertEquals(listOf("search", "watchlist", "tv", "news", "music"), listOf(56, 57, 58, 61, 68).map(::navigationSectionForRow))
-        val all = listOf("language", "subtitles", "ai_subtitles", "playback", "appearance", "news", "profiles", "network")
+        // Music has its own section, like News: the phone tab switch, then its sources and cache.
+        assertEquals(listOf(69, 70, 71), tvGeneralRowsForSection("music"))
+        assertEquals("music_phone", navigationSectionForRow(69))
+        val all = listOf("language", "subtitles", "ai_subtitles", "playback", "appearance", "news", "music", "profiles", "network")
             .flatMap(::tvGeneralRowsForSection)
         assertEquals(all.size, all.distinct().size)
     }

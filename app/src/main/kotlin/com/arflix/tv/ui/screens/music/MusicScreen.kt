@@ -95,6 +95,21 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.foundation.focusable
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -118,6 +133,8 @@ import com.arflix.tv.music.SearchSection
 import com.arflix.tv.music.MusicArtist
 import com.arflix.tv.music.MusicCollections
 import com.arflix.tv.music.MusicPlaylist
+import com.arflix.tv.music.MusicNowPlaying
+import com.arflix.tv.music.MusicPlaybackProblem
 import com.arflix.tv.music.MusicPin
 import com.arflix.tv.music.MusicPinType
 import com.arflix.tv.music.MusicPlaybackState
@@ -130,6 +147,7 @@ import com.arflix.tv.ui.theme.BackgroundElevated
 internal val Surface = Color(0xFF141414)
 internal val Muted = Color(0xB3EDEDED)
 internal val Faint = Color(0x80EDEDED)
+private val ProblemText = Color(0xFFFF8A80)
 private val MiniPlayerHeight = 64.dp
 
 /**
@@ -158,43 +176,46 @@ fun MusicScreen(
 internal fun MusicContent(
     state: MusicUiState,
     playback: MusicPlaybackState,
-    viewModel: MusicActions,
+    actions: MusicActions,
     onBack: () -> Unit = {},
 ) {
+    val viewModel = actions
     val accent = resolveAccentColor(fallback = Color.White)
 
-    var addingSource by rememberSaveable { mutableStateOf(false) }
-    LaunchedEffect(state.library) { addingSource = false }
-
     BackHandler {
-        if (addingSource && state.hasSources) addingSource = false
-        else if (!viewModel.back()) onBack()
+        if (!viewModel.back()) onBack()
     }
 
-    Box(Modifier.fillMaxSize().background(Color.Black).testTag("music-screen")) {
+    Box(
+        Modifier.fillMaxSize().background(Color.Black).testTag("music-screen"),
+    ) {
         when {
             !state.configLoaded -> Unit
-            !state.hasSources || addingSource -> ConnectView(
-                state = state,
+            // The first source is added here; more are added and removed in Settings -> Music.
+            !state.hasSources -> ConnectView(
+                status = MusicSourceStatus(state.connecting, state.connectError, state.addingAddon, state.addonError),
                 accent = accent,
                 onConnect = viewModel::connect,
                 onAddAddon = viewModel::addAddon,
-                onClose = if (state.hasSources) ({ addingSource = false }) else null,
+                onClose = null,
             )
             else -> {
-                val bottomPadding = LocalBottomBarInset.current +
-                    (if (playback.current != null) MiniPlayerHeight + 8.dp else 0.dp) + 16.dp
-                when (val page = state.pages.lastOrNull()) {
-                    is MusicPage.Album -> AlbumPageView(page, state.collections, playback, accent, bottomPadding, viewModel)
-                    is MusicPage.Artist -> ArtistPageView(page, state.collections, accent, bottomPadding, viewModel)
-                    is MusicPage.Playlist -> PlaylistPageView(page, state.collections, playback, accent, bottomPadding, viewModel)
-                    null -> LibraryView(state, playback, accent, bottomPadding, viewModel) { addingSource = true }
+                val miniSpace = if (playback.current != null) MiniPlayerHeight + 8.dp else 0.dp
+                // The lists scroll on under the mini player.
+                val bottomPadding = LocalBottomBarInset.current + miniSpace + 16.dp
+                Box(Modifier.fillMaxSize()) {
+                    when (val page = state.pages.lastOrNull()) {
+                        is MusicPage.Album -> AlbumPageView(page, state.collections, playback, accent, bottomPadding, viewModel)
+                        is MusicPage.Artist -> ArtistPageView(page, state.collections, accent, bottomPadding, viewModel)
+                        is MusicPage.Playlist -> PlaylistPageView(page, state.collections, playback, accent, bottomPadding, viewModel)
+                        null -> LibraryView(state, playback, accent, bottomPadding, viewModel)
+                    }
                 }
             }
         }
 
         val current = playback.current
-        if (current != null && state.hasSources && !addingSource) {
+        if (current != null && state.hasSources) {
             MiniPlayer(
                 track = current,
                 playback = playback,
@@ -226,9 +247,17 @@ internal fun MusicContent(
 /** How a source is added: an addon URL, or a login on the user's own server. */
 private enum class SourceKind { ADDON, SUBSONIC, JELLYFIN }
 
+/** Where adding a source stands: a server login or an addon being checked, and why the last try failed. */
+internal data class MusicSourceStatus(
+    val connecting: Boolean = false,
+    val connectError: String? = null,
+    val addingAddon: Boolean = false,
+    val addonError: String? = null,
+)
+
 @Composable
-private fun ConnectView(
-    state: MusicUiState,
+internal fun ConnectView(
+    status: MusicSourceStatus,
     accent: Color,
     onConnect: (MusicServerType, String, String, String) -> Unit,
     onAddAddon: (String) -> Unit,
@@ -239,9 +268,9 @@ private fun ConnectView(
     var username by rememberSaveable { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     val isAddon = kind == SourceKind.ADDON
-    val connecting = if (isAddon) state.addingAddon else state.connecting
-    val error = if (isAddon) state.addonError?.let { stringResource(R.string.music_addon_failed, it) }
-    else state.connectError?.let { stringResource(R.string.music_connect_failed, it) }
+    val connecting = if (isAddon) status.addingAddon else status.connecting
+    val error = if (isAddon) status.addonError?.let { stringResource(R.string.music_addon_failed, it) }
+    else status.connectError?.let { stringResource(R.string.music_connect_failed, it) }
     val canConnect = url.isNotBlank() && (isAddon || username.isNotBlank()) && !connecting
     val submit = {
         if (canConnect) {
@@ -264,7 +293,7 @@ private fun ConnectView(
     ) {
         if (onClose != null) {
             Row(Modifier.fillMaxWidth()) {
-                IconButton(onClick = onClose) {
+                IconButton(modifier = Modifier.tvFocusRing(CircleShape), onClick = onClose) {
                     Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.music_back), tint = Color.White)
                 }
             }
@@ -302,6 +331,7 @@ private fun ConnectView(
                     Box(
                         Modifier
                             .weight(1f)
+                            .tvFocusRing(RoundedCornerShape(9.dp))
                             .clip(RoundedCornerShape(9.dp))
                             .background(if (selected) accent else Color.Transparent)
                             .clickable { kind = option }
@@ -322,6 +352,7 @@ private fun ConnectView(
                 label = stringResource(if (isAddon) R.string.music_addon_url else R.string.music_server_url),
                 placeholder = stringResource(if (isAddon) R.string.music_addon_url_hint else R.string.music_server_url_hint),
                 accent = accent,
+                tvFocus = rememberTvInitialFocus(kind),
                 keyboard = KeyboardOptions(
                     keyboardType = KeyboardType.Uri,
                     imeAction = if (isAddon) ImeAction.Done else ImeAction.Next,
@@ -356,6 +387,7 @@ private fun ConnectView(
                 Modifier
                     .fillMaxWidth()
                     .height(52.dp)
+                    .tvFocusRing(RoundedCornerShape(26.dp))
                     .clip(RoundedCornerShape(26.dp))
                     .background(if (canConnect) accent else accent.copy(alpha = 0.3f))
                     .clickable(enabled = canConnect, onClick = submit)
@@ -387,7 +419,13 @@ private fun MusicField(
     onDone: () -> Unit = {},
     leading: ImageVector? = null,
     modifier: Modifier = Modifier.fillMaxWidth(),
+    /** On TV, where the remote lands on the field (it opens the keyboard only on OK). */
+    tvFocus: FocusRequester = remember { FocusRequester() },
 ) {
+    if (isMusicTv()) {
+        TvMusicField(value, onValue, label, accent, placeholder, password, keyboard, onDone, leading, modifier, tvFocus)
+        return
+    }
     val labelContent: (@Composable () -> Unit)? = if (label.isNotEmpty()) {
         { Text(label) }
     } else null
@@ -398,7 +436,7 @@ private fun MusicField(
         { Icon(leading, null, tint = Muted) }
     } else null
     val trailingContent: (@Composable () -> Unit)? = if (leading != null && value.isNotEmpty()) {
-        { IconButton(onClick = { onValue("") }) { Icon(Icons.Default.Close, null, tint = Muted) } }
+        { IconButton(modifier = Modifier.tvFocusRing(CircleShape), onClick = { onValue("") }) { Icon(Icons.Default.Close, null, tint = Muted) } }
     } else null
     OutlinedTextField(
         value = value,
@@ -413,18 +451,95 @@ private fun MusicField(
         keyboardOptions = keyboard,
         keyboardActions = KeyboardActions(onDone = { onDone() }, onSearch = { onDone() }),
         shape = RoundedCornerShape(12.dp),
-        colors = OutlinedTextFieldDefaults.colors(
-            focusedTextColor = Color.White,
-            unfocusedTextColor = Color.White,
-            focusedBorderColor = accent,
-            unfocusedBorderColor = Color(0x33EDEDED),
-            focusedLabelColor = accent,
-            unfocusedLabelColor = Muted,
-            cursorColor = accent,
-            focusedContainerColor = Surface,
-            unfocusedContainerColor = Surface,
-        ),
+        colors = musicFieldColors(accent),
     )
+}
+
+@Composable
+private fun musicFieldColors(accent: Color) = OutlinedTextFieldDefaults.colors(
+    focusedTextColor = Color.White,
+    unfocusedTextColor = Color.White,
+    focusedBorderColor = accent,
+    unfocusedBorderColor = Color(0x33EDEDED),
+    focusedLabelColor = accent,
+    unfocusedLabelColor = Muted,
+    cursorColor = accent,
+    focusedContainerColor = Surface,
+    unfocusedContainerColor = Surface,
+)
+
+/**
+ * The TV version of [MusicField]. A focused text field opens the keyboard at once and keeps the
+ * remote's Up and Down, so here the remote lands on a frame around the field instead: OK starts
+ * typing, and Up or Down (or the keyboard's own Done) leaves the field again.
+ */
+@Composable
+private fun TvMusicField(
+    value: String,
+    onValue: (String) -> Unit,
+    label: String,
+    accent: Color,
+    placeholder: String?,
+    password: Boolean,
+    keyboard: KeyboardOptions,
+    onDone: () -> Unit,
+    leading: ImageVector?,
+    modifier: Modifier,
+    frame: FocusRequester,
+) {
+    var editing by remember { mutableStateOf(false) }
+    val field = remember { FocusRequester() }
+    val focusManager = LocalFocusManager.current
+    LaunchedEffect(editing) { if (editing) runCatching { field.requestFocus() } }
+    fun leave(direction: FocusDirection?) {
+        editing = false
+        runCatching { frame.requestFocus() }
+        direction?.let { focusManager.moveFocus(it) }
+    }
+    Box(
+        modifier
+            .tvFocusRing(RoundedCornerShape(12.dp))
+            .focusRequester(frame)
+            .onKeyEvent { event ->
+                val ok = event.key == Key.Enter || event.key == Key.DirectionCenter || event.key == Key.NumPadEnter
+                if (ok && event.type == KeyEventType.KeyUp && !editing) {
+                    editing = true
+                    true
+                } else ok && !editing
+            }
+            .focusable(),
+    ) {
+        OutlinedTextField(
+            value = value,
+            onValueChange = onValue,
+            modifier = Modifier
+                .fillMaxWidth()
+                .focusRequester(field)
+                .focusProperties { canFocus = editing }
+                .onFocusChanged { if (!it.isFocused && editing) editing = false }
+                .onPreviewKeyEvent { event ->
+                    when {
+                        event.type != KeyEventType.KeyDown -> false
+                        event.key == Key.DirectionDown -> { leave(FocusDirection.Down); true }
+                        event.key == Key.DirectionUp -> { leave(FocusDirection.Up); true }
+                        else -> false
+                    }
+                },
+            singleLine = true,
+            label = if (label.isNotEmpty()) ({ Text(label) }) else null,
+            placeholder = placeholder?.let { { Text(it, color = Faint) } },
+            leadingIcon = leading?.let { { Icon(it, null, tint = Muted) } },
+            visualTransformation = if (password) PasswordVisualTransformation() else androidx.compose.ui.text.input.VisualTransformation.None,
+            keyboardOptions = keyboard,
+            keyboardActions = KeyboardActions(
+                onDone = { onDone(); leave(null) },
+                onSearch = { onDone(); leave(null) },
+                onNext = { leave(FocusDirection.Down) },
+            ),
+            shape = RoundedCornerShape(12.dp),
+            colors = musicFieldColors(accent),
+        )
+    }
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -437,11 +552,11 @@ private fun LibraryView(
     accent: Color,
     bottomPadding: Dp,
     viewModel: MusicActions,
-    onAddSource: () -> Unit,
 ) {
     Column(Modifier.fillMaxSize().statusBarsPadding()) {
         Row(
-            Modifier.fillMaxWidth().padding(start = 20.dp, end = 8.dp, top = 12.dp),
+            // The height the sources menu button gave the row before sources moved to Settings.
+            Modifier.fillMaxWidth().padding(start = 20.dp, end = 8.dp, top = 12.dp).heightIn(min = 48.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
@@ -449,38 +564,6 @@ private fun LibraryView(
                 color = Color.White, fontSize = 30.sp, fontWeight = FontWeight.Bold,
                 modifier = Modifier.weight(1f),
             )
-            var menu by remember { mutableStateOf(false) }
-            Box {
-                IconButton(onClick = { menu = true }) {
-                    Icon(Icons.Default.MoreVert, stringResource(R.string.music_more), tint = Color.White)
-                }
-                DropdownMenu(expanded = menu, onDismissRequest = { menu = false }, containerColor = BackgroundElevated) {
-                    state.config?.let { config ->
-                        Text(
-                            stringResource(R.string.music_connected_as, config.baseUrl.substringAfter("://"), config.username),
-                            color = Faint, fontSize = 12.sp,
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp).widthIn(max = 260.dp),
-                        )
-                    }
-                    state.library.addons.forEach { addon ->
-                        Text(addon.name, color = Faint, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
-                        DropdownMenuItem(
-                            text = { Text(stringResource(R.string.music_remove_addon, addon.name), color = Color.White) },
-                            onClick = { menu = false; viewModel.removeAddon(addon) },
-                        )
-                    }
-                    if (state.config != null) {
-                        DropdownMenuItem(
-                            text = { Text(stringResource(R.string.music_disconnect), color = Color.White) },
-                            onClick = { menu = false; viewModel.disconnect() },
-                        )
-                    }
-                    DropdownMenuItem(
-                        text = { Text(stringResource(R.string.music_add_source), color = Color.White) },
-                        onClick = { menu = false; onAddSource() },
-                    )
-                }
-            }
         }
 
         MusicField(
@@ -491,6 +574,7 @@ private fun LibraryView(
             accent = accent,
             leading = Icons.Default.Search,
             keyboard = KeyboardOptions(imeAction = ImeAction.Search),
+            tvFocus = rememberTvInitialFocus(),
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp).testTag("music-search"),
         )
 
@@ -512,6 +596,7 @@ private fun LibraryView(
                 val selected = state.tab == tab
                 Box(
                     Modifier
+                        .tvFocusRing(RoundedCornerShape(20.dp))
                         .clip(RoundedCornerShape(20.dp))
                         .background(if (selected) accent else Surface)
                         .clickable { viewModel.selectTab(tab) }
@@ -725,7 +810,7 @@ private fun AlbumPageView(
                     BackRow(viewModel) {
                         PinButton(collections.isPinned(MusicPinType.ALBUM, album.id), accent) { viewModel.togglePin(MusicPin.of(album)) }
                         FavoriteButton(collections.isFavorite(album), accent) { viewModel.toggleFavorite(album) }
-                        IconButton(onClick = { viewModel.showAddToPlaylist(page.tracks) }, enabled = page.tracks.isNotEmpty()) {
+                        IconButton(modifier = Modifier.tvFocusRing(CircleShape), onClick = { viewModel.showAddToPlaylist(page.tracks) }, enabled = page.tracks.isNotEmpty()) {
                             Icon(Icons.AutoMirrored.Filled.PlaylistAdd, stringResource(R.string.music_add_to_playlist), tint = Color.White)
                         }
                     }
@@ -740,6 +825,7 @@ private fun AlbumPageView(
                         album.artist, color = accent, fontSize = 15.sp, fontWeight = FontWeight.SemiBold,
                         modifier = Modifier
                             .padding(top = 4.dp)
+                            .tvFocusRing(RoundedCornerShape(6.dp))
                             .clip(RoundedCornerShape(6.dp))
                             .clickable(enabled = album.artistId != null) { viewModel.openArtist(album.artistId, album.artist) }
                             .padding(horizontal = 6.dp, vertical = 2.dp),
@@ -809,7 +895,7 @@ private fun ArtistPageView(page: MusicPage.Artist, collections: MusicCollections
 @Composable
 private fun BackRow(viewModel: MusicActions, actions: @Composable RowScope.() -> Unit = {}) {
     Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-        IconButton(onClick = { viewModel.back() }) {
+        IconButton(modifier = Modifier.tvFocusRing(CircleShape), onClick = { viewModel.back() }) {
             Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.music_back), tint = Color.White)
         }
         Spacer(Modifier.weight(1f))
@@ -819,7 +905,7 @@ private fun BackRow(viewModel: MusicActions, actions: @Composable RowScope.() ->
 
 @Composable
 private fun FavoriteButton(favorite: Boolean, accent: Color, onClick: () -> Unit) {
-    IconButton(onClick = onClick) {
+    IconButton(modifier = Modifier.tvFocusRing(CircleShape), onClick = onClick) {
         Icon(
             if (favorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
             stringResource(if (favorite) R.string.music_unlike else R.string.music_like),
@@ -830,8 +916,11 @@ private fun FavoriteButton(favorite: Boolean, accent: Color, onClick: () -> Unit
 
 @Composable
 private fun PlayButtons(accent: Color, enabled: Boolean, onPlay: () -> Unit, onShuffle: (() -> Unit)?) {
+    // A page opens with the remote on Play, once there is something to play.
+    val playFocus = rememberTvInitialFocus(enabled)
     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        PillButton(stringResource(R.string.music_play), Icons.Default.PlayArrow, accent, filled = true, enabled = enabled, onClick = onPlay)
+        PillButton(stringResource(R.string.music_play), Icons.Default.PlayArrow, accent, filled = true, enabled = enabled,
+            modifier = Modifier.focusRequester(playFocus), onClick = onPlay)
         if (onShuffle != null) {
             PillButton(stringResource(R.string.music_shuffle), Icons.Default.Shuffle, accent, filled = false, enabled = enabled, onClick = onShuffle)
         }
@@ -839,10 +928,11 @@ private fun PlayButtons(accent: Color, enabled: Boolean, onPlay: () -> Unit, onS
 }
 
 @Composable
-private fun PillButton(label: String, icon: ImageVector, accent: Color, filled: Boolean, enabled: Boolean, onClick: () -> Unit) {
+private fun PillButton(label: String, icon: ImageVector, accent: Color, filled: Boolean, enabled: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
     val content = if (filled) contentOn(accent) else Color.White
     Row(
-        Modifier
+        modifier
+            .tvFocusRing(RoundedCornerShape(24.dp))
             .clip(RoundedCornerShape(24.dp))
             .then(if (filled) Modifier.background(accent) else Modifier.border(1.dp, Color(0x4DEDEDED), RoundedCornerShape(24.dp)))
             .clickable(enabled = enabled, onClick = onClick)
@@ -860,7 +950,7 @@ private fun PillButton(label: String, icon: ImageVector, accent: Color, filled: 
 
 @Composable
 private fun AlbumCard(album: MusicAlbum, modifier: Modifier = Modifier, onClick: () -> Unit) {
-    Column(modifier.clip(RoundedCornerShape(10.dp)).clickable(onClick = onClick)) {
+    Column(modifier.tvFocusRing(RoundedCornerShape(10.dp), lift = true).clip(RoundedCornerShape(10.dp)).clickable(onClick = onClick)) {
         Cover(album.coverUrl, Modifier.fillMaxWidth().aspectRatio(1f), shape = RoundedCornerShape(10.dp), icon = Icons.Default.Album)
         Text(
             album.name, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.SemiBold,
@@ -873,7 +963,7 @@ private fun AlbumCard(album: MusicAlbum, modifier: Modifier = Modifier, onClick:
 @Composable
 private fun ArtistRow(artist: MusicArtist, onClick: () -> Unit) {
     Row(
-        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 20.dp, vertical = 8.dp),
+        Modifier.fillMaxWidth().tvFocusRing(RoundedCornerShape(10.dp)).clickable(onClick = onClick).padding(horizontal = 20.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Cover(artist.coverUrl, Modifier.size(52.dp), shape = CircleShape, icon = Icons.Default.Person)
@@ -898,44 +988,54 @@ private fun TrackRow(
     actions: List<MenuAction> = emptyList(),
     onClick: () -> Unit,
 ) {
+    // The ⋮ button sits beside the clickable part, not inside it, so a remote can move across to it.
     Row(
-        Modifier.fillMaxWidth().clickable(onClick = onClick)
-            .padding(start = 20.dp, end = if (actions.isEmpty()) 20.dp else 4.dp, top = 10.dp, bottom = 10.dp),
+        Modifier.fillMaxWidth().padding(end = if (actions.isEmpty()) 0.dp else 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        if (showCover) {
-            Cover(track.coverUrl, Modifier.size(46.dp), shape = RoundedCornerShape(6.dp), icon = Icons.Default.MusicNote)
-            Spacer(Modifier.width(14.dp))
-        } else if (number != null) {
-            Box(Modifier.width(32.dp)) {
-                if (playing) Icon(Icons.Default.MusicNote, null, tint = accent, modifier = Modifier.size(18.dp))
-                else Text(number.toString(), color = Faint, fontSize = 14.sp)
+        Row(
+            Modifier.weight(1f)
+                // As tall as when the ⋮ button (48dp) sat inside the row's padding.
+                .heightIn(min = if (actions.isEmpty()) 0.dp else 68.dp)
+                .tvFocusRing(RoundedCornerShape(10.dp)).clickable(onClick = onClick)
+                .padding(start = 20.dp, end = if (actions.isEmpty()) 20.dp else 0.dp, top = 10.dp, bottom = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (showCover) {
+                Cover(track.coverUrl, Modifier.size(46.dp), shape = RoundedCornerShape(6.dp), icon = Icons.Default.MusicNote)
+                Spacer(Modifier.width(14.dp))
+            } else if (number != null) {
+                Box(Modifier.width(32.dp)) {
+                    if (playing) Icon(Icons.Default.MusicNote, null, tint = accent, modifier = Modifier.size(18.dp))
+                    else Text(number.toString(), color = Faint, fontSize = 14.sp)
+                }
             }
-        }
-        Column(Modifier.weight(1f)) {
-            Text(
-                track.title, color = if (playing) accent else Color.White, fontSize = 15.sp,
-                fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis,
-            )
-            if (showArtist && track.artist.isNotBlank()) {
+            Column(Modifier.weight(1f)) {
                 Text(
-                    if (showCover && track.album.isNotBlank()) "${track.artist} · ${track.album}" else track.artist,
-                    color = Faint, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    track.title, color = if (playing) accent else Color.White, fontSize = 15.sp,
+                    fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis,
                 )
+                if (showArtist && track.artist.isNotBlank()) {
+                    Text(
+                        if (showCover && track.album.isNotBlank()) "${track.artist} · ${track.album}" else track.artist,
+                        color = Faint, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    )
+                }
             }
-        }
-        if (track.durationSec > 0) {
-            Text(formatTime(track.durationSec * 1000L), color = Faint, fontSize = 13.sp, modifier = Modifier.padding(start = 12.dp))
+            if (track.durationSec > 0) {
+                Text(formatTime(track.durationSec * 1000L), color = Faint, fontSize = 13.sp, modifier = Modifier.padding(start = 12.dp))
+            }
         }
         if (actions.isNotEmpty()) {
             var open by remember { mutableStateOf(false) }
             Box {
-                IconButton(onClick = { open = true }) {
+                IconButton(modifier = Modifier.tvFocusRing(CircleShape), onClick = { open = true }) {
                     Icon(Icons.Default.MoreVert, stringResource(R.string.music_more), tint = Faint)
                 }
                 DropdownMenu(expanded = open, onDismissRequest = { open = false }, containerColor = BackgroundElevated) {
                     actions.forEach { action ->
                         DropdownMenuItem(
+                            modifier = Modifier.tvFocusRing(RoundedCornerShape(4.dp)),
                             text = { Text(action.label, color = Color.White) },
                             leadingIcon = action.icon?.let { icon -> @Composable { Icon(icon, null, tint = Muted) } },
                             onClick = { open = false; action.onClick() },
@@ -1023,6 +1123,7 @@ private fun MiniPlayer(
         modifier
             .fillMaxWidth()
             .height(MiniPlayerHeight)
+            .tvFocusRing(RoundedCornerShape(14.dp))
             .clip(RoundedCornerShape(14.dp))
             .background(BackgroundElevated)
             .clickable(onClick = onOpen)
@@ -1033,10 +1134,18 @@ private fun MiniPlayer(
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(track.title, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text(track.artist, color = Faint, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                val note = playbackNote(playback, short = true)
+                Text(
+                    note ?: track.artist, color = if (playback.problem != null) ProblemText else Faint, fontSize = 12.sp,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    modifier = if (note != null) Modifier.testTag("music-playback-note") else Modifier,
+                )
             }
             PlayPauseIcon(playback, Color.White, onToggle, size = 44.dp)
-            IconButton(onClick = onNext) { Icon(Icons.Default.SkipNext, stringResource(R.string.music_next), tint = Color.White) }
+            IconButton(modifier = Modifier.tvFocusRing(CircleShape), onClick = onNext) { Icon(Icons.Default.SkipNext, stringResource(R.string.music_next), tint = Color.White) }
+            IconButton(modifier = Modifier.tvFocusRing(CircleShape), onClick = MusicNowPlaying::close) {
+                Icon(Icons.Default.Close, stringResource(R.string.music_stop_close), tint = Faint)
+            }
         }
         val progress = if (playback.durationMs > 0) (playback.positionMs.toFloat() / playback.durationMs).coerceIn(0f, 1f) else 0f
         Box(
@@ -1046,9 +1155,36 @@ private fun MiniPlayer(
     }
 }
 
+/** Why the song stopped, or that it is still being prepared; null while it plays normally. */
 @Composable
-private fun PlayPauseIcon(playback: MusicPlaybackState, tint: Color, onClick: () -> Unit, size: Dp) {
-    IconButton(onClick = onClick, modifier = Modifier.size(size)) {
+private fun playbackNote(playback: MusicPlaybackState, short: Boolean): String? =
+    // A closing mark keeps an English note's final "." or "…" at its end in a right-to-left layout.
+    playbackNoteText(playback, short)?.let { "$it‎" }
+
+@Composable
+private fun playbackNoteText(playback: MusicPlaybackState, short: Boolean): String? {
+    playback.problem?.let { problem ->
+        return when (problem.kind) {
+            MusicPlaybackProblem.Kind.ADDON_TIMEOUT -> stringResource(R.string.music_error_addon_timeout)
+            MusicPlaybackProblem.Kind.ADDON_ERROR -> problem.code?.let { stringResource(R.string.music_error_addon_code, it) }
+                ?: stringResource(R.string.music_error_addon)
+            MusicPlaybackProblem.Kind.STREAM_ERROR -> stringResource(R.string.music_error_stream)
+            MusicPlaybackProblem.Kind.NO_CONNECTION -> stringResource(R.string.music_error_offline)
+            MusicPlaybackProblem.Kind.NOT_IN_SOURCES -> stringResource(R.string.music_error_not_found, problem.detail.orEmpty())
+            MusicPlaybackProblem.Kind.FORMAT -> stringResource(R.string.music_error_format)
+            MusicPlaybackProblem.Kind.OTHER -> stringResource(R.string.music_error_other)
+        }
+    }
+    return when (playback.loadingWait) {
+        MusicPlaybackState.LoadingWait.NONE -> null
+        MusicPlaybackState.LoadingWait.PREPARING -> stringResource(R.string.music_preparing)
+        MusicPlaybackState.LoadingWait.SLOW -> stringResource(if (short) R.string.music_preparing else R.string.music_preparing_slow)
+    }
+}
+
+@Composable
+private fun PlayPauseIcon(playback: MusicPlaybackState, tint: Color, onClick: () -> Unit, size: Dp, modifier: Modifier = Modifier) {
+    IconButton(onClick = onClick, modifier = modifier.size(size).tvFocusRing(CircleShape)) {
         if (playback.isBuffering && !playback.isPlaying) {
             CircularProgressIndicator(color = tint, strokeWidth = 2.dp, modifier = Modifier.size(size * 0.45f))
         } else {
@@ -1063,7 +1199,13 @@ private fun PlayPauseIcon(playback: MusicPlaybackState, tint: Color, onClick: ()
 }
 
 @Composable
-private fun FullPlayer(track: MusicTrack, playback: MusicPlaybackState, state: MusicUiState, appAccent: Color, viewModel: MusicActions) {
+private fun FullPlayer(
+    track: MusicTrack,
+    playback: MusicPlaybackState,
+    state: MusicUiState,
+    appAccent: Color,
+    viewModel: MusicActions,
+) {
     val collections = state.collections
     // The player takes its colours from the cover: a dark tint behind, a bright one for the controls.
     val coverColors = rememberCoverColors(track.coverUrl)
@@ -1076,8 +1218,12 @@ private fun FullPlayer(track: MusicTrack, playback: MusicPlaybackState, state: M
     BackHandler(enabled = queueOpen || panel == PlayerPanel.LYRICS) {
         if (queueOpen) queueOpen = false else panel = PlayerPanel.COVER
     }
+    val playFocus = rememberTvInitialFocus()
 
-    Box(Modifier.fillMaxSize().background(Color.Black).clickable(enabled = false) {}.testTag("music-player")) {
+    Box(
+        Modifier.fillMaxSize().background(Color.Black).clickable(enabled = false) {}
+            .testTag("music-player"),
+    ) {
         Cover(track.coverUrl, Modifier.fillMaxSize().blur(80.dp), shape = RoundedCornerShape(0.dp), icon = Icons.Default.MusicNote)
         Box(
             Modifier.fillMaxSize().background(
@@ -1089,7 +1235,7 @@ private fun FullPlayer(track: MusicTrack, playback: MusicPlaybackState, state: M
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Row(Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = { viewModel.setPlayerOpen(false) }) {
+                IconButton(modifier = Modifier.tvFocusRing(CircleShape), onClick = { viewModel.setPlayerOpen(false) }) {
                     Icon(Icons.Default.KeyboardArrowDown, stringResource(R.string.music_close_player), tint = Color.White, modifier = Modifier.size(32.dp))
                 }
                 Text(
@@ -1097,13 +1243,34 @@ private fun FullPlayer(track: MusicTrack, playback: MusicPlaybackState, state: M
                     maxLines = 1, overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f).padding(horizontal = 8.dp),
                 )
-                IconButton(onClick = { viewModel.showAddToPlaylist(listOf(track)) }) {
+                IconButton(modifier = Modifier.tvFocusRing(CircleShape), onClick = { viewModel.showAddToPlaylist(listOf(track)) }) {
                     Icon(Icons.AutoMirrored.Filled.PlaylistAdd, stringResource(R.string.music_add_to_playlist), tint = Color.White)
                 }
+                // Stops the song for good: the player, the mini player and the notification all go.
+                IconButton(
+                    modifier = Modifier.tvFocusRing(CircleShape),
+                    onClick = {
+                        viewModel.setPlayerOpen(false)
+                        MusicNowPlaying.close()
+                    },
+                ) {
+                    Icon(Icons.Default.Close, stringResource(R.string.music_stop_close), tint = Color.White)
+                }
+            }
+            val lyrics = state.lyrics?.takeIf { it.trackId == track.id }
+            val extras: @Composable () -> Unit = {
+                PlayerExtrasRow(
+                    panel = panel,
+                    playback = playback,
+                    accent = accent,
+                    onLyrics = { panel = if (panel == PlayerPanel.LYRICS) PlayerPanel.COVER else PlayerPanel.LYRICS },
+                    onSleep = { sleepDialog = true },
+                    onQueue = { queueOpen = true },
+                )
             }
             if (panel == PlayerPanel.LYRICS) {
                 LyricsPanel(
-                    lyrics = state.lyrics?.takeIf { it.trackId == track.id },
+                    lyrics = lyrics,
                     positionMs = playback.positionMs,
                     accent = accent,
                     onSeek = viewModel::seekTo,
@@ -1120,78 +1287,7 @@ private fun FullPlayer(track: MusicTrack, playback: MusicPlaybackState, state: M
                 )
                 Spacer(Modifier.weight(0.5f))
             }
-            Column(Modifier.fillMaxWidth().widthIn(max = 520.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) {
-                        Text(track.title, color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                        Text(
-                            track.artist, color = Muted, fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.padding(top = 4.dp),
-                        )
-                    }
-                    FavoriteButton(collections.isFavorite(track), accent) { viewModel.toggleFavorite(track) }
-                }
-                Spacer(Modifier.height(18.dp))
-
-                var dragging by remember { mutableStateOf(false) }
-                var dragValue by remember { mutableFloatStateOf(0f) }
-                val duration = playback.durationMs.coerceAtLeast(1L)
-                val value = if (dragging) dragValue else (playback.positionMs.toFloat() / duration).coerceIn(0f, 1f)
-                Slider(
-                    value = value,
-                    onValueChange = { dragging = true; dragValue = it },
-                    onValueChangeFinished = {
-                        viewModel.seekTo((dragValue * duration).toLong())
-                        dragging = false
-                    },
-                    colors = SliderDefaults.colors(
-                        thumbColor = accent,
-                        activeTrackColor = accent,
-                        inactiveTrackColor = Color(0x33EDEDED),
-                    ),
-                )
-                Row(Modifier.fillMaxWidth()) {
-                    Text(formatTime((value * duration).toLong()), color = Faint, fontSize = 12.sp, modifier = Modifier.weight(1f))
-                    Text(formatTime(playback.durationMs), color = Faint, fontSize = 12.sp)
-                }
-                Spacer(Modifier.height(12.dp))
-                Row(
-                    Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    IconButton(onClick = viewModel::toggleShuffle) {
-                        Icon(Icons.Default.Shuffle, stringResource(R.string.music_shuffle), tint = if (playback.shuffle) accent else Muted)
-                    }
-                    IconButton(onClick = viewModel::previous, modifier = Modifier.size(56.dp)) {
-                        Icon(Icons.Default.SkipPrevious, stringResource(R.string.music_previous), tint = Color.White, modifier = Modifier.size(36.dp))
-                    }
-                    Box(
-                        Modifier.size(72.dp).clip(CircleShape).background(accent),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        PlayPauseIcon(playback, contentOn(accent), viewModel::togglePlay, size = 72.dp)
-                    }
-                    IconButton(onClick = viewModel::next, modifier = Modifier.size(56.dp)) {
-                        Icon(Icons.Default.SkipNext, stringResource(R.string.music_next), tint = Color.White, modifier = Modifier.size(36.dp))
-                    }
-                    IconButton(onClick = viewModel::cycleRepeat) {
-                        Icon(
-                            if (playback.repeatMode == Player.REPEAT_MODE_ONE) Icons.Default.RepeatOne else Icons.Default.Repeat,
-                            stringResource(R.string.music_repeat),
-                            tint = if (playback.repeatMode != Player.REPEAT_MODE_OFF) accent else Muted,
-                        )
-                    }
-                }
-                PlayerExtrasRow(
-                    panel = panel,
-                    playback = playback,
-                    accent = accent,
-                    onLyrics = { panel = if (panel == PlayerPanel.LYRICS) PlayerPanel.COVER else PlayerPanel.LYRICS },
-                    onSleep = { sleepDialog = true },
-                    onQueue = { queueOpen = true },
-                )
-            }
+            PlayerControls(track, playback, collections, accent, viewModel, playFocus, Modifier.fillMaxWidth().widthIn(max = 520.dp), extras)
             Spacer(Modifier.weight(if (panel == PlayerPanel.LYRICS) 0.05f else 0.4f))
         }
 
@@ -1199,6 +1295,91 @@ private fun FullPlayer(track: MusicTrack, playback: MusicPlaybackState, state: M
             QueueOverlay(playback, background = Color(0xFF0B0B0B), accent = accent, viewModel = viewModel) { queueOpen = false }
         }
         if (sleepDialog) SleepTimerDialog(playback, accent, viewModel) { sleepDialog = false }
+    }
+}
+
+/** The song's title and state, the seek bar, the playback buttons and [extras] below them. */
+@Composable
+private fun PlayerControls(
+    track: MusicTrack,
+    playback: MusicPlaybackState,
+    collections: MusicCollections,
+    accent: Color,
+    viewModel: MusicActions,
+    playFocus: FocusRequester,
+    modifier: Modifier,
+    extras: @Composable () -> Unit,
+) {
+    Column(modifier) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(track.title, color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Text(
+                    track.artist, color = Muted, fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(top = 4.dp),
+                )
+            }
+            FavoriteButton(collections.isFavorite(track), accent) { viewModel.toggleFavorite(track) }
+        }
+        playbackNote(playback, short = false)?.let { note ->
+            Text(
+                note, color = if (playback.problem != null) ProblemText else Muted, fontSize = 14.sp,
+                modifier = Modifier.padding(top = 10.dp).testTag("music-playback-note"),
+            )
+        }
+        Spacer(Modifier.height(18.dp))
+
+        var dragging by remember { mutableStateOf(false) }
+        var dragValue by remember { mutableFloatStateOf(0f) }
+        val duration = playback.durationMs.coerceAtLeast(1L)
+        val value = if (dragging) dragValue else (playback.positionMs.toFloat() / duration).coerceIn(0f, 1f)
+        Slider(
+            value = value,
+            onValueChange = { dragging = true; dragValue = it },
+            onValueChangeFinished = {
+                viewModel.seekTo((dragValue * duration).toLong())
+                dragging = false
+            },
+            colors = SliderDefaults.colors(
+                thumbColor = accent,
+                activeTrackColor = accent,
+                inactiveTrackColor = Color(0x33EDEDED),
+            ),
+        )
+        Row(Modifier.fillMaxWidth()) {
+            Text(formatTime((value * duration).toLong()), color = Faint, fontSize = 12.sp, modifier = Modifier.weight(1f))
+            Text(formatTime(playback.durationMs), color = Faint, fontSize = 12.sp)
+        }
+        Spacer(Modifier.height(12.dp))
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            IconButton(modifier = Modifier.tvFocusRing(CircleShape), onClick = viewModel::toggleShuffle) {
+                Icon(Icons.Default.Shuffle, stringResource(R.string.music_shuffle), tint = if (playback.shuffle) accent else Muted)
+            }
+            IconButton(onClick = viewModel::previous, modifier = Modifier.size(56.dp).tvFocusRing(CircleShape)) {
+                Icon(Icons.Default.SkipPrevious, stringResource(R.string.music_previous), tint = Color.White, modifier = Modifier.size(36.dp))
+            }
+            Box(
+                Modifier.size(72.dp).clip(CircleShape).background(accent),
+                contentAlignment = Alignment.Center,
+            ) {
+                PlayPauseIcon(playback, contentOn(accent), viewModel::togglePlay, size = 72.dp, modifier = Modifier.focusRequester(playFocus))
+            }
+            IconButton(onClick = viewModel::next, modifier = Modifier.size(56.dp).tvFocusRing(CircleShape)) {
+                Icon(Icons.Default.SkipNext, stringResource(R.string.music_next), tint = Color.White, modifier = Modifier.size(36.dp))
+            }
+            IconButton(modifier = Modifier.tvFocusRing(CircleShape), onClick = viewModel::cycleRepeat) {
+                Icon(
+                    if (playback.repeatMode == Player.REPEAT_MODE_ONE) Icons.Default.RepeatOne else Icons.Default.Repeat,
+                    stringResource(R.string.music_repeat),
+                    tint = if (playback.repeatMode != Player.REPEAT_MODE_OFF) accent else Muted,
+                )
+            }
+        }
+        extras()
     }
 }
 
@@ -1266,7 +1447,7 @@ private fun MyMusicView(state: MusicUiState, accent: Color, bottomPadding: Dp, v
                         },
                         color = Color.White, fontSize = 14.sp, lineHeight = 19.sp, modifier = Modifier.weight(1f),
                     )
-                    IconButton(onClick = viewModel::dismissImportResult) {
+                    IconButton(modifier = Modifier.tvFocusRing(CircleShape), onClick = viewModel::dismissImportResult) {
                         Icon(Icons.Default.Close, stringResource(R.string.music_cancel), tint = Faint)
                     }
                 }
@@ -1322,13 +1503,13 @@ private fun MyMusicView(state: MusicUiState, accent: Color, bottomPadding: Dp, v
                 Text(stringResource(R.string.music_import_explain), color = Muted, fontSize = 14.sp, lineHeight = 20.sp)
             },
             confirmButton = {
-                TextButton(onClick = {
+                TextButton(modifier = Modifier.tvFocusRing(RoundedCornerShape(20.dp)), onClick = {
                     explainingImport = false
                     pickFiles.launch(arrayOf("text/csv", "text/comma-separated-values", "text/plain", "application/json", "application/zip", "application/octet-stream"))
                 }) { Text(stringResource(R.string.music_import_choose), color = accent) }
             },
             dismissButton = {
-                TextButton(onClick = { explainingImport = false }) { Text(stringResource(R.string.music_cancel), color = Muted) }
+                TextButton(modifier = Modifier.tvFocusRing(RoundedCornerShape(20.dp)), onClick = { explainingImport = false }) { Text(stringResource(R.string.music_cancel), color = Muted) }
             },
         )
     }
@@ -1344,7 +1525,7 @@ private fun CollectionRow(
     onClick: () -> Unit,
 ) {
     Row(
-        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 20.dp, vertical = 8.dp),
+        Modifier.fillMaxWidth().tvFocusRing(RoundedCornerShape(10.dp)).clickable(onClick = onClick).padding(horizontal = 20.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (iconTint != null) {
@@ -1396,15 +1577,17 @@ private fun PlaylistPageView(
                 if (playlist != null) {
                     var menu by remember { mutableStateOf(false) }
                     Box {
-                        IconButton(onClick = { menu = true }) {
+                        IconButton(modifier = Modifier.tvFocusRing(CircleShape), onClick = { menu = true }) {
                             Icon(Icons.Default.MoreVert, stringResource(R.string.music_more), tint = Color.White)
                         }
                         DropdownMenu(expanded = menu, onDismissRequest = { menu = false }, containerColor = BackgroundElevated) {
                             DropdownMenuItem(
+                                modifier = Modifier.tvFocusRing(RoundedCornerShape(4.dp)),
                                 text = { Text(stringResource(R.string.music_rename), color = Color.White) },
                                 onClick = { menu = false; renaming = true },
                             )
                             DropdownMenuItem(
+                                modifier = Modifier.tvFocusRing(RoundedCornerShape(4.dp)),
                                 text = { Text(stringResource(R.string.music_delete_playlist), color = Color.White) },
                                 onClick = { menu = false; deleting = true },
                             )
@@ -1483,12 +1666,12 @@ private fun PlaylistPageView(
             title = { Text(stringResource(R.string.music_delete_playlist), color = Color.White) },
             text = { Text(stringResource(R.string.music_delete_playlist_confirm, playlist.name), color = Muted) },
             confirmButton = {
-                TextButton(onClick = { deleting = false; viewModel.deletePlaylist(playlist.id) }) {
+                TextButton(modifier = Modifier.tvFocusRing(RoundedCornerShape(20.dp)), onClick = { deleting = false; viewModel.deletePlaylist(playlist.id) }) {
                     Text(stringResource(R.string.music_delete), color = accent)
                 }
             },
             dismissButton = {
-                TextButton(onClick = { deleting = false }) { Text(stringResource(R.string.music_cancel), color = Color.White) }
+                TextButton(modifier = Modifier.tvFocusRing(RoundedCornerShape(20.dp)), onClick = { deleting = false }) { Text(stringResource(R.string.music_cancel), color = Color.White) }
             },
         )
     }
@@ -1515,7 +1698,7 @@ private fun AddToPlaylistDialog(tracks: List<MusicTrack>, collections: MusicColl
         text = {
             Column(Modifier.verticalScroll(rememberScrollState())) {
                 Row(
-                    Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).clickable { creating = true }.padding(vertical = 12.dp),
+                    Modifier.fillMaxWidth().tvFocusRing(RoundedCornerShape(8.dp)).clip(RoundedCornerShape(8.dp)).clickable { creating = true }.padding(vertical = 12.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Icon(Icons.Default.Add, null, tint = Color.White)
@@ -1524,7 +1707,7 @@ private fun AddToPlaylistDialog(tracks: List<MusicTrack>, collections: MusicColl
                 }
                 collections.playlists.forEach { playlist ->
                     Row(
-                        Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp))
+                        Modifier.fillMaxWidth().tvFocusRing(RoundedCornerShape(8.dp)).clip(RoundedCornerShape(8.dp))
                             .clickable { viewModel.addToPlaylist(playlist.id, tracks) }.padding(vertical = 12.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
@@ -1543,7 +1726,7 @@ private fun AddToPlaylistDialog(tracks: List<MusicTrack>, collections: MusicColl
         },
         confirmButton = {},
         dismissButton = {
-            TextButton(onClick = { viewModel.showAddToPlaylist(null) }) { Text(stringResource(R.string.music_cancel), color = Color.White) }
+            TextButton(modifier = Modifier.tvFocusRing(RoundedCornerShape(20.dp)), onClick = { viewModel.showAddToPlaylist(null) }) { Text(stringResource(R.string.music_cancel), color = Color.White) }
         },
     )
 }
@@ -1571,10 +1754,10 @@ private fun NameDialog(title: String, initial: String, confirm: String, onConfir
             )
         },
         confirmButton = {
-            TextButton(onClick = { onConfirm(name) }, enabled = name.isNotBlank()) {
+            TextButton(modifier = Modifier.tvFocusRing(RoundedCornerShape(20.dp)), onClick = { onConfirm(name) }, enabled = name.isNotBlank()) {
                 Text(confirm, color = if (name.isNotBlank()) Color.White else Faint)
             }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.music_cancel), color = Muted) } },
+        dismissButton = { TextButton(modifier = Modifier.tvFocusRing(RoundedCornerShape(20.dp)), onClick = onDismiss) { Text(stringResource(R.string.music_cancel), color = Muted) } },
     )
 }

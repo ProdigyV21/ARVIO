@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="music_stop_close">עצור וסגור</string>
+    <string name="music_sources_title">מקורות מוזיקה</string>
+    <string name="music_sources_desc">התוספים והשרתים שמהם המוזיקה מתנגנת</string>
+    <string name="music_sources_none">עדיין אין מקורות</string>
+    <string name="music_remove">הסר</string>
+    <string name="music_cache_clear">נקה מטמון מוזיקה</string>
+    <string name="music_cache_desc">שירים נשמרים במכשיר בזמן שהם מתנגנים, כך שקפיצה קדימה מיידית. עד %1$s; הישנים נמחקים ראשונים.</string>
+    <plurals name="music_track_count">
+        <item quantity="one">שיר אחד</item>
+        <item quantity="two">%d שירים</item>
+        <item quantity="many">%d שירים</item>
+        <item quantity="other">%d שירים</item>
+    </plurals>
+    <plurals name="music_import_done">
+        <item quantity="one">יובא פלייליסט אחד: נמצאו %2$d מתוך %3$d שירים במקורות שלך.</item>
+        <item quantity="two">יובאו %1$d פלייליסטים: נמצאו %2$d מתוך %3$d שירים במקורות שלך.</item>
+        <item quantity="many">יובאו %1$d פלייליסטים: נמצאו %2$d מתוך %3$d שירים במקורות שלך.</item>
+        <item quantity="other">יובאו %1$d פלייליסטים: נמצאו %2$d מתוך %3$d שירים במקורות שלך.</item>
+    </plurals>
+    <string name="music_preparing">מכין את השיר…</string>
+    <string name="music_preparing_slow">עדיין מכין. יש תוספים שמביאים שיר בפעם הראשונה שהוא מתנגן, וזה יכול לקחת דקה או שתיים.</string>
+    <string name="music_error_addon_timeout">לתוסף לקח יותר מדי זמן להכין את השיר. ייתכן שהוא יהיה מוכן אם תנסה שוב בעוד דקה.</string>
+    <string name="music_error_addon_code">התוסף לא הצליח להכין את השיר (שגיאה %1$d). נסה שוב בעוד דקה.</string>
+    <string name="music_error_addon">התוסף לא הצליח להכין את השיר. נסה שוב בעוד דקה.</string>
+    <string name="music_error_stream">שרת המוזיקה לא הצליח לשלוח את השיר. נסה שוב, או בחר שיר אחר.</string>
+    <string name="music_error_offline">אין גישה למקור המוזיקה. בדוק את החיבור לאינטרנט.</string>
+    <string name="music_error_not_found">לאף אחד מהמקורות שלך אין את \"%1$s\".</string>
+    <string name="music_error_format">לא ניתן לנגן את פורמט השמע של השיר במכשיר הזה.</string>
+    <string name="music_error_other">לא ניתן לנגן את השיר.</string>
+</resources>

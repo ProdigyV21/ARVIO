@@ -57,6 +57,8 @@ data class MusicSearchResult(
     val tracks: List<MusicTrack> = emptyList(),
     /** Playlists (an addon's, or the charts'); they open like albums. */
     val playlists: List<MusicAlbum> = emptyList(),
+    /** Latin names the query was also searched by, when it was typed in another script ([MusicNameLookup]). */
+    val aliases: List<String> = emptyList(),
 ) {
     val isEmpty: Boolean get() = artists.isEmpty() && albums.isEmpty() && tracks.isEmpty() && playlists.isEmpty()
 }

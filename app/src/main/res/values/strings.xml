@@ -2200,6 +2200,8 @@
     <string name="playback_compatibility_test">Run format test</string>
     <string name="playback_compatibility_test_failed">Could not run the format test.</string>
     <string name="nav_news">News</string>
+    <string name="navigation_show_music_phone">Show Music on phones and tablets</string>
+    <string name="navigation_show_music_tv">Show Music on TV</string>
     <string name="navigation_show_news">Show News</string>
     <string name="news_all">All</string>
     <string name="news_refresh">Refresh</string>
@@ -2217,6 +2219,7 @@
     <string name="news_load_failed">Could not load %1$s</string>
     <string name="news_read_hint">Press OK for the summary and a link to the full story</string>
     <string name="settings_desc_news">The News tab, its sources and topics</string>
+    <string name="settings_desc_music">The Music tab on phones and tablets, your music sources and the song cache</string>
     <string name="news_topics_section">Topics</string>
     <string name="news_topics_desc">Show every topic, or only the ones you pick. Feeds you added yourself always appear.</string>
     <string name="news_change_providers_hint">Providers can be changed in Settings → News</string>

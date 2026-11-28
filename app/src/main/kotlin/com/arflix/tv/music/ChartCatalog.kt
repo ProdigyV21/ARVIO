@@ -112,6 +112,11 @@ object ChartCatalog {
         "TW" to Local("Top Taiwan", listOf(
             "C-Pop" to "C-Pop", "Mandopop" to "Mandopop", "Cantopop" to "Cantopop",
         )),
+        // Hebrew searches find few Deezer playlists, so the Israeli rows search in English.
+        "IL" to Local("Top Israel", listOf(
+            "להיטים ישראליים" to "Israeli hits", "פופ ישראלי" to "Israeli pop", "מזרחית" to "Mizrahi",
+            "רוק ישראלי" to "Israeli rock", "היפ הופ ישראלי" to "Israeli rap", "קלאסיקות ישראליות" to "Israeli classics",
+        )),
         "GB" to Local("Top UK", listOf(
             "UK hits" to "UK hits", "UK rap" to "UK rap", "Britpop" to "Britpop",
         )),
@@ -152,6 +157,7 @@ object ChartCatalog {
         "nl" to "NL", "de" to "DE", "fr" to "FR", "es" to "ES", "it" to "IT", "pt-BR" to "BR", "pt-PT" to "PT", "pt" to "BR",
         "pl" to "PL", "tr" to "TR", "ru" to "RU", "ar" to "SA", "hi" to "IN", "ja" to "JP", "ko" to "KR", "zh" to "TW",
         "en-GB" to "GB", "en" to "US", "sv" to "SE", "nb" to "NO", "da" to "DK", "fi" to "FI", "id" to "ID",
+        "he" to "IL",
     )
 
     /** The charts row's title, per app language. */
@@ -159,7 +165,17 @@ object ChartCatalog {
         "nl" to "Hitlijsten", "fr" to "Classements", "es" to "Listas de éxitos", "it" to "Classifiche",
         "pt" to "Paradas", "pt-PT" to "Tabelas", "pl" to "Listy przebojów", "tr" to "Listeler", "ru" to "Чарты",
         "ar" to "الأكثر استماعًا", "ja" to "チャート", "ko" to "차트", "zh" to "排行榜",
+        "he" to "מצעדים",
     )
+
+    /** "Top <country>" where a language puts it differently; %s is the country's name in that language. */
+    private val COUNTRY_TOP = mapOf("he" to "המובילים ב%s")
+
+    /** Android still reports Hebrew by its old code, "iw". */
+    private fun normalized(languageTag: String): String {
+        val tag = languageTag.replace('_', '-')
+        return if (tag.substringBefore('-').lowercase() == "iw") "he" + tag.drop(2) else tag
+    }
 
     /**
      * The country whose charts lead: the device's country when it gives one, else the app
@@ -167,7 +183,7 @@ object ChartCatalog {
      */
     fun country(languageTag: String, deviceCountry: String?): String {
         deviceCountry?.trim()?.uppercase()?.takeIf { it.length == 2 && it.all(Char::isLetter) }?.let { return it }
-        val tag = languageTag.replace('_', '-')
+        val tag = normalized(languageTag)
         val region = tag.split('-').drop(1).firstOrNull { it.length == 2 && it.all(Char::isLetter) }?.uppercase()
         if (region != null && region in LOCAL) return region
         val language = tag.substringBefore('-').lowercase()
@@ -191,6 +207,20 @@ object ChartCatalog {
 
     /** Row titles for the general rows, per language; missing ones keep the English title. */
     private val TITLES: Map<String, Map<String, String>> = mapOf(
+        "he" to mapOf(
+            "top40" to "טופ 40", "worldwide" to "המובילים בעולם", "new" to "יציאות חדשות", "viral" to "להיטים ויראליים",
+            "gym" to "חדר כושר", "workout" to "אימון", "running" to "ריצה", "chill" to "צ'יל",
+            "party" to "מסיבה", "throwback" to "נוסטלגיה", "80s" to "להיטי שנות ה-80", "90s" to "להיטי שנות ה-90",
+            "2000s" to "להיטי שנות ה-2000", "2010s" to "להיטי שנות ה-2010", "hiphop" to "היפ הופ", "rnb" to "R&B",
+            "dance" to "להיטי דאנס", "house" to "האוס", "techno" to "טכנו", "edm" to "EDM",
+            "rock" to "רוק", "classicrock" to "רוק קלאסי", "metal" to "מטאל", "indie" to "אינדי",
+            "pop" to "להיטי פופ", "latin" to "להיטים לטיניים", "afro" to "אפרוביטס", "reggae" to "רגאיי",
+            "jazz" to "ג'אז", "classical" to "מוזיקה קלאסית", "lofi" to "לו-פיי", "focus" to "ריכוז",
+            "sleep" to "שינה", "acoustic" to "אקוסטי", "love" to "שירי אהבה", "sad" to "שירים עצובים",
+            "roadtrip" to "בדרכים", "soul" to "סול", "piano" to "פסנתר", "kids" to "ילדים",
+            "summer" to "להיטי הקיץ", "feelgood" to "מצב רוח טוב", "christmas" to "שירי חג המולד",
+            "year" to "להיטי %d",
+        ),
         "nl" to mapOf(
             "worldwide" to "Wereldwijd top", "new" to "Nieuwe releases", "viral" to "Viral hits", "gym" to "Sportschool",
             "running" to "Hardlopen", "party" to "Feest", "throwback" to "Throwback", "love" to "Liefdesliedjes",
@@ -229,7 +259,7 @@ object ChartCatalog {
     private const val PINNED_GENERAL = 3
 
     fun rows(languageTag: String, date: LocalDate, deviceCountry: String? = null): List<Row> {
-        val tag = languageTag.replace('_', '-')
+        val tag = normalized(languageTag)
         val language = tag.substringBefore('-').lowercase()
         val country = country(tag, deviceCountry)
         val local = LOCAL[country]
@@ -244,12 +274,12 @@ object ChartCatalog {
             .map { (key, query) -> Row(key, titles[key] ?: query, query) }
         val year = date.year
         val pinned = listOf(
-            Row("country", "Top $shownName", chartQuery),
+            Row("country", COUNTRY_TOP[language]?.format(shownName) ?: "Top $shownName", chartQuery),
             // Deezer's own chart list follows the server's location, so the country's chart is searched instead.
             Row("charts", CHARTS_TITLES[tag] ?: CHARTS_TITLES[language] ?: "Charts", "Top 50 " + chartQuery.removePrefix("Top ")),
         ) + local?.local.orEmpty().mapIndexed { i, (title, query) -> Row("local$i", title, query) } +
             general.take(PINNED_GENERAL) +
-            Row("year", "Hits $year", "Hits $year")
+            Row("year", titles["year"]?.format(year) ?: "Hits $year", "Hits $year")
         // The rest changes order every day, so the home looks different each time.
         val rotating = general.drop(PINNED_GENERAL).shuffled(Random(date.toEpochDay()))
         return pinned + rotating
@@ -267,9 +297,10 @@ object ChartCatalog {
         "pt" to PersonalTitles("Porque você ouviu %s", "Com base nas suas pesquisas", "Mix"),
         "pl" to PersonalTitles("Bo słuchałeś: %s", "Na podstawie twoich wyszukiwań", "Mix"),
         "tr" to PersonalTitles("%s dinlediğin için", "Aramalarına göre", "Mix"),
+        "he" to PersonalTitles("כי שמעת את %s", "לפי החיפושים שלך", "מיקס"),
     )
 
     fun personalTitles(languageTag: String): PersonalTitles =
-        PERSONAL[languageTag.replace('_', '-').substringBefore('-').lowercase()]
+        PERSONAL[normalized(languageTag).substringBefore('-').lowercase()]
             ?: PersonalTitles("Because you listened to %s", "Based on your searches", "Mix")
 }

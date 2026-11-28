@@ -37,7 +37,10 @@ data class MusicPlaybackState(
     val durationMs: Long = 0L,
     val shuffle: Boolean = false,
     val repeatMode: Int = Player.REPEAT_MODE_OFF,
-    val error: String? = null,
+    /** Why the current song stopped or never started; shown in the player until the next try. */
+    val problem: MusicPlaybackProblem? = null,
+    /** How long the song has been loading: [LoadingWait.NONE] at first, then a note, then the reason it can take long. */
+    val loadingWait: LoadingWait = LoadingWait.NONE,
     /** The queue positions still to come, in the order they will play (shuffle included). */
     val upNext: List<Int> = emptyList(),
     /** When the sleep timer pauses the music (wall clock), or null. */
@@ -45,6 +48,8 @@ data class MusicPlaybackState(
     /** The sleep timer pauses at the end of the current song. */
     val sleepAtEndOfTrack: Boolean = false,
 ) {
+    enum class LoadingWait { NONE, PREPARING, SLOW }
+
     val current: MusicTrack? get() = queue.getOrNull(index)
     val sleepTimerOn: Boolean get() = sleepAtMs != null || sleepAtEndOfTrack
     val hasNext: Boolean get() = index in 0 until queue.lastIndex || repeatMode != Player.REPEAT_MODE_OFF
@@ -65,9 +70,15 @@ class MusicPlayer @Inject constructor(
 
     private var controller: MediaController? = null
     private var ticker: Job? = null
+    private var loadingWatch: Job? = null
+    private var loadingSong: String? = null
     private val tracks = mutableMapOf<String, MusicTrack>()
     private var reportedFor: String? = null
 
+    init {
+        MusicNowPlaying.togglePlay = ::togglePlay
+        MusicNowPlaying.stopPlayback = ::stop
+    }
     private var sleepJob: Job? = null
     private var radioJob: Job? = null
 
@@ -119,7 +130,9 @@ class MusicPlayer @Inject constructor(
                 player.setMediaItems(queue.map { it.toMediaItem() }, start, 0L)
                 player.prepare()
                 player.play()
-            }.onFailure { error -> _state.update { it.copy(error = error.message) } }
+            }.onFailure { error ->
+                _state.update { it.copy(problem = MusicPlaybackProblem(MusicPlaybackProblem.Kind.OTHER, detail = error.message)) }
+            }
         }
         radioJob?.cancel()
         // A song played on its own is followed by similar ones, so the music does not just stop.
@@ -230,11 +243,36 @@ class MusicPlayer @Inject constructor(
                 durationMs = player.duration.takeIf { d -> d > 0 } ?: ((queue.getOrNull(player.currentMediaItemIndex)?.durationSec ?: 0) * 1000L),
                 shuffle = player.shuffleModeEnabled,
                 repeatMode = player.repeatMode,
-                error = player.playerError?.message,
+                problem = player.playerError?.let(MusicPlaybackProblem::of),
                 upNext = if (queue.size == player.mediaItemCount) upcoming(player) else emptyList(),
             )
         }
+        MusicNowPlaying.publish(_state.value.current?.let { MusicNowPlaying.Song(it.title, it.artist, it.coverUrl, player.isPlaying) })
         if (player.isPlaying) startTicker(player) else stopTicker()
+        val loading = player.playbackState == Player.STATE_BUFFERING && !player.isPlaying
+        watchLoading(if (loading) "${player.currentMediaItemIndex}/${player.currentMediaItem?.mediaId}" else null)
+    }
+
+    /**
+     * Some addons fetch a song on its first play and take up to a minute or two before it can
+     * start; after a few seconds the player says it is still preparing, later why it can take that long.
+     */
+    private fun watchLoading(song: String?) {
+        // Still the same wait; another song (or the same one loading again later) starts its own.
+        if (song == loadingSong) return
+        loadingWatch?.cancel()
+        loadingWatch = null
+        loadingSong = song
+        if (_state.value.loadingWait != MusicPlaybackState.LoadingWait.NONE) {
+            _state.update { it.copy(loadingWait = MusicPlaybackState.LoadingWait.NONE) }
+        }
+        if (song == null) return
+        loadingWatch = scope.launch {
+            delay(PREPARING_NOTE_MS)
+            _state.update { it.copy(loadingWait = MusicPlaybackState.LoadingWait.PREPARING) }
+            delay(SLOW_NOTE_MS - PREPARING_NOTE_MS)
+            _state.update { it.copy(loadingWait = MusicPlaybackState.LoadingWait.SLOW) }
+        }
     }
 
     /** The positions after the current one in play order, following the shuffle when it is on. */
@@ -287,6 +325,8 @@ class MusicPlayer @Inject constructor(
     private companion object {
         const val RADIO_SIZE = 25
         const val SLEEP_FADE_MS = 8_000L
+        const val PREPARING_NOTE_MS = 3_000L
+        const val SLOW_NOTE_MS = 15_000L
     }
 
     private fun MusicTrack.toMediaItem(): MediaItem {

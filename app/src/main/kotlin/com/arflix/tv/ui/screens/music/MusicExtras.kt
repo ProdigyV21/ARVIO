@@ -448,7 +448,7 @@ internal fun sleepLabel(playback: MusicPlaybackState): String? {
 @Composable
 private fun ExtraButton(icon: ImageVector, label: String, active: Boolean, accent: Color, tag: String, onClick: () -> Unit) {
     Row(
-        Modifier.clip(RoundedCornerShape(18.dp))
+        Modifier.tvFocusRing(RoundedCornerShape(18.dp)).clip(RoundedCornerShape(18.dp))
             .background(if (active) accent.copy(alpha = 0.18f) else Color.Transparent)
             .clickable(onClick = onClick)
             .padding(horizontal = 12.dp, vertical = 8.dp)

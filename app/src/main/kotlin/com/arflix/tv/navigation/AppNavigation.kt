@@ -272,7 +272,13 @@ fun AppNavigation(
     }
 
     SideEffect { com.arflix.tv.ui.components.NewsNavigation.open = { navigateTopLevel(Screen.News.route) } }
-    SideEffect { com.arflix.tv.ui.components.MusicNavigation.open = { navigateTopLevel(Screen.Music.route) } }
+    SideEffect {
+        com.arflix.tv.ui.components.MusicNavigation.open = {
+            // The TV top bar's Music chip names the playing song, so it opens on that song.
+            if (com.arflix.tv.music.MusicNowPlaying.song.value != null) com.arflix.tv.music.MusicNowPlaying.requestOpenPlayer()
+            navigateTopLevel(Screen.Music.route)
+        }
+    }
 
     val navigateHome: () -> Unit = {
         // Pop back to the EXISTING Home entry rather than replacing it.
