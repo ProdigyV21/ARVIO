@@ -188,7 +188,7 @@ class TvViewModel @Inject constructor(
         val existing = sportsBroadcasterIndexLoad
         val job = if (existing?.first == key && !existing.second.isCancelled) existing.second else {
             existing?.second?.cancel()
-            viewModelScope.async(com.arflix.tv.ui.screens.tv.live.LiveSportsWorkPolicy.dispatcher) {
+            viewModelScope.async(com.arflix.tv.ui.screens.tv.live.LiveSportsWorkPolicy.broadcasterIndexDispatcher) {
                 val context = currentCoroutineContext()
                 SportsBroadcasterIndex.build(key) { visitor ->
                     iptvRepository.visitStoredChannelLabels(key.providerId.takeUnless { it == "all" }) { id, name, group ->

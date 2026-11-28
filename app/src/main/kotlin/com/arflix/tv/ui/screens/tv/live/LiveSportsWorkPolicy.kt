@@ -3,6 +3,8 @@ package com.arflix.tv.ui.screens.tv.live
 import android.os.Process
 import java.util.concurrent.Executors
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.asCoroutineDispatcher
 
 /**
@@ -37,16 +39,31 @@ internal object LiveSportsWorkPolicy {
     }
 
     /**
-     * One background-priority thread. A normal-priority worker still competed with the
-     * main and render threads for the four slow cores of a TV box (measured on a TCL
-     * Android 14 TV with a 57k-channel playlist: sports and broadcaster scans used
-     * 30-60% of a core each for minutes while the guide dropped to ~30 fps). At
-     * background priority it only gets the CPU the UI leaves over.
+     * Light sports work (comparing lists, joining fixtures, attaching add-on games). It must
+     * never queue behind a guide scan: when it did, live add-on games only appeared after
+     * the one-to-two-minute scan of a 50k-channel guide had finished.
      */
-    val dispatcher: CoroutineDispatcher = Executors.newSingleThreadExecutor { runnable ->
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val dispatcher: CoroutineDispatcher = Dispatchers.Default.limitedParallelism(1)
+
+    /**
+     * Heavy off-screen scans each get their own background-priority thread. A normal-priority
+     * worker competed with the main and render threads for the four slow cores of a TV box
+     * (TCL Android 14 TV, 57k-channel playlist: these scans used 30-60% of a core each for
+     * minutes while the guide dropped to ~30 fps). At background priority they only get the
+     * CPU the UI leaves over. While Sports is on screen the scan runs at normal priority
+     * instead, because then the user is waiting for it.
+     */
+    val guideScanDispatcher: CoroutineDispatcher = backgroundThread("SportsGuideScan")
+    val broadcasterIndexDispatcher: CoroutineDispatcher = backgroundThread("SportsBroadcasterIndex")
+
+    fun guideScanDispatcher(sportsOnScreen: Boolean): CoroutineDispatcher =
+        if (sportsOnScreen) Dispatchers.IO else guideScanDispatcher
+
+    private fun backgroundThread(name: String): CoroutineDispatcher = Executors.newSingleThreadExecutor { runnable ->
         Thread({
             runCatching { Process.setThreadPriority(Process.THREAD_PRIORITY_BACKGROUND + Process.THREAD_PRIORITY_LESS_FAVORABLE) }
             runnable.run()
-        }, "LiveSportsWork").apply { isDaemon = true }
+        }, name).apply { isDaemon = true }
     }.asCoroutineDispatcher()
 }
