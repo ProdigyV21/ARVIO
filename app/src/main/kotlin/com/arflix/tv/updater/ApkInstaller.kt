@@ -18,6 +18,8 @@ import com.arflix.tv.R
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileInputStream
+import java.io.InputStream
+import java.io.OutputStream
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 
@@ -25,6 +27,23 @@ object ApkInstaller {
     /** Set on the status intent when the session included base.dm, with [EXTRA_APK_PATH]. */
     const val EXTRA_WITH_DEX_METADATA = "com.arflix.tv.updater.WITH_DEX_METADATA"
     const val EXTRA_APK_PATH = "com.arflix.tv.updater.APK_PATH"
+
+    /**
+     * Sessions dropped for a retry. Android still reports each one as aborted, which must not
+     * read as the new install failing.
+     */
+    private val abandonedSessionIds: MutableSet<Int> = java.util.concurrent.ConcurrentHashMap.newKeySet()
+
+    internal fun wasAbandonedForRetry(sessionId: Int): Boolean = sessionId in abandonedSessionIds
+
+    /** Drops this app's earlier install sessions so a retry leaves only the new one. */
+    internal fun abandonEarlierSessions(installer: PackageInstaller) {
+        installer.mySessions.forEach { old ->
+            // Recorded first: Android's "aborted" report may arrive before abandonSession returns.
+            abandonedSessionIds += old.sessionId
+            runCatching { installer.abandonSession(old.sessionId) }
+        }
+    }
 
     fun canRequestPackageInstalls(context: Context): Boolean {
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -118,18 +137,27 @@ object ApkInstaller {
         ApkInstallWorker.enqueue(context, apkFile, withDexMetadata)
     }
 
+    /**
+     * @param onProgress how much of the APK has been copied to the installer (0..1), so the
+     * screen can show the copy instead of seeming stuck.
+     */
     @WorkerThread
-    internal fun installNow(context: Context, apkFile: File, withDexMetadata: Boolean): Boolean {
+    internal fun installNow(
+        context: Context,
+        apkFile: File,
+        withDexMetadata: Boolean,
+        onProgress: (Float) -> Unit = {},
+    ): Boolean {
         // Try session-based installer first (smoother UX on Android 5+)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
             try {
                 val metadata = if (withDexMetadata) createDexMetadata(context, apkFile) else null
                 try {
-                    commitSession(context, apkFile, metadata)
+                    commitSession(context, apkFile, metadata, onProgress)
                 } catch (e: DexMetadataWriteException) {
                     // The failed session may contain a partial base.dm. Never commit it.
                     System.err.println("[ApkInstaller] Retrying a clean APK-only session: ${e.cause?.message}")
-                    commitSession(context, apkFile, null)
+                    commitSession(context, apkFile, null, onProgress)
                 }
                 return true
             } catch (e: Exception) {
@@ -153,17 +181,25 @@ object ApkInstaller {
         }
     }
 
-    private fun commitSession(context: Context, apkFile: File, metadata: ByteArray?) {
+    private fun commitSession(context: Context, apkFile: File, metadata: ByteArray?, onProgress: (Float) -> Unit) {
         val installer = context.packageManager.packageInstaller
         val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL)
         params.setSize(apkFile.length() + (metadata?.size ?: 0))
+        // A retry after a cancelled or dismissed confirmation: drop the earlier session, whose
+        // confirmation must not come back next to the new one.
+        abandonEarlierSessions(installer)
         val sessionId = installer.createSession(params)
         var committed = false
         try {
             installer.openSession(sessionId).use { session ->
                 // Named base.apk so the dex metadata can pair with it as base.dm.
                 session.openWrite("base.apk", 0, apkFile.length()).use { out ->
-                    FileInputStream(apkFile).use { input -> input.copyTo(out) }
+                    FileInputStream(apkFile).use { input ->
+                        copyWithProgress(input, out, apkFile.length()) { fraction ->
+                            session.setStagingProgress(fraction)
+                            onProgress(fraction)
+                        }
+                    }
                     session.fsync(out)
                 }
                 if (metadata != null) {
@@ -201,6 +237,24 @@ object ApkInstaller {
     }
 
     private class DexMetadataWriteException(cause: Exception) : Exception(cause)
+
+    /** Copies [input] to [out], reporting each whole percent of [total] bytes once. */
+    internal fun copyWithProgress(input: InputStream, out: OutputStream, total: Long, onProgress: (Float) -> Unit) {
+        val buffer = ByteArray(256 * 1024)
+        var copied = 0L
+        var reported = -1
+        while (true) {
+            val read = input.read(buffer)
+            if (read < 0) break
+            out.write(buffer, 0, read)
+            copied += read
+            val percent = if (total > 0) (copied * 100 / total).toInt().coerceAtMost(100) else 0
+            if (percent != reported) {
+                reported = percent
+                onProgress(percent / 100f)
+            }
+        }
+    }
 
     /**
      * Adds the APK's own baseline profile to the session as base.dm, so the system compiles

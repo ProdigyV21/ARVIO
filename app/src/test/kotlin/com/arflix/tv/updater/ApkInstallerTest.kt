@@ -83,6 +83,17 @@ class ApkInstallerTest {
         assertEquals(apk.absolutePath, callback.getStringExtra(ApkInstaller.EXTRA_APK_PATH))
     }
 
+    @Test fun retryDropsTheEarlierSessionAndItsAbortedReportIsIgnored() {
+        val earlier = mockk<PackageInstaller.SessionInfo>()
+        every { earlier.sessionId } returns 7
+        every { installer.mySessions } returns listOf(earlier) andThen emptyList()
+        assertTrue(ApkInstaller.installNow(context, apk, true))
+        verify(exactly = 1) { installer.abandonSession(7) }
+        verify(exactly = 1) { first.commit(any()) }
+        assertTrue(ApkInstaller.wasAbandonedForRetry(7))
+        assertFalse(ApkInstaller.wasAbandonedForRetry(11))
+    }
+
     @Test fun failedMetadataOpenStartsACleanApkOnlySession() {
         every { first.openWrite("base.dm", 0, any()) } throws IOException("Cannot open metadata")
         assertCleanFallback()

@@ -22,12 +22,17 @@ class ApkInstallWorker @AssistedInject constructor(
 ) : CoroutineWorker(context, parameters) {
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
         val apkFile = inputData.getString(ApkInstaller.EXTRA_APK_PATH)?.let(::File)
+        // Also covers the receiver's retry, which starts the copy over.
+        updateStatusManager.setInstallPreparing(0f)
         val installed = apkFile?.isFile == true && ApkInstaller.installNow(
             applicationContext,
             apkFile,
-            withDexMetadata = inputData.getBoolean(ApkInstaller.EXTRA_WITH_DEX_METADATA, true)
+            withDexMetadata = inputData.getBoolean(ApkInstaller.EXTRA_WITH_DEX_METADATA, true),
+            onProgress = updateStatusManager::setInstallPreparing,
         )
         if (installed) {
+            // Android has the APK; its confirmation comes next.
+            updateStatusManager.setInstallPreparing(null)
             Result.success()
         } else {
             updateStatusManager.updateStatus(

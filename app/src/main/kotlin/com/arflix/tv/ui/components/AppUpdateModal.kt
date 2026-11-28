@@ -32,7 +32,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.lifecycle.compose.LifecycleResumeEffect
+import kotlinx.coroutines.delay
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -76,6 +79,9 @@ private data class ActionButtonConfig(
 // Real release notes are 3-15 KB; this only guards layout time against a runaway release body.
 private const val MAX_UPDATE_NOTES_CHARS = 20_000
 
+/** How long after returning from Android's install confirmation before "Retry install" shows. */
+private const val RETRY_AFTER_RETURN_MS = 10_000L
+
 /**
  * D-pad scroll step for the release notes. Returns null when the notes cannot move in that
  * direction, so the key falls through to the existing focus handling.
@@ -106,8 +112,27 @@ fun AppUpdateModal(
     val labelCancel = stringResource(R.string.cancel)
     val labelRetry = stringResource(R.string.retry)
 
+    // Back from Android's confirmation: if the user pressed Install, Android closes ARVIO a few
+    // seconds later, and a Retry button meanwhile reads as a failure. A cancel is reported within
+    // a second (it becomes Failure), so Retry only shows if ARVIO is still here after a while.
+    val waitingForAndroid = status is UpdateStatus.Installing && status.preparing == null
+    var retryReady by remember(status) { mutableStateOf(false) }
+    if (waitingForAndroid) {
+        val retryScope = rememberCoroutineScope()
+        LifecycleResumeEffect(status) {
+            val wait = retryScope.launch {
+                delay(RETRY_AFTER_RETURN_MS)
+                retryReady = true
+            }
+            onPauseOrDispose {
+                wait.cancel()
+                retryReady = false
+            }
+        }
+    }
+
     val buttons = remember(
-        status,
+        status, retryReady,
         labelClose, labelIgnore, labelDownload, labelInstall,
         labelHide, labelRetryInstall, labelCancel, labelRetry
     ) {
@@ -121,7 +146,11 @@ fun AppUpdateModal(
                 ActionButtonConfig(labelClose, onDismiss),
                 ActionButtonConfig(labelInstall, onInstall, highlighted = true)
             )
-            is UpdateStatus.Installing -> listOf(
+            // While the APK is still being handed to Android, or Android may be installing it,
+            // there is nothing to retry yet.
+            is UpdateStatus.Installing -> if (status.preparing != null || !retryReady) listOf(
+                ActionButtonConfig(labelHide, onDismiss, highlighted = true)
+            ) else listOf(
                 ActionButtonConfig(labelHide, onDismiss),
                 ActionButtonConfig(labelRetryInstall, onInstall, highlighted = true)
             )
@@ -131,7 +160,8 @@ fun AppUpdateModal(
             )
             is UpdateStatus.Failure -> listOf(
                 ActionButtonConfig(labelClose, onDismiss),
-                ActionButtonConfig(labelRetry, onDownload, highlighted = true)
+                // After a cancelled install the APK is still here: install it, don't download it.
+                ActionButtonConfig(labelRetry, if (status.apkPath != null) onInstall else onDownload, highlighted = true)
             )
             else -> listOf(
                 ActionButtonConfig(labelClose, onDismiss)
@@ -224,7 +254,9 @@ fun AppUpdateModal(
                     is UpdateStatus.UpdateAvailable -> stringResource(R.string.update_msg_available, status.update.title, status.update.tag)
                     is UpdateStatus.Downloading -> stringResource(R.string.update_msg_downloading)
                     is UpdateStatus.ReadyToInstall -> stringResource(R.string.update_msg_ready_subtitle, status.update.title)
-                    is UpdateStatus.Installing -> stringResource(R.string.update_msg_installing)
+                    is UpdateStatus.Installing ->
+                        if (status.preparing != null) stringResource(R.string.update_msg_preparing_install)
+                        else stringResource(R.string.update_msg_installing)
                     is UpdateStatus.Failure -> stringResource(R.string.update_msg_failed)
                     is UpdateStatus.Success -> stringResource(R.string.update_msg_uptodate)
                     is UpdateStatus.Idle -> stringResource(R.string.update_msg_no_info)
@@ -273,7 +305,24 @@ fun AppUpdateModal(
                         androidx.compose.material3.Text(stringResource(R.string.update_msg_ready), style = ArflixTypography.body, color = TextPrimary)
                     }
                     is UpdateStatus.Installing -> {
-                        androidx.compose.material3.Text(stringResource(R.string.update_msg_installer_hint), style = ArflixTypography.body, color = TextPrimary)
+                        val preparing = status.preparing
+                        if (preparing != null) {
+                            LinearProgressIndicator(
+                                progress = preparing,
+                                modifier = Modifier.fillMaxWidth(),
+                                color = Pink,
+                                trackColor = Color.White.copy(alpha = 0.08f)
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            androidx.compose.material3.Text(
+                                text = "${(preparing * 100).toInt()}%",
+                                style = ArflixTypography.caption,
+                                color = TextSecondary
+                            )
+                        } else {
+                            val hint = if (retryReady) R.string.update_msg_installer_hint else R.string.update_msg_android_installing
+                            androidx.compose.material3.Text(stringResource(hint), style = ArflixTypography.body, color = TextPrimary)
+                        }
                     }
                     is UpdateStatus.UpdateAvailable -> {
                         if (showNotes) {

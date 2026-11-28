@@ -32,6 +32,11 @@ class ApkInstallReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val status = intent.getIntExtra(PackageInstaller.EXTRA_STATUS, -999)
         val message = intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE)
+        val sessionId = intent.getIntExtra(PackageInstaller.EXTRA_SESSION_ID, -1)
+        if (ApkInstaller.wasAbandonedForRetry(sessionId)) {
+            Log.i(TAG, "Ignoring status=$status of session $sessionId, replaced by a retry.")
+            return
+        }
 
         when (status) {
             PackageInstaller.STATUS_PENDING_USER_ACTION -> {
@@ -57,9 +62,7 @@ class ApkInstallReceiver : BroadcastReceiver() {
                 try {
                     context.startActivity(confirmIntent)
                     // We are waiting for the user to confirm in the system UI
-                    updateStatusManager.updateStatus(
-                        UpdateStatus.Installing(null) // We don't have the full AppUpdate object here, but the status type indicates what's happening
-                    )
+                    updateStatusManager.waitForConfirmation()
                 } catch (e: Exception) {
                     // Some Android TV forks (particularly Chinese AOSP variants) don't
                     // handle the system confirm intent correctly. Log but don't crash.
@@ -94,7 +97,12 @@ class ApkInstallReceiver : BroadcastReceiver() {
                     PackageInstaller.STATUS_FAILURE_STORAGE -> context.getString(R.string.update_install_storage)
                     else -> message ?: context.getString(R.string.update_install_failed)
                 }
-                updateStatusManager.updateStatus(UpdateStatus.Failure(userMessage))
+                // Cancelled by the user: Retry installs the same APK again instead of
+                // downloading it again.
+                updateStatusManager.installFailed(
+                    userMessage,
+                    keepApk = status == PackageInstaller.STATUS_FAILURE_ABORTED,
+                )
                 showToast(context, userMessage)
             }
 
