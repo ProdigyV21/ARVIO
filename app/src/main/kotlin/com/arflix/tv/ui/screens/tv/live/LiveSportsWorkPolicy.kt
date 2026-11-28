@@ -1,8 +1,9 @@
 package com.arflix.tv.ui.screens.tv.live
 
+import android.os.Process
+import java.util.concurrent.Executors
 import kotlinx.coroutines.CoroutineDispatcher
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.asCoroutineDispatcher
 
 /**
  * The sports schedule is prepared in the background so the Sports page opens instantly,
@@ -35,6 +36,17 @@ internal object LiveSportsWorkPolicy {
         else -> BACKGROUND_SETTLE_MS
     }
 
-    @OptIn(ExperimentalCoroutinesApi::class)
-    val dispatcher: CoroutineDispatcher = Dispatchers.Default.limitedParallelism(1)
+    /**
+     * One background-priority thread. A normal-priority worker still competed with the
+     * main and render threads for the four slow cores of a TV box (measured on a TCL
+     * Android 14 TV with a 57k-channel playlist: sports and broadcaster scans used
+     * 30-60% of a core each for minutes while the guide dropped to ~30 fps). At
+     * background priority it only gets the CPU the UI leaves over.
+     */
+    val dispatcher: CoroutineDispatcher = Executors.newSingleThreadExecutor { runnable ->
+        Thread({
+            runCatching { Process.setThreadPriority(Process.THREAD_PRIORITY_BACKGROUND + Process.THREAD_PRIORITY_LESS_FAVORABLE) }
+            runnable.run()
+        }, "LiveSportsWork").apply { isDaemon = true }
+    }.asCoroutineDispatcher()
 }
