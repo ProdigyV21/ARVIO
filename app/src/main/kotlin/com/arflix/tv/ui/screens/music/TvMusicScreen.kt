@@ -1459,6 +1459,11 @@ private fun TvSeekBar(playback: MusicPlaybackState, accent: Color, onSeek: (Long
     val duration = playback.durationMs.coerceAtLeast(1L)
     val progress = (playback.positionMs.toFloat() / duration).coerceIn(0f, 1f)
     val height by animateFloatAsState(if (focused) 8f else 4f, tween(160), label = "tv-seek-height")
+    // The bar fills from the start edge, which is the right in RTL (Hebrew, Arabic): there the
+    // Left key moves forward along it.
+    val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
+    val forwardKey = if (rtl) Key.DirectionLeft else Key.DirectionRight
+    val backKey = if (rtl) Key.DirectionRight else Key.DirectionLeft
     Column(Modifier.fillMaxWidth().widthIn(max = 760.dp)) {
         Box(
             Modifier.fillMaxWidth().height(24.dp)
@@ -1466,8 +1471,8 @@ private fun TvSeekBar(playback: MusicPlaybackState, accent: Color, onSeek: (Long
                 .onKeyEvent { event ->
                     if (event.type != KeyEventType.KeyDown) return@onKeyEvent false
                     when (event.key) {
-                        Key.DirectionRight -> { onSeek((playback.positionMs + 10_000).coerceAtMost(playback.durationMs)); true }
-                        Key.DirectionLeft -> { onSeek((playback.positionMs - 10_000).coerceAtLeast(0)); true }
+                        forwardKey -> { onSeek((playback.positionMs + 10_000).coerceAtMost(playback.durationMs)); true }
+                        backKey -> { onSeek((playback.positionMs - 10_000).coerceAtLeast(0)); true }
                         else -> false
                     }
                 }
